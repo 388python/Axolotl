@@ -67,6 +67,7 @@ export default defineConfig({
             '@tauri-apps/api/app',
             '@tauri-apps/api/path',
             '@tauri-apps/plugin-http',
+            'vue-i18n',
         ],
     },
     test: {
