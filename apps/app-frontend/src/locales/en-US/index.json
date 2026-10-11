@@ -6473,6 +6473,9 @@
   "app.navigation.edit-world": {
     "message": "Edit world"
   },
+  "app.navigation.forward": {
+    "message": "Forward"
+  },
   "app.navigation.home": {
     "message": "Home"
   },
