@@ -60,9 +60,55 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_release_documents,
             resource_favorites,
             resource_favorite_add,
-            resource_favorite_remove
+            resource_favorite_remove,
+            resource_prepare_operation,
+            resource_revise_plan,
+            resource_queue_plan
         ])
         .build()
+}
+
+#[tauri::command]
+pub async fn resource_prepare_operation(
+    instance_id: String,
+    intent: ResourceOperationIntent,
+    selections: Vec<ResourceSelection>,
+    install_dependencies: Option<bool>,
+    request_id: RequestId,
+) -> Result<ResourceOperationPlan> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::plans::prepare(
+        instance_id,
+        intent,
+        selections,
+        install_dependencies.unwrap_or(true),
+        &cancel,
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn resource_revise_plan(
+    plan_id: PlanId,
+    revision: u32,
+    decisions: Vec<ResourcePlanDecision>,
+    request_id: RequestId,
+) -> Result<ResourceOperationPlan> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(
+        theseus::resources::plans::revise(
+            plan_id, revision, decisions, &cancel,
+        )
+        .await?,
+    )
+}
+
+#[tauri::command]
+pub async fn resource_queue_plan(
+    plan_id: PlanId,
+    revision: u32,
+) -> Result<ResourceOperationPlan> {
+    Ok(theseus::resources::plans::queue(plan_id, revision).await?)
 }
 
 #[tauri::command]

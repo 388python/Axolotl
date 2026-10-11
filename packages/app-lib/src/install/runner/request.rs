@@ -632,6 +632,15 @@ pub(super) async fn run_request(
                                     paths: vec![format!("saves/{}", download.file_name)],
                                 }))
                             }
+                            InstallContentBatchItem::FrozenResource { plan } => {
+                                crate::resources::plans::execute_frozen_plan(
+                                    &instance_id,
+                                    &plan,
+                                    Some(reporter.clone()),
+                                    state,
+                                ).await?;
+                                Ok(None)
+                            }
                         }
                     }
                 })

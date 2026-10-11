@@ -218,7 +218,7 @@ pub struct ResourceOperationPlan {
     pub id: PlanId,
     pub revision: u32,
     pub instance_id: String,
-    pub instance_revision: u32,
+    pub instance_revision: u64,
     pub intent: ResourceOperationIntent,
     pub selections: Vec<ResourceSelection>,
     pub active_roots: Vec<SelectionId>,

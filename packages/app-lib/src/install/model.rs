@@ -1958,6 +1958,11 @@ pub enum InstallContentBatchItem {
     CurseForgeWorld {
         request: CurseForgeWorldInstallRequest,
     },
+    /// A resource operation plan has already resolved every release and
+    /// artifact. The worker must execute this snapshot without re-querying.
+    FrozenResource {
+        plan: content_management::resources::ResourceOperationPlan,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -2938,6 +2943,7 @@ impl InstallJobState {
                         item,
                         InstallContentBatchItem::CurseForge { .. }
                             | InstallContentBatchItem::CurseForgeWorld { .. }
+                            | InstallContentBatchItem::FrozenResource { .. }
                     )
                 }) {
                     InstallJobProvider::CurseForge

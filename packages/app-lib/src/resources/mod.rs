@@ -6,6 +6,7 @@ pub mod cache;
 pub mod catalog;
 pub mod favorites;
 pub mod identity;
+pub mod plans;
 pub mod providers;
 pub mod search;
 mod service;

@@ -9,11 +9,13 @@ mod export;
 mod identity;
 pub mod ipc;
 mod operation;
+mod planning;
 
 pub use catalog::*;
 pub use export::*;
 pub use identity::*;
 pub use operation::*;
+pub use planning::*;
 
 pub const RESOURCE_CONTRACT_VERSION: u32 = 1;
 

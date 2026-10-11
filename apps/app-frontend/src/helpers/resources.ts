@@ -264,6 +264,78 @@ export function resourceSetPreferredSource(source: SourceId) {
 }
 
 export type ResourceCachePolicy = 'useFresh' | 'forceRefresh' | 'onlyCached'
+
+export type ResourceOperationIntent = 'install' | 'update' | 'switchVersion'
+export type ResourceSelection = {
+    id: string
+    resource: ResourceRef
+    release:
+        | { kind: 'automatic' }
+        | { kind: 'release'; reference: SourceReleaseRef }
+        | { kind: 'artifact'; reference: ResourceArtifact['reference'] }
+    resourceType: ResourceType
+    scope: { kind: 'instance' } | { kind: 'world'; relativePath: string }
+    entryId?: string | null
+}
+export type ResourceOperationPlan = {
+    schemaVersion: number
+    id: string
+    revision: number
+    instanceId: string
+    instanceRevision: number
+    intent: ResourceOperationIntent
+    selections: ResourceSelection[]
+    activeRoots: string[]
+    nodes: unknown[]
+    edges: unknown[]
+    actions: unknown[]
+    issues: { blocking: boolean; code: string; message: string }[]
+    exceptions: unknown[]
+    selectionReasons: unknown[]
+}
+export type ResourcePlanDecision =
+    | { kind: 'addOptional'; nodeId: string }
+    | { kind: 'removeOptional'; nodeId: string }
+    | { kind: 'removeRoot'; selectionId: string }
+    | { kind: 'acceptCompatibility'; exception: unknown }
+    | { kind: 'selectRelease'; nodeId: string; selection: ResourceSelection['release'] }
+
+export function resourcePrepareOperation(
+    instanceId: string,
+    intent: ResourceOperationIntent,
+    selections: ResourceSelection[],
+    installDependencies = true,
+    signal?: AbortSignal,
+) {
+    return resourceRequest<ResourceOperationPlan>(
+        'resource_prepare_operation',
+        {
+            instanceId,
+            intent,
+            selections,
+            installDependencies,
+        },
+        signal,
+    )
+}
+export function resourceRevisePlan(
+    planId: string,
+    revision: number,
+    decisions: ResourcePlanDecision[],
+    signal?: AbortSignal,
+) {
+    return resourceRequest<ResourceOperationPlan>(
+        'resource_revise_plan',
+        { planId, revision, decisions },
+        signal,
+    )
+}
+export function resourceQueuePlan(planId: string, revision: number) {
+    return invoke<ResourceOperationPlan>('plugin:resources|resource_queue_plan', {
+        planId,
+        revision,
+    })
+}
 export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {
     return behavior === 'bypass'
         ? 'forceRefresh'
