@@ -1,7 +1,7 @@
 use sqlx::migrate::{Migration, MigrationType, Migrator};
 use std::borrow::Cow;
 
-pub const CACHE_SCHEMA_VERSION: u32 = 1;
+pub const CACHE_SCHEMA_VERSION: u32 = 2;
 
 pub fn migrator() -> Migrator {
     Migrator {
@@ -32,6 +32,19 @@ pub fn migrator() -> Migrator {
                 payload TEXT NOT NULL,
                 verified_at INTEGER NOT NULL
             );
+            "#.into(),
+            false,
+        ), Migration::new(
+            20261011121000,
+            "legacy resource import checkpoint".into(),
+            MigrationType::Simple,
+            r#"
+            CREATE TABLE resource_legacy_import (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                last_rowid INTEGER NOT NULL DEFAULT 0,
+                completed INTEGER NOT NULL DEFAULT 0 CHECK (completed IN (0, 1))
+            );
+            INSERT INTO resource_legacy_import(id) VALUES (1);
             "#.into(),
             false,
         )]),

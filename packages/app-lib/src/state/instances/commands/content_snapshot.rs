@@ -543,13 +543,42 @@ async fn get_content_snapshot_inner(
             None
         }
     };
-    let pack = pack_snapshot(
+    let mut pack = pack_snapshot(
         &instance.name,
         instance.icon_path.clone(),
         &link,
         &members,
         remote_pack,
     );
+
+    let resource_store =
+        crate::state::resources::ResourceStore::new(state.pool.clone());
+    if let Some(pack) = &mut pack {
+        pack.resource_id = resource_store
+            .instance_pack_resource(instance_id)
+            .await
+            .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    }
+    let entry_resources = resource_store
+        .entry_resources(instance_id)
+        .await
+        .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    let pack_resources = resource_store
+        .pack_resources(instance_id)
+        .await
+        .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    for item in &mut items {
+        item.resource_id = item
+            .entry_id
+            .as_ref()
+            .and_then(|id| entry_resources.get(id))
+            .cloned();
+        item.pack_resource_id = item
+            .member_id
+            .as_ref()
+            .and_then(|id| pack_resources.get(id))
+            .cloned();
+    }
 
     items.sort_by(|left, right| {
         left.expected_relative_path
@@ -1587,6 +1616,8 @@ fn snapshot_item(
         .is_some_and(|content| !content.provider_refs.is_empty());
 
     InstanceContentSnapshotItem {
+        resource_id: None,
+        pack_resource_id: None,
         file_id,
         entry_id,
         member_id: member.map(|member| member.id.clone()),
@@ -1686,6 +1717,7 @@ fn pack_snapshot(
         .unwrap_or(fallback_name);
 
     Some(InstanceContentPack {
+        resource_id: None,
         name,
         icon_path,
         provider,

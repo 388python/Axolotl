@@ -447,6 +447,8 @@ async fn read_only_upgrade_source(
             continue;
         };
         snapshot.items.push(InstanceContentSnapshotItem {
+            resource_id: None,
+            pack_resource_id: None,
             file_id: None,
             entry_id: None,
             member_id: None,
@@ -6478,6 +6480,8 @@ mod tests {
             revision: 7,
             pack: None,
             items: vec![InstanceContentSnapshotItem {
+                resource_id: None,
+                pack_resource_id: None,
                 file_id: Some("file".to_string()),
                 entry_id: Some("entry".to_string()),
                 member_id: None,
@@ -6929,6 +6933,8 @@ mod tests {
         release_id: Option<&str>,
     ) -> InstanceContentSnapshotItem {
         InstanceContentSnapshotItem {
+            resource_id: None,
+            pack_resource_id: None,
             file_id: Some("file".to_string()),
             entry_id: Some("entry".to_string()),
             member_id: None,

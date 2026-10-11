@@ -30,6 +30,8 @@ pub struct FileRecognition {
 #[derive(Clone, Debug)]
 pub struct ProjectProbeResult {
     pub status: IdentityStatus,
+    /// Byte evidence obtained in this probe. A previously confirmed main-DB
+    /// relationship does not imply equivalence of the current release files.
     pub evidence: Vec<VerifiedArtifactMatch>,
     pub failures: Vec<(SourceId, ResourceError)>,
     pub probed_artifacts: usize,
@@ -104,6 +106,26 @@ impl ResourceService {
             probed_artifacts: 0,
             history_pages: 0,
         };
+        if cancel.is_cancelled() {
+            return output;
+        }
+        if let Some(store) = self.store() {
+            let identities =
+                join_all([store.lookup(left), store.lookup(right)]).await;
+            for (source, identity) in
+                [&left.source, &right.source].into_iter().zip(&identities)
+            {
+                if let Err(error) = identity {
+                    output.failures.push((source.clone(), error.clone()));
+                    return output;
+                }
+            }
+            if matches!((&identities[0], &identities[1]), (Ok(Some(left)), Ok(Some(right))) if left == right)
+            {
+                output.status = IdentityStatus::Confirmed;
+                return output;
+            }
+        }
         let cache_generation = self.cache().generation().await;
         let projects = join_all([
             self.query(
@@ -126,7 +148,7 @@ impl ResourceService {
             ),
         ])
         .await;
-        let mut types = vec![];
+        let mut metadata = vec![];
         for (source, project) in
             [&left.source, &right.source].into_iter().zip(projects)
         {
@@ -134,7 +156,7 @@ impl ResourceService {
                 Ok(QueryOutcome {
                     value: ProviderValue::Project(document),
                     ..
-                }) => types.push(document.metadata.types),
+                }) => metadata.push(document.metadata),
                 Err(error) => {
                     output.failures.push((source.clone(), error));
                     return output;
@@ -142,10 +164,14 @@ impl ResourceService {
                 _ => return output,
             }
         }
-        if types.iter().any(Vec::is_empty) {
+        if metadata.iter().any(|project| project.types.is_empty()) {
             return output;
         }
-        if !types[0].iter().any(|kind| types[1].contains(kind)) {
+        if !metadata[0]
+            .types
+            .iter()
+            .any(|kind| metadata[1].types.contains(kind))
+        {
             output.status = IdentityStatus::Rejected;
             return output;
         }
@@ -263,6 +289,31 @@ impl ResourceService {
                             )
                             .await
                         {
+                            if cancel.is_cancelled() {
+                                return output;
+                            }
+                            if let Some(store) = self.store() {
+                                let (origin_metadata, destination_metadata) =
+                                    if reverse {
+                                        (&metadata[1], &metadata[0])
+                                    } else {
+                                        (&metadata[0], &metadata[1])
+                                    };
+                                if let Err(error) = store
+                                    .confirm_projects(
+                                        origin_metadata,
+                                        destination_metadata,
+                                        artifact,
+                                        matched,
+                                    )
+                                    .await
+                                {
+                                    output
+                                        .failures
+                                        .push((origin.source.clone(), error));
+                                    continue;
+                                }
+                            }
                             output.evidence.push(evidence);
                         }
                     }

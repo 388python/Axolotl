@@ -64,6 +64,7 @@ mod cache;
 pub use self::cache::*;
 
 pub mod content_favorites;
+pub mod resources;
 pub use self::content_favorites::*;
 
 mod friends;
@@ -203,9 +204,17 @@ impl State {
                 let cache = Arc::new(
                     crate::resources::cache::ResourceCache::open(path).await,
                 );
-                crate::resources::ResourceService::new(
+                let import_cache = cache.clone();
+                let import_main = self.pool.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = import_cache.import_legacy(&import_main).await {
+                        tracing::warn!(error = %error, "Legacy resource cache import deferred");
+                    }
+                });
+                crate::resources::ResourceService::with_store(
                     cache,
                     crate::resources::providers::default_providers(),
+                    resources::ResourceStore::new(self.pool.clone()),
                 )
             })
             .await

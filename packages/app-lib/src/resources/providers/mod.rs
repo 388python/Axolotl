@@ -5,6 +5,7 @@ use std::sync::Arc;
 use super::{ipc::*, *};
 
 mod curseforge;
+pub(crate) mod legacy;
 mod mcarchive;
 mod modrinth;
 mod planet_minecraft;

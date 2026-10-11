@@ -7,6 +7,7 @@ pub mod identity;
 pub mod providers;
 mod service;
 
+pub(crate) use service::valid_artifact;
 pub use service::{CachePolicy, QueryOutcome, ResourceService};
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -25,6 +26,8 @@ pub enum ResourceError {
     Canceled,
     #[error("resource cache unavailable: {0}")]
     Cache(String),
+    #[error("resource database unavailable: {0}")]
+    Database(String),
 }
 
 pub type ResourceResult<T> = Result<T, ResourceError>;

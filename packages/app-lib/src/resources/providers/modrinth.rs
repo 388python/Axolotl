@@ -567,7 +567,7 @@ impl ResourceProvider for ModrinthProvider {
 }
 
 #[derive(Deserialize)]
-struct RemoteProject {
+pub(crate) struct RemoteProject {
     id: String,
     #[serde(default)]
     team: Option<String>,
@@ -594,7 +594,7 @@ struct RemoteProject {
 }
 
 impl RemoteProject {
-    fn document(self) -> ResourceResult<ProjectDocument> {
+    pub(crate) fn document(self) -> ResourceResult<ProjectDocument> {
         let types = resource_types(&self.project_type, &self.loaders);
         Ok(ProjectDocument {
             metadata: SourceProjectMetadata {

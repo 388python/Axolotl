@@ -1,5 +1,6 @@
 //! An independently versioned SQLx pool. No joins or transactions use app.db.
 
+mod legacy;
 mod migrations;
 
 use chrono::Utc;
@@ -207,6 +208,12 @@ impl ResourceCache {
             .execute(&mut *transaction)
             .await
             .map_err(cache_error)?;
+        sqlx::query(
+            "UPDATE resource_legacy_import SET completed = 1 WHERE id = 1",
+        )
+        .execute(&mut *transaction)
+        .await
+        .map_err(cache_error)?;
         transaction.commit().await.map_err(cache_error)?;
         Ok(())
     }

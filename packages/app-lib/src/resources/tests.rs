@@ -11,6 +11,204 @@ use tokio_util::sync::CancellationToken;
 #[path = "../../../content-management/tests/fixtures/mod.rs"]
 mod fixtures;
 
+#[tokio::test]
+async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
+{
+    let main = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&main).await.unwrap();
+    let (_directory, cache) = cache().await;
+    let now = chrono::Utc::now().timestamp();
+    let legacy_ttl = 100 * 365 * 24 * 60 * 60;
+    let project = json!({
+        "id": "abcdefgh", "slug": "locator", "project_type": "mod", "title": "Legacy",
+        "description": "Summary", "body": "Body"
+    });
+    let cf_project = json!({
+        "id": 456, "gameId": 432, "name": "CF Legacy", "slug": "legacy", "summary": "Summary",
+        "status": 4, "downloadCount": 100, "isFeatured": false, "primaryCategoryId": 6,
+        "categories": [], "classId": 6, "authors": [], "logo": null,
+        "mainFileId": 5425378, "latestFiles": [{
+            "id": 5425378, "modId": 456, "fileName": "mod.jar", "fileLength": 100,
+            "gameId": 432, "displayName": "Mod", "fileStatus": 4,
+            "fileDate": "2020-01-03T00:00:00Z", "downloadCount": 100,
+            "hashes": [{"algo": 1, "value": "a".repeat(40)}], "releaseType": 1,
+            "fileFingerprint": 123, "isAvailable": true,
+            "downloadUrl": "https://example.com/mod.jar"
+        }], "dateCreated": "2020-01-01T00:00:00Z", "dateModified": "2020-01-02T00:00:00Z",
+        "dateReleased": "2020-01-03T00:00:00Z", "isAvailable": true
+    });
+    for (id, kind, data, age) in [
+        ("abcdefgh", "project", project.to_string(), 0),
+        ("456", "curseforge_project", cf_project.to_string(), 0),
+        ("bad-json", "project", "not json".into(), 0),
+        ("wrong-id", "project", project.to_string(), 0),
+        ("minecraft", "minecraft_manifest", "{}".into(), 0),
+        ("stale123", "project", json!({"id":"stale123","project_type":"mod","title":"Stale","description":"Summary"}).to_string(), 3600),
+        ("G5dd9TM4", "version", fixtures::MR_IRIS.into(), 0),
+        ("large123", "project", json!({"id":"large123", "project_type":"mod", "title":"Large", "description":"", "body":"a".repeat(1024 * 1024 + 1)}).to_string(), 0),
+    ] {
+        sqlx::query("INSERT INTO cache(id, data_type, data, expires) VALUES (?, ?, ?, ?)")
+            .bind(id).bind(kind).bind(data).bind(now + legacy_ttl - age).execute(&main).await.unwrap();
+    }
+    // A full extra page verifies progress beyond the import's memory bound.
+    for index in 0..101 {
+        let id = format!("{index:08}");
+        let mut version: Value =
+            serde_json::from_str(fixtures::MR_IRIS).unwrap();
+        version["id"] = json!(id);
+        sqlx::query("INSERT INTO cache(id, data_type, data, expires) VALUES (?, 'version', ?, ?)")
+            .bind(id).bind(version.to_string()).bind(now + legacy_ttl).execute(&main).await.unwrap();
+    }
+    let key = CacheKey::new(
+        "modrinth-v2".into(),
+        SourceId::modrinth(),
+        &project_query("abcdefgh"),
+    )
+    .unwrap();
+    let current =
+        project_value(SourceId::modrinth(), "abcdefgh", "Fetched recently");
+    cache
+        .put(
+            &key,
+            &current,
+            1800,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    cache.import_legacy(&main).await.unwrap();
+    assert_eq!(cache.get(&key).await, Some(current.clone()));
+    assert!(
+        cache
+            .get(
+                &CacheKey::new(
+                    "modrinth-v2".into(),
+                    SourceId::modrinth(),
+                    &project_query("large123")
+                )
+                .unwrap()
+            )
+            .await
+            .is_none()
+    );
+    assert!(
+        cache
+            .get(
+                &CacheKey::new(
+                    "modrinth-v2".into(),
+                    SourceId::modrinth(),
+                    &project_query("stale123")
+                )
+                .unwrap()
+            )
+            .await
+            .is_none()
+    );
+    let description_query = ProviderQuery::Description {
+        id: SourceProjectId::new("abcdefgh").unwrap(),
+        slug: None,
+    };
+    assert!(
+        matches!(cache.get(&CacheKey::new("modrinth-v2".into(), SourceId::modrinth(), &description_query).unwrap()).await, Some(ProviderValue::Description(text)) if text.body == "Body")
+    );
+    let cf_query = ProviderQuery::Release {
+        project_id: Some(SourceProjectId::new("456").unwrap()),
+        release_id: SourceReleaseId::new("5425378").unwrap(),
+        slug: None,
+    };
+    assert!(matches!(
+        cache
+            .get(
+                &CacheKey::new(
+                    "curseforge-v1".into(),
+                    SourceId::curseforge(),
+                    &cf_query
+                )
+                .unwrap()
+            )
+            .await,
+        Some(ProviderValue::Release(_))
+    ));
+    let last_query = ProviderQuery::Release {
+        project_id: None,
+        release_id: SourceReleaseId::new("00000100").unwrap(),
+        slug: None,
+    };
+    assert!(matches!(
+        cache
+            .get(
+                &CacheKey::new(
+                    "modrinth-v2".into(),
+                    SourceId::modrinth(),
+                    &last_query
+                )
+                .unwrap()
+            )
+            .await,
+        Some(ProviderValue::Release(_))
+    ));
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM resource_source_projects"
+        )
+        .fetch_one(&main)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM cache")
+            .fetch_one(&main)
+            .await
+            .unwrap(),
+        109
+    );
+    let count = cache.info().await.unwrap().entry_count;
+    cache.import_legacy(&main).await.unwrap();
+    assert_eq!(cache.info().await.unwrap().entry_count, count);
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(cache.path()),
+        )
+        .await
+        .unwrap();
+    // Model interruption after cache writes but before the durable checkpoint.
+    sqlx::query(
+        "UPDATE resource_legacy_import SET completed = 0, last_rowid = 0",
+    )
+    .execute(&probe)
+    .await
+    .unwrap();
+    let path = cache.path().to_path_buf();
+    probe.close().await;
+    cache.close().await;
+    let reopened = ResourceCache::open(path).await;
+    reopened.import_legacy(&main).await.unwrap();
+    assert_eq!(reopened.info().await.unwrap().entry_count, count);
+    assert_eq!(reopened.get(&key).await, Some(current));
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(reopened.path()),
+        )
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE resource_legacy_import SET completed = 0, last_rowid = 0",
+    )
+    .execute(&probe)
+    .await
+    .unwrap();
+    reopened.clear().await.unwrap();
+    reopened.import_legacy(&main).await.unwrap();
+    assert_eq!(reopened.info().await.unwrap().entry_count, 0);
+    probe.close().await;
+    reopened.close().await;
+}
+
 fn project_query(id: &str) -> ProviderQuery {
     ProviderQuery::Project {
         id: SourceProjectId::new(id).unwrap(),
@@ -203,7 +401,7 @@ async fn cache_survives_close_and_reopen_with_a_separate_wal_database() {
         .await
         .unwrap();
     assert_eq!(mode, "wal");
-    assert_eq!(reopened.info().await.unwrap().schema_version, 1);
+    assert_eq!(reopened.info().await.unwrap().schema_version, 2);
     probe.close().await;
     reopened.close().await;
 }
@@ -1163,7 +1361,8 @@ async fn source_validation_rejects_one_bad_id_without_poisoning_peer_results() {
 }
 
 #[tokio::test]
-async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
+async fn project_probe_persists_historical_balm_confirmation_with_a_bounded_budget()
+ {
     let mr_transport = FixtureTransport::new(|_, request| {
         match request.path.as_str() {
             "/projects" => Ok(
@@ -1207,7 +1406,14 @@ async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
         }
     });
     let (_temp, cache) = cache().await;
-    let service = ResourceService::new(
+    let main = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&main).await.unwrap();
+    let store = crate::state::resources::ResourceStore::new(main.clone());
+    let service = ResourceService::with_store(
         cache.clone(),
         vec![
             Arc::new(ModrinthProvider::new(mr_transport.clone())),
@@ -1215,6 +1421,7 @@ async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
                 cf_transport.clone(),
             )))),
         ],
+        store.clone(),
     )
     .unwrap();
     let mr = SourceProjectRef {
@@ -1225,6 +1432,8 @@ async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
         source: SourceId::curseforge(),
         project_id: SourceProjectId::new("531761").unwrap(),
     };
+    assert!(store.lookup(&mr).await.unwrap().is_none());
+    assert!(store.lookup(&cf).await.unwrap().is_none());
     let result = service
         .probe_projects(
             &mr,
@@ -1239,6 +1448,10 @@ async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
     assert_eq!(result.history_pages, 1);
     assert_eq!(result.probed_artifacts, 4);
     assert_eq!(result.evidence.len(), 1);
+    assert_eq!(
+        store.lookup(&mr).await.unwrap(),
+        store.lookup(&cf).await.unwrap()
+    );
     let proof = &result.evidence[0];
     assert!(
         service
@@ -1270,6 +1483,24 @@ async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
             .artifact_evidence(&proof.left, &proof.right)
             .await
             .is_none()
+    );
+    let durable = service
+        .probe_projects(
+            &mr,
+            None,
+            &cf,
+            None,
+            target(),
+            &CancellationToken::new(),
+        )
+        .await;
+    assert_eq!(durable.status, IdentityStatus::Confirmed);
+    assert_eq!(durable.probed_artifacts, 0);
+    assert!(durable.evidence.is_empty());
+    assert_eq!(
+        before,
+        mr_transport.requests.lock().unwrap().len()
+            + cf_transport.requests.lock().unwrap().len()
     );
     cache.close().await;
 }

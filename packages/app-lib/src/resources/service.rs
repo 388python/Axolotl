@@ -89,6 +89,7 @@ impl Subscription {
 }
 
 pub struct ResourceService {
+    store: Option<crate::state::resources::ResourceStore>,
     cache: Arc<ResourceCache>,
     sources: HashMap<SourceId, SourceRuntime>,
     flights: DashMap<FlightKey, Arc<Flight>>,
@@ -99,6 +100,22 @@ impl ResourceService {
     pub fn new(
         cache: Arc<ResourceCache>,
         providers: Vec<Arc<dyn ResourceProvider>>,
+    ) -> ResourceResult<Arc<Self>> {
+        Self::build(cache, providers, None)
+    }
+
+    pub fn with_store(
+        cache: Arc<ResourceCache>,
+        providers: Vec<Arc<dyn ResourceProvider>>,
+        store: crate::state::resources::ResourceStore,
+    ) -> ResourceResult<Arc<Self>> {
+        Self::build(cache, providers, Some(store))
+    }
+
+    fn build(
+        cache: Arc<ResourceCache>,
+        providers: Vec<Arc<dyn ResourceProvider>>,
+        store: Option<crate::state::resources::ResourceStore>,
     ) -> ResourceResult<Arc<Self>> {
         let mut sources = HashMap::new();
         for provider in providers {
@@ -119,6 +136,7 @@ impl ResourceService {
             }
         }
         Ok(Arc::new(Self {
+            store,
             cache,
             sources,
             flights: DashMap::new(),
@@ -138,6 +156,10 @@ impl ResourceService {
 
     pub fn cache(&self) -> &Arc<ResourceCache> {
         &self.cache
+    }
+
+    pub fn store(&self) -> Option<&crate::state::resources::ResourceStore> {
+        self.store.as_ref()
     }
 
     #[cfg(test)]
@@ -398,7 +420,7 @@ async fn wait_for_abandoned(batch: &[Arc<Flight>], notify: &Notify) {
     }
 }
 
-fn validate_value(
+pub(crate) fn validate_value(
     source: &SourceId,
     query: &ProviderQuery,
     value: &ProviderValue,
@@ -473,7 +495,7 @@ fn validate_value(
     }
 }
 
-fn valid_artifact(artifact: &ResourceArtifact) -> bool {
+pub(crate) fn valid_artifact(artifact: &ResourceArtifact) -> bool {
     if artifact.file_name.as_ref().is_some_and(|name| {
         name.is_empty()
             || matches!(name.as_str(), "." | "..")

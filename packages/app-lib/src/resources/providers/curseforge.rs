@@ -529,7 +529,7 @@ impl ResourceProvider for CurseForgeProvider {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RemoteProject {
+pub(crate) struct RemoteProject {
     id: u32,
     name: String,
     slug: String,
@@ -554,7 +554,7 @@ struct RemoteProject {
 }
 
 impl RemoteProject {
-    fn document(self) -> ResourceResult<ProjectDocument> {
+    pub(crate) fn document(self) -> ResourceResult<ProjectDocument> {
         positive_id(&self.id.to_string())?;
         let types = match self.class_id {
             Some(6) => vec![ResourceType::Mod],
