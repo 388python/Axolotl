@@ -166,7 +166,7 @@ pub struct ContentHash {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtifactIntegrity {
-    pub size: u64,
+    pub size: Option<u64>,
     pub hashes: Vec<ContentHash>,
 }
 

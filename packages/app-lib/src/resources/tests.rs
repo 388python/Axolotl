@@ -1,0 +1,1474 @@
+use super::{cache::*, identity::*, providers::*, *};
+use async_trait::async_trait;
+use serde_json::{Value, json};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+};
+use tokio::sync::{Notify, Semaphore};
+use tokio_util::sync::CancellationToken;
+
+#[path = "../../../content-management/tests/fixtures/mod.rs"]
+mod fixtures;
+
+fn project_query(id: &str) -> ProviderQuery {
+    ProviderQuery::Project {
+        id: SourceProjectId::new(id).unwrap(),
+        slug: None,
+    }
+}
+
+fn project_value(source: SourceId, id: &str, title: &str) -> ProviderValue {
+    ProviderValue::Project(ProjectDocument {
+        metadata: SourceProjectMetadata {
+            project: SourceProjectRef {
+                source: source.clone(),
+                project_id: SourceProjectId::new(id).unwrap(),
+            },
+            slug: Some("locator".into()),
+            title: title.into(),
+            summary: "summary".into(),
+            icon_url: None,
+            types: vec![ResourceType::Mod],
+            authors: vec![],
+            license: None,
+            downloads: None,
+            followers: None,
+            created_at: None,
+            updated_at: None,
+            first_published_at: None,
+            latest_published_at: None,
+        },
+        description: ResourceText {
+            source,
+            format: TextFormat::Plain,
+            body: "description".into(),
+        },
+    })
+}
+
+async fn cache() -> (tempfile::TempDir, Arc<ResourceCache>) {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("caches/resources/beta/resource-cache.db");
+    let cache = Arc::new(ResourceCache::open(path).await);
+    assert!(cache.available());
+    (temp, cache)
+}
+
+struct MockProvider {
+    source: SourceId,
+    batches: Mutex<Vec<Vec<ProviderQuery>>>,
+    in_flight: AtomicUsize,
+    max_in_flight: AtomicUsize,
+    canceled: AtomicUsize,
+    gate: Option<Arc<Semaphore>>,
+    started: Notify,
+    fail: AtomicBool,
+    missing: AtomicBool,
+    limit: usize,
+}
+
+impl MockProvider {
+    fn new(limit: usize, gate: Option<Arc<Semaphore>>) -> Arc<Self> {
+        Arc::new(Self {
+            source: SourceId::modrinth(),
+            batches: Mutex::new(vec![]),
+            in_flight: AtomicUsize::new(0),
+            max_in_flight: AtomicUsize::new(0),
+            canceled: AtomicUsize::new(0),
+            gate,
+            started: Notify::new(),
+            fail: AtomicBool::new(false),
+            missing: AtomicBool::new(false),
+            limit,
+        })
+    }
+    fn calls(&self) -> usize {
+        self.batches.lock().unwrap().len()
+    }
+}
+
+struct Activity<'a> {
+    provider: &'a MockProvider,
+    completed: bool,
+}
+impl Drop for Activity<'_> {
+    fn drop(&mut self) {
+        self.provider.in_flight.fetch_sub(1, Ordering::AcqRel);
+        if !self.completed {
+            self.provider.canceled.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+}
+
+#[async_trait]
+impl ResourceProvider for MockProvider {
+    fn source(&self) -> ResourceSource {
+        ResourceSource {
+            id: self.source.clone(),
+            available: true,
+            types: vec![ResourceType::Mod],
+            capabilities: vec![
+                SourceCapability::Project,
+                SourceCapability::IdentifyHash,
+            ],
+            supported_search_sorts: vec![],
+        }
+    }
+    fn namespace(&self) -> String {
+        "mock-v1".into()
+    }
+    fn batch_limit(&self, _: &ProviderQuery) -> usize {
+        self.limit
+    }
+    async fn fetch_many(
+        &self,
+        queries: &[ProviderQuery],
+    ) -> Vec<ResourceResult<ProviderValue>> {
+        self.batches.lock().unwrap().push(queries.to_vec());
+        let active = self.in_flight.fetch_add(1, Ordering::AcqRel) + 1;
+        self.max_in_flight.fetch_max(active, Ordering::AcqRel);
+        let mut activity = Activity {
+            provider: self,
+            completed: false,
+        };
+        self.started.notify_waiters();
+        if let Some(gate) = &self.gate {
+            gate.acquire().await.unwrap().forget();
+        }
+        activity.completed = true;
+        queries
+            .iter()
+            .map(|query| {
+                if self.fail.load(Ordering::Acquire) {
+                    return Err(ResourceError::Network { status: Some(503) });
+                }
+                if self.missing.load(Ordering::Acquire) {
+                    return Ok(ProviderValue::NotFound);
+                }
+                match query {
+                    ProviderQuery::Project { id, .. } => Ok(project_value(
+                        self.source.clone(),
+                        id.as_str(),
+                        "current",
+                    )),
+                    ProviderQuery::Identify { .. } => {
+                        Ok(ProviderValue::Matches(vec![]))
+                    }
+                    _ => {
+                        Err(ResourceError::Unsupported("mock operation".into()))
+                    }
+                }
+            })
+            .collect()
+    }
+}
+
+async fn wait_until(mut predicate: impl FnMut() -> bool) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !predicate() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn cache_survives_close_and_reopen_with_a_separate_wal_database() {
+    let (_temp, first) = cache().await;
+    let key = CacheKey::new(
+        "v1".into(),
+        SourceId::modrinth(),
+        &project_query("project"),
+    )
+    .unwrap();
+    let value = project_value(SourceId::modrinth(), "project", "persistent");
+    first
+        .put(&key, &value, 1800, first.generation().await, 1)
+        .await;
+    assert!(first.info().await.unwrap().size_bytes > 0);
+    let path = first.path().to_path_buf();
+    first.close().await;
+    let reopened = ResourceCache::open(path).await;
+    assert_eq!(reopened.get(&key).await, Some(value));
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(reopened.path()),
+        )
+        .await
+        .unwrap();
+    let mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&probe)
+        .await
+        .unwrap();
+    assert_eq!(mode, "wal");
+    assert_eq!(reopened.info().await.unwrap().schema_version, 1);
+    probe.close().await;
+    reopened.close().await;
+}
+
+#[tokio::test]
+async fn cache_expiry_malformed_json_and_unknown_payload_version_are_misses() {
+    let (_temp, cache) = cache().await;
+    let key = CacheKey::new(
+        "v1".into(),
+        SourceId::modrinth(),
+        &project_query("project"),
+    )
+    .unwrap();
+    cache
+        .put(
+            &key,
+            &ProviderValue::NotFound,
+            -1,
+            cache.generation().await,
+            1,
+        )
+        .await;
+    assert!(cache.get(&key).await.is_none());
+    cache
+        .put(
+            &key,
+            &ProviderValue::NotFound,
+            100,
+            cache.generation().await,
+            2,
+        )
+        .await;
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(cache.path()),
+        )
+        .await
+        .unwrap();
+    sqlx::query("UPDATE resource_cache_entries SET payload = 'broken JSON'")
+        .execute(&probe)
+        .await
+        .unwrap();
+    assert!(cache.get(&key).await.is_none());
+    cache
+        .put(
+            &key,
+            &ProviderValue::NotFound,
+            100,
+            cache.generation().await,
+            3,
+        )
+        .await;
+    sqlx::query("UPDATE resource_cache_entries SET value_version = 99")
+        .execute(&probe)
+        .await
+        .unwrap();
+    assert!(cache.get(&key).await.is_none());
+    probe.close().await;
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn cache_clear_rejects_old_generation_and_late_older_responses() {
+    let (_temp, cache) = cache().await;
+    let key = CacheKey::new(
+        "v1".into(),
+        SourceId::modrinth(),
+        &project_query("project"),
+    )
+    .unwrap();
+    let old_generation = cache.generation().await;
+    cache.clear().await.unwrap();
+    cache
+        .put(&key, &ProviderValue::NotFound, 100, old_generation, 1)
+        .await;
+    assert!(cache.get(&key).await.is_none());
+    let new = project_value(SourceId::modrinth(), "project", "new");
+    cache
+        .put(&key, &new, 100, cache.generation().await, 3)
+        .await;
+    cache
+        .put(
+            &key,
+            &ProviderValue::NotFound,
+            100,
+            cache.generation().await,
+            2,
+        )
+        .await;
+    assert_eq!(cache.get(&key).await, Some(new));
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn corrupt_cache_rebuilds_and_creation_failure_degrades_to_live_queries()
+{
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("resource-cache.db");
+    tokio::fs::write(&path, b"not a SQLite database")
+        .await
+        .unwrap();
+    let rebuilt = ResourceCache::open(path.clone()).await;
+    assert!(rebuilt.available());
+    assert_eq!(rebuilt.info().await.unwrap().entry_count, 0);
+    rebuilt.close().await;
+    let parent = temp.path().join("not-a-directory");
+    tokio::fs::write(&parent, b"file").await.unwrap();
+    let disabled =
+        Arc::new(ResourceCache::open(parent.join("resource-cache.db")).await);
+    assert!(!disabled.available());
+    let provider = MockProvider::new(100, None);
+    let service =
+        ResourceService::new(disabled, vec![provider.clone()]).unwrap();
+    assert!(
+        service
+            .query(
+                &SourceId::modrinth(),
+                project_query("project"),
+                CachePolicy::UseFresh,
+                &CancellationToken::new()
+            )
+            .await
+            .is_ok()
+    );
+    assert_eq!(provider.calls(), 1);
+}
+
+#[tokio::test]
+async fn unknown_cache_migration_is_preserved_and_disabled() {
+    let (_temp, cache) = cache().await;
+    let path = cache.path().to_path_buf();
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(&path))
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) VALUES (20271011090000, 'future schema', 1, x'00', 1)").execute(&probe).await.unwrap();
+    probe.close().await;
+    cache.close().await;
+    let next = ResourceCache::open(path.clone()).await;
+    assert!(!next.available());
+    let probe = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(sqlx::sqlite::SqliteConnectOptions::new().filename(path))
+        .await
+        .unwrap();
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _sqlx_migrations WHERE version = 20271011090000)").fetch_one(&probe).await.unwrap();
+    assert!(exists);
+    probe.close().await;
+}
+
+#[tokio::test]
+async fn service_uses_hot_cache_and_force_refresh_ignores_positive_and_negative_cache()
+ {
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, None);
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let token = CancellationToken::new();
+    let query = project_query("project");
+    let source = SourceId::modrinth();
+    assert!(
+        !service
+            .query(&source, query.clone(), CachePolicy::UseFresh, &token)
+            .await
+            .unwrap()
+            .from_cache
+    );
+    assert!(
+        service
+            .query(&source, query.clone(), CachePolicy::UseFresh, &token)
+            .await
+            .unwrap()
+            .from_cache
+    );
+    assert_eq!(provider.calls(), 1);
+    provider.fail.store(true, Ordering::Release);
+    assert!(matches!(
+        service
+            .query(&source, query.clone(), CachePolicy::ForceRefresh, &token)
+            .await,
+        Err(ResourceError::Network { .. })
+    ));
+    assert_eq!(provider.calls(), 2);
+    provider.fail.store(false, Ordering::Release);
+    provider.missing.store(true, Ordering::Release);
+    assert_eq!(
+        service
+            .query(&source, query.clone(), CachePolicy::ForceRefresh, &token)
+            .await
+            .unwrap()
+            .value,
+        ProviderValue::NotFound
+    );
+    provider.missing.store(false, Ordering::Release);
+    assert_eq!(
+        service
+            .query(&source, query.clone(), CachePolicy::UseFresh, &token)
+            .await
+            .unwrap()
+            .value,
+        ProviderValue::NotFound
+    );
+    assert!(matches!(
+        service
+            .query(&source, query, CachePolicy::ForceRefresh, &token)
+            .await
+            .unwrap()
+            .value,
+        ProviderValue::Project(_)
+    ));
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn batch_queries_deduplicate_keys_preserve_order_and_limit_source_concurrency()
+ {
+    let (_temp, cache) = cache().await;
+    let gate = Arc::new(Semaphore::new(0));
+    let provider = MockProvider::new(50, Some(gate.clone()));
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let mut queries: Vec<_> =
+        (0..251).map(|id| project_query(&id.to_string())).collect();
+    queries.push(project_query("0"));
+    let task = tokio::spawn({
+        let service = service.clone();
+        async move {
+            service
+                .query_many(
+                    &SourceId::modrinth(),
+                    queries,
+                    CachePolicy::UseFresh,
+                    &CancellationToken::new(),
+                )
+                .await
+        }
+    });
+    wait_until(|| provider.calls() == 3).await;
+    assert_eq!(provider.max_in_flight.load(Ordering::Acquire), 3);
+    gate.add_permits(6);
+    let results = task.await.unwrap();
+    assert_eq!(provider.calls(), 6);
+    assert!(
+        provider
+            .batches
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|batch| batch.len() <= 50)
+    );
+    assert_eq!(results.len(), 252);
+    assert_eq!(results[0], results[251]);
+    for (id, result) in results.into_iter().take(251).enumerate() {
+        let ProviderValue::Project(document) = result.unwrap().value else {
+            panic!("wrong result");
+        };
+        assert_eq!(
+            document.metadata.project.project_id.as_str(),
+            id.to_string()
+        );
+    }
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn canceling_one_subscriber_keeps_shared_request_alive() {
+    let (_temp, cache) = cache().await;
+    let gate = Arc::new(Semaphore::new(0));
+    let provider = MockProvider::new(100, Some(gate.clone()));
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let first_cancel = CancellationToken::new();
+    let first = tokio::spawn({
+        let service = service.clone();
+        let token = first_cancel.clone();
+        async move {
+            service
+                .query(
+                    &SourceId::modrinth(),
+                    project_query("shared"),
+                    CachePolicy::UseFresh,
+                    &token,
+                )
+                .await
+        }
+    });
+    wait_until(|| provider.calls() == 1).await;
+    let second = tokio::spawn({
+        let service = service.clone();
+        async move {
+            service
+                .query(
+                    &SourceId::modrinth(),
+                    project_query("shared"),
+                    CachePolicy::UseFresh,
+                    &CancellationToken::new(),
+                )
+                .await
+        }
+    });
+    wait_until(|| service.subscriber_count() == 2).await;
+    first_cancel.cancel();
+    assert_eq!(first.await.unwrap(), Err(ResourceError::Canceled));
+    gate.add_permits(1);
+    assert!(second.await.unwrap().is_ok());
+    assert_eq!(provider.calls(), 1);
+    assert_eq!(provider.canceled.load(Ordering::Acquire), 0);
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn last_subscriber_cancellation_stops_work_and_does_not_fill_cache() {
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, Some(Arc::new(Semaphore::new(0))));
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let token = CancellationToken::new();
+    let task = tokio::spawn({
+        let service = service.clone();
+        let token = token.clone();
+        async move {
+            service
+                .query(
+                    &SourceId::modrinth(),
+                    project_query("cancel"),
+                    CachePolicy::ForceRefresh,
+                    &token,
+                )
+                .await
+        }
+    });
+    wait_until(|| provider.calls() == 1).await;
+    token.cancel();
+    assert_eq!(task.await.unwrap(), Err(ResourceError::Canceled));
+    wait_until(|| provider.canceled.load(Ordering::Acquire) == 1).await;
+    assert_eq!(cache.info().await.unwrap().entry_count, 0);
+    cache.close().await;
+}
+
+type ResponseFactory =
+    dyn Fn(&SourceId, &ProtocolRequest) -> ResourceResult<Value> + Send + Sync;
+struct FixtureTransport {
+    requests: Mutex<Vec<ProtocolRequest>>,
+    response: Box<ResponseFactory>,
+}
+
+impl FixtureTransport {
+    fn new(
+        response: impl Fn(&SourceId, &ProtocolRequest) -> ResourceResult<Value>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            requests: Mutex::new(vec![]),
+            response: Box::new(response),
+        })
+    }
+}
+
+#[async_trait]
+impl ProtocolTransport for FixtureTransport {
+    async fn request(
+        &self,
+        source: &SourceId,
+        request: ProtocolRequest,
+    ) -> ResourceResult<Value> {
+        self.requests.lock().unwrap().push(request.clone());
+        (self.response)(source, &request)
+    }
+}
+
+struct Available(Arc<dyn ResourceProvider>);
+#[async_trait]
+impl ResourceProvider for Available {
+    fn source(&self) -> ResourceSource {
+        let mut source = self.0.source();
+        source.available = true;
+        source
+    }
+    fn namespace(&self) -> String {
+        self.0.namespace()
+    }
+    fn batch_limit(&self, query: &ProviderQuery) -> usize {
+        self.0.batch_limit(query)
+    }
+    fn validate_query(&self, query: &ProviderQuery) -> ResourceResult<()> {
+        self.0.validate_query(query)
+    }
+    async fn fetch_many(
+        &self,
+        queries: &[ProviderQuery],
+    ) -> Vec<ResourceResult<ProviderValue>> {
+        self.0.fetch_many(queries).await
+    }
+}
+
+#[tokio::test]
+async fn adapters_normalize_real_iris_and_balm_without_merging_different_bytes()
+{
+    let mr_transport = FixtureTransport::new(|_, _| {
+        Ok(json!([
+            serde_json::from_str::<Value>(fixtures::MR_IRIS).unwrap(),
+            serde_json::from_str::<Value>(fixtures::MR_BALM_43).unwrap(),
+            serde_json::from_str::<Value>(fixtures::MR_BALM_44).unwrap(),
+        ]))
+    });
+    let cf_transport = FixtureTransport::new(|_, _| {
+        Ok(json!({"data": [
+            serde_json::from_str::<Value>(fixtures::CF_IRIS).unwrap(),
+            serde_json::from_str::<Value>(fixtures::CF_BALM_43).unwrap(),
+            serde_json::from_str::<Value>(fixtures::CF_BALM_44).unwrap(),
+        ]}))
+    });
+    let release_query = |id: &str| ProviderQuery::Release {
+        project_id: None,
+        release_id: SourceReleaseId::new(id).unwrap(),
+        slug: None,
+    };
+    let mr = ModrinthProvider::new(mr_transport);
+    let cf = CurseForgeProvider::new(cf_transport);
+    let mr_results = mr
+        .fetch_many(&[
+            release_query("G5dd9TM4"),
+            release_query("1VlYVa3k"),
+            release_query("dDN38ae7"),
+        ])
+        .await;
+    let cf_results = cf
+        .fetch_many(&[
+            release_query("5425378"),
+            release_query("8862257"),
+            release_query("8969708"),
+        ])
+        .await;
+    let artifact = |result: &ResourceResult<ProviderValue>| {
+        let ProviderValue::Release(document) = result.as_ref().unwrap() else {
+            panic!("wrong release");
+        };
+        document.release.artifacts[0].clone()
+    };
+    let mr_iris = artifact(&mr_results[0]);
+    let cf_iris = artifact(&cf_results[0]);
+    assert!(verify_artifact_pair(&mr_iris, &cf_iris).is_some());
+    assert!(mr_iris.dependencies.is_empty());
+    assert_eq!(
+        cf_iris.dependencies[0].kind,
+        ResourceDependencyKind::Required
+    );
+    assert!(
+        verify_artifact_pair(
+            &artifact(&mr_results[1]),
+            &artifact(&cf_results[1])
+        )
+        .is_some()
+    );
+    assert!(
+        verify_artifact_pair(
+            &artifact(&mr_results[2]),
+            &artifact(&cf_results[2])
+        )
+        .is_none()
+    );
+}
+
+#[tokio::test]
+async fn modrinth_identification_matches_the_actual_file_in_a_multifile_release()
+ {
+    let mut release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+    let mut attachment = release["files"][0].clone();
+    attachment["id"] = json!("attachment");
+    attachment["filename"] = json!("iris-sources.jar");
+    attachment["hashes"]["sha1"] = json!("a".repeat(40));
+    attachment["primary"] = json!(false);
+    attachment["file_type"] = json!("sources-jar");
+    release["files"]
+        .as_array_mut()
+        .unwrap()
+        .insert(0, attachment);
+    let hash = "574992b5760f3bf2f9aa0b70984f19fb1952b748";
+    let transport = FixtureTransport::new(move |_, request| {
+        assert_eq!(request.path, "/version_files");
+        Ok(json!({hash: release}))
+    });
+    let provider = ModrinthProvider::new(transport.clone());
+    let results = provider
+        .fetch_many(&[ProviderQuery::Identify {
+            integrity: ArtifactIntegrity {
+                size: Some(2684113),
+                hashes: vec![ContentHash {
+                    algorithm: HashAlgorithm::Sha1,
+                    value: hash.into(),
+                }],
+            },
+            fingerprint: None,
+        }])
+        .await;
+    let ProviderValue::Matches(matches) = results[0].as_ref().unwrap() else {
+        panic!("wrong matches");
+    };
+    assert_eq!(matches.len(), 1);
+    assert_eq!(
+        matches[0].file_name.as_deref(),
+        Some("iris-1.7.1+mc1.20.1.jar")
+    );
+    assert_eq!(matches[0].role, ArtifactRole::Primary);
+    assert_eq!(transport.requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn fingerprint_collision_and_unknown_size_do_not_confirm_identity() {
+    let file: Value = serde_json::from_str(fixtures::CF_IRIS).unwrap();
+    let transport = FixtureTransport::new(move |_, request| {
+        assert_eq!(request.path, "/v1/fingerprints/432");
+        Ok(json!({"data": {"exactMatches": [{"id": 455508, "file": file}]}}))
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
+            transport,
+        ))))],
+    )
+    .unwrap();
+    let local = LocalArtifactIdentity {
+        integrity: ArtifactIntegrity {
+            size: Some(2684113),
+            hashes: vec![ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: "b".repeat(40),
+            }],
+        },
+        fingerprint: Some(1967997505),
+    };
+    let result = service
+        .identify_many(
+            &[SourceId::curseforge()],
+            &[local],
+            CachePolicy::ForceRefresh,
+            &CancellationToken::new(),
+        )
+        .await;
+    assert!(result[0].matches.is_empty());
+    assert_eq!(result[0].unresolved_sources, [SourceId::curseforge()]);
+    assert!(result[0].failures.is_empty());
+    let known = ArtifactIntegrity {
+        size: Some(1),
+        hashes: vec![ContentHash {
+            algorithm: HashAlgorithm::Sha1,
+            value: "a".repeat(40),
+        }],
+    };
+    let mut unknown = known.clone();
+    unknown.size = None;
+    assert!(!exact_integrity(&known, &unknown));
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn mcarchive_stable_uuid_uses_verified_slug_locator_and_unknown_size() {
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/mods/by_slug/modloader");
+        assert!(request.fields.as_ref().unwrap().contains("uuid"));
+        Ok(
+            json!({"uuid":"project-uuid", "slug":"modloader", "name":"Modloader", "mod_versions":[{"uuid":"release-uuid", "name":"1.6.2", "game_versions":[{"name":"1.6.2"}], "files":[{"uuid":"file-uuid", "name":"ModLoader.zip", "sha256":"a".repeat(64), "archive_url":"https://b2.mcarchive.net/file/modloader.zip"}]}]}),
+        )
+    });
+    let provider = McArchiveProvider::new(transport);
+    let query = ProviderQuery::Release {
+        project_id: Some(SourceProjectId::new("project-uuid").unwrap()),
+        release_id: SourceReleaseId::new("release-uuid").unwrap(),
+        slug: Some("modloader".into()),
+    };
+    let results = provider.fetch_many(&[query]).await;
+    let ProviderValue::Release(document) = results[0].as_ref().unwrap() else {
+        panic!("wrong release");
+    };
+    assert!(document.release.published_at.is_none());
+    assert!(document.release.artifacts[0].integrity.size.is_none());
+    assert_eq!(
+        document.release.reference.project.project_id.as_str(),
+        "project-uuid"
+    );
+    assert!(matches!(
+        document.release.artifacts[0].acquisition,
+        ArtifactAcquisition::PublicDownload { .. }
+    ));
+    let result = provider
+        .fetch_many(&[ProviderQuery::Project {
+            id: SourceProjectId::new("wrong-project").unwrap(),
+            slug: Some("modloader".into()),
+        }])
+        .await;
+    assert!(matches!(result[0], Err(ResourceError::InvalidResponse(_))));
+}
+
+#[tokio::test]
+async fn planet_minecraft_missing_metadata_remains_unknown_and_downloads_need_hashes()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/projects/project");
+        Ok(
+            json!({"id":"project", "title":"Project", "pageUrl":"https://www.planetminecraft.com/project/example", "versions":[{"id":"release", "name":"1", "gameVersions":["1.20.1"], "download":{"pageUrl":"https://www.planetminecraft.com/project/example", "directUrl":"https://cdn.example/file.zip"}}]}),
+        )
+    });
+    let provider = PlanetMinecraftProvider::new(transport);
+    let results = provider
+        .fetch_many(&[ProviderQuery::Release {
+            project_id: Some(SourceProjectId::new("project").unwrap()),
+            release_id: SourceReleaseId::new("release").unwrap(),
+            slug: None,
+        }])
+        .await;
+    let ProviderValue::Release(document) = results[0].as_ref().unwrap() else {
+        panic!("wrong release");
+    };
+    assert!(document.release.published_at.is_none());
+    assert!(document.release.artifacts[0].file_name.is_none());
+    assert!(document.release.artifacts[0].integrity.size.is_none());
+    assert!(matches!(
+        document.release.artifacts[0].acquisition,
+        ArtifactAcquisition::ManualDownload { .. }
+    ));
+    assert!(
+        !provider
+            .source()
+            .capabilities
+            .contains(&SourceCapability::IdentifyHash)
+    );
+    assert!(
+        !provider
+            .source()
+            .capabilities
+            .contains(&SourceCapability::Changelog)
+    );
+}
+
+#[test]
+fn probes_have_bounded_history_and_md5_is_not_identity_evidence() {
+    let mut budget = ProbeBudget::default();
+    assert_eq!(budget.take_initial(20), 3);
+    assert_eq!(budget.take_initial(20), 0);
+    assert!(budget.take_history_page());
+    assert_eq!(budget.take_history_artifacts(6), 6);
+    assert!(budget.take_history_page());
+    assert_eq!(budget.take_history_artifacts(6), 4);
+    assert!(!budget.take_history_page());
+    let md5 = ArtifactIntegrity {
+        size: Some(10),
+        hashes: vec![ContentHash {
+            algorithm: HashAlgorithm::Md5,
+            value: "a".repeat(32),
+        }],
+    };
+    assert!(!exact_integrity(&md5, &md5));
+}
+
+#[test]
+fn cache_paths_are_channel_scoped_and_reject_path_traversal() {
+    let directories = crate::state::DirectoryInfo {
+        settings_dir: "settings".into(),
+        config_dir: "custom".into(),
+        app_identifier: "test".into(),
+    };
+    assert_eq!(
+        directories.resource_cache_db("beta").unwrap(),
+        std::path::Path::new("custom/caches/resources/beta/resource-cache.db")
+    );
+    assert_ne!(
+        directories.resource_cache_db("beta").unwrap(),
+        directories.resource_cache_db("release").unwrap()
+    );
+    assert!(directories.resource_cache_db("../outside").is_err());
+}
+
+fn target() -> ipc::ResourceTarget {
+    ipc::ResourceTarget {
+        game_versions: vec![],
+        loaders: vec![],
+        channels: vec![],
+    }
+}
+
+#[tokio::test]
+async fn concurrent_cache_initialization_does_not_block_the_runtime() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("resource-cache.db");
+    let (left, right) =
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            tokio::join!(
+                ResourceCache::open(path.clone()),
+                ResourceCache::open(path.clone())
+            )
+        })
+        .await
+        .unwrap();
+    assert!(left.available());
+    assert!(right.available());
+    left.close().await;
+    right.close().await;
+}
+
+#[tokio::test]
+async fn modrinth_project_batches_keep_public_team_members_and_ignore_pending_invites()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        match request.path.as_str() {
+            "/projects" => Ok(
+                json!([{"id":"YL57xq9U","slug":"iris","title":"Iris","description":"","project_type":"mod","team":"team0001"}]),
+            ),
+            "/teams" => Ok(
+                json!([[{"team_id":"team0001","accepted":true,"user":{"username":"public-author"}}, {"team_id":"team0001","accepted":false,"user":{"username":"pending-invite"}}]]),
+            ),
+            _ => panic!("unexpected endpoint"),
+        }
+    });
+    let results = ModrinthProvider::new(transport.clone())
+        .fetch_many(&[project_query("YL57xq9U")])
+        .await;
+    let ProviderValue::Project(document) = results[0].as_ref().unwrap() else {
+        panic!("wrong project");
+    };
+    assert_eq!(document.metadata.authors, ["public-author"]);
+    assert_eq!(transport.requests.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn curseforge_manual_links_use_project_urls_and_unavailable_files_remain_unavailable()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        match request.path.as_str() {
+            "/v1/mods/files" => {
+                let mut file: Value =
+                    serde_json::from_str(fixtures::CF_IRIS).unwrap();
+                file["downloadUrl"] = Value::Null;
+                file["isServerPack"] = Value::Null;
+                let mut unavailable = file.clone();
+                unavailable["id"] = json!(5425379);
+                unavailable["isAvailable"] = json!(false);
+                Ok(json!({"data":[file, unavailable]}))
+            }
+            "/v1/mods" => Ok(
+                json!({"data":[{"id":455508,"slug":"irisshaders","name":"Iris","classId":6,"links":{"websiteUrl":"https://www.curseforge.com/minecraft/mc-mods/irisshaders"}}]}),
+            ),
+            _ => panic!("unexpected endpoint"),
+        }
+    });
+    let queries = [5425378, 5425379].map(|id| ProviderQuery::Release {
+        project_id: Some(SourceProjectId::new("455508").unwrap()),
+        release_id: SourceReleaseId::new(id.to_string()).unwrap(),
+        slug: None,
+    });
+    let results = CurseForgeProvider::new(transport.clone())
+        .fetch_many(&queries)
+        .await;
+    let ProviderValue::Release(document) = results[0].as_ref().unwrap() else {
+        panic!("wrong release");
+    };
+    assert_eq!(document.release.artifacts[0].acquisition, ArtifactAcquisition::ManualDownload { page_url: "https://www.curseforge.com/minecraft/mc-mods/irisshaders/files/5425378".into() });
+    let ProviderValue::Release(document) = results[1].as_ref().unwrap() else {
+        panic!("wrong release");
+    };
+    assert_eq!(document.release.artifacts[0].available, Some(false));
+    assert_eq!(
+        document.release.artifacts[0].acquisition,
+        ArtifactAcquisition::Unavailable
+    );
+    assert_eq!(transport.requests.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn source_search_projections_preserve_variants_and_date_semantics() {
+    let mr_transport = FixtureTransport::new(|_, _| {
+        let mut response: Value =
+            serde_json::from_str(fixtures::MR_SEARCH).unwrap();
+        response["total_hits"] =
+            json!(response["hits"].as_array().unwrap().len());
+        response["hits"][0]["date_created"] = json!("2024-01-01T00:00:00Z");
+        response["hits"][0]["date_modified"] = json!("2025-01-01T00:00:00Z");
+        Ok(response)
+    });
+    let cf_transport = FixtureTransport::new(|_, _| {
+        let mut response: Value =
+            serde_json::from_str(fixtures::CF_SEARCH).unwrap();
+        for project in response["data"].as_array_mut().unwrap() {
+            project["classId"] = json!(6);
+        }
+        Ok(response)
+    });
+    let query = ProviderQuery::Search {
+        query: ipc::ResourceSearchQuery {
+            text: "itemphysic".into(),
+            types: vec![ResourceType::Mod],
+            sources: vec![],
+            target: target(),
+            categories: vec![],
+            sort: ipc::ResourceSearchSort::Relevance,
+            page_size: 20,
+        },
+        cursor: None,
+    };
+    let mr = ModrinthProvider::new(mr_transport);
+    let cf = CurseForgeProvider::new(cf_transport);
+    let mr_result = mr
+        .fetch_many(std::slice::from_ref(&query))
+        .await
+        .remove(0)
+        .unwrap();
+    let cf_result = cf.fetch_many(&[query]).await.remove(0).unwrap();
+    let ProviderValue::Search(mr_page) = mr_result else {
+        panic!("wrong search");
+    };
+    let ProviderValue::Search(cf_page) = cf_result else {
+        panic!("wrong search");
+    };
+    assert!(mr_page.entries[0].created_at.is_some());
+    assert!(mr_page.entries[0].updated_at.is_some());
+    assert!(mr_page.entries[0].first_published_at.is_none());
+    assert!(mr_page.entries[0].latest_published_at.is_none());
+    assert!(
+        mr_page
+            .entries
+            .iter()
+            .any(|project| project.title == "ItemPhysic Lite")
+    );
+    assert!(
+        cf_page
+            .entries
+            .iter()
+            .any(|project| project.title == "ItemPhysic Full")
+    );
+    assert!(
+        cf_page
+            .entries
+            .iter()
+            .any(|project| project.title == "ItemPhysic Legacy Unofficial")
+    );
+    assert_eq!(cf_page.total.precision, ipc::TotalPrecision::Unknown);
+}
+
+#[tokio::test]
+async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_total()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        assert!(request.query.contains(&("index".into(), "9990".into())));
+        assert!(request.query.contains(&("pageSize".into(), "10".into())));
+        Ok(
+            json!({"data":(1..=10).map(|id| json!({"id":id,"name":"Project","slug":"project","classId":6})).collect::<Vec<_>>(), "pagination":{"index":9990,"resultCount":10,"totalCount":10000}}),
+        )
+    });
+    let query = ProviderQuery::Search {
+        query: ipc::ResourceSearchQuery {
+            text: "".into(),
+            types: vec![ResourceType::Mod],
+            sources: vec![],
+            target: target(),
+            categories: vec![],
+            sort: ipc::ResourceSearchSort::Relevance,
+            page_size: 50,
+        },
+        cursor: Some("9990".into()),
+    };
+    let result = CurseForgeProvider::new(transport)
+        .fetch_many(&[query])
+        .await
+        .remove(0)
+        .unwrap();
+    let ProviderValue::Search(page) = result else {
+        panic!("wrong search");
+    };
+    assert!(page.window_exhausted);
+    assert!(page.cursor.is_none());
+    assert_eq!(page.entries.len(), 10);
+    assert_eq!(page.total.precision, ipc::TotalPrecision::Estimate);
+}
+
+#[tokio::test]
+async fn clear_leaves_main_database_facts_and_source_namespaces_intact() {
+    let (temp, cache) = cache().await;
+    let main = sqlx::sqlite::SqlitePoolOptions::new()
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(temp.path().join("app.db"))
+                .create_if_missing(true),
+        )
+        .await
+        .unwrap();
+    sqlx::query("CREATE TABLE business_facts (id TEXT PRIMARY KEY)")
+        .execute(&main)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO business_facts VALUES ('installed-entry')")
+        .execute(&main)
+        .await
+        .unwrap();
+    let mr =
+        CacheKey::new("v1".into(), SourceId::modrinth(), &project_query("42"))
+            .unwrap();
+    let cf = CacheKey::new(
+        "v1".into(),
+        SourceId::curseforge(),
+        &project_query("42"),
+    )
+    .unwrap();
+    let other_namespace =
+        CacheKey::new("v2".into(), SourceId::modrinth(), &project_query("42"))
+            .unwrap();
+    cache
+        .put(
+            &mr,
+            &project_value(SourceId::modrinth(), "42", "MR"),
+            100,
+            cache.generation().await,
+            1,
+        )
+        .await;
+    assert!(cache.get(&cf).await.is_none());
+    assert!(cache.get(&other_namespace).await.is_none());
+    cache.clear().await.unwrap();
+    assert_eq!(cache.info().await.unwrap().entry_count, 0);
+    let fact: String = sqlx::query_scalar("SELECT id FROM business_facts")
+        .fetch_one(&main)
+        .await
+        .unwrap();
+    assert_eq!(fact, "installed-entry");
+    main.close().await;
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn source_validation_rejects_one_bad_id_without_poisoning_peer_results() {
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.body.as_ref().unwrap()["modIds"], json!([42]));
+        Ok(
+            json!({"data": [{"id":42,"name":"Valid", "slug":"valid", "classId":6}]}),
+        )
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
+            transport.clone(),
+        ))))],
+    )
+    .unwrap();
+    let results = service
+        .query_many(
+            &SourceId::curseforge(),
+            vec![project_query("not-numeric"), project_query("42")],
+            CachePolicy::ForceRefresh,
+            &CancellationToken::new(),
+        )
+        .await;
+    assert!(matches!(results[0], Err(ResourceError::InvalidRequest(_))));
+    assert!(results[1].is_ok());
+    assert_eq!(transport.requests.lock().unwrap().len(), 1);
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn project_probe_reuses_historical_balm_evidence_with_a_bounded_budget() {
+    let mr_transport = FixtureTransport::new(|_, request| {
+        match request.path.as_str() {
+            "/projects" => Ok(
+                json!([{"id":"MBAkmtvl","slug":"balm","title":"Balm","description":"","project_type":"mod","loaders":["forge"]}]),
+            ),
+            "/version_files" => {
+                let requested = request.body.as_ref().unwrap()["hashes"]
+                    .as_array()
+                    .unwrap();
+                let common = "4248e3b8fb20e9b6432d2225325c605f4ad7b211";
+                if requested.iter().any(|value| value == common) {
+                    Ok(
+                        json!({common: serde_json::from_str::<Value>(fixtures::MR_BALM_43).unwrap()}),
+                    )
+                } else {
+                    Ok(json!({}))
+                }
+            }
+            _ => panic!("unexpected MR endpoint"),
+        }
+    });
+    let cf_transport = FixtureTransport::new(|_, request| {
+        match request.path.as_str() {
+            "/v1/mods" => Ok(
+                json!({"data":[{"id":531761,"name":"Balm","slug":"balm","classId":6}]}),
+            ),
+            "/v1/mods/531761/files" => {
+                let current: Value =
+                    serde_json::from_str(fixtures::CF_BALM_44).unwrap();
+                let mut files = vec![current];
+                for id in [8000000, 8000001] {
+                    let mut file = files[0].clone();
+                    file["id"] = json!(id);
+                    file["hashes"][0]["value"] = json!("b".repeat(40));
+                    files.push(file);
+                }
+                files.push(serde_json::from_str(fixtures::CF_BALM_43).unwrap());
+                Ok(json!({"data":files,"pagination":{"totalCount":4}}))
+            }
+            _ => panic!("unexpected CF endpoint"),
+        }
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![
+            Arc::new(ModrinthProvider::new(mr_transport.clone())),
+            Arc::new(Available(Arc::new(CurseForgeProvider::new(
+                cf_transport.clone(),
+            )))),
+        ],
+    )
+    .unwrap();
+    let mr = SourceProjectRef {
+        source: SourceId::modrinth(),
+        project_id: SourceProjectId::new("MBAkmtvl").unwrap(),
+    };
+    let cf = SourceProjectRef {
+        source: SourceId::curseforge(),
+        project_id: SourceProjectId::new("531761").unwrap(),
+    };
+    let result = service
+        .probe_projects(
+            &mr,
+            None,
+            &cf,
+            None,
+            target(),
+            &CancellationToken::new(),
+        )
+        .await;
+    assert_eq!(result.status, IdentityStatus::Confirmed);
+    assert_eq!(result.history_pages, 1);
+    assert_eq!(result.probed_artifacts, 4);
+    assert_eq!(result.evidence.len(), 1);
+    let proof = &result.evidence[0];
+    assert!(
+        service
+            .artifact_evidence(&proof.left, &proof.right)
+            .await
+            .is_some()
+    );
+    let before = mr_transport.requests.lock().unwrap().len()
+        + cf_transport.requests.lock().unwrap().len();
+    let repeated = service
+        .probe_projects(
+            &mr,
+            None,
+            &cf,
+            None,
+            target(),
+            &CancellationToken::new(),
+        )
+        .await;
+    assert_eq!(repeated.status, IdentityStatus::Confirmed);
+    assert_eq!(
+        before,
+        mr_transport.requests.lock().unwrap().len()
+            + cf_transport.requests.lock().unwrap().len()
+    );
+    cache.clear().await.unwrap();
+    assert!(
+        service
+            .artifact_evidence(&proof.left, &proof.right)
+            .await
+            .is_none()
+    );
+    cache.close().await;
+}
+
+struct HttpTransport {
+    base: String,
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl ProtocolTransport for HttpTransport {
+    async fn request(
+        &self,
+        _: &SourceId,
+        request: ProtocolRequest,
+    ) -> ResourceResult<Value> {
+        let mut builder = self
+            .client
+            .request(request.method, format!("{}{}", self.base, request.path))
+            .query(&request.query);
+        if let Some(body) = request.body {
+            builder = builder.json(&body);
+        }
+        let response =
+            builder
+                .send()
+                .await
+                .map_err(|error| ResourceError::Network {
+                    status: error.status().map(|status| status.as_u16()),
+                })?;
+        if !response.status().is_success() {
+            return Err(ResourceError::Network {
+                status: Some(response.status().as_u16()),
+            });
+        }
+        response.json().await.map_err(|_| {
+            ResourceError::InvalidResponse("invalid HTTP JSON".into())
+        })
+    }
+}
+
+#[tokio::test]
+async fn real_http_batches_and_reopened_sqlite_cache_obey_force_refresh() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let bytes = Arc::new(AtomicUsize::new(0));
+    let fail = Arc::new(AtomicBool::new(false));
+    let server = tokio::spawn({
+        let calls = calls.clone();
+        let bytes = bytes.clone();
+        let fail = fail.clone();
+        async move {
+            loop {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let calls = calls.clone();
+                let bytes = bytes.clone();
+                let fail = fail.clone();
+                tokio::spawn(async move {
+                    let mut header = vec![];
+                    loop {
+                        let mut buffer = [0u8; 2048];
+                        let count = stream.read(&mut buffer).await.unwrap();
+                        if count == 0 {
+                            return;
+                        }
+                        header.extend_from_slice(&buffer[..count]);
+                        if header.windows(4).any(|window| window == b"\r\n\r\n")
+                        {
+                            break;
+                        }
+                        assert!(header.len() < 32768);
+                    }
+                    calls.fetch_add(1, Ordering::AcqRel);
+                    let header = String::from_utf8(header).unwrap();
+                    let path = header.split_whitespace().nth(1).unwrap();
+                    let url =
+                        url::Url::parse(&format!("http://127.0.0.1{path}"))
+                            .unwrap();
+                    let ids: Vec<String> = serde_json::from_str(
+                        &url.query_pairs()
+                            .find(|(key, _)| key == "ids")
+                            .unwrap()
+                            .1,
+                    )
+                    .unwrap();
+                    assert!(ids.len() <= 100);
+                    let failed = fail.load(Ordering::Acquire);
+                    let payload = if failed {
+                        json!({"error":"unavailable"})
+                    } else {
+                        Value::Array(ids.iter().map(|id| json!({"id":id,"slug":id,"title":id,"description":"","body":"body","project_type":"mod"})).collect())
+                    };
+                    let payload = serde_json::to_vec(&payload).unwrap();
+                    bytes.fetch_add(payload.len(), Ordering::AcqRel);
+                    let response = format!(
+                        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        if failed {
+                            "503 Service Unavailable"
+                        } else {
+                            "200 OK"
+                        },
+                        payload.len()
+                    );
+                    stream.write_all(response.as_bytes()).await.unwrap();
+                    stream.write_all(&payload).await.unwrap();
+                });
+            }
+        }
+    });
+    let transport = Arc::new(HttpTransport {
+        base: format!("http://{address}"),
+        client: reqwest::Client::builder().no_proxy().build().unwrap(),
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(ModrinthProvider::new(transport.clone()))],
+    )
+    .unwrap();
+    let queries: Vec<_> = (0..101)
+        .map(|id| project_query(&format!("p{id:07}")))
+        .collect();
+    let token = CancellationToken::new();
+    assert!(
+        service
+            .query_many(
+                &SourceId::modrinth(),
+                queries.clone(),
+                CachePolicy::UseFresh,
+                &token
+            )
+            .await
+            .iter()
+            .all(Result::is_ok)
+    );
+    assert_eq!(calls.load(Ordering::Acquire), 2);
+    assert!(
+        service
+            .query_many(
+                &SourceId::modrinth(),
+                queries.clone(),
+                CachePolicy::UseFresh,
+                &token
+            )
+            .await
+            .iter()
+            .all(|result| result.as_ref().unwrap().from_cache)
+    );
+    assert_eq!(calls.load(Ordering::Acquire), 2);
+    let path = cache.path().to_path_buf();
+    cache.close().await;
+    let reopened = Arc::new(ResourceCache::open(path).await);
+    let new_service = ResourceService::new(
+        reopened.clone(),
+        vec![Arc::new(ModrinthProvider::new(transport))],
+    )
+    .unwrap();
+    assert!(
+        new_service
+            .query_many(
+                &SourceId::modrinth(),
+                queries.clone(),
+                CachePolicy::UseFresh,
+                &token
+            )
+            .await
+            .iter()
+            .all(|result| result.as_ref().unwrap().from_cache)
+    );
+    assert_eq!(calls.load(Ordering::Acquire), 2);
+    assert!(
+        new_service
+            .query_many(
+                &SourceId::modrinth(),
+                queries,
+                CachePolicy::ForceRefresh,
+                &token
+            )
+            .await
+            .iter()
+            .all(Result::is_ok)
+    );
+    assert_eq!(calls.load(Ordering::Acquire), 4);
+    fail.store(true, Ordering::Release);
+    assert_eq!(
+        new_service
+            .query(
+                &SourceId::modrinth(),
+                project_query("p0000000"),
+                CachePolicy::ForceRefresh,
+                &token
+            )
+            .await,
+        Err(ResourceError::Network { status: Some(503) })
+    );
+    assert_eq!(calls.load(Ordering::Acquire), 5);
+    assert!(bytes.load(Ordering::Acquire) > 0);
+    reopened.close().await;
+    server.abort();
+}

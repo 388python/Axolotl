@@ -292,6 +292,20 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
+    pub fn resource_cache_db(&self, channel: &str) -> crate::Result<PathBuf> {
+        if !matches!(channel, "release" | "beta") {
+            return Err(crate::ErrorKind::InputError(
+                "Invalid resource cache channel".into(),
+            )
+            .into());
+        }
+        Ok(self
+            .caches_dir()
+            .join("resources")
+            .join(channel)
+            .join("resource-cache.db"))
+    }
+
     pub fn content_store_dir(&self) -> PathBuf {
         self.caches_dir().join("content-store")
     }

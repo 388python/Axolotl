@@ -1491,6 +1491,17 @@ pub async fn match_fingerprints(
     Ok(response.data)
 }
 
+/// Resource adapters share routing and credential handling without consulting
+/// the legacy main-database resource cache.
+pub(crate) async fn resource_request(
+    method: Method,
+    path: &str,
+    query: Vec<(String, String)>,
+    body: Option<Value>,
+) -> crate::Result<Value> {
+    request_json(method, path, query, body, MirrorPolicy::MirrorFirst).await
+}
+
 pub async fn install_file(
     request: CurseForgeInstallRequest,
 ) -> crate::Result<CurseForgeInstallResult> {

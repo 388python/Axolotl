@@ -1,0 +1,506 @@
+use chrono::Utc;
+use dashmap::{DashMap, mapref::entry::Entry};
+use futures::future::join_all;
+use std::collections::HashMap;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+use tokio::sync::{Notify, Semaphore, watch};
+use tokio_util::sync::CancellationToken;
+
+use super::{
+    cache::{CacheKey, ResourceCache},
+    providers::*,
+    *,
+};
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum CachePolicy {
+    UseFresh,
+    /// Ignore positive, negative, and expired cache entries. A source error
+    /// never becomes success by falling back to an old cached response.
+    ForceRefresh,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryOutcome {
+    pub value: ProviderValue,
+    pub from_cache: bool,
+}
+
+struct SourceRuntime {
+    provider: Arc<dyn ResourceProvider>,
+    semaphore: Arc<Semaphore>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct FlightKey {
+    cache: CacheKey,
+    policy: CachePolicy,
+    generation: i64,
+}
+
+struct Flight {
+    key: FlightKey,
+    query: ProviderQuery,
+    subscribers: AtomicUsize,
+    result: watch::Sender<Option<ResourceResult<QueryOutcome>>>,
+    changed: Arc<Notify>,
+    started_at: i64,
+    owner: std::sync::Weak<ResourceService>,
+}
+
+struct Subscription(Arc<Flight>);
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        if self.0.subscribers.fetch_sub(1, Ordering::AcqRel) == 1 {
+            if let Some(owner) = self.0.owner.upgrade() {
+                owner.flights.remove_if(&self.0.key, |_, current| {
+                    Arc::ptr_eq(current, &self.0)
+                });
+            }
+        }
+        self.0.changed.notify_waiters();
+    }
+}
+
+impl Subscription {
+    async fn wait(
+        self,
+        cancel: &CancellationToken,
+    ) -> ResourceResult<QueryOutcome> {
+        let mut receiver = self.0.result.subscribe();
+        loop {
+            if cancel.is_cancelled() {
+                return Err(ResourceError::Canceled);
+            }
+            if let Some(value) = receiver.borrow_and_update().clone() {
+                return value;
+            }
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err(ResourceError::Canceled),
+                result = receiver.changed() => if result.is_err() { return Err(ResourceError::Canceled); },
+            }
+        }
+    }
+}
+
+pub struct ResourceService {
+    cache: Arc<ResourceCache>,
+    sources: HashMap<SourceId, SourceRuntime>,
+    flights: DashMap<FlightKey, Arc<Flight>>,
+    changed: Arc<Notify>,
+}
+
+impl ResourceService {
+    pub fn new(
+        cache: Arc<ResourceCache>,
+        providers: Vec<Arc<dyn ResourceProvider>>,
+    ) -> ResourceResult<Arc<Self>> {
+        let mut sources = HashMap::new();
+        for provider in providers {
+            let id = provider.source().id;
+            if sources
+                .insert(
+                    id,
+                    SourceRuntime {
+                        provider,
+                        semaphore: Arc::new(Semaphore::new(3)),
+                    },
+                )
+                .is_some()
+            {
+                return Err(ResourceError::InvalidRequest(
+                    "duplicate source adapter".into(),
+                ));
+            }
+        }
+        Ok(Arc::new(Self {
+            cache,
+            sources,
+            flights: DashMap::new(),
+            changed: Arc::new(Notify::new()),
+        }))
+    }
+
+    pub fn sources(&self) -> Vec<ResourceSource> {
+        let mut sources: Vec<_> = self
+            .sources
+            .values()
+            .map(|runtime| runtime.provider.source())
+            .collect();
+        sources.sort_by(|left, right| left.id.cmp(&right.id));
+        sources
+    }
+
+    pub fn cache(&self) -> &Arc<ResourceCache> {
+        &self.cache
+    }
+
+    #[cfg(test)]
+    pub(crate) fn subscriber_count(&self) -> usize {
+        self.flights
+            .iter()
+            .map(|flight| flight.subscribers.load(Ordering::Acquire))
+            .sum()
+    }
+
+    pub async fn query(
+        self: &Arc<Self>,
+        source: &SourceId,
+        query: ProviderQuery,
+        policy: CachePolicy,
+        cancel: &CancellationToken,
+    ) -> ResourceResult<QueryOutcome> {
+        self.query_many(source, vec![query], policy, cancel)
+            .await
+            .into_iter()
+            .next()
+            .ok_or(ResourceError::Canceled)?
+    }
+
+    /// Results retain input order and per-item failures. Repeated keys share
+    /// one operation; each caller owns only its own cancellation subscription.
+    pub async fn query_many(
+        self: &Arc<Self>,
+        source: &SourceId,
+        queries: Vec<ProviderQuery>,
+        policy: CachePolicy,
+        cancel: &CancellationToken,
+    ) -> Vec<ResourceResult<QueryOutcome>> {
+        if cancel.is_cancelled() {
+            return vec![Err(ResourceError::Canceled); queries.len()];
+        }
+        let Some(runtime) = self.sources.get(source) else {
+            return vec![Err(ResourceError::Unavailable); queries.len()];
+        };
+        let capabilities = runtime.provider.source();
+        if !capabilities.available {
+            return vec![Err(ResourceError::Unavailable); queries.len()];
+        }
+        let namespace = runtime.provider.namespace();
+        let generation = self.cache.generation().await;
+        let mut subscriptions = Vec::with_capacity(queries.len());
+        let mut fresh = Vec::new();
+        for mut query in queries {
+            if cancel.is_cancelled() {
+                subscriptions.push(Err(ResourceError::Canceled));
+                continue;
+            }
+            query.normalize();
+            if let Err(error) = runtime.provider.validate_query(&query) {
+                subscriptions.push(Err(error));
+                continue;
+            }
+            if let ProviderQuery::Search { query, .. } = &query {
+                if !capabilities.supported_search_sorts.contains(&query.sort) {
+                    subscriptions.push(Err(ResourceError::Unsupported(
+                        "source sort semantics unavailable".into(),
+                    )));
+                    continue;
+                }
+            }
+            if !capabilities.capabilities.contains(&query.capability())
+                && !matches!(query, ProviderQuery::Identify { .. } if capabilities.capabilities.contains(&SourceCapability::IdentifyFingerprint))
+            {
+                subscriptions.push(Err(ResourceError::Unsupported(
+                    "source capability unavailable".into(),
+                )));
+                continue;
+            }
+            let cache_key = match CacheKey::new(
+                namespace.clone(),
+                source.clone(),
+                &query.cache_identity(),
+            ) {
+                Ok(key) => key,
+                Err(error) => {
+                    subscriptions.push(Err(error));
+                    continue;
+                }
+            };
+            if policy == CachePolicy::UseFresh {
+                if let Some(value) = self.cache.get(&cache_key).await {
+                    if validate_value(source, &query, &value).is_ok() {
+                        subscriptions.push(Ok(Ok(QueryOutcome {
+                            value,
+                            from_cache: true,
+                        })));
+                        continue;
+                    }
+                }
+            }
+            let key = FlightKey {
+                cache: cache_key,
+                policy,
+                generation,
+            };
+            let flight = match self.flights.entry(key.clone()) {
+                Entry::Occupied(entry)
+                    if entry.get().subscribers.load(Ordering::Acquire) > 0 =>
+                {
+                    let flight = entry.get().clone();
+                    flight.subscribers.fetch_add(1, Ordering::AcqRel);
+                    flight
+                }
+                entry => {
+                    let flight = Arc::new(Flight {
+                        key: key.clone(),
+                        query,
+                        subscribers: AtomicUsize::new(1),
+                        result: watch::channel(None).0,
+                        changed: self.changed.clone(),
+                        started_at: Utc::now().timestamp_micros(),
+                        owner: Arc::downgrade(self),
+                    });
+                    match entry {
+                        Entry::Occupied(mut entry) => {
+                            entry.insert(flight.clone());
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(flight.clone());
+                        }
+                    }
+                    fresh.push(flight.clone());
+                    flight
+                }
+            };
+            subscriptions.push(Ok(Err(Subscription(flight))));
+        }
+        let mut groups: HashMap<u8, Vec<Arc<Flight>>> = HashMap::new();
+        for flight in fresh {
+            groups
+                .entry(flight.query.batch_group())
+                .or_default()
+                .push(flight);
+        }
+        for group in groups.into_values() {
+            let limit = group
+                .first()
+                .map(|flight| runtime.provider.batch_limit(&flight.query))
+                .unwrap_or(1)
+                .max(1);
+            for batch in group.chunks(limit) {
+                let service = self.clone();
+                let provider = runtime.provider.clone();
+                let semaphore = runtime.semaphore.clone();
+                let batch = batch.to_vec();
+                tokio::spawn(async move {
+                    service.fetch_batch(provider, semaphore, batch).await;
+                });
+            }
+        }
+        let results = join_all(subscriptions.into_iter().map(
+            |subscription| async move {
+                match subscription {
+                    Err(error) => Err(error),
+                    Ok(Ok(value)) => Ok(value),
+                    Ok(Err(subscription)) => subscription.wait(cancel).await,
+                }
+            },
+        ))
+        .await;
+        if cancel.is_cancelled() {
+            vec![Err(ResourceError::Canceled); results.len()]
+        } else {
+            results
+        }
+    }
+
+    async fn fetch_batch(
+        self: Arc<Self>,
+        provider: Arc<dyn ResourceProvider>,
+        semaphore: Arc<Semaphore>,
+        batch: Vec<Arc<Flight>>,
+    ) {
+        let operation = async {
+            let _permit = semaphore
+                .acquire()
+                .await
+                .map_err(|_| ResourceError::Canceled)?;
+            let active: Vec<_> = batch
+                .iter()
+                .filter(|flight| flight.subscribers.load(Ordering::Acquire) > 0)
+                .cloned()
+                .collect();
+            if active.is_empty() {
+                return Ok(());
+            }
+            let queries: Vec<_> =
+                active.iter().map(|flight| flight.query.clone()).collect();
+            let responses = provider.fetch_many(&queries).await;
+            if responses.len() != active.len() {
+                return Err(ResourceError::InvalidResponse(
+                    "batch result count mismatch".into(),
+                ));
+            }
+            for (flight, response) in active.iter().zip(responses) {
+                let result = response.and_then(|value| {
+                    validate_value(
+                        &flight.key.cache.source,
+                        &flight.query,
+                        &value,
+                    )?;
+                    Ok(value)
+                });
+                if let Ok(value) = &result {
+                    if flight.subscribers.load(Ordering::Acquire) > 0 {
+                        self.cache
+                            .put(
+                                &flight.key.cache,
+                                value,
+                                flight.query.ttl(value),
+                                flight.key.generation,
+                                flight.started_at,
+                            )
+                            .await;
+                    }
+                }
+                flight.result.send_replace(Some(result.map(|value| {
+                    QueryOutcome {
+                        value,
+                        from_cache: false,
+                    }
+                })));
+            }
+            Ok(())
+        };
+        let result = tokio::select! {
+            result = operation => result,
+            _ = wait_for_abandoned(&batch, &self.changed) => Err(ResourceError::Canceled),
+        };
+        for flight in batch {
+            if let Err(error) = &result {
+                flight.result.send_replace(Some(Err(error.clone())));
+            }
+            self.flights.remove_if(&flight.key, |_, current| {
+                Arc::ptr_eq(current, &flight)
+            });
+        }
+    }
+}
+
+async fn wait_for_abandoned(batch: &[Arc<Flight>], notify: &Notify) {
+    loop {
+        let notified = notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if batch
+            .iter()
+            .all(|flight| flight.subscribers.load(Ordering::Acquire) == 0)
+        {
+            return;
+        }
+        notified.await;
+    }
+}
+
+fn validate_value(
+    source: &SourceId,
+    query: &ProviderQuery,
+    value: &ProviderValue,
+) -> ResourceResult<()> {
+    let valid = match (query, value) {
+        (_, ProviderValue::NotFound) => !matches!(
+            query,
+            ProviderQuery::Search { .. } | ProviderQuery::Releases { .. }
+        ),
+        (
+            ProviderQuery::Project { id, .. },
+            ProviderValue::Project(document),
+        ) => {
+            document.metadata.project.source == *source
+                && document.metadata.project.project_id == *id
+                && document.description.source == *source
+        }
+        (
+            ProviderQuery::Description { .. },
+            ProviderValue::Description(text),
+        )
+        | (ProviderQuery::Changelog { .. }, ProviderValue::Changelog(text)) => {
+            text.source == *source
+        }
+        (
+            ProviderQuery::Release {
+                project_id,
+                release_id,
+                ..
+            },
+            ProviderValue::Release(document),
+        ) => {
+            document.release.reference.project.source == *source
+                && project_id.as_ref().is_none_or(|id| {
+                    document.release.reference.project.project_id == *id
+                })
+                && document.release.reference.release_id == *release_id
+                && document.release.artifacts.iter().all(|artifact| {
+                    artifact.reference.release == document.release.reference
+                        && valid_artifact(artifact)
+                })
+        }
+        (
+            ProviderQuery::Releases { project_id, .. },
+            ProviderValue::Releases(page),
+        ) => page.entries.iter().all(|release| {
+            release.reference.project.source == *source
+                && release.reference.project.project_id == *project_id
+                && release.artifacts.iter().all(|artifact| {
+                    artifact.reference.release == release.reference
+                        && valid_artifact(artifact)
+                })
+        }),
+        (ProviderQuery::Search { .. }, ProviderValue::Search(page)) => page
+            .entries
+            .iter()
+            .all(|project| project.project.source == *source),
+        (ProviderQuery::Identify { .. }, ProviderValue::Matches(matches)) => {
+            matches.iter().all(|artifact| {
+                artifact.reference.release.project.source == *source
+                    && valid_artifact(artifact)
+            })
+        }
+        _ => false,
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(ResourceError::InvalidResponse(
+            "response identity or query kind mismatch".into(),
+        ))
+    }
+}
+
+fn valid_artifact(artifact: &ResourceArtifact) -> bool {
+    if artifact.file_name.as_ref().is_some_and(|name| {
+        name.is_empty()
+            || matches!(name.as_str(), "." | "..")
+            || name.chars().any(|character| {
+                character.is_control() || matches!(character, '/' | '\\')
+            })
+    }) {
+        return false;
+    }
+    if hashes(
+        artifact
+            .integrity
+            .hashes
+            .iter()
+            .map(|hash| (hash.algorithm, hash.value.clone())),
+    )
+    .is_err()
+    {
+        return false;
+    }
+    match &artifact.acquisition {
+        ArtifactAcquisition::PublicDownload { urls } => {
+            !urls.is_empty() && urls.iter().all(|url| public_url(url).is_some())
+        }
+        ArtifactAcquisition::ManualDownload { page_url } => {
+            public_url(page_url).is_some()
+        }
+        ArtifactAcquisition::Unavailable => true,
+    }
+}

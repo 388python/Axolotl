@@ -159,6 +159,7 @@ pub struct State {
     pub(crate) instance_locks: Arc<InstanceLockManager>,
 
     pub(crate) pool: SqlitePool,
+    resource_service: OnceCell<Arc<crate::resources::ResourceService>>,
 
     // Cloning reqwest::Client retains its underlying connection pool.
     configured_http_client: RwLock<crate::util::fetch::DownloadClients>,
@@ -171,6 +172,45 @@ pub struct State {
 }
 
 impl State {
+    pub async fn resources(
+        &self,
+    ) -> crate::resources::ResourceResult<&Arc<crate::resources::ResourceService>>
+    {
+        self.resource_service
+            .get_or_try_init(|| async {
+                let path: String = sqlx::query_scalar(
+                    "SELECT file FROM pragma_database_list WHERE name = 'main'",
+                )
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|error| {
+                    crate::resources::ResourceError::Cache(error.to_string())
+                })?;
+                let channel = std::path::Path::new(&path)
+                    .parent()
+                    .and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str())
+                    .filter(|name| matches!(*name, "release" | "beta"))
+                    .unwrap_or_else(|| db::default_update_channel());
+                let path = self
+                    .directories
+                    .resource_cache_db(channel)
+                    .map_err(|_| {
+                        crate::resources::ResourceError::InvalidRequest(
+                            "invalid cache channel".into(),
+                        )
+                    })?;
+                let cache = Arc::new(
+                    crate::resources::cache::ResourceCache::open(path).await,
+                );
+                crate::resources::ResourceService::new(
+                    cache,
+                    crate::resources::providers::default_providers(),
+                )
+            })
+            .await
+    }
+
     pub(crate) async fn lock_instance_screenshots(
         &self,
         instance_id: &str,
@@ -1013,6 +1053,7 @@ impl State {
             restart_after_pending_update: AtomicBool::new(false),
             instance_locks: Arc::new(InstanceLockManager::default()),
             pool,
+            resource_service: OnceCell::new(),
             configured_http_client: RwLock::new(configured_http_client),
             configured_http_client_update: AsyncMutex::new(()),
             file_watcher,
@@ -1128,6 +1169,7 @@ pub(crate) async fn test_state(
         restart_after_pending_update: AtomicBool::new(false),
         instance_locks: Arc::new(InstanceLockManager::default()),
         pool,
+        resource_service: OnceCell::new(),
         configured_http_client: RwLock::new(configured_http_client),
         configured_http_client_update: AsyncMutex::new(()),
         file_watcher,

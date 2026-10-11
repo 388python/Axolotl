@@ -13,6 +13,8 @@ pub enum ResourceSearchSort {
     Followers,
     FirstPublished,
     LatestPublished,
+    Created,
+    ProjectUpdated,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

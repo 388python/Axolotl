@@ -21,10 +21,11 @@ fn artifact(source: SourceId, file: &str) -> SourceArtifactRef {
 fn resource_artifact() -> ResourceArtifact {
     ResourceArtifact {
         reference: artifact(SourceId::modrinth(), "primary-file"),
-        file_name: "example.jar".into(),
+        file_name: Some("example.jar".into()),
         role: ArtifactRole::Primary,
+        available: None,
         integrity: ArtifactIntegrity {
-            size: 42,
+            size: Some(42),
             hashes: vec![ContentHash {
                 algorithm: HashAlgorithm::Sha1,
                 value: "f".repeat(40),

@@ -39,6 +39,7 @@ pub struct ResourceSource {
     pub types: Vec<ResourceType>,
     pub capabilities: Vec<SourceCapability>,
     pub available: bool,
+    pub supported_search_sorts: Vec<super::ipc::ResourceSearchSort>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -55,6 +56,7 @@ pub struct SourceProjectMetadata {
     pub downloads: Option<u64>,
     pub followers: Option<u64>,
     pub created_at: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub first_published_at: Option<DateTime<Utc>>,
     pub latest_published_at: Option<DateTime<Utc>>,
 }
@@ -107,7 +109,7 @@ pub struct ResourceRelease {
     pub reference: SourceReleaseRef,
     pub version: String,
     pub channel: ReleaseChannel,
-    pub published_at: DateTime<Utc>,
+    pub published_at: Option<DateTime<Utc>>,
     pub compatibility: ReleaseCompatibility,
     pub artifacts: Vec<ResourceArtifact>,
     pub equivalent_releases: Vec<SourceReleaseRef>,
@@ -146,6 +148,13 @@ pub enum ResourceDependencyKind {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DependencyTarget {
+    SourceRelease {
+        source: SourceId,
+        release_id: super::SourceReleaseId,
+    },
+    FileName {
+        name: String,
+    },
     Resource {
         reference: ResourceRef,
     },
@@ -174,8 +183,9 @@ pub struct ArtifactDependency {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceArtifact {
     pub reference: SourceArtifactRef,
-    pub file_name: String,
+    pub file_name: Option<String>,
     pub role: ArtifactRole,
+    pub available: Option<bool>,
     pub integrity: ArtifactIntegrity,
     pub acquisition: ArtifactAcquisition,
     pub dependencies: Vec<ArtifactDependency>,
