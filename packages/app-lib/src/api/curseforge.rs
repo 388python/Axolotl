@@ -25,9 +25,9 @@ use crate::util::fetch::{
     resolve_download_routes_for, sha1_file_async, sha1_file_cancellable,
 };
 use crate::{ErrorKind, State};
+use content_management::{DependencyPolicy, DependencyType};
 use dashmap::DashMap;
 use futures::{StreamExt, stream};
-use modrinth_content_management::{DependencyPolicy, DependencyType};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -1631,7 +1631,7 @@ struct CurseForgeDependencyEdgeCandidate {
 struct ModrinthFallbackPlan {
     parent_project_id: u32,
     parent_file_id: u32,
-    plan: modrinth_content_management::ResolveContentPlan,
+    plan: content_management::ResolveContentPlan,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2534,7 +2534,7 @@ async fn install_fixed_modrinth_content(
     }
     crate::state::instances::commands::install_resolved_dependency(
         &request.instance_id,
-        &modrinth_content_management::ResolvedContent {
+        &content_management::ResolvedContent {
             project_id: project_id.to_string(),
             version_id: version_id.to_string(),
             dependent_on_version_id: None,
@@ -7940,7 +7940,7 @@ async fn resolve_modrinth_fallback_plan(
     item_type: ProjectType,
     request: &CurseForgeInstallRequest,
     state: &State,
-) -> crate::Result<Option<modrinth_content_management::ResolveContentPlan>> {
+) -> crate::Result<Option<content_management::ResolveContentPlan>> {
     let Some(sha1) = file
         .hashes
         .iter()
@@ -8026,7 +8026,7 @@ fn mod_loader_from_curseforge_type(mod_loader_type: u32) -> Option<ModLoader> {
 }
 
 async fn preview_modrinth_fallbacks(
-    plan: &modrinth_content_management::ResolveContentPlan,
+    plan: &content_management::ResolveContentPlan,
     parent_project_id: u32,
     state: &State,
 ) -> crate::Result<Vec<CurseForgeModrinthFallbackPreview>> {
@@ -8067,7 +8067,7 @@ async fn preview_modrinth_fallbacks(
 
 async fn append_modrinth_fallback_plan(
     resolution_plan: &mut DependencyResolutionPlan,
-    fallback_plan: &modrinth_content_management::ResolveContentPlan,
+    fallback_plan: &content_management::ResolveContentPlan,
     curseforge_parent: &ContentProviderRef,
     state: &State,
 ) -> crate::Result<()> {

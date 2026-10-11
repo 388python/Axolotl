@@ -25,12 +25,12 @@ use crate::util::io;
 use crate::util::io::io_error_with_lock_info;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::{StreamExt, TryStreamExt};
-use modrinth_content_management::{
+use content_management::{
     ContentMetadataProvider, ContentType, DependencyPolicy,
     Error as ResolveError, ResolutionPreferences, ResolveContentPlan,
     ResolveContentRequest, ResolvedContent, SkippedReason,
 };
+use futures::{StreamExt, TryStreamExt};
 use std::collections::HashMap;
 use std::future::Future;
 use std::io::{Cursor, Write};
@@ -109,8 +109,7 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
     async fn get_version(
         &mut self,
         version_id: &str,
-    ) -> Result<Option<modrinth_content_management::Version>, ResolveError>
-    {
+    ) -> Result<Option<content_management::Version>, ResolveError> {
         let version = CachedEntry::get_version(
             &ModrinthVersionId::new(version_id.to_string())
                 .map_err(resolve_provider_error)?,
@@ -127,7 +126,7 @@ impl ContentMetadataProvider for CachedEntryContentProvider<'_> {
     async fn get_project_versions(
         &mut self,
         project_id: &str,
-    ) -> Result<Vec<modrinth_content_management::Version>, ResolveError> {
+    ) -> Result<Vec<content_management::Version>, ResolveError> {
         let versions = CachedEntry::get_project_versions(
             &ModrinthProjectId::new(project_id.to_string())
                 .map_err(resolve_provider_error)?,
@@ -154,16 +153,14 @@ fn resolver_error(error: ResolveError) -> crate::Error {
     crate::ErrorKind::InputError(error.to_string()).into()
 }
 
-fn version_to_resolver(
-    version: Version,
-) -> modrinth_content_management::Version {
+fn version_to_resolver(version: Version) -> content_management::Version {
     let (filename, sha1) = version
         .files
         .first()
         .map(|f| (Some(f.filename.clone()), f.hashes.get("sha1").cloned()))
         .unwrap_or_default();
 
-    modrinth_content_management::Version {
+    content_management::Version {
         id: version.id,
         project_id: version.project_id,
         date_published: version.date_published,
@@ -183,23 +180,23 @@ fn version_to_resolver(
 
 fn dependency_to_resolver(
     dependency: Dependency,
-) -> modrinth_content_management::Dependency {
-    modrinth_content_management::Dependency {
+) -> content_management::Dependency {
+    content_management::Dependency {
         version_id: dependency.version_id,
         project_id: dependency.project_id,
         file_name: dependency.file_name,
         dependency_type: match dependency.dependency_type {
             DependencyType::Required => {
-                modrinth_content_management::DependencyType::Required
+                content_management::DependencyType::Required
             }
             DependencyType::Optional => {
-                modrinth_content_management::DependencyType::Optional
+                content_management::DependencyType::Optional
             }
             DependencyType::Incompatible => {
-                modrinth_content_management::DependencyType::Incompatible
+                content_management::DependencyType::Incompatible
             }
             DependencyType::Embedded => {
-                modrinth_content_management::DependencyType::Embedded
+                content_management::DependencyType::Embedded
             }
         },
     }
@@ -299,7 +296,7 @@ async fn resolve_install_plan_with_cache(
         force_project_ids: request.force_project_ids,
     };
 
-    let mut plan = modrinth_content_management::resolve_content_with_policy(
+    let mut plan = content_management::resolve_content_with_policy(
         provider,
         request,
         dependency_policy,
@@ -385,7 +382,7 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
         force_project_ids: request.force_project_ids,
     };
 
-    let mut plan = modrinth_content_management::resolve_content_with_policy(
+    let mut plan = content_management::resolve_content_with_policy(
         provider,
         request,
         dependency_policy,

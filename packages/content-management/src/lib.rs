@@ -1,6 +1,7 @@
 pub mod install;
 pub mod model;
 pub mod provider;
+pub mod resources;
 
 pub use install::{
     DependencyPolicy, resolve_content, resolve_content_with_policy,

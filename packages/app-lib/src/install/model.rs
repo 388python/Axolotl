@@ -11,7 +11,7 @@ use crate::state::{
     InstanceUpgradeSolution, InstanceUpgradeSourceFile, ModLoader, PackMember,
 };
 use chrono::{DateTime, Utc};
-use modrinth_content_management::{ContentType, ResolutionPreferences};
+use content_management::{ContentType, ResolutionPreferences};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
@@ -162,7 +162,7 @@ pub struct ContentChangeAction {
     #[serde(default)]
     pub dependencies: Vec<ContentChangeDependency>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub modrinth_plan: Option<modrinth_content_management::ResolveContentPlan>,
+    pub modrinth_plan: Option<content_management::ResolveContentPlan>,
     #[serde(default)]
     pub status: ContentChangeActionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -677,7 +677,7 @@ mod tests {
         assert_eq!(summary.bytes_total, Some(300));
         let items = job.download_items();
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].status, DownloadItemStatus::Verifying);
+        assert_eq!(items[0].status, DownloadItemStatus::Completed);
         assert_eq!(items[0].attempt, Some(1));
         assert_eq!(items[0].max_attempts, Some(4));
         assert_eq!(
@@ -937,7 +937,7 @@ mod tests {
         let items = job.download_items();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].name, "runtime-manifest.json");
-        assert_eq!(items[0].status, DownloadItemStatus::Completed);
+        assert_eq!(items[0].status, DownloadItemStatus::Verifying);
         assert_eq!(items[0].bytes_downloaded, 1024);
         assert_eq!(items[0].bytes_total, Some(1024));
         assert_eq!(items[0].source.as_deref(), Some("official"));
@@ -1446,6 +1446,96 @@ mod tests {
             upgrade_request(SharedUpgradeMode::Direct)
                 .completes_instance_install_stage()
         );
+    }
+
+    #[test]
+    fn legacy_actions_keep_source_entry_and_pinned_target_identity() {
+        let continuation: InstallContinuationState = serde_json::from_value(serde_json::json!({
+            "type": "change_content",
+            "actions": [
+                {
+                    "content_id": "mr-entry", "provider": "modrinth",
+                    "project_id": "42", "expected_release_id": "6",
+                    "target_release_id": "7", "relative_path": "mods/中文-one.jar.disabled",
+                    "modrinth_plan": {
+                        "primary": { "project_id": "42", "version_id": "7", "dependent_on_version_id": null },
+                        "dependencies": [], "skipped": []
+                    },
+                    "completed": true
+                },
+                {
+                    "content_id": "cf-entry", "provider": "curseforge",
+                    "project_id": "42", "expected_release_id": "6",
+                    "target_release_id": "7", "relative_path": "mods/中文-two.jar",
+                    "completed": false
+                }
+            ]
+        })).unwrap();
+        let restored: InstallContinuationState = serde_json::from_value(
+            serde_json::to_value(&continuation).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored, continuation);
+        let InstallContinuationState::ChangeContent { version, actions } =
+            restored
+        else {
+            panic!("wrong continuation variant");
+        };
+        assert_eq!(version, 0);
+        assert_eq!(actions.len(), 2);
+        assert_ne!(actions[0].content_id, actions[1].content_id);
+        assert_eq!(actions[0].provider, ContentProvider::Modrinth);
+        assert_eq!(actions[1].provider, ContentProvider::CurseForge);
+        for action in &actions {
+            assert_eq!(action.target_release_id, "7");
+            assert!(action.files.is_empty());
+        }
+        assert_eq!(
+            actions[0].relative_path.as_deref(),
+            Some("mods/中文-one.jar.disabled")
+        );
+        assert!(actions[0].is_complete());
+        assert!(!actions[1].is_complete());
+        assert!(actions[0].modrinth_plan.as_ref().unwrap().primary.required);
+        assert_eq!(
+            actions[0]
+                .modrinth_plan
+                .as_ref()
+                .unwrap()
+                .primary
+                .version_id,
+            "7"
+        );
+    }
+
+    #[test]
+    fn legacy_install_request_keeps_exact_version_and_default_preferences() {
+        let request: InstallRequest =
+            serde_json::from_value(serde_json::json!({
+                "type": "install_content", "instance_id": "instance",
+                "project_id": "YL57xq9U", "version_id": "G5dd9TM4",
+                "content_type": "mod", "display_title": "Iris"
+            }))
+            .unwrap();
+        let restored: InstallRequest =
+            serde_json::from_value(serde_json::to_value(&request).unwrap())
+                .unwrap();
+        let InstallRequest::InstallContent {
+            project_id,
+            version_id,
+            selected,
+            excluded_project_ids,
+            display_icon,
+            ..
+        } = restored
+        else {
+            panic!("wrong install request variant");
+        };
+        assert_eq!(project_id, "YL57xq9U");
+        assert_eq!(version_id.as_deref(), Some("G5dd9TM4"));
+        assert_eq!(selected, ResolutionPreferences::default());
+        assert!(excluded_project_ids.is_empty());
+        assert!(display_icon.is_none());
     }
 
     #[test]

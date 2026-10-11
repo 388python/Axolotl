@@ -926,7 +926,7 @@ mod tests {
                 instance_id: instance_id.clone(),
                 project_id: "project".to_string(),
                 version_id: Some("version".to_string()),
-                content_type: modrinth_content_management::ContentType::Mod,
+                content_type: content_management::ContentType::Mod,
                 selected: Default::default(),
                 excluded_project_ids: Vec::new(),
                 display_title: "Modrinth content".to_string(),

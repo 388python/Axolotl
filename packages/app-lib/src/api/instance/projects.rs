@@ -7,7 +7,7 @@ use crate::state::instances::{
 };
 use crate::state::{ContentProvider, ContentSourceKind, ProjectType, State};
 use crate::util::fetch;
-use modrinth_content_management::{
+use content_management::{
     ContentType, ResolutionPreferences, ResolveContentPlan,
 };
 use std::collections::HashMap;

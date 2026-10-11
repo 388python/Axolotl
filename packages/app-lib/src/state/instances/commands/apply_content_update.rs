@@ -126,8 +126,8 @@ async fn apply_content_update(
             })?;
             let content_type =
                 ProjectType::get_from_loaders(version.loaders.clone())
-                    .map(modrinth_content_management::ContentType::from)
-                    .unwrap_or(modrinth_content_management::ContentType::Mod);
+                    .map(content_management::ContentType::from)
+                    .unwrap_or(content_management::ContentType::Mod);
             let new_provider_file_name = primary_version_file_name(&version)?;
             let old_provider_file_name = CachedEntry::get_version(
                 current_version_id,

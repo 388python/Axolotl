@@ -1114,18 +1114,17 @@ mod tests {
             vec![file("primary")],
         );
         assert!(needs_preparation(&prepared));
-        prepared.modrinth_plan =
-            Some(modrinth_content_management::ResolveContentPlan {
-                primary: modrinth_content_management::ResolvedContent {
-                    project_id: "projectA".into(),
-                    version_id: "versionA".into(),
-                    dependent_on_version_id: None,
-                    required: true,
-                    metadata: None,
-                },
-                dependencies: Vec::new(),
-                skipped: Vec::new(),
-            });
+        prepared.modrinth_plan = Some(content_management::ResolveContentPlan {
+            primary: content_management::ResolvedContent {
+                project_id: "projectA".into(),
+                version_id: "versionA".into(),
+                dependent_on_version_id: None,
+                required: true,
+                metadata: None,
+            },
+            dependencies: Vec::new(),
+            skipped: Vec::new(),
+        });
         let serialized = serde_json::to_string(&prepared).unwrap();
         let restored: ContentChangeAction =
             serde_json::from_str(&serialized).unwrap();

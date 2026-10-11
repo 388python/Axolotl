@@ -5,7 +5,7 @@ mod tests {
 
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
-    use modrinth_content_management::{
+    use content_management::{
         ContentMetadataProvider, ContentType, Dependency, DependencyPolicy,
         DependencyType, Error, ResolutionPreferences, ResolveContentRequest,
         SkippedReason, Version, resolve_content, resolve_content_with_policy,
@@ -259,6 +259,16 @@ mod tests {
             plan.dependencies
                 .iter()
                 .any(|dependency| dependency.project_id == "optional-child")
+        );
+        let optional_child = plan
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.project_id == "optional-child")
+            .unwrap();
+        assert!(optional_child.required);
+        assert_eq!(
+            optional_child.dependent_on_version_id.as_deref(),
+            Some("optional")
         );
     }
 
@@ -998,7 +1008,7 @@ mod tests {
         assert_eq!(plan.skipped.len(), 1);
         assert_eq!(
             plan.skipped[0].reason,
-            modrinth_content_management::SkippedReason::DuplicateProject
+            content_management::SkippedReason::DuplicateProject
         );
         assert_eq!(plan.skipped[0].project_id, "LNytGWDc");
     }

@@ -13,7 +13,7 @@ use crate::state::{
     SyncedPackInfo, Version,
 };
 use crate::util::fetch;
-use modrinth_content_management::ResolutionPreferences;
+use content_management::ResolutionPreferences;
 use std::collections::BTreeMap;
 
 use super::super::synced_options::{

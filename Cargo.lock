@@ -914,6 +914,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "content-management"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3573,17 +3585,6 @@ dependencies = [
  "log",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "modrinth-content-management"
-version = "0.0.0"
-dependencies = [
- "async-trait",
- "chrono",
- "serde",
- "thiserror 2.0.19",
- "tokio",
 ]
 
 [[package]]
@@ -6872,6 +6873,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "cidre",
+ "content-management",
  "crc32fast",
  "daedalus",
  "dashmap",
@@ -6903,7 +6905,6 @@ dependencies = [
  "libc",
  "local-ip-address",
  "md5",
- "modrinth-content-management",
  "notify",
  "notify-debouncer-mini",
  "p256",
