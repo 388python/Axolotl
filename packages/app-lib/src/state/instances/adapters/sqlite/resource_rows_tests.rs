@@ -82,6 +82,11 @@ fn project(source: SourceId, id: &str) -> SourceProjectRef {
 
 fn metadata(project: SourceProjectRef) -> SourceProjectMetadata {
     SourceProjectMetadata {
+        environments: vec![],
+        categories: vec![],
+        game_versions: vec![],
+        loaders: vec![],
+        gallery: vec![],
         project,
         slug: Some("same-name".into()),
         title: "Same name".into(),

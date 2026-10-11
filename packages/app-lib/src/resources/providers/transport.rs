@@ -62,7 +62,12 @@ impl ProtocolTransport for LauncherTransport {
             .map_err(Into::into);
         }
         let base = if source == &SourceId::modrinth() {
-            env!("MODRINTH_API_URL").trim_end_matches('/').to_string()
+            let base = env!("MODRINTH_API_URL").trim_end_matches('/');
+            if request.path.starts_with("/v3/") {
+                base.trim_end_matches("/v2").to_string()
+            } else {
+                base.to_string()
+            }
         } else if source == &SourceId::mcarchive() {
             "https://mcarchive.net/api/v1".into()
         } else if source == &SourceId::planet_minecraft() {

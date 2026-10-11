@@ -1,33 +1,79 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import { restoreCachedUrls } from './download-url'
+import {
+    resourceCachePolicy,
+    resourceProjectDocuments,
+    resourceProjectProtocol,
+    resourceReleaseDocuments,
+    resourceRequest,
+} from './resources'
 
 async function readCache(command, args) {
     return restoreCachedUrls(await invoke(command, args))
 }
 
+/** @returns {Promise<import('@modrinth/api-client').Labrinth.Projects.v2.Project>} */
 export async function get_project(id, cacheBehaviour) {
-    return await readCache('plugin:cache|get_project', { id, cacheBehaviour })
+    return restoreCachedUrls(
+        await resourceProjectProtocol(
+            'modrinth',
+            id,
+            undefined,
+            resourceCachePolicy(cacheBehaviour),
+        ),
+    )
 }
 
+/** @returns {Promise<import('@modrinth/api-client').Labrinth.Projects.v2.Project[]>} */
 export async function get_project_many(ids, cacheBehaviour) {
-    return await readCache('plugin:cache|get_project_many', { ids, cacheBehaviour })
+    return (
+        await resourceProjectDocuments(
+            'modrinth',
+            ids,
+            undefined,
+            resourceCachePolicy(cacheBehaviour),
+        )
+    ).map((document) => {
+        if (!document.protocol) throw new Error('Source presentation is unavailable')
+        return restoreCachedUrls(document.protocol)
+    })
 }
 
 export async function get_project_v3(id, cacheBehaviour) {
-    return await readCache('plugin:cache|get_project_v3', { id, cacheBehaviour })
+    return (await get_project_v3_many([id], cacheBehaviour))[0] ?? null
 }
 
 export async function get_project_v3_many(ids, cacheBehaviour) {
-    return await readCache('plugin:cache|get_project_v3_many', { ids, cacheBehaviour })
+    const documents = await resourceRequest('resource_project_protocol', {
+        locators: ids,
+        protocolVersion: 'v3',
+        cachePolicy: resourceCachePolicy(cacheBehaviour),
+    })
+    return documents.map((document) => {
+        if (!document.protocol) throw new Error('Source presentation is unavailable')
+        return restoreCachedUrls(document.protocol)
+    })
 }
 
+/** @returns {Promise<import('@modrinth/api-client').Labrinth.Versions.v2.Version>} */
 export async function get_version(id, cacheBehaviour) {
-    return await readCache('plugin:cache|get_version', { id, cacheBehaviour })
+    return (await get_version_many([id], cacheBehaviour))[0]
 }
 
+/** @returns {Promise<import('@modrinth/api-client').Labrinth.Versions.v2.Version[]>} */
 export async function get_version_many(ids, cacheBehaviour) {
-    return await readCache('plugin:cache|get_version_many', { ids, cacheBehaviour })
+    const documents = await resourceReleaseDocuments(
+        'modrinth',
+        ids,
+        undefined,
+        undefined,
+        resourceCachePolicy(cacheBehaviour),
+    )
+    return documents.map((document) => {
+        if (!document.protocol) throw new Error('Source presentation is unavailable')
+        return restoreCachedUrls(document.protocol)
+    })
 }
 
 export async function get_user(id, cacheBehaviour) {
@@ -86,8 +132,6 @@ export async function purge_cache_types(cacheTypes) {
  * @returns {Promise<Array|null>} Array of version objects (without changelogs) or null
  */
 export async function get_project_versions(projectId, cacheBehaviour) {
-    return await readCache('plugin:cache|get_project_versions', {
-        projectId,
-        cacheBehaviour,
-    })
+    const project = await get_project(projectId, cacheBehaviour)
+    return get_version_many(project.versions ?? [], cacheBehaviour)
 }

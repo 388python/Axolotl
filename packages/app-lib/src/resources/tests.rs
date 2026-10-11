@@ -11,6 +11,9 @@ use tokio_util::sync::CancellationToken;
 #[path = "../../../content-management/tests/fixtures/mod.rs"]
 mod fixtures;
 
+#[path = "search_tests.rs"]
+mod search_tests;
+
 #[tokio::test]
 async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
 {
@@ -218,7 +221,13 @@ fn project_query(id: &str) -> ProviderQuery {
 
 fn project_value(source: SourceId, id: &str, title: &str) -> ProviderValue {
     ProviderValue::Project(ProjectDocument {
+        protocol: None,
         metadata: SourceProjectMetadata {
+            environments: vec![],
+            categories: vec![],
+            game_versions: vec![],
+            loaders: vec![],
+            gallery: vec![],
             project: SourceProjectRef {
                 source: source.clone(),
                 project_id: SourceProjectId::new(id).unwrap(),
@@ -1192,6 +1201,7 @@ async fn source_search_projections_preserve_variants_and_date_semantics() {
     });
     let query = ProviderQuery::Search {
         query: ipc::ResourceSearchQuery {
+            filter: None,
             text: "itemphysic".into(),
             types: vec![ResourceType::Mod],
             sources: vec![],
@@ -1253,6 +1263,7 @@ async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_to
     });
     let query = ProviderQuery::Search {
         query: ipc::ResourceSearchQuery {
+            filter: None,
             text: "".into(),
             types: vec![ResourceType::Mod],
             sources: vec![],

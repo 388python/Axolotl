@@ -148,10 +148,25 @@ impl ResourceCache {
     }
 
     pub(crate) async fn get(&self, key: &CacheKey) -> Option<ProviderValue> {
+        self.get_cached(key, true).await
+    }
+
+    pub(crate) async fn get_any(
+        &self,
+        key: &CacheKey,
+    ) -> Option<ProviderValue> {
+        self.get_cached(key, false).await
+    }
+
+    async fn get_cached(
+        &self,
+        key: &CacheKey,
+        fresh: bool,
+    ) -> Option<ProviderValue> {
         let _guard = self.gate.read().await;
         let pool = self.pool.as_ref()?;
-        let row = sqlx::query("SELECT payload, value_version FROM resource_cache_entries WHERE namespace = ? AND source = ? AND query_key = ? AND expires_at > ?")
-            .bind(&key.namespace).bind(key.source.as_str()).bind(&key.query).bind(Utc::now().timestamp()).fetch_optional(pool).await.ok()??;
+        let row = sqlx::query("SELECT payload, value_version FROM resource_cache_entries WHERE namespace = ? AND source = ? AND query_key = ? AND (expires_at > ? OR ? = 0)")
+            .bind(&key.namespace).bind(key.source.as_str()).bind(&key.query).bind(Utc::now().timestamp()).bind(fresh).fetch_optional(pool).await.ok()??;
         let version: i64 = row.try_get("value_version").ok()?;
         let payload: String = row.try_get("payload").ok()?;
         if version != i64::from(RESOURCE_CONTRACT_VERSION) {

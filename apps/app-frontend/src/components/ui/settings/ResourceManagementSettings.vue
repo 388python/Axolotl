@@ -22,6 +22,7 @@ import {
     getMissingContentScannerSettings,
     setMissingContentScannerSettings,
 } from '@/helpers/downloads-scanner'
+import { resourcePreferredSource, resourceSetPreferredSource } from '@/helpers/resources'
 import { get, getProxyConfig, setProxyConfig, testProxyConfig, update } from '@/helpers/settings.ts'
 import { createSettingsPatchSaver } from '@/helpers/settings-patch'
 import { showAppDbBackupsFolder } from '@/helpers/utils.js'
@@ -48,6 +49,28 @@ const minecraftDirectories = ref(loadMinecraftDirectories())
 const minecraftDirectoryError = ref(null)
 const purgeCacheConfirmModal = ref(null)
 const { formatMessage } = useVIntl()
+const preferredResourceSource = ref(await resourcePreferredSource())
+const savingResourceSource = ref(false)
+const resourceSourceOptions = ['Modrinth', 'CurseForge', 'MCArchive', 'Planet Minecraft']
+const resourceSourceIds = ['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft']
+const resourceSourceChoice = computed({
+    get: () => resourceSourceOptions[resourceSourceIds.indexOf(preferredResourceSource.value)],
+    set: (value) => {
+        void saveResourceSource(value)
+    },
+})
+async function saveResourceSource(value) {
+    savingResourceSource.value = true
+    try {
+        const source = resourceSourceIds[resourceSourceOptions.indexOf(value)]
+        await resourceSetPreferredSource(source)
+        preferredResourceSource.value = source
+    } catch (error) {
+        handleError(error)
+    } finally {
+        savingResourceSource.value = false
+    }
+}
 
 const isPortable = ref(false)
 
@@ -115,6 +138,14 @@ async function testProxy() {
 }
 
 const messages = defineMessages({
+    preferredResourceSource: {
+        id: 'app.resources.preferred-source',
+        defaultMessage: 'Preferred resource source',
+    },
+    preferredResourceSourceDescription: {
+        id: 'app.resources.preferred-source.description',
+        defaultMessage: 'Used for default descriptions and equivalent releases. Default: Modrinth.',
+    },
     dataStorageSectionTitle: {
         id: 'app.settings.resources.sections.data-storage',
         defaultMessage: 'Data directories & cache',
@@ -655,6 +686,7 @@ watch(
 )
 
 async function purgeCache() {
+    await invoke('plugin:resources|resource_cache_clear')
     await purge_cache_types([
         'project',
         'project_v3',
@@ -875,6 +907,18 @@ function validateMinecraftDirectory(_value) {
         </SettingsSection>
 
         <SettingsSection v-if="props.scope === 'content-downloads'">
+            <SettingsRow>
+                <template #label>{{ formatMessage(messages.preferredResourceSource) }}</template>
+                <template #description>{{
+                    formatMessage(messages.preferredResourceSourceDescription)
+                }}</template>
+                <template #control
+                    ><Combobox
+                        v-model="resourceSourceChoice"
+                        :options="resourceSourceOptions"
+                        :disabled="savingResourceSource"
+                /></template>
+            </SettingsRow>
             <template #header>
                 <h2
                     id="settings-target-resources-download-mirrors"

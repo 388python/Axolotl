@@ -6579,7 +6579,7 @@
     "message": "Set the vibe"
   },
   "app.onboarding.browse.description": {
-    "message": "Use types, search, and filters to narrow things down. Project pages keep versions, changelogs, galleries, and install options in one place."
+    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place."
   },
   "app.onboarding.browse.title": {
     "message": "Search with receipts"
@@ -6756,7 +6756,7 @@
     "message": "Your data, your call"
   },
   "app.onboarding.resources.description": {
-    "message": "Choose how content downloads and installs, from download sources to safety checks."
+    "message": "Choose how content downloads and installs, including your preferred resource source. Modrinth is the default; changing the description source only changes what you read."
   },
   "app.onboarding.resources.title": {
     "message": "Do not cook the computer"
@@ -13402,5 +13402,35 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Unknown file warning"
+  },
+  "app.resources.description.retry": {
+    "message": "Retry description"
+  },
+  "app.resources.description.failed": {
+    "message": "The description could not be loaded."
+  },
+  "app.resources.description.reading": {
+    "message": "Description from {source}"
+  },
+  "app.resources.preferred-source": {
+    "message": "Preferred resource source"
+  },
+  "app.resources.preferred-source.description": {
+    "message": "Used for default descriptions and equivalent releases. Default: Modrinth."
+  },
+  "app.resources.search.window-exhausted": {
+    "message": "{source} has reached its search result window."
+  },
+  "app.resources.search.confirmed-source": {
+    "message": "Open the confirmed {source} project"
+  },
+  "app.resources.search.candidate-source": {
+    "message": "Open the {source} candidate. Its identity is not yet verified."
+  },
+  "app.resources.route.failed": {
+    "message": "No resource source could be opened."
+  },
+  "app.resources.route.retry": {
+    "message": "Retry"
   }
 }

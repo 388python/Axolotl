@@ -724,6 +724,7 @@ async function toggleFavorite() {
             provider: 'modrinth',
             project_id: data.value.id,
             content_type: data.value.project_type,
+            slug: data.value.slug,
         })
         .catch(handleError)
 }

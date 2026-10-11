@@ -135,6 +135,7 @@ tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
 url = { workspace = true, features = ["serde"] }
 urlencoding = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }
+unicode-normalization = "0.1.25"
 webpki-roots = { workspace = true }
 whoami = { workspace = true }
 xz2 = { workspace = true }

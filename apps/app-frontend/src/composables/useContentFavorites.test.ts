@@ -80,3 +80,24 @@ test('content favorite writes roll back busy state when persistence fails', asyn
     assert.equal(store.isFavorite('curseforge', 'embeddium'), true)
     assert.equal(store.isPending('curseforge', 'embeddium'), false)
 })
+
+test('a confirmed resource is bookmarked through all known sources and removed as one resource', async () => {
+    const saved = {
+        ...favorite('modrinth', 'abcdefgh', 'mod', 10),
+        resource_id: 'resource',
+        projects: [
+            { source: 'modrinth' as const, projectId: 'abcdefgh' },
+            { source: 'curseforge' as const, projectId: '123' },
+        ],
+    }
+    const store = createContentFavoritesStore({
+        list: async () => [saved],
+        add: async () => saved,
+        remove: async () => {},
+    })
+    await store.load()
+    assert.equal(store.isFavorite('curseforge', '123'), true)
+    await store.remove('curseforge', '123')
+    assert.equal(store.isFavorite('modrinth', 'abcdefgh'), false)
+    assert.equal(store.favorites.value.length, 0)
+})

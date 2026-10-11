@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -21,6 +21,13 @@ impl ModrinthProvider {
         &self,
         queries: &[ProviderQuery],
     ) -> ResourceResult<Vec<ResourceResult<ProviderValue>>> {
+        if queries.iter().all(|query| matches!(query, ProviderQuery::ProjectProtocol { version, .. } if version == "v3")) {
+            let locators: Vec<_> = queries.iter().filter_map(|query| if let ProviderQuery::ProjectProtocol { locator, .. } = query { Some(locator.as_str()) } else { None }).collect();
+            let mut request = ProtocolRequest::get("/v3/projects");
+            request.query.push(("ids".into(), serde_json::to_string(&locators)?));
+            let values: Vec<Value> = serde_json::from_value(self.request(request).await?)?;
+            return Ok(locators.iter().map(|locator| values.iter().find(|value| value["id"].as_str() == Some(locator) || value["slug"].as_str().is_some_and(|slug| slug.eq_ignore_ascii_case(locator))).map(|value| protocol_document(value.clone()).map(ProviderValue::Project)).unwrap_or(Ok(ProviderValue::NotFound))).collect());
+        }
         if queries
             .iter()
             .all(|query| matches!(query, ProviderQuery::Project { .. }))
@@ -263,6 +270,17 @@ impl ModrinthProvider {
         query: &ProviderQuery,
     ) -> ResourceResult<ProviderValue> {
         match query {
+            ProviderQuery::Locate { locator } => {
+                SourceProjectId::new(locator.clone())?;
+                let project: RemoteProject = serde_json::from_value(
+                    self.request(ProtocolRequest::get(format!(
+                        "/project/{}",
+                        urlencoding::encode(locator)
+                    )))
+                    .await?,
+                )?;
+                Ok(ProviderValue::Project(project.document()?))
+            }
             ProviderQuery::Description { id, .. } => {
                 let project: RemoteProject = serde_json::from_value(
                     self.request(ProtocolRequest::get(format!(
@@ -430,7 +448,12 @@ impl ModrinthProvider {
                         "invalid page size".into(),
                     ));
                 }
-                let mut request = ProtocolRequest::get("/search");
+                let mut request =
+                    ProtocolRequest::get(if query.filter.is_some() {
+                        "/v3/search"
+                    } else {
+                        "/search"
+                    });
                 request.query = vec![
                     ("query".into(), query.text.clone()),
                     ("limit".into(), query.page_size.to_string()),
@@ -438,6 +461,53 @@ impl ModrinthProvider {
                     ("index".into(), index.into()),
                     ("facets".into(), serde_json::to_string(&facets)?),
                 ];
+                if let Some(expression) = &query.filter {
+                    let expression = search_filters::for_source(
+                        expression,
+                        &SourceId::modrinth(),
+                    )?;
+                    let mut terms = vec![expression];
+                    if !query.types.is_empty() {
+                        terms.push(ResourceSearchExpression::Predicate {
+                            field: "type".into(),
+                            values: query
+                                .types
+                                .iter()
+                                .map(|kind| {
+                                    match kind {
+                                        ResourceType::Plugin => "plugin",
+                                        ResourceType::DataPack => "datapack",
+                                        _ => type_name(*kind),
+                                    }
+                                    .to_string()
+                                })
+                                .collect(),
+                            excluded: false,
+                        });
+                    }
+                    if !query.target.game_versions.is_empty() {
+                        terms.push(ResourceSearchExpression::Predicate {
+                            field: "gameVersion".into(),
+                            values: query.target.game_versions.clone(),
+                            excluded: false,
+                        });
+                    }
+                    if !query.target.loaders.is_empty() {
+                        terms.push(ResourceSearchExpression::Predicate {
+                            field: "loader".into(),
+                            values: query.target.loaders.clone(),
+                            excluded: false,
+                        });
+                    }
+                    request.query.retain(|(key, _)| key != "facets");
+                    request.query.push((
+                        "new_filters".into(),
+                        search_filters::modrinth(
+                            &ResourceSearchExpression::All { terms },
+                            0,
+                        )?,
+                    ));
+                }
                 let result: SearchResponse =
                     serde_json::from_value(self.request(request).await?)?;
                 let count = result.hits.len();
@@ -502,6 +572,9 @@ impl ResourceProvider for ModrinthProvider {
         "modrinth-v2".into()
     }
     fn batch_limit(&self, query: &ProviderQuery) -> usize {
+        if matches!(query, ProviderQuery::ProjectProtocol { .. }) {
+            return 100;
+        }
         if query.batch_group() < 3 { 100 } else { 1 }
     }
     fn validate_query(&self, query: &ProviderQuery) -> ResourceResult<()> {
@@ -517,6 +590,14 @@ impl ResourceProvider for ModrinthProvider {
             }
         };
         match query {
+            ProviderQuery::ProjectProtocol { locator, version } => {
+                SourceProjectId::new(locator.clone())?;
+                if version != "v3" {
+                    return Err(ResourceError::Unsupported(
+                        "unknown Modrinth project protocol".into(),
+                    ));
+                }
+            }
             ProviderQuery::Project { id, .. }
             | ProviderQuery::Description { id, .. } => valid_id(id.as_str())?,
             ProviderQuery::Release {
@@ -566,8 +647,38 @@ impl ResourceProvider for ModrinthProvider {
     }
 }
 
-#[derive(Deserialize)]
+fn protocol_document(raw: Value) -> ResourceResult<ProjectDocument> {
+    let mut normalized = raw.clone();
+    normalized["title"] = json!(
+        raw["name"]
+            .as_str()
+            .or_else(|| raw["title"].as_str())
+            .or_else(|| raw["id"].as_str())
+            .unwrap_or_default()
+    );
+    normalized["description"] =
+        json!(raw["summary"].as_str().unwrap_or_default());
+    normalized["body"] = json!(
+        raw["description"]
+            .as_str()
+            .or_else(|| raw["body"].as_str())
+            .unwrap_or_default()
+    );
+    normalized["project_type"] = raw["project_types"]
+        .as_array()
+        .and_then(|types| types.first())
+        .cloned()
+        .unwrap_or(json!("unknown"));
+    let mut document =
+        serde_json::from_value::<RemoteProject>(normalized)?.document()?;
+    document.protocol = Some(protocol_projection(raw));
+    Ok(document)
+}
+
+#[derive(Deserialize, Serialize)]
 pub(crate) struct RemoteProject {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: String,
     #[serde(default)]
     team: Option<String>,
@@ -595,9 +706,40 @@ pub(crate) struct RemoteProject {
 
 impl RemoteProject {
     pub(crate) fn document(self) -> ResourceResult<ProjectDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         let types = resource_types(&self.project_type, &self.loaders);
         Ok(ProjectDocument {
+            protocol,
             metadata: SourceProjectMetadata {
+                environments: vec![],
+                categories: self
+                    .extra
+                    .get("categories")
+                    .and_then(|value| {
+                        serde_json::from_value(value.clone()).ok()
+                    })
+                    .unwrap_or_default(),
+                game_versions: self
+                    .extra
+                    .get("game_versions")
+                    .and_then(|value| {
+                        serde_json::from_value(value.clone()).ok()
+                    })
+                    .unwrap_or_default(),
+                loaders: self.loaders.clone(),
+                gallery: self
+                    .extra
+                    .get("gallery")
+                    .and_then(Value::as_array)
+                    .map(|images| {
+                        images
+                            .iter()
+                            .filter_map(|image| {
+                                image["url"].as_str().map(str::to_owned)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 project: source_project(SourceId::modrinth(), self.id)?,
                 slug: self.slug,
                 title: self.title,
@@ -624,8 +766,10 @@ impl RemoteProject {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub(crate) struct RemoteRelease {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: String,
     project_id: String,
     version_number: String,
@@ -644,8 +788,10 @@ pub(crate) struct RemoteRelease {
     dependencies: Vec<RemoteDependency>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteFile {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     #[serde(default)]
     id: Option<String>,
     filename: String,
@@ -659,7 +805,7 @@ struct RemoteFile {
     file_type: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteDependency {
     project_id: Option<String>,
     version_id: Option<String>,
@@ -669,6 +815,7 @@ struct RemoteDependency {
 
 impl RemoteRelease {
     pub(crate) fn document(self) -> ResourceResult<ReleaseDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         let reference = release_ref(
             source_project(SourceId::modrinth(), self.project_id)?,
             self.id,
@@ -754,6 +901,7 @@ impl RemoteRelease {
             });
         }
         Ok(ReleaseDocument {
+            protocol,
             release: ResourceRelease {
                 reference,
                 version: self.version_number,
@@ -780,19 +928,24 @@ impl RemoteRelease {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SearchResponse {
     hits: Vec<SearchHit>,
     total_hits: usize,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SearchHit {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     project_id: String,
     slug: String,
+    #[serde(alias = "name")]
     title: String,
+    #[serde(alias = "primary_project_type", default)]
     project_type: String,
     #[serde(default)]
+    #[serde(alias = "summary")]
     description: String,
     #[serde(default)]
     icon_url: Option<String>,
@@ -813,14 +966,74 @@ struct SearchHit {
 impl SearchHit {
     fn metadata(self) -> ResourceResult<SourceProjectMetadata> {
         Ok(SourceProjectMetadata {
+            environments: self
+                .extra
+                .get("environment")
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_default(),
+            categories: self.categories.clone(),
+            game_versions: self
+                .extra
+                .get("game_versions")
+                .or_else(|| self.extra.get("versions"))
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_default(),
+            loaders: self
+                .extra
+                .get("loaders")
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_else(|| {
+                    self.categories
+                        .iter()
+                        .filter(|value| {
+                            matches!(
+                                value.as_str(),
+                                "fabric"
+                                    | "forge"
+                                    | "quilt"
+                                    | "neoforge"
+                                    | "paper"
+                                    | "bukkit"
+                                    | "spigot"
+                                    | "datapack"
+                                    | "optifine"
+                                    | "iris"
+                            )
+                        })
+                        .cloned()
+                        .collect()
+                }),
+            gallery: self
+                .extra
+                .get("gallery")
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_default(),
             project: source_project(SourceId::modrinth(), self.project_id)?,
             slug: Some(self.slug),
             title: self.title,
             summary: self.description,
             icon_url: self.icon_url,
-            types: resource_types(&self.project_type, &self.categories),
+            types: self
+                .extra
+                .get("all_project_types")
+                .or_else(|| self.extra.get("project_types"))
+                .and_then(Value::as_array)
+                .map(|types| {
+                    types
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .flat_map(|kind| resource_types(kind, &self.categories))
+                        .collect()
+                })
+                .unwrap_or_else(|| {
+                    resource_types(&self.project_type, &self.categories)
+                }),
             authors: self.author.into_iter().collect(),
-            license: None,
+            license: self
+                .extra
+                .get("license")
+                .and_then(Value::as_str)
+                .map(str::to_owned),
             downloads: self.downloads,
             followers: self.follows,
             created_at: self.date_created,
@@ -883,6 +1096,8 @@ fn resource_types(kind: &str, loaders: &[String]) -> Vec<ResourceType> {
         types
     } else {
         match kind {
+            "plugin" => vec![ResourceType::Plugin],
+            "datapack" => vec![ResourceType::DataPack],
             "resourcepack" => vec![ResourceType::ResourcePack],
             "shader" => vec![ResourceType::Shader],
             "modpack" => vec![ResourceType::ModPack],

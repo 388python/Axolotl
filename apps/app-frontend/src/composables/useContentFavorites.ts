@@ -33,7 +33,9 @@ function sameFavorites(left: ContentFavorite[], right: ContentFavorite[]) {
                 favorite.provider === right[index]?.provider &&
                 favorite.project_id === right[index]?.project_id &&
                 favorite.content_type === right[index]?.content_type &&
-                favorite.saved_at === right[index]?.saved_at,
+                favorite.saved_at === right[index]?.saved_at &&
+                favorite.resource_id === right[index]?.resource_id &&
+                JSON.stringify(favorite.projects) === JSON.stringify(right[index]?.projects),
         )
     )
 }
@@ -81,9 +83,12 @@ export function createContentFavoritesStore(api: ContentFavoritesApi) {
     const favoriteKeys = computed(
         () =>
             new Set(
-                favorites.value.map((favorite) =>
+                favorites.value.flatMap((favorite) => [
                     contentFavoriteKey(favorite.provider, favorite.project_id),
-                ),
+                    ...(favorite.projects ?? []).map((project) =>
+                        contentFavoriteKey(project.source, project.projectId),
+                    ),
+                ]),
             ),
     )
 
@@ -104,7 +109,8 @@ export function createContentFavoritesStore(api: ContentFavoritesApi) {
             setFavorites([
                 ...favorites.value.filter(
                     (favorite) =>
-                        contentFavoriteKey(favorite.provider, favorite.project_id) !== key,
+                        contentFavoriteKey(favorite.provider, favorite.project_id) !== key &&
+                        (!saved.resource_id || favorite.resource_id !== saved.resource_id),
                 ),
                 saved,
             ])
@@ -123,7 +129,11 @@ export function createContentFavoritesStore(api: ContentFavoritesApi) {
             setFavorites(
                 favorites.value.filter(
                     (favorite) =>
-                        contentFavoriteKey(favorite.provider, favorite.project_id) !== key,
+                        contentFavoriteKey(favorite.provider, favorite.project_id) !== key &&
+                        !favorite.projects?.some(
+                            (project) =>
+                                project.source === provider && project.projectId === projectId,
+                        ),
                 ),
             )
             loaded.value = true

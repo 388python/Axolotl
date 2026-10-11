@@ -9,6 +9,7 @@ pub(crate) mod legacy;
 mod mcarchive;
 mod modrinth;
 mod planet_minecraft;
+pub(crate) mod search_filters;
 mod transport;
 
 pub use curseforge::CurseForgeProvider;
@@ -24,6 +25,13 @@ pub use transport::{ProtocolRequest, ProtocolTransport};
     rename_all_fields = "camelCase"
 )]
 pub enum ProviderQuery {
+    ProjectProtocol {
+        locator: String,
+        version: String,
+    },
+    Locate {
+        locator: String,
+    },
     Project {
         id: SourceProjectId,
         slug: Option<String>,
@@ -62,6 +70,8 @@ pub enum ProviderQuery {
 impl ProviderQuery {
     pub fn capability(&self) -> SourceCapability {
         match self {
+            Self::ProjectProtocol { .. } => SourceCapability::Project,
+            Self::Locate { .. } => SourceCapability::Project,
             Self::Project { .. } => SourceCapability::Project,
             Self::Description { .. } => SourceCapability::Description,
             Self::Release { .. } | Self::Releases { .. } => {
@@ -75,6 +85,7 @@ impl ProviderQuery {
 
     pub(crate) fn batch_group(&self) -> u8 {
         match self {
+            Self::ProjectProtocol { .. } => 4,
             Self::Project { .. } => 0,
             Self::Release { .. } => 1,
             Self::Identify { .. } => 2,
@@ -90,7 +101,10 @@ impl ProviderQuery {
         }
         match self {
             Self::Search { .. } => 60,
-            Self::Project { .. } | Self::Description { .. } => 30 * 60,
+            Self::ProjectProtocol { .. }
+            | Self::Locate { .. }
+            | Self::Project { .. }
+            | Self::Description { .. } => 30 * 60,
             Self::Releases { .. } => 5 * 60,
             Self::Release { .. }
             | Self::Changelog { .. }
@@ -155,6 +169,8 @@ pub struct SourcePage<T> {
 pub struct ProjectDocument {
     pub metadata: SourceProjectMetadata,
     pub description: ResourceText,
+    #[serde(default)]
+    pub protocol: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -162,6 +178,8 @@ pub struct ProjectDocument {
 pub struct ReleaseDocument {
     pub release: ResourceRelease,
     pub changelog: Option<ResourceText>,
+    #[serde(default)]
+    pub protocol: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -256,6 +274,46 @@ pub(crate) fn public_url(value: &str) -> Option<String> {
         return None;
     }
     Some(value.to_string())
+}
+
+pub(crate) fn protocol_projection(
+    value: serde_json::Value,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(values) => serde_json::Value::Object(
+            values
+                .into_iter()
+                .filter(|(key, _)| {
+                    !matches!(
+                        key.to_ascii_lowercase()
+                            .replace(['_', '-'], "")
+                            .as_str(),
+                        "apikey"
+                            | "authorization"
+                            | "password"
+                            | "token"
+                            | "accesstoken"
+                            | "secret"
+                            | "headers"
+                    )
+                })
+                .map(|(key, value)| (key, protocol_projection(value)))
+                .collect(),
+        ),
+        serde_json::Value::Array(values) => serde_json::Value::Array(
+            values.into_iter().map(protocol_projection).collect(),
+        ),
+        serde_json::Value::String(ref text)
+            if text.starts_with("https://") || text.starts_with("http://") =>
+        {
+            if public_url(text).is_some() {
+                value
+            } else {
+                serde_json::Value::Null
+            }
+        }
+        _ => value,
+    }
 }
 
 pub(crate) fn acquisition(

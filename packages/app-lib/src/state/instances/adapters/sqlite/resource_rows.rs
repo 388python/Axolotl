@@ -165,6 +165,15 @@ impl ResourceStore {
             .collect()
     }
 
+    pub async fn project_alias(
+        &self,
+        project: &SourceProjectRef,
+    ) -> ResourceResult<Option<String>> {
+        sqlx::query_scalar("SELECT alias FROM resource_aliases WHERE source = ? AND project_id = ? ORDER BY rowid DESC LIMIT 1")
+            .bind(project.source.as_str()).bind(project.project_id.as_str())
+            .fetch_optional(&self.pool).await.map_err(database_error)
+    }
+
     /// Confirmation retains the complete byte/type evidence in the main DB.
     /// Cache eviction cannot undo a relationship used by business records.
     pub async fn confirm_projects(

@@ -40,21 +40,17 @@ import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.v
 import InstanceIcon from '@/components/ui/InstanceIcon.vue'
 import { useContentFavorites } from '@/composables/useContentFavorites'
 import { createBrowseProjectTabs, getBrowseProjectTabOptions } from '@/helpers/browse-project-tabs'
-import { get_project, get_project_many, get_version_many } from '@/helpers/cache.js'
+import { get_project, get_version_many } from '@/helpers/cache.js'
 import {
     type ContentFavorite,
     contentFavoriteKey,
     type FavoriteContentType,
     type FavoriteProvider,
 } from '@/helpers/content-favorites'
-import {
-    type CurseForgeProject,
-    getCurseForgeFiles,
-    getCurseForgeImageUrl,
-    getCurseForgeProjects,
-} from '@/helpers/curseforge'
+import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
+import { resourceLocate } from '@/helpers/resources'
 import {
     getLastBrowseContentDisplayMode,
     setLastBrowseContentDisplayMode,
@@ -353,7 +349,9 @@ function toUnavailable(favorite: ContentFavorite): FavoriteProject {
             ? 'CurseForge'
             : favorite.provider === 'mcarchive'
               ? 'MCArchive'
-              : 'Modrinth'
+              : favorite.provider === 'planet_minecraft'
+                ? 'Planet Minecraft'
+                : 'Modrinth'
     return {
         favorite,
         provider: favorite.provider,
@@ -368,123 +366,40 @@ function toUnavailable(favorite: ContentFavorite): FavoriteProject {
     }
 }
 
-function toModrinthFavorite(
-    project: Labrinth.Projects.v2.Project,
-    favorite: ContentFavorite,
-): FavoriteProject {
-    return {
-        favorite,
-        provider: 'modrinth',
-        projectId: project.id,
-        title: project.title,
-        description: project.description,
-        slug: project.slug,
-        iconUrl: project.icon_url,
-        downloads: project.downloads,
-        categories: [typeLabel(favorite.content_type), ...project.categories],
-        dateCreated: project.published,
-        dateModified: project.updated,
-        banner: project.gallery?.find((image) => image.featured)?.url,
-        color: project.color,
-        environment: {
-            clientSide: project.client_side,
-            serverSide: project.server_side,
-        },
-        unavailable: false,
-    }
-}
-
-function toCurseForgeFavorite(
-    project: CurseForgeProject,
-    favorite: ContentFavorite,
-): FavoriteProject {
-    return {
-        favorite,
-        provider: 'curseforge',
-        projectId: project.id.toString(),
-        title: project.name,
-        description: project.summary,
-        slug: project.slug,
-        iconUrl: getCurseForgeImageUrl(project.logo?.thumbnailUrl),
-        downloads: project.downloadCount,
-        categories: [
-            typeLabel(favorite.content_type),
-            ...project.categories.map((category) => category.slug),
-        ],
-        dateCreated: project.dateCreated,
-        dateModified: project.dateModified,
-        banner: getCurseForgeImageUrl(project.screenshots[0]?.thumbnailUrl, 960),
-        unavailable: false,
-    }
-}
-
-async function loadModrinthFavorites(projectIds: string[]) {
-    try {
-        return (await get_project_many(projectIds, 'bypass')) as Labrinth.Projects.v2.Project[]
-    } catch (error) {
-        handleError(error)
-        return await get_project_many(projectIds, 'cache_only').catch((cacheError) => {
-            handleError(cacheError)
-            return [] as Labrinth.Projects.v2.Project[]
-        })
-    }
-}
-
-async function loadCurseForgeFavorites(projectIds: number[]) {
-    try {
-        return await getCurseForgeProjects(projectIds, 'bypass')
-    } catch (error) {
-        handleError(error)
-        return await getCurseForgeProjects(projectIds, 'cache_only').catch((cacheError) => {
-            handleError(cacheError)
-            return [] as CurseForgeProject[]
-        })
-    }
-}
-
 async function refreshProjects() {
     const requestId = ++projectRequestId
     loadingProjects.value = true
     try {
         await contentFavorites.load(true)
         const favorites = [...contentFavorites.favorites.value]
-        if (favorites.length === 0) {
-            if (requestId === projectRequestId) projects.value = []
-            return
-        }
-
-        const modrinthIds = favorites
-            .filter((favorite) => favorite.provider === 'modrinth')
-            .map((favorite) => favorite.project_id)
-        const curseForgeIds = favorites
-            .filter((favorite) => favorite.provider === 'curseforge')
-            .map((favorite) => Number(favorite.project_id))
-            .filter(Number.isSafeInteger)
-        const [modrinthResult, curseForgeResult] = await Promise.all([
-            modrinthIds.length
-                ? loadModrinthFavorites(modrinthIds)
-                : Promise.resolve([] as Labrinth.Projects.v2.Project[]),
-            curseForgeIds.length
-                ? loadCurseForgeFavorites(curseForgeIds)
-                : Promise.resolve([] as CurseForgeProject[]),
-        ])
-        if (requestId !== projectRequestId) return
-
-        const modrinthById = new Map(modrinthResult.map((project) => [project.id, project]))
-        const curseForgeById = new Map(
-            curseForgeResult.map((project) => [project.id.toString(), project]),
+        const resolved = await Promise.all(
+            favorites.map(async (favorite): Promise<FavoriteProject> => {
+                try {
+                    const { metadata } = await resourceLocate(
+                        favorite.provider,
+                        favorite.project_id,
+                    )
+                    return {
+                        favorite,
+                        provider: favorite.provider,
+                        projectId: metadata.project.projectId,
+                        title: metadata.title,
+                        description: metadata.summary,
+                        slug: metadata.slug ?? undefined,
+                        iconUrl: metadata.iconUrl ?? undefined,
+                        downloads: metadata.downloads ?? undefined,
+                        categories: [typeLabel(favorite.content_type), ...metadata.categories],
+                        dateCreated: metadata.createdAt ?? undefined,
+                        dateModified: metadata.updatedAt ?? undefined,
+                        banner: metadata.gallery[0],
+                        unavailable: false,
+                    }
+                } catch {
+                    return toUnavailable(favorite)
+                }
+            }),
         )
-        projects.value = favorites.map((favorite) => {
-            if (favorite.provider === 'modrinth') {
-                const project = modrinthById.get(favorite.project_id)
-                return project ? toModrinthFavorite(project, favorite) : toUnavailable(favorite)
-            }
-            if (favorite.provider === 'curseforge') {
-                const project = curseForgeById.get(favorite.project_id)
-                return project ? toCurseForgeFavorite(project, favorite) : toUnavailable(favorite)
-            }
-            return toUnavailable(favorite)
-        })
+        if (requestId === projectRequestId) projects.value = resolved
     } catch (error) {
         handleError(error)
     } finally {
@@ -606,6 +521,10 @@ async function getModrinthVersions(projectId: string) {
 
 async function toggleProjectSelection(project: FavoriteProject) {
     if (project.unavailable) return
+    if (project.provider === 'mcarchive' || project.provider === 'planet_minecraft') {
+        await router.push(getProjectLink(project)!)
+        return
+    }
     if (!contentSelection.targetInstance.value) {
         await contentSelection.refreshInstances(queryValue(route.query.i) || undefined)
         instanceSelector.value?.show()
@@ -681,11 +600,20 @@ function setDisplayMode(mode: FavoriteDisplayMode) {
 
 function getProjectLink(project: FavoriteProject) {
     if (project.unavailable) return undefined
+    if (project.favorite.resource_id)
+        return {
+            path: `/resource/${project.favorite.resource_id}`,
+            query: { ...route.query, b: route.fullPath },
+        }
     return {
         path:
             project.provider === 'curseforge'
                 ? `/project/curseforge/${project.projectId}`
-                : `/project/${project.slug ?? project.projectId}`,
+                : project.provider === 'mcarchive'
+                  ? `/project/mcarchive/${project.slug ?? project.projectId}`
+                  : project.provider === 'planet_minecraft'
+                    ? `/project/planet-minecraft/${project.projectId}`
+                    : `/project/${project.slug ?? project.projectId}`,
         query: { ...route.query, b: route.fullPath },
     }
 }

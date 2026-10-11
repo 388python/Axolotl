@@ -5,6 +5,12 @@ import type { RouteRecordRaw } from 'vue-router'
 /** Discover vertical: browse, favorites, and multi-provider project pages. */
 export const discoverRoutes: RouteRecordRaw[] = [
     {
+        path: '/resource/:id',
+        name: 'ResourceProject',
+        component: () => import('@/pages/project/ResourceRoute.vue'),
+        meta: { useContext: true, pageTransitionGroup: 'project' },
+    },
+    {
         path: '/browse/favorites',
         name: 'Favorites',
         component: () => import('@/pages/Favorites.vue'),

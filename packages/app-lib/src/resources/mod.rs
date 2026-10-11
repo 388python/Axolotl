@@ -3,8 +3,11 @@
 pub use content_management::resources::*;
 
 pub mod cache;
+pub mod catalog;
+pub mod favorites;
 pub mod identity;
 pub mod providers;
+pub mod search;
 mod service;
 
 pub(crate) use service::valid_artifact;
@@ -12,6 +15,8 @@ pub use service::{CachePolicy, QueryOutcome, ResourceService};
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ResourceError {
+    #[error("resource cursor expired; restart the query")]
+    CursorExpired,
     #[error("unsupported resource operation: {0}")]
     Unsupported(String),
     #[error("invalid resource request: {0}")]

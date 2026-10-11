@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
 import InstanceIcon from '@/components/ui/InstanceIcon.vue'
+import ResourceDescription from '@/components/ui/ResourceDescription.vue'
 import {
     import_mcarchive_content,
     install_mcarchive_content,
@@ -253,12 +254,18 @@ void contentSelection
                     </span>
                 </Button>
             </div>
-            <p
-                v-if="project.description"
-                class="m-0 whitespace-pre-wrap text-sm text-[var(--color-text-tertiary)]"
+            <ResourceDescription
+                source="mcarchive"
+                :project-id="project.uuid"
+                :locator="project.slug"
             >
-                {{ project.description }}
-            </p>
+                <p
+                    v-if="project.description"
+                    class="m-0 whitespace-pre-wrap text-sm text-[var(--color-text-tertiary)]"
+                >
+                    {{ project.description }}
+                </p>
+            </ResourceDescription>
         </section>
 
         <Card v-if="manualDownload" class="flex flex-col gap-3">

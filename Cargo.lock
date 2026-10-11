@@ -6946,6 +6946,7 @@ dependencies = [
  "tracing",
  "tracing-error",
  "tracing-subscriber",
+ "unicode-normalization",
  "url",
  "urlencoding",
  "uuid 1.24.0",

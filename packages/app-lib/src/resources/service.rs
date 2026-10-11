@@ -15,9 +15,20 @@ use super::{
     *,
 };
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Eq,
+    Hash,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub enum CachePolicy {
     UseFresh,
+    OnlyCached,
     /// Ignore positive, negative, and expired cache entries. A source error
     /// never becomes success by falling back to an old cached response.
     ForceRefresh,
@@ -89,6 +100,7 @@ impl Subscription {
 }
 
 pub struct ResourceService {
+    pub(crate) searches: DashMap<String, super::search::SearchCursor>,
     store: Option<crate::state::resources::ResourceStore>,
     cache: Arc<ResourceCache>,
     sources: HashMap<SourceId, SourceRuntime>,
@@ -136,6 +148,7 @@ impl ResourceService {
             }
         }
         Ok(Arc::new(Self {
+            searches: DashMap::new(),
             store,
             cache,
             sources,
@@ -200,7 +213,7 @@ impl ResourceService {
             return vec![Err(ResourceError::Unavailable); queries.len()];
         };
         let capabilities = runtime.provider.source();
-        if !capabilities.available {
+        if !capabilities.available && policy != CachePolicy::OnlyCached {
             return vec![Err(ResourceError::Unavailable); queries.len()];
         }
         let namespace = runtime.provider.namespace();
@@ -244,8 +257,13 @@ impl ResourceService {
                     continue;
                 }
             };
-            if policy == CachePolicy::UseFresh {
-                if let Some(value) = self.cache.get(&cache_key).await {
+            if policy != CachePolicy::ForceRefresh {
+                let value = if policy == CachePolicy::OnlyCached {
+                    self.cache.get_any(&cache_key).await
+                } else {
+                    self.cache.get(&cache_key).await
+                };
+                if let Some(value) = value {
                     if validate_value(source, &query, &value).is_ok() {
                         subscriptions.push(Ok(Ok(QueryOutcome {
                             value,
@@ -254,6 +272,10 @@ impl ResourceService {
                         continue;
                     }
                 }
+            }
+            if policy == CachePolicy::OnlyCached {
+                subscriptions.push(Err(ResourceError::Unavailable));
+                continue;
             }
             let key = FlightKey {
                 cache: cache_key,
@@ -426,6 +448,8 @@ pub(crate) fn validate_value(
     value: &ProviderValue,
 ) -> ResourceResult<()> {
     let valid = match (query, value) {
+        (ProviderQuery::ProjectProtocol { .. }, ProviderValue::Project(document)) => document.metadata.project.source == *source && document.description.source == *source && crate::state::instances::adapters::sqlite::resource_rows::validate_project(&document.metadata.project).is_ok(),
+        (ProviderQuery::Locate { .. }, ProviderValue::Project(document)) => document.metadata.project.source == *source && document.description.source == *source && crate::state::instances::adapters::sqlite::resource_rows::validate_project(&document.metadata.project).is_ok(),
         (_, ProviderValue::NotFound) => !matches!(
             query,
             ProviderQuery::Search { .. } | ProviderQuery::Releases { .. }

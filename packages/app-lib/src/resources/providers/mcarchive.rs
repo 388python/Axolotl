@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::*;
@@ -54,6 +54,25 @@ impl McArchiveProvider {
         query: &ProviderQuery,
     ) -> ResourceResult<ProviderValue> {
         match query {
+            ProviderQuery::ProjectProtocol { .. } => {
+                Err(ResourceError::Unsupported(
+                    "MCArchive has no alternative project protocol".into(),
+                ))
+            }
+            ProviderQuery::Locate { locator } => {
+                SourceProjectId::new(locator.clone())?;
+                let project: RemoteProject = serde_json::from_value(
+                    self.request(
+                        ProtocolRequest::get(format!(
+                            "/mods/by_slug/{}",
+                            urlencoding::encode(locator)
+                        )),
+                        PROJECT_FIELDS,
+                    )
+                    .await?,
+                )?;
+                Ok(ProviderValue::Project(project.document()?))
+            }
             ProviderQuery::Project { id, slug } => Ok(ProviderValue::Project(
                 self.project(id, slug).await?.document()?,
             )),
@@ -126,6 +145,9 @@ impl McArchiveProvider {
                 )?))
             }
             ProviderQuery::Search { query, cursor } => {
+                if let Some(expression) = &query.filter {
+                    validate_archive_filter(expression)?;
+                }
                 if query.sort != ResourceSearchSort::Relevance
                     || query.types.iter().any(|kind| *kind != ResourceType::Mod)
                     || query.target.game_versions.len() > 1
@@ -210,6 +232,27 @@ impl McArchiveProvider {
     }
 }
 
+fn validate_archive_filter(
+    expression: &ResourceSearchExpression,
+) -> ResourceResult<()> {
+    match expression {
+        ResourceSearchExpression::All { terms } => {
+            for term in terms {
+                validate_archive_filter(term)?;
+            }
+            Ok(())
+        }
+        ResourceSearchExpression::Predicate {
+            field,
+            excluded: false,
+            ..
+        } if matches!(field.as_str(), "type" | "gameVersion") => Ok(()),
+        _ => Err(ResourceError::Unsupported(
+            "MCArchive cannot express these search filters".into(),
+        )),
+    }
+}
+
 #[async_trait]
 impl ResourceProvider for McArchiveProvider {
     fn source(&self) -> ResourceSource {
@@ -251,8 +294,10 @@ impl ResourceProvider for McArchiveProvider {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteProject {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     uuid: String,
     slug: String,
     name: String,
@@ -266,8 +311,15 @@ struct RemoteProject {
 
 impl RemoteProject {
     fn document(self) -> ResourceResult<ProjectDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         Ok(ProjectDocument {
+            protocol,
             metadata: SourceProjectMetadata {
+                environments: vec![],
+                categories: vec![],
+                game_versions: vec![],
+                loaders: vec![],
+                gallery: vec![],
                 project: source_project(SourceId::mcarchive(), self.uuid)?,
                 slug: Some(self.slug),
                 title: self.name,
@@ -298,8 +350,10 @@ impl RemoteProject {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteRelease {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     uuid: String,
     name: String,
     #[serde(default, alias = "gameVersions")]
@@ -313,6 +367,7 @@ impl RemoteRelease {
         self,
         project: SourceProjectRef,
     ) -> ResourceResult<ReleaseDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         let reference = release_ref(project, self.uuid)?;
         let role = if self.files.len() == 1 {
             ArtifactRole::Primary
@@ -325,6 +380,7 @@ impl RemoteRelease {
             .map(|file| file.artifact(reference.clone(), role))
             .collect::<ResourceResult<Vec<_>>>()?;
         Ok(ReleaseDocument {
+            protocol,
             release: ResourceRelease {
                 reference,
                 version: self.name,
@@ -348,8 +404,10 @@ impl RemoteRelease {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteFile {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     uuid: String,
     name: String,
     sha256: Option<String>,
@@ -408,21 +466,21 @@ impl RemoteFile {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteMatchedFile {
     #[serde(flatten)]
     file: RemoteFile,
     mod_version: MatchedRelease,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct MatchedRelease {
     uuid: String,
     #[serde(rename = "mod")]
     mod_: MatchedProject,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct MatchedProject {
     uuid: String,
 }

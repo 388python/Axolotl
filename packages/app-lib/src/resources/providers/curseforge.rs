@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
@@ -360,6 +360,15 @@ impl CurseForgeProvider {
                 )?))
             }
             ProviderQuery::Search { query, cursor } => {
+                if let Some(expression) = &query.filter {
+                    search_filters::validate_curseforge(
+                        &search_filters::for_source(
+                            expression,
+                            &SourceId::curseforge(),
+                        )?,
+                        0,
+                    )?;
+                }
                 if query.types.len() != 1 {
                     return Err(ResourceError::Unsupported("CurseForge search requires one content class per request".into()));
                 }
@@ -370,18 +379,14 @@ impl CurseForgeProvider {
                     ResourceType::Shader => 6552,
                     ResourceType::ModPack => 4471,
                     ResourceType::World => 17,
-                    ResourceType::DataPack => {
-                        return Err(ResourceError::Unsupported(
-                            "CurseForge data-pack search class is unavailable"
-                                .into(),
-                        ));
-                    }
+                    ResourceType::DataPack => 6945,
                 };
                 let sort = match query.sort {
                     ResourceSearchSort::Relevance => 1,
                     ResourceSearchSort::Downloads => 6,
                     ResourceSearchSort::ProjectUpdated => 3,
                     ResourceSearchSort::FirstPublished => 8,
+                    ResourceSearchSort::Created => 11,
                     _ => return Err(ResourceError::Unsupported(
                         "CurseForge cannot provide requested sort semantics"
                             .into(),
@@ -457,6 +462,7 @@ impl ResourceProvider for CurseForgeProvider {
                 ResourceType::Shader,
                 ResourceType::ModPack,
                 ResourceType::World,
+                ResourceType::DataPack,
             ],
             capabilities: vec![
                 SourceCapability::Search,
@@ -473,6 +479,7 @@ impl ResourceProvider for CurseForgeProvider {
                 ResourceSearchSort::Downloads,
                 ResourceSearchSort::ProjectUpdated,
                 ResourceSearchSort::FirstPublished,
+                ResourceSearchSort::Created,
             ],
         }
     }
@@ -527,9 +534,11 @@ impl ResourceProvider for CurseForgeProvider {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteProject {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: u32,
     name: String,
     slug: String,
@@ -555,6 +564,7 @@ pub(crate) struct RemoteProject {
 
 impl RemoteProject {
     pub(crate) fn document(self) -> ResourceResult<ProjectDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         positive_id(&self.id.to_string())?;
         let types = match self.class_id {
             Some(6) => vec![ResourceType::Mod],
@@ -563,10 +573,53 @@ impl RemoteProject {
             Some(6552) => vec![ResourceType::Shader],
             Some(4471) => vec![ResourceType::ModPack],
             Some(17) => vec![ResourceType::World],
+            Some(6945) => vec![ResourceType::DataPack],
             _ => vec![],
         };
         Ok(ProjectDocument {
+            protocol,
             metadata: SourceProjectMetadata {
+                environments: vec![],
+                categories: self
+                    .extra
+                    .get("categories")
+                    .and_then(Value::as_array)
+                    .map(|categories| {
+                        categories
+                            .iter()
+                            .filter_map(|category| {
+                                category["slug"].as_str().map(str::to_owned)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                game_versions: self
+                    .extra
+                    .get("latestFilesIndexes")
+                    .and_then(Value::as_array)
+                    .map(|indexes| {
+                        indexes
+                            .iter()
+                            .filter_map(|index| {
+                                index["gameVersion"].as_str().map(str::to_owned)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                loaders: vec![],
+                gallery: self
+                    .extra
+                    .get("screenshots")
+                    .and_then(Value::as_array)
+                    .map(|images| {
+                        images
+                            .iter()
+                            .filter_map(|image| {
+                                image["url"].as_str().map(str::to_owned)
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
                 project: source_project(
                     SourceId::curseforge(),
                     self.id.to_string(),
@@ -602,9 +655,11 @@ impl RemoteProject {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RemoteFile {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: u32,
     mod_id: u32,
     file_name: String,
@@ -631,13 +686,13 @@ pub(crate) struct RemoteFile {
     is_available: Option<bool>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct RemoteHash {
     algo: u32,
     value: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteDependency {
     mod_id: u32,
@@ -646,6 +701,7 @@ struct RemoteDependency {
 
 impl RemoteFile {
     pub(crate) fn document(self) -> ResourceResult<ReleaseDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         positive_id(&self.id.to_string())?;
         positive_id(&self.mod_id.to_string())?;
         let reference = release_ref(
@@ -729,6 +785,7 @@ impl RemoteFile {
             dependencies,
         };
         Ok(ReleaseDocument {
+            protocol,
             release: ResourceRelease {
                 reference,
                 version: self.display_name,
@@ -751,14 +808,14 @@ impl RemoteFile {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct FingerprintResponse {
     #[serde(default)]
     exact_matches: Vec<FingerprintMatch>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct FingerprintMatch {
     id: u32,
     file: RemoteFile,

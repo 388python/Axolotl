@@ -73,7 +73,7 @@ export const onboardingMessages = defineMessages({
     browseDescription: {
         id: 'app.onboarding.browse.description',
         defaultMessage:
-            'Use types, search, and filters to narrow things down. Project pages keep versions, changelogs, galleries, and install options in one place.',
+            'Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place.',
     },
     favoritesTitle: {
         id: 'app.onboarding.favorites.title',
@@ -216,7 +216,7 @@ export const onboardingMessages = defineMessages({
     resourcesDescription: {
         id: 'app.onboarding.resources.description',
         defaultMessage:
-            'Choose how content downloads and installs, from download sources to safety checks.',
+            'Choose how content downloads and installs, including your preferred resource source. Modrinth is the default; changing the description source only changes what you read.',
     },
     privacyTitle: {
         id: 'app.onboarding.privacy.title',

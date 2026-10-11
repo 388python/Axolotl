@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
+import { resourceProjectProtocol } from './resources'
+
 export type PlanetMinecraftDownload = {
     pageUrl: string
     fileName?: string | null
@@ -37,7 +39,5 @@ export function searchPlanetMinecraftProjects(query: string, gameVersion?: strin
 }
 
 export function getPlanetMinecraftProject(id: string) {
-    return invoke<PlanetMinecraftProject>('plugin:planet-minecraft|planet_minecraft_get_project', {
-        id,
-    })
+    return resourceProjectProtocol<PlanetMinecraftProject>('planet_minecraft', id)
 }

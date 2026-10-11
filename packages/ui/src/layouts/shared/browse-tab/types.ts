@@ -20,7 +20,10 @@ export interface BrowseSearchResponse {
     })[]
     serverHits: Labrinth.Search.v3.ResultSearchProject[]
     total_hits: number
+    has_more?: boolean
+    total_precision?: 'exact' | 'estimate' | 'unknown'
     per_page: number
+    page?: number
 }
 
 export interface BrowseSelectedProject {

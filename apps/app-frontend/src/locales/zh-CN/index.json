@@ -6537,7 +6537,7 @@
     "message": "调成你的顺眼样子"
   },
   "app.onboarding.browse.description": {
-    "message": "用类型、搜索和筛选快速收敛范围，项目页把版本、更新日志、图库和安装选择都放在一个地方。"
+    "message": "同时搜索可用来源。同名项目在文件核验前只是候选。项目页面集中展示版本、更新日志、图库和安装选项。"
   },
   "app.onboarding.browse.title": {
     "message": "搜索，不靠玄学"
@@ -6714,7 +6714,7 @@
     "message": "你的数据，由你决定"
   },
   "app.onboarding.resources.description": {
-    "message": "选择内容的下载与安装方式，包括下载源和安全确认。"
+    "message": "选择内容的下载、安装方式及首选资源来源。默认为 Modrinth；切换简介来源只改变阅读内容。"
   },
   "app.onboarding.resources.title": {
     "message": "别把电脑烤熟"
@@ -13414,5 +13414,35 @@
   },
   "app.settings.privacy.security-title": {
     "message": "安全"
+  },
+  "app.resources.description.retry": {
+    "message": "重试简介"
+  },
+  "app.resources.description.failed": {
+    "message": "无法加载简介。"
+  },
+  "app.resources.description.reading": {
+    "message": "来自 {source} 的简介"
+  },
+  "app.resources.preferred-source": {
+    "message": "首选资源来源"
+  },
+  "app.resources.preferred-source.description": {
+    "message": "用于默认简介和等价发布的来源选择。默认为 Modrinth。"
+  },
+  "app.resources.search.window-exhausted": {
+    "message": "{source} 已达到搜索结果窗口上限。"
+  },
+  "app.resources.search.confirmed-source": {
+    "message": "打开已确认的 {source} 项目"
+  },
+  "app.resources.search.candidate-source": {
+    "message": "打开 {source} 候选项目。它的身份尚未核验。"
+  },
+  "app.resources.route.failed": {
+    "message": "无法打开任何资源来源。"
+  },
+  "app.resources.route.retry": {
+    "message": "重试"
   }
 }

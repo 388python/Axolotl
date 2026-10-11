@@ -237,16 +237,18 @@
                 </template>
             </ProjectPageVersions>
             <Card v-else>
-                <TranslatedProjectDescription
-                    v-if="data.body"
-                    :description="data.body"
-                    :active="translationActive"
-                    :translations="translations"
-                    :mode="translationMode"
-                    :style="translationStyle"
-                    format="html"
-                />
-                <p v-else class="m-0">{{ data.description }}</p>
+                <ResourceDescription source="curseforge" :project-id="String(data.id)">
+                    <TranslatedProjectDescription
+                        v-if="data.body"
+                        :description="data.body"
+                        :active="translationActive"
+                        :translations="translations"
+                        :mode="translationMode"
+                        :style="translationStyle"
+                        format="html"
+                    />
+                    <p v-else class="m-0">{{ data.description }}</p>
+                </ResourceDescription>
             </Card>
         </div>
     </div>
@@ -296,6 +298,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
+import ResourceDescription from '@/components/ui/ResourceDescription.vue'
 import TranslatedProjectDescription from '@/components/ui/TranslatedProjectDescription.vue'
 import { useContentFavorites } from '@/composables/useContentFavorites'
 import { isFavoriteContentType } from '@/helpers/content-favorites'
@@ -494,6 +497,7 @@ function toggleFavorite() {
             provider: 'curseforge',
             project_id: favoriteProjectId.value,
             content_type: projectType.value,
+            slug: project.value?.slug,
         })
         .catch(handleError)
 }

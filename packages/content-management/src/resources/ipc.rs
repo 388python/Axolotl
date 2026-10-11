@@ -28,6 +28,8 @@ pub struct ResourceTarget {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceSearchQuery {
+    #[serde(default)]
+    pub filter: Option<ResourceSearchExpression>,
     pub text: String,
     pub types: Vec<ResourceType>,
     pub sources: Vec<SourceId>,
@@ -35,6 +37,22 @@ pub struct ResourceSearchQuery {
     pub categories: Vec<String>,
     pub sort: ResourceSearchSort,
     pub page_size: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ResourceSearchExpression {
+    All {
+        terms: Vec<ResourceSearchExpression>,
+    },
+    Any {
+        terms: Vec<ResourceSearchExpression>,
+    },
+    Predicate {
+        field: String,
+        values: Vec<String>,
+        excluded: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -86,7 +104,7 @@ pub struct ResourceSearchResult {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceChangelog {
     pub release: SourceReleaseRef,
-    pub published_at: DateTime<Utc>,
+    pub published_at: Option<DateTime<Utc>>,
     pub text: ResourceText,
 }
 

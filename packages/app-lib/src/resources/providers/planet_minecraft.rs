@@ -1,4 +1,5 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::*;
@@ -81,6 +82,7 @@ impl ResourceProvider for PlanetMinecraftProvider {
             types: vec![],
             capabilities: vec![
                 SourceCapability::Project,
+                SourceCapability::Description,
                 SourceCapability::Search,
                 SourceCapability::Releases,
                 SourceCapability::Download,
@@ -128,9 +130,11 @@ fn connector_namespace() -> Option<String> {
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteProject {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: String,
     title: String,
     #[serde(default)]
@@ -145,6 +149,7 @@ struct RemoteProject {
 
 impl RemoteProject {
     fn document(self) -> ResourceResult<ProjectDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         let types = match self.project_type.as_deref() {
             Some("mod") => vec![ResourceType::Mod],
             Some("resourcepack") => vec![ResourceType::ResourcePack],
@@ -154,7 +159,13 @@ impl RemoteProject {
             _ => vec![],
         };
         Ok(ProjectDocument {
+            protocol,
             metadata: SourceProjectMetadata {
+                environments: vec![],
+                categories: vec![],
+                game_versions: vec![],
+                loaders: vec![],
+                gallery: vec![],
                 project: source_project(SourceId::planet_minecraft(), self.id)?,
                 slug: None,
                 title: self.title,
@@ -179,9 +190,11 @@ impl RemoteProject {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteRelease {
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
     id: String,
     name: String,
     #[serde(default)]
@@ -189,7 +202,7 @@ struct RemoteRelease {
     download: RemoteDownload,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RemoteDownload {
     page_url: String,
@@ -206,6 +219,7 @@ impl RemoteRelease {
         self,
         project: SourceProjectRef,
     ) -> ResourceResult<ReleaseDocument> {
+        let protocol = Some(protocol_projection(serde_json::to_value(&self)?));
         let reference = release_ref(project, self.id)?;
         let file_hashes = hashes(
             self.download
@@ -239,6 +253,7 @@ impl RemoteRelease {
             dependencies: vec![],
         };
         Ok(ReleaseDocument {
+            protocol,
             release: ResourceRelease {
                 reference,
                 version: self.name,

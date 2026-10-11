@@ -8,6 +8,7 @@ import { useRoute } from 'vue-router'
 
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
 import InstanceIcon from '@/components/ui/InstanceIcon.vue'
+import ResourceDescription from '@/components/ui/ResourceDescription.vue'
 import {
     import_planet_minecraft_content,
     install_planet_minecraft_content,
@@ -198,6 +199,11 @@ void contentSelection
                 {{ selectedInstance?.name ?? formatMessage(messages.chooseInstance) }}
             </Button>
         </section>
+        <Card
+            ><ResourceDescription source="planet_minecraft" :project-id="project.id"
+                ><p class="m-0">{{ project.summary }}</p></ResourceDescription
+            ></Card
+        >
         <Card v-if="manualDownload" class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
                 <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">

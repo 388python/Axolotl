@@ -45,6 +45,16 @@ pub struct ResourceSource {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceProjectMetadata {
+    #[serde(default)]
+    pub environments: Vec<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
+    #[serde(default)]
+    pub game_versions: Vec<String>,
+    #[serde(default)]
+    pub loaders: Vec<String>,
+    #[serde(default)]
+    pub gallery: Vec<String>,
     pub project: SourceProjectRef,
     pub slug: Option<String>,
     pub title: String,
@@ -65,6 +75,10 @@ pub struct SourceProjectMetadata {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Resource {
+    #[serde(default)]
+    pub confirmed_projects: Vec<SourceProjectRef>,
+    #[serde(default)]
+    pub source_failures: Vec<super::ipc::ResourceSourceFailure>,
     pub id: Option<ResourceId>,
     pub default_project: SourceProjectRef,
     pub projects: Vec<SourceProjectMetadata>,

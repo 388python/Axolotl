@@ -41,6 +41,7 @@ const maxResultsValues = computed<number[]>(
 )
 
 const messages = defineMessages({
+    refreshing: { id: 'browse.search.refreshing', defaultMessage: 'Refreshing results…' },
     searchPlaceholder: {
         id: 'browse.search.placeholder',
         defaultMessage: 'Search {projectType}...',
@@ -306,8 +307,30 @@ const skeletonCount = computed(() => {
 
     <slot name="above-results" />
 
-    <div class="search relative">
-        <section v-if="ctx.loading.value" class="py-1" aria-busy="true" aria-live="polite">
+    <div
+        v-if="ctx.searchError?.value"
+        role="alert"
+        class="mb-3 flex items-center gap-3 rounded-lg border border-solid border-surface-4 bg-surface-2 p-3"
+    >
+        <span>{{ ctx.searchError.value }}</span>
+        <Button @click="ctx.refreshSearch()">{{ formatMessage(messages.retryLabel) }}</Button>
+    </div>
+    <p
+        v-if="ctx.loading.value && (ctx.projectHits.value.length || ctx.serverHits.value.length)"
+        role="status"
+    >
+        {{ formatMessage(messages.refreshing) }}
+    </p>
+
+    <div class="search relative" :aria-busy="ctx.loading.value">
+        <section
+            v-if="
+                ctx.loading.value && !ctx.projectHits.value.length && !ctx.serverHits.value.length
+            "
+            class="py-1"
+            aria-busy="true"
+            aria-live="polite"
+        >
             <div
                 class="flex items-center justify-center gap-2 pb-3 text-sm font-medium text-[var(--color-text-tertiary)]"
             >
@@ -334,9 +357,10 @@ const skeletonCount = computed(() => {
         </section>
         <section
             v-else-if="
-                ctx.isServerType.value
+                !ctx.searchError?.value &&
+                (ctx.isServerType.value
                     ? ctx.serverHits.value.length === 0
-                    : ctx.projectHits.value.length === 0
+                    : ctx.projectHits.value.length === 0)
             "
             class="py-8"
         >
