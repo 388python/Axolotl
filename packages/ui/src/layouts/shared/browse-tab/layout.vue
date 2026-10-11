@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Labrinth } from '@modrinth/api-client'
-import { ArrowUpDownIcon, EyeIcon, SearchIcon, SpinnerIcon } from '@modrinth/assets'
+import { ArrowUpDownIcon, EyeIcon, SearchIcon } from '@modrinth/assets'
 import { computed, ref, toValue } from 'vue'
 
 import Button from '#ui/components/base/buttons/Button.vue'
@@ -41,7 +41,6 @@ const maxResultsValues = computed<number[]>(
 )
 
 const messages = defineMessages({
-    refreshing: { id: 'browse.search.refreshing', defaultMessage: 'Refreshing results…' },
     searchPlaceholder: {
         id: 'browse.search.placeholder',
         defaultMessage: 'Search {projectType}...',
@@ -315,28 +314,8 @@ const skeletonCount = computed(() => {
         <span>{{ ctx.searchError.value }}</span>
         <Button @click="ctx.refreshSearch()">{{ formatMessage(messages.retryLabel) }}</Button>
     </div>
-    <p
-        v-if="ctx.loading.value && (ctx.projectHits.value.length || ctx.serverHits.value.length)"
-        role="status"
-    >
-        {{ formatMessage(messages.refreshing) }}
-    </p>
-
     <div class="search relative" :aria-busy="ctx.loading.value">
-        <section
-            v-if="
-                ctx.loading.value && !ctx.projectHits.value.length && !ctx.serverHits.value.length
-            "
-            class="py-1"
-            aria-busy="true"
-            aria-live="polite"
-        >
-            <div
-                class="flex items-center justify-center gap-2 pb-3 text-sm font-medium text-[var(--color-text-tertiary)]"
-            >
-                <SpinnerIcon class="size-4 animate-spin" />
-                {{ formatMessage(messages.loadingLabel) }}
-            </div>
+        <section v-if="ctx.loading.value" class="py-1" aria-busy="true" aria-live="polite">
             <ProjectCardList :layout="ctx.effectiveLayout.value">
                 <ProjectCardSkeleton
                     v-for="index in skeletonCount"
@@ -493,6 +472,7 @@ const skeletonCount = computed(() => {
                         :banner="result.featured_gallery ?? undefined"
                         :color="result.color ?? undefined"
                         :provider="result.provider"
+                        :providers="result.providers"
                         :environment="
                             ['mod', 'modpack'].includes(ctx.projectType.value)
                                 ? {

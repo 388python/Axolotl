@@ -4,12 +4,17 @@ pub use content_management::resources::*;
 
 pub mod cache;
 pub mod catalog;
+mod execution;
 pub mod favorites;
+pub mod history;
 pub mod identity;
+pub mod installed;
+pub(crate) mod legacy_catalog;
 pub mod plans;
 pub mod providers;
 pub mod search;
 mod service;
+pub mod updates;
 
 pub(crate) use service::valid_artifact;
 pub use service::{CachePolicy, QueryOutcome, ResourceService};

@@ -29,12 +29,15 @@
                     {{ summary }}
                 </p>
             </div>
-            <span
-                v-if="provider"
-                class="project-card--compact__provider truncate text-[13px] font-medium leading-4 text-[var(--color-text-tertiary)]"
-            >
-                {{ providerLabel }}
-            </span>
+            <div class="project-card--compact__provider flex flex-wrap gap-1">
+                <span
+                    v-for="label in providerLabels"
+                    :key="label"
+                    class="rounded-full bg-surface-5 px-2 py-0.5 text-xs font-semibold text-[var(--color-text-tertiary)]"
+                >
+                    {{ label }}
+                </span>
+            </div>
             <div
                 class="project-card--compact__tags flex min-w-0 items-center gap-1 overflow-hidden"
             >
@@ -123,10 +126,11 @@
                                 <div class="flex min-w-0 gap-2 items-center">
                                     <ProjectCardTitle :title="title" compact />
                                     <span
-                                        v-if="provider"
+                                        v-for="label in providerLabels"
+                                        :key="label"
                                         class="rounded-full bg-surface-5 px-2 py-0.5 text-xs font-semibold text-[var(--color-text-tertiary)]"
                                     >
-                                        {{ providerLabel }}
+                                        {{ label }}
                                     </span>
                                     <ProjectStatusBadge
                                         v-if="status"
@@ -228,10 +232,11 @@
                 <div class="flex min-w-0 gap-2 items-center">
                     <ProjectCardTitle :title="title" />
                     <span
-                        v-if="provider"
+                        v-for="label in providerLabels"
+                        :key="label"
                         class="rounded-full bg-surface-5 px-2 py-0.5 text-xs font-semibold text-[var(--color-text-tertiary)]"
                     >
-                        {{ providerLabel }}
+                        {{ label }}
                     </span>
                     <ProjectStatusBadge v-if="status" :status="status" />
                 </div>
@@ -381,20 +386,22 @@ const props = defineProps<{
     environment?: ProjectCardEnvironmentProps
     status?: ProjectStatus
     maxTags?: number
+    providers?: ('modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft')[]
     provider?: 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft'
 }>()
 
-const providerLabel = computed(() => {
-    switch (props.provider) {
-        case 'curseforge':
-            return 'CurseForge'
-        case 'mcarchive':
-            return 'MCArchive'
-        case 'planet_minecraft':
-            return 'Planet Minecraft'
-        default:
-            return 'Modrinth'
+const providerLabels = computed(() => {
+    const names = {
+        modrinth: 'Modrinth',
+        curseforge: 'CurseForge',
+        mcarchive: 'MCArchive',
+        planet_minecraft: 'Planet Minecraft',
     }
+    return [
+        ...new Set(
+            props.providers?.length ? props.providers : props.provider ? [props.provider] : [],
+        ),
+    ].map((source) => names[source])
 })
 
 const baseCardStyle =

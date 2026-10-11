@@ -266,6 +266,44 @@ fn main() {
                     ),
             )
             .plugin(
+                "axolotl-resources",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "resource_sources",
+                        "resource_search",
+                        "resource_get",
+                        "resource_get_description",
+                        "resource_list_releases",
+                        "resource_get_release",
+                        "resource_get_changelog",
+                        "resource_list_changelogs",
+                        "resource_cancel",
+                        "resource_preferred_source",
+                        "resource_set_preferred_source",
+                        "resource_cache_info",
+                        "resource_cache_clear",
+                        "resource_locate",
+                        "resource_project_document",
+                        "resource_project_documents",
+                        "resource_project_protocol",
+                        "resource_release_documents",
+                        "resource_favorites",
+                        "resource_favorite_add",
+                        "resource_favorite_remove",
+                        "resource_prepare_operation",
+                        "resource_prepare_entry_operation",
+                        "resource_list_installed",
+                        "resource_check_updates",
+                        "resource_revise_plan",
+                        "resource_queue_plan",
+                        "resource_list_history",
+                        "resource_rollback",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "datapacks",
                 InlinedPlugin::new()
                     .commands(&[

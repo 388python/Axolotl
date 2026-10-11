@@ -331,7 +331,7 @@ export const onboardingMessages = defineMessages({
     instanceTabsDescription: {
         id: 'app.onboarding.instance-tabs.description',
         defaultMessage:
-            'Use these tabs for content, files, screenshots, worlds, and logs. Tidy chaos.',
+            'Use these tabs for content, files, screenshots, worlds, and logs. Content updates and version changes show a dependency preview before queueing. Recorded updates can be restored from their verified history backups.',
     },
     labTitle: {
         id: 'app.onboarding.lab.title',

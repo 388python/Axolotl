@@ -1,9 +1,4 @@
 use super::{ipc::ResourceTarget, providers::*, *};
-use crate::state::{
-    ContentProviderRef, ContentSourceKind, CurseForgeFileId,
-    CurseForgeProjectId, ModrinthProjectId, ModrinthVersionId, ProjectType,
-};
-use crate::util::fetch::{self, DownloadRequest, Integrity, ResourceClass};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 use std::{
@@ -17,6 +12,10 @@ pub(crate) struct OperationDraft {
     pub plan: ResourceOperationPlan,
     pub install_dependencies: bool,
     pub candidates: Vec<ResourceSelection>,
+    #[serde(default)]
+    pub local_files: HashMap<InstalledEntryId, String>,
+    #[serde(default)]
+    pub restore_history: Option<HistoryId>,
 }
 
 pub(crate) fn db(error: sqlx::Error) -> ResourceError {
@@ -39,6 +38,20 @@ fn issue(
         blocking,
         message: message.into(),
     });
+}
+
+fn selection_matches_artifact(
+    selection: &ReleaseSelection,
+    artifact: Option<&ResourceArtifact>,
+) -> bool {
+    match selection {
+        ReleaseSelection::Automatic => true,
+        ReleaseSelection::Release { reference } => artifact
+            .is_some_and(|artifact| &artifact.reference.release == reference),
+        ReleaseSelection::Artifact { reference } => {
+            artifact.is_some_and(|artifact| &artifact.reference == reference)
+        }
+    }
 }
 
 pub fn validate_scope(
@@ -147,7 +160,7 @@ pub(crate) async fn instance_revision(
     pool: &SqlitePool,
     instance_id: &str,
 ) -> ResourceResult<u64> {
-    let value: Option<i64> = sqlx::query_scalar("SELECT revision FROM instance_content_sets WHERE instance_id = ? AND status = 'applied'").bind(instance_id).fetch_optional(pool).await.map_err(db)?;
+    let value: Option<i64> = sqlx::query_scalar("SELECT content.revision FROM instances instance JOIN instance_content_sets content ON content.id = instance.applied_content_set_id WHERE instance.id = ?").bind(instance_id).fetch_optional(pool).await.map_err(db)?;
     value
         .and_then(|value| u64::try_from(value).ok())
         .ok_or_else(|| invalid("instance has no applied content set"))
@@ -157,7 +170,7 @@ pub(crate) async fn installed(
     pool: &SqlitePool,
     instance_id: &str,
 ) -> ResourceResult<Vec<InstalledResource>> {
-    let rows = sqlx::query("SELECT entry.id, entry.project_type, entry.ownership_kind, file.relative_path, file.enabled, file.missing, file.sha1, file.size, exact.artifact, exact.scope FROM instance_content_entries entry JOIN instance_content_sets content ON content.id = entry.content_set_id JOIN instance_files file ON file.id = entry.file_id LEFT JOIN resource_installed_artifacts exact ON exact.entry_id = entry.id WHERE entry.instance_id = ? AND content.status = 'applied'").bind(instance_id).fetch_all(pool).await.map_err(db)?;
+    let rows = sqlx::query("SELECT entry.id, entry.project_type, entry.ownership_kind, (SELECT member.id FROM instance_pack_members member WHERE member.content_entry_id = entry.id LIMIT 1) AS member_id, file.relative_path, file.enabled, file.missing, file.sha1, file.size, exact.artifact, exact.scope FROM instance_content_entries entry JOIN instance_content_sets content ON content.id = entry.content_set_id JOIN instance_files file ON file.id = entry.file_id LEFT JOIN resource_installed_artifacts exact ON exact.entry_id = entry.id WHERE entry.instance_id = ? AND content.id = (SELECT applied_content_set_id FROM instances WHERE id = entry.instance_id)").bind(instance_id).fetch_all(pool).await.map_err(db)?;
     let mut result = vec![];
     for row in rows {
         let entry_id: String = row.get("id");
@@ -165,7 +178,7 @@ pub(crate) async fn installed(
         let resource_type = match kind.as_str() {
             "mod" => ResourceType::Mod,
             "plugin" => ResourceType::Plugin,
-            "shader" => ResourceType::Shader,
+            "shader" | "shaderpack" => ResourceType::Shader,
             "resourcepack" => ResourceType::ResourcePack,
             "datapack" => ResourceType::DataPack,
             _ => continue,
@@ -195,7 +208,33 @@ pub(crate) async fn installed(
         let resource_id = links.first().and_then(|row| {
             ResourceId::new(row.get::<String, _>("resource_id")).ok()
         });
-        let artifact = exact.as_ref().map(|file| file.reference.clone());
+        let artifact = exact
+            .as_ref()
+            .map(|file| file.reference.clone())
+            .or_else(|| {
+                let link = links.first()?;
+                let artifact_id =
+                    link.get::<Option<String>, _>("artifact_id")?;
+                Some(SourceArtifactRef {
+                    release: SourceReleaseRef {
+                        project: SourceProjectRef {
+                            source: SourceId::new(
+                                link.get::<String, _>("source"),
+                            )
+                            .ok()?,
+                            project_id: SourceProjectId::new(
+                                link.get::<String, _>("project_id"),
+                            )
+                            .ok()?,
+                        },
+                        release_id: SourceReleaseId::new(
+                            link.get::<Option<String>, _>("release_id")?,
+                        )
+                        .ok()?,
+                    },
+                    artifact_id: SourceArtifactId::new(artifact_id).ok()?,
+                })
+            });
         let sha1: String = row.get("sha1");
         let size: i64 = row.get("size");
         let ownership: String = row.get("ownership_kind");
@@ -220,7 +259,13 @@ pub(crate) async fn installed(
             missing: row.get::<i64, _>("missing") != 0,
             ownership: if ownership == "pack_managed" {
                 ResourceOwnership::PackManaged {
-                    pack_member_id: "existing-pack-member".into(),
+                    pack_member_id: row
+                        .get::<Option<String>, _>("member_id")
+                        .ok_or_else(|| {
+                        invalid(
+                            "pack-managed entry has no persistent pack member",
+                        )
+                    })?,
                 }
             } else if ownership == "user_added" {
                 ResourceOwnership::UserAdded
@@ -267,12 +312,13 @@ impl ResourceService {
         Ok(metadata)
     }
 
-    async fn selected_release(
+    pub(crate) async fn selected_release_for_current(
         self: &Arc<Self>,
         selection: &ResourceSelection,
         target: &ResourceTarget,
         preferred: &SourceId,
         cancel: &CancellationToken,
+        current: Option<&ResourceRelease>,
     ) -> ResourceResult<(
         ResourceRelease,
         ResourceArtifact,
@@ -345,6 +391,11 @@ impl ResourceService {
                                         || target
                                             .channels
                                             .contains(&release.channel))
+                                    && current.is_none_or(|current| {
+                                        !release_is_known_lower(
+                                            release, current,
+                                        )
+                                    })
                             },
                         ));
                         cursor = page.cursor;
@@ -497,6 +548,38 @@ impl ResourceService {
                 return Err(invalid("dependency graph exceeded 512 resources"));
             }
             if !seen.insert(selection.id.clone()) {
+                if let Some(previous) =
+                    draft.plan.nodes.iter().find(|node| node.id == selection.id)
+                {
+                    let selected = previous.artifact.clone();
+                    let matches = if selection_matches_artifact(
+                        &selection.release,
+                        selected.as_ref(),
+                    ) {
+                        true
+                    } else {
+                        let (_, expected, _) = self
+                            .selected_release_for_current(
+                                &selection, target, &preferred, cancel, None,
+                            )
+                            .await?;
+                        selected.as_ref().is_some_and(|selected| {
+                            identity::exact_integrity(
+                                &selected.integrity,
+                                &expected.integrity,
+                            )
+                        })
+                    };
+                    if !matches {
+                        issue(
+                            &mut draft.plan,
+                            ResourceIssueCode::VersionConflict,
+                            &selection.id,
+                            true,
+                            "multiple parents require different dependency releases",
+                        );
+                    }
+                }
                 continue;
             }
             let _metadata = match self.canonical(&mut selection, cancel).await {
@@ -515,13 +598,32 @@ impl ResourceService {
                     continue;
                 }
             };
-            let key = format!(
-                "{}:{}",
-                serde_json::to_string(&selection.resource)?,
-                serde_json::to_string(&selection.scope)?
-            );
+            let previous_release = if draft.plan.intent
+                == ResourceOperationIntent::Update
+            {
+                if let Some(artifact) = selection
+                    .entry_id
+                    .as_ref()
+                    .and_then(|id| {
+                        installed.iter().find(|entry| &entry.entry_id == id)
+                    })
+                    .and_then(|entry| entry.artifact.as_ref())
+                {
+                    Some(self.release(&artifact.release, None, cancel).await?)
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let (release, artifact, basis) = match self
-                .selected_release(&selection, target, &preferred, cancel)
+                .selected_release_for_current(
+                    &selection,
+                    target,
+                    &preferred,
+                    cancel,
+                    previous_release.as_ref(),
+                )
                 .await
             {
                 Ok(value) => value,
@@ -539,6 +641,65 @@ impl ResourceService {
                     continue;
                 }
             };
+            if artifact.reference.release.project.source
+                == SourceId::curseforge()
+                && self.sources().iter().any(|source| {
+                    source.available && source.id == SourceId::modrinth()
+                })
+            {
+                let matches = self
+                    .identify_many(
+                        &[SourceId::modrinth()],
+                        &[identity::LocalArtifactIdentity {
+                            integrity: artifact.integrity.clone(),
+                            fingerprint: None,
+                        }],
+                        CachePolicy::UseFresh,
+                        cancel,
+                    )
+                    .await;
+                if let Some(matches) =
+                    matches.first().filter(|matches| !matches.ambiguous)
+                {
+                    for other in &matches.matches {
+                        if let Some(store) = self.store() {
+                            let left = self
+                                .project_document(
+                                    &artifact.reference.release.project,
+                                    None,
+                                    cancel,
+                                )
+                                .await?;
+                            let right = self
+                                .project_document(
+                                    &other.reference.release.project,
+                                    None,
+                                    cancel,
+                                )
+                                .await?;
+                            store
+                                .confirm_projects(
+                                    &left.metadata,
+                                    &right.metadata,
+                                    &artifact,
+                                    other,
+                                )
+                                .await?;
+                        }
+                    }
+                }
+                self.canonical(&mut selection, cancel).await?;
+            }
+            let resource_key = format!(
+                "{}:{}",
+                serde_json::to_string(&selection.resource)?,
+                serde_json::to_string(&selection.scope)?
+            );
+            let key = selection
+                .entry_id
+                .as_ref()
+                .map(|entry| format!("{resource_key}:entry:{}", entry.as_str()))
+                .unwrap_or_else(|| resource_key.clone());
             if let Some(previous) = resolved.get(&key) {
                 let node = draft
                     .plan
@@ -576,6 +737,9 @@ impl ResourceService {
                 continue;
             }
             resolved.insert(key, selection.id.clone());
+            resolved
+                .entry(resource_key)
+                .or_insert_with(|| selection.id.clone());
             let assessment =
                 assess_compatibility(&release, target, selection.resource_type);
             for (dimension, value) in [
@@ -621,6 +785,70 @@ impl ResourceService {
                         }
                 })
                 .collect();
+            let current = selection.entry_id.as_ref().and_then(|entry_id| {
+                installed.iter().find(|item| {
+                    &item.entry_id == entry_id
+                        && item.scope == selection.scope
+                        && item.resource_type == selection.resource_type
+                })
+            });
+            if let Some(current) = current {
+                let same_resource = match &selection.resource {
+                    ResourceRef::Resource { id } => {
+                        current.resource_id.as_ref() == Some(id)
+                    }
+                    ResourceRef::Source { project } => {
+                        current.artifact.as_ref().is_some_and(|artifact| {
+                            &artifact.release.project == project
+                        })
+                    }
+                };
+                if !same_resource {
+                    issue(
+                        &mut draft.plan,
+                        ResourceIssueCode::ArtifactMismatch,
+                        &selection.id,
+                        true,
+                        "target resource does not own the installed entry",
+                    );
+                }
+                if draft.plan.intent == ResourceOperationIntent::Update {
+                    let newer = if let Some(artifact) = &current.artifact {
+                        let previous = self
+                            .release(&artifact.release, None, cancel)
+                            .await?;
+                        release_is_newer(&release, &previous)
+                    } else {
+                        false
+                    };
+                    if !newer
+                        && !identity::exact_integrity(
+                            &current.integrity,
+                            &artifact.integrity,
+                        )
+                    {
+                        issue(
+                            &mut draft.plan,
+                            ResourceIssueCode::VersionConflict,
+                            &selection.id,
+                            true,
+                            "target is not a newer release; use switch version for an explicit downgrade",
+                        );
+                    }
+                }
+            }
+            let is_entry_update = draft.plan.intent
+                != ResourceOperationIntent::Install
+                && selection.entry_id.is_some();
+            if is_entry_update && current.is_none() {
+                issue(
+                    &mut draft.plan,
+                    ResourceIssueCode::ArtifactMismatch,
+                    &selection.id,
+                    true,
+                    "the selected installed entry is missing or belongs to another scope",
+                );
+            }
             let satisfied = candidates
                 .iter()
                 .find(|item| {
@@ -632,7 +860,13 @@ impl ResourceService {
                         )
                 })
                 .copied();
-            let state = if satisfied.is_some() {
+            let state = if is_entry_update {
+                if satisfied.is_some() {
+                    DependencyNodeState::Satisfied
+                } else {
+                    DependencyNodeState::Update
+                }
+            } else if satisfied.is_some() {
                 DependencyNodeState::Satisfied
             } else if draft.plan.active_roots.contains(&selection.id) {
                 DependencyNodeState::SelectedRoot
@@ -645,6 +879,29 @@ impl ResourceService {
                 &artifact,
             );
             match path {
+                Ok(_path) if is_entry_update => {
+                    if let Some(current) = current {
+                        let target_path = current.relative_path.clone();
+                        if (draft.plan.intent
+                            == ResourceOperationIntent::SwitchVersion
+                            && current.artifact.as_ref()
+                                != Some(&artifact.reference))
+                            || !identity::exact_integrity(
+                                &current.integrity,
+                                &artifact.integrity,
+                            )
+                        {
+                            draft.plan.actions.push(ResourceEntryAction {
+                                entry_id: current.entry_id.clone(),
+                                node_id: selection.id.clone(),
+                                kind: ResourceActionKind::Replace,
+                                current: Some(current.clone()),
+                                target: artifact.clone(),
+                                target_relative_path: target_path,
+                            });
+                        }
+                    }
+                }
                 Ok(path) if satisfied.is_none() => {
                     if installed.iter().any(|item| {
                         item.relative_path.eq_ignore_ascii_case(&path)
@@ -765,6 +1022,37 @@ impl ResourceService {
                     .get(&key)
                     .cloned()
                     .unwrap_or_else(|| child.id.clone());
+                if let Some(existing) = resolved.get(&key).and_then(|id| {
+                    draft.plan.nodes.iter().find(|node| &node.id == id)
+                }) {
+                    if dependency.kind == ResourceDependencyKind::Required
+                        && !selection_matches_artifact(
+                            &child.release,
+                            existing.artifact.as_ref(),
+                        )
+                    {
+                        let existing = existing.artifact.clone();
+                        let (_, expected, _) = self
+                            .selected_release_for_current(
+                                &child, target, &preferred, cancel, None,
+                            )
+                            .await?;
+                        if !existing.as_ref().is_some_and(|existing| {
+                            identity::exact_integrity(
+                                &existing.integrity,
+                                &expected.integrity,
+                            )
+                        }) {
+                            issue(
+                                &mut draft.plan,
+                                ResourceIssueCode::VersionConflict,
+                                &selection.id,
+                                true,
+                                "required dependency conflicts with an active root release or artifact",
+                            );
+                        }
+                    }
+                }
                 draft.plan.edges.push(ResourceDependencyEdge {
                     parent: selection.id.clone(),
                     child: id.clone(),
@@ -859,6 +1147,22 @@ impl ResourceService {
     }
 }
 
+pub(crate) fn update_channels(
+    channel: crate::state::ReleaseChannel,
+) -> Vec<ReleaseChannel> {
+    match channel {
+        crate::state::ReleaseChannel::Release => vec![ReleaseChannel::Release],
+        crate::state::ReleaseChannel::Beta => {
+            vec![ReleaseChannel::Release, ReleaseChannel::Beta]
+        }
+        crate::state::ReleaseChannel::Alpha => vec![
+            ReleaseChannel::Release,
+            ReleaseChannel::Beta,
+            ReleaseChannel::Alpha,
+        ],
+    }
+}
+
 pub async fn prepare(
     instance_id: String,
     intent: ResourceOperationIntent,
@@ -866,15 +1170,25 @@ pub async fn prepare(
     install_dependencies: bool,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceOperationPlan> {
-    if intent != ResourceOperationIntent::Install
-        || selections
-            .iter()
-            .any(|selection| selection.entry_id.is_some())
-    {
-        return Err(ResourceError::Unsupported(
-            "entry updates use the content change workflow until phase six"
-                .into(),
-        ));
+    match intent {
+        ResourceOperationIntent::Install
+            if selections
+                .iter()
+                .any(|selection| selection.entry_id.is_some()) =>
+        {
+            return Err(invalid(
+                "install roots cannot target an existing entry",
+            ));
+        }
+        ResourceOperationIntent::Update
+        | ResourceOperationIntent::SwitchVersion
+            if selections
+                .iter()
+                .all(|selection| selection.entry_id.is_none()) =>
+        {
+            return Err(invalid("updates must identify an installed entry"));
+        }
+        _ => {}
     }
     if selections.is_empty()
         || selections.len() > 100
@@ -899,6 +1213,8 @@ pub async fn prepare(
     let draft = OperationDraft {
         install_dependencies,
         candidates: vec![],
+        local_files: HashMap::new(),
+        restore_history: None,
         plan: ResourceOperationPlan {
             schema_version: ResourceContractVersion,
             id: PlanId::new(uuid::Uuid::new_v4().to_string())?,
@@ -919,9 +1235,14 @@ pub async fn prepare(
     let target = ResourceTarget {
         game_versions: vec![instance.applied_content_set.game_version],
         loaders: vec![instance.applied_content_set.loader.as_str().into()],
-        channels: vec![],
+        channels: update_channels(instance.instance.update_channel),
     };
-    let installed = installed(&state.pool, &draft.plan.instance_id).await?;
+    let installed = if draft.plan.intent == ResourceOperationIntent::Install {
+        installed(&state.pool, &draft.plan.instance_id).await?
+    } else {
+        super::installed::hydrate(&state, &draft.plan.instance_id, cancel)
+            .await?
+    };
     let draft = state
         .resources()
         .await?
@@ -965,6 +1286,10 @@ pub async fn revise(
     {
         return Err(invalid("instance changed; prepare a new plan"));
     }
+    let added_optional = decisions.iter().any(|decision| {
+        matches!(decision, ResourcePlanDecision::AddOptional { .. })
+    });
+    let previous_issues = draft.plan.issues.clone();
     for decision in decisions {
         match decision {
             ResourcePlanDecision::AddOptional { node_id } => {
@@ -1030,14 +1355,34 @@ pub async fn revise(
     let target = ResourceTarget {
         game_versions: vec![instance.applied_content_set.game_version],
         loaders: vec![instance.applied_content_set.loader.as_str().into()],
-        channels: vec![],
+        channels: update_channels(instance.instance.update_channel),
     };
-    let installed = installed(&state.pool, &draft.plan.instance_id).await?;
+    let installed = if draft.plan.intent == ResourceOperationIntent::Install {
+        installed(&state.pool, &draft.plan.instance_id).await?
+    } else {
+        super::installed::hydrate(&state, &draft.plan.instance_id, cancel)
+            .await?
+    };
     let draft = state
         .resources()
         .await?
         .build_operation(draft, &target, &installed, cancel)
         .await?;
+    if added_optional
+        && draft.plan.issues.iter().any(|issue| {
+            issue.blocking
+                && matches!(
+                    issue.code,
+                    ResourceIssueCode::SourceUnavailable
+                        | ResourceIssueCode::MissingDependency
+                )
+                && !previous_issues.contains(issue)
+        })
+    {
+        return Err(invalid(
+            "unable to resolve the added dependency; your previous selection is retained",
+        ));
+    }
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);
     }
@@ -1056,40 +1401,10 @@ pub async fn revise(
 pub async fn queue(
     id: PlanId,
     revision: u32,
-) -> ResourceResult<ResourceOperationPlan> {
-    let state = crate::State::get().await?;
-    let draft = load(&state.pool, &id, revision).await?;
-    if draft.plan.issues.iter().any(|issue| issue.blocking) {
-        return Err(invalid("resolve blocking plan issues before queueing"));
-    }
-    let claimed = sqlx::query("UPDATE resource_operation_plans SET queued = 1 WHERE id = ? AND revision = ? AND job_id IS NULL AND queued = 0").bind(id.as_str()).bind(revision).execute(&state.pool).await.map_err(db)?;
-    if claimed.rows_affected() != 1 {
-        return Err(invalid("plan changed concurrently or is already queued"));
-    }
-    let item = crate::install::InstallContentBatchItem::FrozenResource {
-        plan: draft.plan.clone(),
-    };
-    let job = match crate::install::runner::install_content_batch(
-        draft.plan.instance_id.clone(),
-        vec![item],
-        "Install resources".into(),
-        None,
-    )
-    .await
-    {
-        Ok(job) => job,
-        Err(error) => {
-            let _ = sqlx::query("UPDATE resource_operation_plans SET queued = 0 WHERE id = ? AND revision = ? AND job_id IS NULL")
-                .bind(id.as_str()).bind(revision).execute(&state.pool).await;
-            return Err(ResourceError::Database(error.to_string()));
-        }
-    };
-    let changed = sqlx::query("UPDATE resource_operation_plans SET job_id = ? WHERE id = ? AND revision = ? AND job_id IS NULL AND queued = 1")
-        .bind(job.job_id.to_string()).bind(id.as_str()).bind(revision).execute(&state.pool).await.map_err(db)?;
-    if changed.rows_affected() != 1 {
-        return Err(invalid("plan changed concurrently or is already queued"));
-    }
-    Ok(draft.plan)
+) -> ResourceResult<crate::install::InstallJobSnapshot> {
+    crate::install::runner::queue_resource_plan(id, revision)
+        .await
+        .map_err(|error| ResourceError::InvalidRequest(error.to_string()))
 }
 
 pub(crate) async fn execute_frozen_plan(
@@ -1098,163 +1413,12 @@ pub(crate) async fn execute_frozen_plan(
     reporter: Option<crate::install::InstallProgressReporter>,
     state: &crate::State,
 ) -> crate::Result<()> {
-    if plan.instance_id != instance_id
-        || plan.issues.iter().any(|issue| issue.blocking)
-    {
-        return Err(crate::ErrorKind::InputError(
-            "resource plan is not executable".into(),
-        )
-        .into());
-    }
-    let current = instance_revision(&state.pool, instance_id)
-        .await
-        .map_err(|error| crate::ErrorKind::InputError(error.to_string()))?;
-    if current != plan.instance_revision {
-        return Err(crate::ErrorKind::InputError(
-            "resource plan is stale".into(),
-        )
-        .into());
-    }
-    let temp = tempfile::tempdir()?;
-    let total = plan.actions.len() as u64;
-    for (index, action) in plan.actions.iter().enumerate() {
-        let url = match &action.target.acquisition {
-            ArtifactAcquisition::PublicDownload { urls } => {
-                urls.first().cloned().ok_or_else(|| {
-                    crate::ErrorKind::InputError(
-                        "artifact has no public URL".into(),
-                    )
-                })?
-            }
-            _ => {
-                return Err(crate::ErrorKind::InputError(
-                    "artifact requires a manual download".into(),
-                )
-                .into());
-            }
-        };
-        let file_name = action.target.file_name.clone().ok_or_else(|| {
-            crate::ErrorKind::InputError("artifact has no filename".into())
-        })?;
-        let path = temp.path().join(&file_name);
-        let mut integrity = Integrity::default();
-        integrity.size = action.target.integrity.size;
-        for hash in &action.target.integrity.hashes {
-            match hash.algorithm {
-                HashAlgorithm::Sha1 => {
-                    integrity.sha1 = Some(hash.value.clone())
-                }
-                HashAlgorithm::Sha256 => {
-                    integrity.sha256 = Some(hash.value.clone())
-                }
-                HashAlgorithm::Sha512 => {
-                    integrity.sha512 = Some(hash.value.clone())
-                }
-                HashAlgorithm::Md5 => integrity.md5 = Some(hash.value.clone()),
-            }
-        }
-        let mut request = DownloadRequest::new(url, ResourceClass::Other)
-            .with_integrity(integrity);
-        if let Some(reporter) = reporter.clone() {
-            request = request.with_install_tracking(
-                reporter,
-                action.target_relative_path.clone(),
-                file_name.clone(),
-            );
-        }
-        fetch::download_to_path(
-            request,
-            &path,
-            &state.download_semaphore,
-            &state.pool,
-            None,
-        )
-        .await?;
-        let provider = &action.target.reference.release.project;
-        let provider_ref = match provider.source.as_str() {
-            "modrinth" => ContentProviderRef::Modrinth {
-                project_id: ModrinthProjectId::new(
-                    provider.project_id.as_str(),
-                )?,
-                version_id: Some(ModrinthVersionId::new(
-                    action.target.reference.release.release_id.as_str(),
-                )?),
-            },
-            "curseforge" => ContentProviderRef::CurseForge {
-                project_id: CurseForgeProjectId::new(
-                    provider.project_id.as_str().parse().map_err(|_| {
-                        crate::ErrorKind::InputError(
-                            "invalid CurseForge project ID".to_string(),
-                        )
-                    })?,
-                )?,
-                file_id: Some(CurseForgeFileId::new(
-                    action
-                        .target
-                        .reference
-                        .release
-                        .release_id
-                        .as_str()
-                        .parse()
-                        .map_err(|_| {
-                            crate::ErrorKind::InputError(
-                                "invalid CurseForge file ID".to_string(),
-                            )
-                        })?,
-                )?),
-            },
-            _ => {
-                return Err(crate::ErrorKind::InputError(
-                    "this source cannot yet materialize a content entry".into(),
-                )
-                .into());
-            }
-        };
-        let project_type = match plan
-            .selections
-            .iter()
-            .find(|selection| selection.id == action.node_id)
-            .map(|selection| selection.resource_type)
-        {
-            Some(ResourceType::Mod | ResourceType::Plugin) => ProjectType::Mod,
-            Some(ResourceType::DataPack) => ProjectType::DataPack,
-            Some(ResourceType::ResourcePack) => ProjectType::ResourcePack,
-            Some(ResourceType::Shader) => ProjectType::ShaderPack,
-            _ => {
-                return Err(crate::ErrorKind::InputError(
-                    "unsupported resource type".into(),
-                )
-                .into());
-            }
-        };
-        let bytes = tokio::fs::read(&path).await?;
-        crate::state::instances::commands::add_project_bytes_from_provider(
-            instance_id,
-            &file_name,
-            bytes::Bytes::from(bytes),
-            None,
-            project_type,
-            ContentSourceKind::Local,
-            &provider_ref,
-            state,
-        )
-        .await?;
-        if let Some(reporter) = reporter.clone() {
-            reporter
-                .update(
-                    crate::install::InstallPhaseId::DownloadingContent,
-                    Some(crate::install::InstallProgress {
-                        current: (index + 1) as u64,
-                        total,
-                        secondary: None,
-                    }),
-                    crate::install::InstallPhaseDetails::Empty,
-                )
-                .await?;
-        }
-    }
-    let state_json = serde_json::to_string(plan)?;
-    sqlx::query("UPDATE resource_operation_plans SET completed = 1, payload = ? WHERE id = ? AND revision = ?")
-        .bind(state_json).bind(plan.id.as_str()).bind(plan.revision).execute(&state.pool).await?;
-    Ok(())
+    super::execution::execute(instance_id, plan, reporter, state).await
+}
+
+pub(crate) async fn recover_frozen_plan(
+    plan: &ResourceOperationPlan,
+    state: &crate::State,
+) -> crate::Result<()> {
+    super::execution::recover_plan(plan, state).await
 }

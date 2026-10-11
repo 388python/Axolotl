@@ -386,7 +386,23 @@ console.log('resource identities: real upgrade, downgrade and re-upgrade')
     check('online pack has a durable identity', database.prepare('SELECT COUNT(*) AS count FROM resource_instance_pack_links').get().count === 1)
     check('upgrade has no broken foreign keys', database.prepare('PRAGMA foreign_key_check').all().length === 0)
     check('resource favorites preserve exact source timestamps', database.prepare('SELECT saved_at FROM resource_favorites ORDER BY saved_at').all().map((row) => row.saved_at).join(',') === database.prepare("SELECT saved_at FROM content_favorites WHERE project_id = '12345678' ORDER BY saved_at").all().map((row) => row.saved_at).join(','))
+    database.exec(`
+        INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES ('frozen-plan', 'sample', 1, '{"exact":"retained"}');
+        INSERT INTO resource_execution_journals(plan_id, payload) VALUES ('frozen-plan', '[]');
+        INSERT INTO resource_entry_graphs(entry_id, nodes, edges) VALUES ('entry', '[]', '[]');
+        INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES ('entry', '{"source":"modrinth"}', '{"kind":"instance"}');
+        INSERT INTO resource_history(id, instance_id, entry_id, recorded_at, payload, backup_relative_path, backup_size, backup_sha1, backup_available)
+            VALUES ('history', 'sample', 'entry', 30, '{"previous":"exact"}', 'mods/backup.old', 100, 'hash', 1);
+    `)
+    database.exec(`
+        INSERT INTO install_jobs(id, instance_id, kind, status, state, created, modified, finished, dismissed) VALUES ('resource-job', 'sample', 'change_content', 'succeeded', '{}', 1, 1, 2, 0);
+        UPDATE resource_operation_plans SET job_id = 'resource-job', queued = 1, completed = 1 WHERE id = 'frozen-plan';
+        DELETE FROM install_jobs WHERE id = 'resource-job';
+    `)
+    check('clearing task history preserves the durable reviewed resource plan', database.prepare("SELECT COUNT(*) AS count FROM resource_operation_plans WHERE id = 'frozen-plan' AND job_id IS NULL AND completed = 1").get().count === 1)
+    check('frozen resource tasks and populated history preserve foreign keys', database.prepare('PRAGMA foreign_key_check').all().length === 0)
     database.exec("BEGIN; DELETE FROM instances WHERE id = 'sample'; ROLLBACK;")
+    check('resource execution and history tables were created', database.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('resource_history', 'resource_entry_graphs', 'resource_execution_journals')").get().count === 3)
     check('cascading deletion does not conflict with identity triggers', database.prepare("SELECT COUNT(*) AS count FROM instances WHERE id = 'sample'").get().count === 1)
     database.close()
     const result = run(['--db', file, '--to', String(version), '--apply'])

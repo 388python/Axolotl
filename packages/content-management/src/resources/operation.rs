@@ -279,7 +279,7 @@ pub struct ResourceHistoryCleanupPlan {
     pub id: PlanId,
     pub revision: u32,
     pub instance_id: String,
-    pub instance_revision: u32,
+    pub instance_revision: u64,
     pub entries: Vec<ResourceHistoryEntry>,
     pub issues: Vec<ResourcePlanIssue>,
 }

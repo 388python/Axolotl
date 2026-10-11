@@ -11,6 +11,8 @@ use tokio_util::sync::CancellationToken;
 #[path = "../../../content-management/tests/fixtures/mod.rs"]
 mod fixtures;
 
+#[path = "plans_tests.rs"]
+mod plans_tests;
 #[path = "search_tests.rs"]
 mod search_tests;
 

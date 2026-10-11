@@ -6633,7 +6633,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "内容、文件、截图、世界和日志都在这些标签里。乱中有序。"
+    "message": "通过这些标签管理内容、文件、截图、存档和日志。更新或切换内容版本时，会先显示依赖预览，再加入任务队列。已记录的更新可从经过核验的历史备份恢复。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -13444,5 +13444,80 @@
   },
   "app.resources.route.retry": {
     "message": "重试"
+  },
+  "app.resources.operation.header": {
+    "message": "审核内容变更"
+  },
+  "app.resources.operation.loading": {
+    "message": "正在解析发布和依赖…"
+  },
+  "app.resources.operation.artifact": {
+    "message": "{source} · 发布 {release} · {file}"
+  },
+  "app.resources.operation.required": {
+    "message": "必需依赖"
+  },
+  "app.resources.operation.optional": {
+    "message": "可添加的依赖"
+  },
+  "app.resources.operation.satisfied": {
+    "message": "已满足"
+  },
+  "app.resources.operation.changes": {
+    "message": "将在 {instance} 中变更 {count} 个文件。"
+  },
+  "app.resources.operation.add": {
+    "message": "添加 {name}"
+  },
+  "app.resources.operation.remove": {
+    "message": "移除 {name}"
+  },
+  "app.resources.operation.required-by": {
+    "message": "{names} 需要此资源"
+  },
+  "app.resources.operation.exception": {
+    "message": "接受此发布的游戏版本或加载器评估结果并继续"
+  },
+  "app.resources.operation.assessment": {
+    "message": "游戏版本：{game}；加载器：{loader}"
+  },
+  "app.resources.operation.compatibility": {
+    "message": "{state, select, compatible {兼容} incompatible {不兼容} other {未知}}"
+  },
+  "app.resources.operation.retry": {
+    "message": "重试"
+  },
+  "app.resources.operation.cancel": {
+    "message": "取消"
+  },
+  "app.resources.operation.apply": {
+    "message": "加入任务队列"
+  },
+  "app.resources.operation.empty": {
+    "message": "无需变更文件。"
+  },
+  "app.resources.history.header": {
+    "message": "安装历史"
+  },
+  "app.resources.history.restore": {
+    "message": "恢复此备份"
+  },
+  "app.resources.history.unavailable": {
+    "message": "回滚备份不可用"
+  },
+  "app.resources.history.loading": {
+    "message": "正在核验回滚备份…"
+  },
+  "app.resources.history.empty": {
+    "message": "没有已记录的安装历史。"
+  },
+  "app.resources.history.cancel": {
+    "message": "关闭"
+  },
+  "app.resources.history.retry": {
+    "message": "重试"
+  },
+  "app.resources.operation.refresh": {
+    "message": "刷新当前预览"
   }
 }

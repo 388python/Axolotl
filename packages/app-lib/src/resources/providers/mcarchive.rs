@@ -145,17 +145,7 @@ impl McArchiveProvider {
                 )?))
             }
             ProviderQuery::Search { query, cursor } => {
-                if let Some(expression) = &query.filter {
-                    validate_archive_filter(expression)?;
-                }
-                if query.sort != ResourceSearchSort::Relevance
-                    || query.types.iter().any(|kind| *kind != ResourceType::Mod)
-                    || query.target.game_versions.len() > 1
-                    || !query.target.loaders.is_empty()
-                    || !query.categories.is_empty()
-                {
-                    return Err(ResourceError::Unsupported("MCArchive search supports keyword and one game version".into()));
-                }
+                validate_archive_search(query)?;
                 let mut request = ProtocolRequest::get("/mods/");
                 request.query.push(("keyword".into(), query.text.clone()));
                 if let Some(version) = query.target.game_versions.first() {
@@ -232,6 +222,23 @@ impl McArchiveProvider {
     }
 }
 
+fn validate_archive_search(query: &ResourceSearchQuery) -> ResourceResult<()> {
+    if let Some(expression) = &query.filter {
+        validate_archive_filter(expression)?;
+    }
+    if query.sort != ResourceSearchSort::Relevance
+        || query.types.iter().any(|kind| *kind != ResourceType::Mod)
+        || query.target.game_versions.len() > 1
+        || !query.target.loaders.is_empty()
+        || !query.categories.is_empty()
+    {
+        return Err(ResourceError::Unsupported(
+            "MCArchive search supports keyword and one game version".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_archive_filter(
     expression: &ResourceSearchExpression,
 ) -> ResourceResult<()> {
@@ -245,8 +252,21 @@ fn validate_archive_filter(
         ResourceSearchExpression::Predicate {
             field,
             excluded: false,
-            ..
-        } if matches!(field.as_str(), "type" | "gameVersion") => Ok(()),
+            values,
+        } if (field == "type" && values == &["mod"])
+            || (field == "gameVersion" && values.len() == 1) =>
+        {
+            Ok(())
+        }
+        ResourceSearchExpression::Predicate {
+            field,
+            values,
+            excluded: true,
+        } if matches!(field.as_str(), "type" | "allTypes")
+            && !values.iter().any(|value| value == "mod") =>
+        {
+            Ok(())
+        }
         _ => Err(ResourceError::Unsupported(
             "MCArchive cannot express these search filters".into(),
         )),
@@ -276,6 +296,12 @@ impl ResourceProvider for McArchiveProvider {
     }
     fn batch_limit(&self, _: &ProviderQuery) -> usize {
         1
+    }
+    fn validate_query(&self, query: &ProviderQuery) -> ResourceResult<()> {
+        if let ProviderQuery::Search { query, .. } = query {
+            validate_archive_search(query)?;
+        }
+        Ok(())
     }
     async fn fetch_many(
         &self,
@@ -502,4 +528,49 @@ fn collection<T: for<'de> Deserialize<'de>>(
             })?
     };
     Ok(serde_json::from_value(items)?)
+}
+
+#[cfg(test)]
+mod search_filter_tests {
+    use super::*;
+
+    fn predicate(
+        field: &str,
+        values: &[&str],
+        excluded: bool,
+    ) -> ResourceSearchExpression {
+        ResourceSearchExpression::Predicate {
+            field: field.into(),
+            values: values.iter().map(|value| (*value).into()).collect(),
+            excluded,
+        }
+    }
+
+    #[test]
+    fn default_mod_browse_exclusions_do_not_reject_archive_mods() {
+        let filter = ResourceSearchExpression::All {
+            terms: vec![
+                predicate("type", &["mod"], false),
+                predicate(
+                    "allTypes",
+                    &["modpack", "resourcepack", "datapack", "shader"],
+                    true,
+                ),
+                predicate("gameVersion", &["1.7.10"], false),
+            ],
+        };
+        assert!(validate_archive_filter(&filter).is_ok());
+    }
+
+    #[test]
+    fn unsupported_filters_are_never_silently_broadened() {
+        for filter in [
+            predicate("allTypes", &["mod"], true),
+            predicate("loader", &["forge"], false),
+            predicate("gameVersion", &["1.7.10", "1.12.2"], false),
+            predicate("environment", &["client_only"], false),
+        ] {
+            assert!(validate_archive_filter(&filter).is_err());
+        }
+    }
 }

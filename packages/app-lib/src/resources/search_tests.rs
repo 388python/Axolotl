@@ -819,3 +819,41 @@ async fn eight_character_slug_links_use_locator_and_cached_reads_stay_offline()
     assert_eq!(transport.requests.lock().unwrap().len(), 1);
     cache.close().await;
 }
+
+#[tokio::test]
+async fn all_sources_skip_archive_when_instance_filters_are_not_applicable() {
+    let (_directory, cache) = cache().await;
+    let archive =
+        Arc::new(McArchiveProvider::new(FixtureTransport::new(|_, _| {
+            panic!("inapplicable archive search must not perform a request")
+        })));
+    let mr = SearchProvider::new(SourceId::modrinth(), &["Compatible".into()]);
+    let service =
+        ResourceService::new(cache.clone(), vec![mr, archive]).unwrap();
+    let mut query = query(10);
+    query.target.loaders = vec!["forge".into()];
+    let page = service
+        .search(
+            query.clone(),
+            None,
+            RequestId::new("all-with-loader").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 1);
+    assert!(page.source_failures.is_empty());
+    query.sources = vec![SourceId::mcarchive()];
+    let page = service
+        .search(
+            query,
+            None,
+            RequestId::new("archive-with-loader").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(page.entries.is_empty());
+    assert_eq!(page.source_failures.len(), 1);
+    cache.close().await;
+}

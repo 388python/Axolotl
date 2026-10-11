@@ -11,6 +11,8 @@ use super::Result;
 
 static REQUESTS: LazyLock<DashMap<RequestId, CancellationToken>> =
     LazyLock::new(DashMap::new);
+static EARLY_CANCELLATIONS: LazyLock<DashMap<RequestId, std::time::Instant>> =
+    LazyLock::new(DashMap::new);
 
 struct RequestGuard(RequestId);
 impl Drop for RequestGuard {
@@ -28,6 +30,9 @@ fn request(id: &RequestId) -> Result<(RequestGuard, CancellationToken)> {
         ),
         dashmap::mapref::entry::Entry::Vacant(entry) => {
             entry.insert(token.clone());
+            if EARLY_CANCELLATIONS.remove(id).is_some() {
+                token.cancel();
+            }
             Ok((RequestGuard(id.clone()), token))
         }
     }
@@ -38,7 +43,7 @@ async fn service() -> Result<Arc<ResourceService>> {
 }
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
-    tauri::plugin::Builder::new("resources")
+    tauri::plugin::Builder::new("axolotl-resources")
         .invoke_handler(tauri::generate_handler![
             resource_sources,
             resource_search,
@@ -62,10 +67,54 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_favorite_add,
             resource_favorite_remove,
             resource_prepare_operation,
+            resource_prepare_entry_operation,
+            resource_list_installed,
+            resource_check_updates,
             resource_revise_plan,
-            resource_queue_plan
+            resource_queue_plan,
+            resource_list_history,
+            resource_rollback
         ])
         .build()
+}
+
+#[tauri::command]
+pub async fn resource_list_installed(
+    instance_id: String,
+    request_id: RequestId,
+) -> Result<Vec<InstalledResource>> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::installed::list(instance_id, &cancel).await?)
+}
+
+#[tauri::command]
+pub async fn resource_check_updates(
+    instance_id: String,
+    request_id: RequestId,
+) -> Result<theseus::resources::updates::ResourceUpdateCheck> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::updates::check(instance_id, &cancel).await?)
+}
+
+#[tauri::command]
+pub async fn resource_prepare_entry_operation(
+    instance_id: String,
+    intent: ResourceOperationIntent,
+    entry_ids: Vec<InstalledEntryId>,
+    release: Option<SourceReleaseRef>,
+    install_dependencies: bool,
+    request_id: RequestId,
+) -> Result<ResourceOperationPlan> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::installed::prepare_entries(
+        instance_id,
+        intent,
+        entry_ids,
+        release,
+        install_dependencies,
+        &cancel,
+    )
+    .await?)
 }
 
 #[tauri::command]
@@ -107,8 +156,32 @@ pub async fn resource_revise_plan(
 pub async fn resource_queue_plan(
     plan_id: PlanId,
     revision: u32,
-) -> Result<ResourceOperationPlan> {
+) -> Result<theseus::install::InstallJobSnapshot> {
     Ok(theseus::resources::plans::queue(plan_id, revision).await?)
+}
+
+#[tauri::command]
+pub async fn resource_list_history(
+    instance_id: String,
+    entry_id: Option<InstalledEntryId>,
+) -> Result<Vec<ResourceHistoryEntry>> {
+    Ok(theseus::resources::history::list(instance_id, entry_id).await?)
+}
+
+#[tauri::command]
+pub async fn resource_rollback(
+    instance_id: String,
+    entry_id: InstalledEntryId,
+    history_id: HistoryId,
+) -> Result<theseus::install::InstallJobSnapshot> {
+    Ok(
+        theseus::resources::history::rollback(
+            instance_id,
+            entry_id,
+            history_id,
+        )
+        .await?,
+    )
 }
 
 #[tauri::command]
@@ -442,6 +515,17 @@ pub async fn resource_list_changelogs(
 pub fn resource_cancel(request_id: RequestId) {
     if let Some(token) = REQUESTS.get(&request_id) {
         token.cancel();
+    } else {
+        EARLY_CANCELLATIONS.retain(|_, time| {
+            time.elapsed() < std::time::Duration::from_secs(30)
+        });
+        if EARLY_CANCELLATIONS.len() < 256 {
+            EARLY_CANCELLATIONS
+                .insert(request_id.clone(), std::time::Instant::now());
+        }
+        if let Some(token) = REQUESTS.get(&request_id) {
+            token.cancel();
+        }
     }
 }
 

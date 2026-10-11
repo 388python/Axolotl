@@ -521,7 +521,10 @@ function mapToTableItem(item: ContentItem, group?: string): ContentCardTableItem
             : (base.toggleDisabledTooltip ?? null),
         installing: item.installing === true,
         pendingManualDownload: item.pendingManualDownload === true,
-        hasUpdate: !group && item.update != null && item.instanceCapabilities?.canUpdate !== false,
+        hasUpdate:
+            !group &&
+            (item.resourceUpdate != null || item.update != null) &&
+            item.instanceCapabilities?.canUpdate !== false,
         rollbackFileName: item.rollback?.file_name,
         hideSwitchVersion: base.hideSwitchVersion ?? !base.versionLink,
         overflowOptions: buildItemOverflowOptions(item),
@@ -678,7 +681,7 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
 watch(tableItems, restoreContentViewScroll, { flush: 'post', immediate: true })
 
 const hasOutdatedProjects = computed(() => {
-    const outdated = ctx.items.value.filter((p) => p.update != null)
+    const outdated = ctx.items.value.filter((p) => p.resourceUpdate != null || p.update != null)
     const modpackHasUpdate =
         ctx.bulkUpdateIncludesModpack !== false && (ctx.modpack.value?.hasUpdate ?? false)
     return outdated.length > 0 || modpackHasUpdate
@@ -951,7 +954,9 @@ const hasBulkUpdateSupport = computed(
 
 function promptUpdateAll(event?: MouseEvent) {
     if (!hasBulkUpdateSupport.value) return
-    const items = ctx.items.value.filter((item) => item.update != null)
+    const items = ctx.items.value.filter(
+        (item) => item.resourceUpdate != null || item.update != null,
+    )
     const modpackHasUpdate =
         ctx.bulkUpdateIncludesModpack !== false && (ctx.modpack.value?.hasUpdate ?? false)
     if (items.length === 0 && !modpackHasUpdate) return
@@ -966,7 +971,9 @@ function promptUpdateAll(event?: MouseEvent) {
 
 function promptUpdateSelected(event?: MouseEvent) {
     if (!hasBulkUpdateSupport.value) return
-    const items = selectedItems.value.filter((item) => item.update != null)
+    const items = selectedItems.value.filter(
+        (item) => item.resourceUpdate != null || item.update != null,
+    )
     if (items.length === 0) return
     pendingBulkUpdateItems.value = items
     pendingBulkUpdateAll.value = false
@@ -1204,7 +1211,10 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
         >
             <template #actions>
                 <Button
-                    v-if="hasBulkUpdateSupport && selectedItems.some((m) => m.update != null)"
+                    v-if="
+                        hasBulkUpdateSupport &&
+                        selectedItems.some((m) => m.resourceUpdate != null || m.update != null)
+                    "
                     v-tooltip="formatMessage(commonMessages.updateButton)"
                     type="quiet"
                     color="green"

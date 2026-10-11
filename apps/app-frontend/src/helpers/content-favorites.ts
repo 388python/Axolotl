@@ -47,7 +47,7 @@ export async function listContentFavorites(): Promise<ContentFavorite[]> {
             contentType: ResourceType
             savedAt: number
         }[]
-    >('plugin:resources|resource_favorites')
+    >('plugin:axolotl-resources|resource_favorites')
     return values.map((value) => ({
         resource_id: value.resourceId,
         locator: value.locator,
@@ -66,7 +66,7 @@ export async function addContentFavorite(favorite: ContentFavoriteInput): Promis
         resourcepack: 'resourcePack',
         datapack: 'dataPack',
     }
-    await invoke('plugin:resources|resource_favorite_add', {
+    await invoke('plugin:axolotl-resources|resource_favorite_add', {
         project: { source: favorite.provider, projectId: favorite.project_id },
         contentType: types[favorite.content_type],
         locator: favorite.slug ?? null,
@@ -86,7 +86,7 @@ export async function removeContentFavorite(
     provider: FavoriteProvider,
     projectId: string,
 ): Promise<void> {
-    await invoke('plugin:resources|resource_favorite_remove', {
+    await invoke('plugin:axolotl-resources|resource_favorite_remove', {
         project: { source: provider, projectId },
     })
 }

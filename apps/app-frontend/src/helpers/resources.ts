@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
+import type { InstallJobSnapshot } from './install'
+
 export type SourceId = 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft'
 export type ResourceType =
     'mod' | 'plugin' | 'dataPack' | 'resourcePack' | 'shader' | 'modPack' | 'world'
@@ -141,11 +143,14 @@ export async function resourceRequest<T>(
     signal?.throwIfAborted()
     const requestId = crypto.randomUUID()
     const cancel = () => {
-        void invoke('plugin:resources|resource_cancel', { requestId }).catch(() => {})
+        void invoke('plugin:axolotl-resources|resource_cancel', { requestId }).catch(() => {})
     }
     signal?.addEventListener('abort', cancel, { once: true })
     try {
-        const result = await invoke<T>(`plugin:resources|${command}`, { ...args, requestId })
+        const result = await invoke<T>(`plugin:axolotl-resources|${command}`, {
+            ...args,
+            requestId,
+        })
         signal?.throwIfAborted()
         return result
     } finally {
@@ -257,10 +262,10 @@ export async function resourceChangelog(reference: SourceReleaseRef, signal?: Ab
     return result.text
 }
 export function resourcePreferredSource() {
-    return invoke<SourceId>('plugin:resources|resource_preferred_source')
+    return invoke<SourceId>('plugin:axolotl-resources|resource_preferred_source')
 }
 export function resourceSetPreferredSource(source: SourceId) {
-    return invoke<void>('plugin:resources|resource_set_preferred_source', { source })
+    return invoke<void>('plugin:axolotl-resources|resource_set_preferred_source', { source })
 }
 
 export type ResourceCachePolicy = 'useFresh' | 'forceRefresh' | 'onlyCached'
@@ -277,6 +282,60 @@ export type ResourceSelection = {
     scope: { kind: 'instance' } | { kind: 'world'; relativePath: string }
     entryId?: string | null
 }
+export type InstalledResource = {
+    entryId: string
+    instanceId: string
+    resourceId: string | null
+    artifact: ResourceArtifact['reference'] | null
+    knownArtifacts: ResourceArtifact['reference'][]
+    integrity: ResourceArtifact['integrity']
+    relativePath: string
+    originalFileName: string | null
+    resourceType: ResourceType
+    scope: ResourceSelection['scope']
+    enabled: boolean
+    missing: boolean
+    ownership: { kind: 'userAdded' | 'packManaged' | 'localDiscovered'; packMemberId?: string }
+}
+export type ResourceDependencyNode = {
+    id: string
+    resource: ResourceRef
+    scope: ResourceSelection['scope']
+    state: string
+    artifact: ResourceArtifact | null
+    installedEntries: string[]
+    compatibility: {
+        gameVersion: 'compatible' | 'incompatible' | 'unknown'
+        loader: 'compatible' | 'incompatible' | 'unknown'
+        reasons: string[]
+    }
+}
+export function resourceListInstalled(instanceId: string, signal?: AbortSignal) {
+    return resourceRequest<InstalledResource[]>('resource_list_installed', { instanceId }, signal)
+}
+export function resourceCheckUpdates(instanceId: string, signal?: AbortSignal) {
+    return resourceRequest<{
+        entries: string[]
+        releases: Record<string, SourceReleaseRef>
+        unresolved: string[]
+        failures: string[]
+        failedEntries: string[]
+    }>('resource_check_updates', { instanceId }, signal)
+}
+export function resourcePrepareEntryOperation(
+    instanceId: string,
+    intent: ResourceOperationIntent,
+    entryIds: string[],
+    release: SourceReleaseRef | null,
+    installDependencies: boolean,
+    signal?: AbortSignal,
+) {
+    return resourceRequest<ResourceOperationPlan>(
+        'resource_prepare_entry_operation',
+        { instanceId, intent, entryIds, release, installDependencies },
+        signal,
+    )
+}
 export type ResourceOperationPlan = {
     schemaVersion: number
     id: string
@@ -286,11 +345,28 @@ export type ResourceOperationPlan = {
     intent: ResourceOperationIntent
     selections: ResourceSelection[]
     activeRoots: string[]
-    nodes: unknown[]
-    edges: unknown[]
-    actions: unknown[]
-    issues: { blocking: boolean; code: string; message: string }[]
-    exceptions: unknown[]
+    nodes: ResourceDependencyNode[]
+    edges: {
+        parent: string
+        child: string
+        kind: string
+        declaredBy: ResourceArtifact['reference']
+        versionConstraint: string | null
+    }[]
+    actions: {
+        entryId: string
+        nodeId: string
+        kind: string
+        targetRelativePath: string
+        current: InstalledResource | null
+        target: ResourceArtifact
+    }[]
+    issues: { blocking: boolean; code: string; message: string; selectionId: string | null }[]
+    exceptions: {
+        selectionId: string
+        release: SourceReleaseRef
+        dimensions: ('gameVersion' | 'loader')[]
+    }[]
     selectionReasons: unknown[]
 }
 export type ResourcePlanDecision =
@@ -331,9 +407,35 @@ export function resourceRevisePlan(
     )
 }
 export function resourceQueuePlan(planId: string, revision: number) {
-    return invoke<ResourceOperationPlan>('plugin:resources|resource_queue_plan', {
+    return invoke<InstallJobSnapshot>('plugin:axolotl-resources|resource_queue_plan', {
         planId,
         revision,
+    })
+}
+
+export type ResourceHistoryEntry = {
+    id: string
+    entryId: string
+    instanceId: string
+    recordedAt: string
+    previous: InstalledResource
+    target: InstalledResource
+    backupRelativePath: string | null
+    backupAvailable: boolean
+}
+
+export function resourceListHistory(instanceId: string, entryId?: string | null) {
+    return invoke<ResourceHistoryEntry[]>('plugin:axolotl-resources|resource_list_history', {
+        instanceId,
+        entryId: entryId ?? null,
+    })
+}
+
+export function resourceRollback(instanceId: string, entryId: string, historyId: string) {
+    return invoke<InstallJobSnapshot>('plugin:axolotl-resources|resource_rollback', {
+        instanceId,
+        entryId,
+        historyId,
     })
 }
 export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {

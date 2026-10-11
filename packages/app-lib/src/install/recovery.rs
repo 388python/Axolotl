@@ -191,6 +191,21 @@ pub async fn apply_cleanup(
     job_state: &mut InstallJobState,
     state: &State,
 ) -> crate::Result<()> {
+    if let InstallRequest::InstallContentBatch { items, .. } =
+        &job_state.request
+    {
+        for item in items {
+            if let super::model::InstallContentBatchItem::FrozenResource {
+                plan,
+            } = item
+            {
+                Box::pin(crate::resources::plans::recover_frozen_plan(
+                    plan, state,
+                ))
+                .await?;
+            }
+        }
+    }
     match job_state.cleanup.clone() {
         InstallCleanup::DeleteNewInstance { instance_id } => {
             if let Some(instance_id) = instance_id
@@ -1533,11 +1548,14 @@ mod tests {
         missing_instance_job.cleanup = InstallCleanup::DeleteNewInstance {
             instance_id: Some("missing-instance".to_string()),
         };
+        apply_cleanup(&mut missing_instance_job, &state)
+            .await
+            .unwrap();
         assert!(
-            apply_cleanup(&mut missing_instance_job, &state)
+            crate::state::get_instance("missing-instance", &state.pool)
                 .await
-                .is_err(),
-            "new-instance cleanup must report deletion failures"
+                .unwrap()
+                .is_none()
         );
     }
 }

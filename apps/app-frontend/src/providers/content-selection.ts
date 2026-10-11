@@ -28,6 +28,7 @@ import {
     queue_content_batch,
     queue_project_with_dependencies,
 } from '@/helpers/instance'
+import { resourceProjectDocuments } from '@/helpers/resources'
 import { getBrowseDefaultInstanceId, setBrowseDefaultInstanceId } from '@/helpers/settings'
 import type { GameInstance } from '@/helpers/types'
 import { aggregateContentSelectionDependencies } from '@/providers/content-selection-logic'
@@ -107,6 +108,7 @@ export function createContentSelection({
     const installedIdentityCache = new Map<string, ContentIdentity[]>()
     const installedIdentityKeys = ref<Set<string>>(new Set())
     const installedIdentitySlugs = ref<Set<string>>(new Set())
+    const installedIdentityRequests = new Map<string, Promise<ContentIdentity[]>>()
     let installedIdentityRequestId = 0
     const heuristicOverrides = new Set<string>()
     let previewModal: InstanceType<typeof ContentInstallPreviewModal> | null = null
@@ -184,6 +186,17 @@ export function createContentSelection({
     async function getInstalledIdentities(instance: GameInstance) {
         const cached = installedIdentityCache.get(instance.id)
         if (cached) return cached
+        const pending = installedIdentityRequests.get(instance.id)
+        if (pending) return pending
+        const request = fetchInstalledIdentities(instance).finally(() => {
+            if (installedIdentityRequests.get(instance.id) === request)
+                installedIdentityRequests.delete(instance.id)
+        })
+        installedIdentityRequests.set(instance.id, request)
+        return request
+    }
+
+    async function fetchInstalledIdentities(instance: GameInstance) {
         const requestId = ++installedIdentityRequestId
         const canCommit = () =>
             requestId === installedIdentityRequestId && targetInstance.value?.id === instance.id
@@ -201,10 +214,10 @@ export function createContentSelection({
         }
         const unresolvedInputs = contentIdentityInputsFromSnapshot(snapshot.items)
         const modrinthIds = unresolvedInputs
-            .filter((input) => input.provider === 'modrinth')
+            .filter((input) => input.provider === 'modrinth' && !input.slug)
             .map((input) => input.projectId)
         const curseForgeIds = unresolvedInputs
-            .filter((input) => input.provider === 'curseforge')
+            .filter((input) => input.provider === 'curseforge' && !input.slug)
             .map((input) => Number(input.projectId))
             .filter((id) => Number.isSafeInteger(id))
         const [modrinthProjects, curseForgeProjects] = await Promise.all([
@@ -498,7 +511,7 @@ export function createContentSelection({
                 iconUrl: meta?.icon_url,
                 versionNumber: meta?.version_number,
                 fileName: meta?.filename,
-                description: undefined,
+                description: undefined as string | undefined,
                 projectUrl: modrinthProjectUrl({
                     id: dependency.project_id,
                     slug: undefined,
@@ -515,16 +528,38 @@ export function createContentSelection({
                 required: dependency.required,
             }
         })
+        const installedIds = [
+            ...new Set(
+                plan.skipped
+                    .filter((skipped) => skipped.reason === 'already_installed')
+                    .map((skipped) => skipped.project_id),
+            ),
+        ]
+        const cachedProjects = installedIds.length
+            ? await resourceProjectDocuments(
+                  'modrinth',
+                  installedIds,
+                  undefined,
+                  'onlyCached',
+              ).catch(() => [])
+            : []
+        const cachedById = new Map(
+            cachedProjects.map((document) => [
+                document.metadata.project.projectId,
+                document.metadata,
+            ]),
+        )
         for (const skipped of plan.skipped) {
             if (skipped.reason !== 'already_installed') continue
+            const cached = cachedById.get(skipped.project_id)
             const versionId = skipped.version_id ?? `skipped-${skipped.project_id}`
             dependencies.push({
                 id: dependencyKey('modrinth', skipped.project_id, versionId),
-                title: skipped.project_id,
-                iconUrl: undefined,
+                title: cached?.title ?? skipped.project_id,
+                iconUrl: cached?.iconUrl ?? undefined,
                 versionNumber: undefined,
                 fileName: undefined,
-                description: undefined,
+                description: cached?.summary || undefined,
                 projectUrl: modrinthProjectUrl({
                     id: skipped.project_id,
                     slug: undefined,

@@ -3892,6 +3892,42 @@ pub(crate) async fn rollback_project(
     )
     .await?;
 
+    let mut tx = state.pool.begin().await?;
+    let entry_id: Option<String> = sqlx::query_scalar("SELECT entry.id FROM instance_content_entries entry JOIN instance_files file ON file.id = entry.file_id WHERE entry.content_set_id = ? AND file.instance_id = ? AND file.relative_path = ?")
+        .bind(&scope.content_set_id).bind(&scope.instance.id).bind(&final_relative_path).fetch_optional(&mut *tx).await?;
+    if let Some(entry_id) = entry_id {
+        sqlx::query("DELETE FROM instance_content_provider_refs WHERE content_entry_id = ?").bind(&entry_id).execute(&mut *tx).await?;
+        sqlx::query(
+            "DELETE FROM resource_installed_artifacts WHERE entry_id = ?",
+        )
+        .bind(&entry_id)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("DELETE FROM resource_entry_graphs WHERE entry_id = ?")
+            .bind(&entry_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM instance_content_dependencies WHERE parent_entry_id = ?").bind(&entry_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM instance_content_update_checks WHERE content_entry_id = ?").bind(&entry_id).execute(&mut *tx).await?;
+    }
+    sqlx::query("DELETE FROM store_instance_files WHERE instance_id = ? AND relative_path IN (?, ?)").bind(instance_id).bind(project_path).bind(&final_relative_path).execute(&mut *tx).await?;
+    let hash_cache = CacheValue::FileHash(CachedFileHash {
+        path: format!("{}/{}", scope.instance.path, final_relative_path),
+        size: restored_size,
+        hash: restored_sha1,
+        project_type: project_type_for_file_path(&final_relative_path),
+        project_id: None,
+        version_id: None,
+    })
+    .get_entry();
+    CachedEntry::upsert_many(&[hash_cache], &mut *tx).await?;
+    content_rows::bump_content_set_revision_in_transaction(
+        &scope.content_set_id,
+        &mut tx,
+    )
+    .await?;
+    tx.commit().await?;
+
     Ok(final_relative_path)
 }
 

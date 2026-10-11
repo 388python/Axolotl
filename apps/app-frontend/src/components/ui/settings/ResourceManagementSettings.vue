@@ -686,7 +686,7 @@ watch(
 )
 
 async function purgeCache() {
-    await invoke('plugin:resources|resource_cache_clear')
+    await invoke('plugin:axolotl-resources|resource_cache_clear')
     await purge_cache_types([
         'project',
         'project_v3',

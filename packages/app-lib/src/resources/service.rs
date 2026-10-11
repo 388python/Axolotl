@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     cache::{CacheKey, ResourceCache},
+    ipc::ResourceSearchQuery,
     providers::*,
     *,
 };
@@ -109,6 +110,22 @@ pub struct ResourceService {
 }
 
 impl ResourceService {
+    pub(crate) fn search_applicable(
+        &self,
+        source: &SourceId,
+        query: &ResourceSearchQuery,
+    ) -> bool {
+        self.sources.get(source).is_some_and(|runtime| {
+            runtime
+                .provider
+                .validate_query(&ProviderQuery::Search {
+                    query: query.clone(),
+                    cursor: None,
+                })
+                .is_ok()
+        })
+    }
+
     pub fn new(
         cache: Arc<ResourceCache>,
         providers: Vec<Arc<dyn ResourceProvider>>,

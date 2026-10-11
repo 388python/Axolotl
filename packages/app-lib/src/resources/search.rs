@@ -45,6 +45,7 @@ pub fn normalized_title(value: &str) -> String {
 fn wiki_pair(
     left: &SourceProjectMetadata,
     right: &SourceProjectMetadata,
+    lookup: &crate::content_search::ContentIdentityLookup,
 ) -> bool {
     let (mr, cf) = if left.project.source == SourceId::modrinth()
         && right.project.source == SourceId::curseforge()
@@ -60,10 +61,6 @@ fn wiki_pair(
     let (Some(mr_slug), Some(cf_slug)) = (&mr.slug, &cf.slug) else {
         return false;
     };
-    let lookup = crate::content_search::lookup_content_identities(
-        &[mr_slug.clone()],
-        &[cf_slug.clone()],
-    );
     lookup.modrinth.get(mr_slug).is_some_and(|records| {
         records.len() == 1
             && records[0].counterparts.iter().any(|part| {
@@ -121,6 +118,8 @@ impl ResourceService {
                     (query.sources.is_empty()
                         || query.sources.contains(&source.id))
                         && source.available
+                        && (!query.sources.is_empty()
+                            || self.search_applicable(&source.id, &query))
                         && source
                             .capabilities
                             .contains(&SourceCapability::Search)
@@ -318,6 +317,16 @@ impl ResourceService {
                 ))
                 .or_insert(0usize) += 1;
         }
+        let slugs = |source: SourceId| {
+            pool.iter()
+                .filter(|project| project.project.source == source)
+                .filter_map(|project| project.slug.clone())
+                .collect::<Vec<_>>()
+        };
+        let wiki_lookup = crate::content_search::lookup_content_identities(
+            &slugs(SourceId::modrinth()),
+            &slugs(SourceId::curseforge()),
+        );
         let mut groups: Vec<ResourceSearchResult> = Vec::new();
         let mut identities = HashMap::new();
         for metadata in &pool {
@@ -350,7 +359,7 @@ impl ResourceService {
                 let other = &pool[index];
                 let confirmed =
                     id.is_some() && identities[&other.project] == id;
-                let pair = !confirmed && wiki_pair(&first, other);
+                let pair = !confirmed && wiki_pair(&first, other, &wiki_lookup);
                 let exact = !confirmed
                     && !pair
                     && unambiguous

@@ -12,6 +12,7 @@ import {
     type LinkedModpackInfo,
     refresh_content,
 } from '@/helpers/instance'
+import { resourceCheckUpdates } from '@/helpers/resources'
 import type { CacheBehaviour } from '@/helpers/types'
 
 export type InstanceContentData = {
@@ -49,7 +50,7 @@ export async function loadInstanceContentData(
             cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate'
                 ? await refresh_content(path)
                 : await get_content_snapshot(path)
-        const normalizedItems = snapshot.items.map((item) => {
+        const normalizedItems: ContentItem[] = snapshot.items.map((item) => {
             const fileName = item.expectedRelativePath.split('/').pop() ?? item.expectedRelativePath
             const requiresManualDownload =
                 item.ownershipKind === 'pack_managed' &&
@@ -122,6 +123,38 @@ export async function loadInstanceContentData(
                 dependency: item.dependency ?? null,
             }
         }) satisfies ContentItem[]
+        if (cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate') {
+            try {
+                const updates = await resourceCheckUpdates(path)
+                for (const item of normalizedItems) {
+                    if (
+                        !item.instanceEntryId ||
+                        updates.failedEntries.includes(item.instanceEntryId) ||
+                        updates.unresolved.includes(item.file_path ?? '')
+                    )
+                        continue
+                    item.update = null
+                    item.resourceUpdate = updates.releases[item.instanceEntryId] ?? null
+                    if (item.instanceCapabilities)
+                        item.instanceCapabilities = {
+                            ...item.instanceCapabilities,
+                            canUpdate: !!item.resourceUpdate,
+                        }
+                }
+                if (updates.failures.length)
+                    snapshot.warnings.push({
+                        code: 'resource_update_unavailable',
+                        message: updates.failures.join('\n'),
+                        provider: null,
+                    })
+            } catch (error) {
+                snapshot.warnings.push({
+                    code: 'resource_update_unavailable',
+                    message: error instanceof Error ? error.message : String(error),
+                    provider: null,
+                })
+            }
+        }
         const contentItems = normalizedItems.filter(
             (item) => item.instanceOwnershipKind !== 'pack_managed',
         )

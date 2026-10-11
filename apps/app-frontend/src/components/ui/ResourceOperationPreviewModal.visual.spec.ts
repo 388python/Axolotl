@@ -1,0 +1,314 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { expect, it, vi } from 'vitest'
+import { defineComponent, h, ref } from 'vue'
+
+import {
+    resourceGet,
+    type ResourceOperationPlan,
+    resourcePrepareEntryOperation,
+    resourcePrepareOperation,
+    resourceQueuePlan,
+    resourceRevisePlan,
+} from '@/helpers/resources'
+
+import ResourceOperationPreviewModal from './ResourceOperationPreviewModal.vue'
+
+vi.mock('@/helpers/resources', () => ({
+    resourceGet: vi.fn(),
+    resourcePrepareEntryOperation: vi.fn(),
+    resourcePrepareOperation: vi.fn(),
+    resourceQueuePlan: vi.fn(),
+    resourceRevisePlan: vi.fn(),
+}))
+vi.mock('@modrinth/ui', () => ({
+    Avatar: defineComponent({ setup: () => () => h('span') }),
+    Button: defineComponent({
+        setup:
+            (_, { attrs, slots }) =>
+            () =>
+                h('button', attrs, slots.default?.()),
+    }),
+    NewModal: defineComponent({
+        props: ['onHide'],
+        setup(props, { slots, expose }) {
+            const visible = ref(false)
+            expose({
+                show: () => {
+                    visible.value = true
+                },
+                hide: () => {
+                    visible.value = false
+                    props.onHide?.()
+                },
+            })
+            return () =>
+                visible.value ? h('section', [slots.default?.(), slots.actions?.()]) : null
+        },
+    }),
+    defineMessages: (messages: unknown) => messages,
+    useVIntl: () => ({
+        formatMessage: (message: { defaultMessage: string }, values?: Record<string, unknown>) =>
+            message.defaultMessage.replace(/\{(name|names|instance)\}/g, (_, key) =>
+                String(values?.[key] ?? ''),
+            ),
+    }),
+}))
+
+const reference = {
+    release: { project: { source: 'modrinth', projectId: 'root0000' }, releaseId: 'version2' },
+    artifactId: 'root.jar',
+}
+const node = (id: string, state: string, artifact: unknown = null) => ({
+    id,
+    resource: { kind: 'source', project: { source: 'modrinth', projectId: id } },
+    scope: { kind: 'instance' },
+    state,
+    artifact,
+    installedEntries: [],
+    compatibility: { gameVersion: 'compatible', loader: 'compatible', reasons: [] },
+})
+const root = node('root', 'update', { reference, fileName: 'Root.jar' })
+const optional = node('optional', 'optionalCandidate')
+function plan(revision = 1): ResourceOperationPlan {
+    return {
+        id: 'plan',
+        revision,
+        instanceId: 'instance',
+        intent: 'update',
+        selections: [],
+        exceptions: [],
+        activeRoots: ['root'],
+        nodes: [root, optional],
+        edges: [],
+        actions: [
+            {
+                entryId: 'entry',
+                nodeId: 'root',
+                kind: 'replace',
+                targetRelativePath: 'mods/custom.jar.disabled',
+            },
+        ],
+        issues: [],
+    } as unknown as ResourceOperationPlan
+}
+function ready() {
+    vi.clearAllMocks()
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue(plan())
+    vi.mocked(resourceGet).mockImplementation(
+        async (reference) =>
+            ({
+                projects: [
+                    {
+                        project:
+                            reference.kind === 'source'
+                                ? reference.project
+                                : { source: 'modrinth', projectId: reference.id },
+                        title:
+                            reference.kind === 'source'
+                                ? reference.project.projectId
+                                : reference.id,
+                        iconUrl: null,
+                    },
+                ],
+            }) as Awaited<ReturnType<typeof resourceGet>>,
+    )
+}
+const input = {
+    instanceId: 'instance',
+    instanceName: 'Example',
+    entryIds: ['entry'],
+    intent: 'update' as const,
+    installDependencies: true,
+}
+
+it('previews an exact path, retains the previous revision on optional failure, and queues only the successful reviewed revision', async () => {
+    ready()
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        expect(wrapper.text()).toContain('mods/custom.jar.disabled')
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+        vi.mocked(resourceRevisePlan).mockRejectedValueOnce({
+            message: 'dependency source unavailable',
+        })
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === '＋')!
+            .trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toContain('dependency source unavailable')
+        expect(wrapper.text()).toContain('mods/custom.jar.disabled')
+        vi.mocked(resourceRevisePlan).mockResolvedValueOnce({
+            ...plan(2),
+            nodes: [root, node('optional', 'install', { reference, fileName: 'Optional.jar' })],
+            activeRoots: ['root', 'optional'],
+        } as ResourceOperationPlan)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Retry')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceRevisePlan).toHaveBeenLastCalledWith(
+            'plan',
+            1,
+            [{ kind: 'addOptional', nodeId: 'optional' }],
+            expect.any(AbortSignal),
+        )
+        vi.mocked(resourceQueuePlan).mockResolvedValue({ job_id: 'job' } as Awaited<
+            ReturnType<typeof resourceQueuePlan>
+        >)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceQueuePlan).toHaveBeenCalledExactlyOnceWith('plan', 2)
+        expect(await result).toEqual({ job_id: 'job' })
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('blocks unaccepted compatibility and binds an exception to exactly one release', async () => {
+    ready()
+    const incompatible = {
+        ...root,
+        compatibility: {
+            gameVersion: 'incompatible',
+            loader: 'unknown',
+            reasons: ['gameVersion', 'loader'],
+        },
+    }
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue({
+        ...plan(),
+        nodes: [incompatible],
+        issues: [
+            {
+                selectionId: 'root',
+                code: 'compatibilityMismatch',
+                blocking: true,
+                message: 'incompatible game version',
+            },
+        ],
+    } as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        expect(
+            wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Queue changes')!
+                .attributes('disabled'),
+        ).toBeDefined()
+        vi.mocked(resourceRevisePlan).mockResolvedValue(plan(2))
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text().startsWith('Allow this release'))!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceRevisePlan).toHaveBeenCalledWith(
+            'plan',
+            1,
+            [
+                {
+                    kind: 'acceptCompatibility',
+                    exception: {
+                        selectionId: 'root',
+                        release: reference.release,
+                        dimensions: ['gameVersion', 'loader'],
+                    },
+                },
+            ],
+            expect.any(AbortSignal),
+        )
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await result).toBeNull()
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('cancels an in-flight preparation without queueing or allowing an old response to replace a new session', async () => {
+    ready()
+    let signal: AbortSignal | undefined
+    let resolveOld!: (value: ResourceOperationPlan) => void
+    vi.mocked(resourcePrepareEntryOperation).mockImplementationOnce((...args) => {
+        signal = args[5]
+        return new Promise((resolve) => {
+            resolveOld = resolve
+        })
+    })
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const old = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await old).toBeNull()
+        expect(signal?.aborted).toBe(true)
+        const current = wrapper.vm.show({ ...input, instanceId: 'other' })
+        await flushPromises()
+        resolveOld({ ...plan(9), actions: [] })
+        await flushPromises()
+        expect(wrapper.text()).toContain('mods/custom.jar.disabled')
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await current).toBeNull()
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('refreshes a stale reviewed plan before queueing and keeps the selected root draft', async () => {
+    ready()
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        vi.mocked(resourceQueuePlan).mockRejectedValueOnce({
+            message: 'instance changed after review',
+        })
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+            .trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toContain('instance changed after review')
+        vi.mocked(resourcePrepareOperation).mockResolvedValueOnce({ ...plan(7), id: 'refreshed' })
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Refresh this preview')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourcePrepareOperation).toHaveBeenCalledWith(
+            'instance',
+            'update',
+            [],
+            true,
+            expect.any(AbortSignal),
+        )
+        vi.mocked(resourceQueuePlan).mockResolvedValueOnce({ job_id: 'refreshed-job' } as Awaited<
+            ReturnType<typeof resourceQueuePlan>
+        >)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceQueuePlan).toHaveBeenLastCalledWith('refreshed', 7)
+        expect(await result).toEqual({ job_id: 'refreshed-job' })
+    } finally {
+        wrapper.unmount()
+    }
+})

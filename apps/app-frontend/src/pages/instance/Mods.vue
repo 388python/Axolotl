@@ -186,6 +186,8 @@
                     @confirm="handleModpackUpdateConfirm"
                     @cancel="handleModpackUpdateCancel"
                 />
+                <ResourceOperationPreviewModal ref="resourceOperationPreview" />
+                <ResourceHistoryModal ref="resourceHistoryModal" />
                 <ExportModal v-if="projects.length > 0" ref="exportModal" :instance="instance" />
                 <ContentUpdaterModal
                     v-if="updatingProject || updatingModpack"
@@ -272,6 +274,8 @@ import { useRouter } from 'vue-router'
 import DependencyGraphModal from '@/components/instance/dependencies/DependencyGraphModal.vue'
 import ExportModal from '@/components/ui/ExportModal.vue'
 import ContentToggleDependenciesModal from '@/components/ui/modal/ContentToggleDependenciesModal.vue'
+import ResourceHistoryModal from '@/components/ui/ResourceHistoryModal.vue'
+import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import { postUpgradeNoticeQueryKey, usePostUpgradeNotice } from '@/composables/usePostUpgradeNotice'
 import { useWorldDatapacks } from '@/composables/useWorldDatapacks'
 import { trackEvent } from '@/helpers/analytics'
@@ -320,6 +324,11 @@ import {
     localContentIconUrl,
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
+import {
+    resourceCheckUpdates,
+    resourceListHistory,
+    type SourceReleaseRef,
+} from '@/helpers/resources'
 import type { CacheBehaviour, GameInstance } from '@/helpers/types'
 import { highlightModInInstance } from '@/helpers/utils.js'
 import i18n from '@/i18n.config'
@@ -1057,6 +1066,10 @@ const isCurseForgeLinkedModpack = computed(
 
 const shareModal = ref<InstanceType<typeof ShareModal> | null>()
 const exportModal = ref(null)
+const resourceOperationPreview = ref<InstanceType<typeof ResourceOperationPreviewModal> | null>(
+    null,
+)
+const resourceHistoryModal = ref<InstanceType<typeof ResourceHistoryModal> | null>(null)
 const contentUpdaterModal = ref<InstanceType<typeof ContentUpdaterModal> | null>()
 const dependencyGraphModal = ref<InstanceType<typeof DependencyGraphModal> | null>()
 const modpackUpdateConfirmModal = ref<InstanceType<typeof ConfirmModpackUpdateModal> | null>()
@@ -1269,10 +1282,14 @@ function hasContentOperation(item: ContentItem) {
 }
 
 function canUpdateProject(item: ContentItem) {
-    return item.update != null && (item.instanceCapabilities?.canUpdate ?? true)
+    return (
+        (item.resourceUpdate != null || item.update != null) &&
+        (item.instanceCapabilities?.canUpdate ?? true)
+    )
 }
 
 function contentUpdateId(item: ContentItem): string | null {
+    if (item.resourceUpdate) return item.resourceUpdate.releaseId
     if (!item.update) return null
     return item.update.provider === 'modrinth'
         ? item.update.target_version_id
@@ -2053,100 +2070,74 @@ async function getDeleteDependencyWarning(items: ContentItem[]) {
     return dependents.length > 0 ? { items, dependents } : null
 }
 
+async function reviewResourceChanges(entryIds: string[], release: SourceReleaseRef | null = null) {
+    const job = await resourceOperationPreview.value?.show({
+        instanceId: props.instance.id,
+        instanceName: props.instance.name,
+        entryIds,
+        intent: release ? 'switchVersion' : 'update',
+        release,
+        installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
+    })
+    if (job) downloadManager.trackJob(job, true)
+    return !!job
+}
+
 async function bulkUpdateAllProjects() {
     if (pendingContentChanges.value.length > 0 || activeContentChangeJobs.value.length > 0) return
+    localBulkOperating.value = true
     try {
-        await downloadManager.queueContentChange({
-            instanceId: props.instance.id,
-            intent: { type: 'update_all_user_added' },
-            displayTitle: formatMessage(messages.updateAddedContent),
-        })
+        const result = await resourceCheckUpdates(props.instance.id)
+        if (result.failures.length) handleError(new Error(result.failures.join('\n')))
+        const ids = result.entries.filter((id) =>
+            contentSnapshot.value?.items.some(
+                (item) => item.entryId === id && item.ownershipKind === 'user_added',
+            ),
+        )
+        if (ids.length) await reviewResourceChanges(ids)
     } catch (err) {
         handleError(err as Error)
-        throw err
+    } finally {
+        localBulkOperating.value = false
     }
 }
 
 async function bulkUpdateProjects(items: ContentItem[]) {
-    const targets = items.flatMap((item) => {
-        const contentId = getStableContentId(item)
-        const targetReleaseId = contentUpdateId(item)
-        return contentId && targetReleaseId
-            ? [{ content_id: contentId, target_release_id: targetReleaseId }]
-            : []
-    })
-    if (targets.length === 0) return
-    if (items.some((item) => hasGlobalContentChange(item))) return
+    const ids = items.map((item) => item.instanceEntryId).filter((id): id is string => !!id)
+    if (!ids.length || items.some(hasGlobalContentChange)) return
     try {
-        await downloadManager.queueContentChange({
-            instanceId: props.instance.id,
-            intent: { type: 'update_selected', targets },
-            displayTitle: formatMessage(messages.updateAddedContent),
-        })
+        await reviewResourceChanges(ids)
     } catch (err) {
         handleError(err as Error)
-        throw err
     }
 }
 
 async function updateProject(mod: ContentItem) {
-    if (!canUpdateProject(mod)) return
-    const contentId = getStableContentId(mod)
-    const targetReleaseId = contentUpdateId(mod)
-    if (!contentId || !targetReleaseId) return
-    if (hasGlobalContentChange(mod)) return
-
+    if (!mod.instanceEntryId || hasGlobalContentChange(mod)) return false
     try {
-        await downloadManager.queueContentChange({
-            instanceId: props.instance.id,
-            intent: {
-                type: 'update_one',
-                content_id: contentId,
-                target_release_id: targetReleaseId,
-            },
-            displayTitle: mod.project?.title ?? mod.file_name,
-            displayIcon: mod.project?.icon_url,
-        })
-
-        trackEvent('InstanceProjectUpdate', {
-            loader: props.instance.loader,
-            game_version: props.instance.game_version,
-            id: mod.project?.id,
-            name: mod.project?.title ?? mod.file_name,
-            project_type: mod.project_type,
-        })
+        return await reviewResourceChanges([mod.instanceEntryId])
     } catch (err) {
         handleError(err as Error)
-        throw err
+        return false
     }
 }
 
 async function switchProjectVersion(mod: ContentItem, version: Labrinth.Versions.v2.Version) {
-    const contentId = getStableContentId(mod)
-    if (!mod.file_path || !contentId || mod.instanceCapabilities?.canChangeVersion === false) return
-    if (hasGlobalContentChange(mod)) return
-
+    if (!mod.instanceEntryId || hasGlobalContentChange(mod)) return false
+    const cfId = getCurseForgeProjectIdForItem(mod)
+    const source =
+        mod.origin_provider === 'curseforge' || version.project_id.startsWith('curseforge:')
+            ? 'curseforge'
+            : 'modrinth'
+    const projectId = source === 'curseforge' ? String(cfId) : version.project_id
     try {
-        await downloadManager.queueContentChange({
-            instanceId: props.instance.id,
-            intent: {
-                type: 'switch_version',
-                content_id: contentId,
-                target_release_id: version.id,
-            },
-            displayTitle: mod.project?.title ?? mod.file_name,
-            displayIcon: mod.project?.icon_url,
-        })
-
-        trackEvent('InstanceProjectUpdate', {
-            loader: props.instance.loader,
-            game_version: props.instance.game_version,
-            id: mod.project?.id,
-            name: mod.project?.title ?? mod.file_name,
-            project_type: mod.project_type,
+        return await reviewResourceChanges([mod.instanceEntryId], {
+            project: { source, projectId },
+            releaseId: version.id,
         })
     } catch (err) {
         handleError(err as Error)
+        return false
     }
 }
 
@@ -2156,7 +2147,18 @@ async function handleRollbackContent(mod: ContentItem) {
     if (!operation) return
 
     try {
-        await rollback_project(props.instance.id, mod.file_path)
+        const history = mod.instanceEntryId
+            ? await resourceListHistory(props.instance.id, mod.instanceEntryId)
+            : []
+        if (history.length && mod.instanceEntryId) {
+            const job = await resourceHistoryModal.value?.show(
+                props.instance.id,
+                mod.instanceEntryId,
+            )
+            if (job) downloadManager.trackJob(job, true)
+        } else {
+            await rollback_project(props.instance.id, mod.file_path)
+        }
         trackEvent('InstanceProjectRollback', {
             loader: props.instance.loader,
             game_version: props.instance.game_version,
@@ -2329,11 +2331,7 @@ function isCurseForgeUpdaterRequest() {
         return props.instance?.link?.type === 'curseforge_modpack'
     }
     const item = updatingProject.value
-    return (
-        item?.origin_provider === 'curseforge' ||
-        !!item?.project?.id.startsWith('curseforge:') ||
-        item?.provider_refs?.some((ref) => ref.provider === 'curseforge')
-    )
+    return item?.origin_provider === 'curseforge' || !!item?.project?.id.startsWith('curseforge:')
 }
 
 async function fetchAndSpliceCurseForgeVersion(
@@ -2473,11 +2471,10 @@ async function handleModalUpdate(
 
         try {
             if (contentUpdateId(mod) === selectedVersion.id) {
-                await updateProject(mod)
+                succeeded = await updateProject(mod)
             } else {
-                await switchProjectVersion(mod, selectedVersion)
+                succeeded = await switchProjectVersion(mod, selectedVersion)
             }
-            succeeded = true
         } catch {
             // The operation function has already reported the error; keep the
             // selected version available for retry.

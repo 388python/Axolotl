@@ -173,7 +173,8 @@ export function useContentPipeline(config: ContentPipelineConfig) {
 
         for (const item of allItems) {
             type.add(normalizeProjectType(item.project_type))
-            if (showUpdateFilter && item.update != null) status.add('updates')
+            if (showUpdateFilter && (item.resourceUpdate != null || item.update != null))
+                status.add('updates')
             if (isEnabledContentItem(item)) status.add('enabled')
             if (isDisabledContentItem(item)) status.add('disabled')
         }
@@ -256,7 +257,10 @@ export function useContentPipeline(config: ContentPipelineConfig) {
         const hasEnabled = typeFiltered.some(isEnabledContentItem)
         const hasDisabled = typeFiltered.some(isDisabledContentItem)
         const availableStatusFilters = new Set<string>()
-        if (showUpdateFilter && typeFiltered.some((item) => item.update != null)) {
+        if (
+            showUpdateFilter &&
+            typeFiltered.some((item) => item.resourceUpdate != null || item.update != null)
+        ) {
             availableStatusFilters.add('updates')
         }
         if (hasEnabled) availableStatusFilters.add('enabled')
@@ -269,7 +273,8 @@ export function useContentPipeline(config: ContentPipelineConfig) {
         if (effectiveStatusFilters.length > 0) {
             statusFiltered = searchedAllItems.filter((item) => {
                 for (const f of effectiveStatusFilters) {
-                    if (f === 'updates' && item.update == null) return false
+                    if (f === 'updates' && item.resourceUpdate == null && item.update == null)
+                        return false
                     if (f === 'enabled' && !isEnabledContentItem(item)) return false
                     if (f === 'disabled' && !isDisabledContentItem(item)) return false
                 }
@@ -290,7 +295,9 @@ export function useContentPipeline(config: ContentPipelineConfig) {
         ).length
 
         // status counts: from typeFiltered (type-filtered items, NOT status-filtered)
-        counts['updates'] = typeFiltered.filter((m) => m.update != null).length
+        counts['updates'] = typeFiltered.filter(
+            (m) => m.resourceUpdate != null || m.update != null,
+        ).length
         counts['enabled'] = typeFiltered.filter(isEnabledContentItem).length
         counts['disabled'] = typeFiltered.filter(isDisabledContentItem).length
 
@@ -323,7 +330,10 @@ export function useContentPipeline(config: ContentPipelineConfig) {
 
         // Step 6: Build row2FilterOptions from typeFiltered (same as old code)
         const row2: ContentFilterOption[] = []
-        if (showUpdateFilter && typeFiltered.some((m) => m.update != null)) {
+        if (
+            showUpdateFilter &&
+            typeFiltered.some((m) => m.resourceUpdate != null || m.update != null)
+        ) {
             row2.push({ id: 'updates', label: formatMessage(filterMessages.updates) })
         }
         if (hasEnabled && hasDisabled) {
@@ -342,7 +352,8 @@ export function useContentPipeline(config: ContentPipelineConfig) {
             if (effectiveStatusFilters.length > 0) {
                 result = result.filter((item) => {
                     for (const f of effectiveStatusFilters) {
-                        if (f === 'updates' && item.update == null) return false
+                        if (f === 'updates' && item.resourceUpdate == null && item.update == null)
+                            return false
                         if (f === 'enabled' && !isEnabledContentItem(item)) return false
                         if (f === 'disabled' && !isDisabledContentItem(item)) return false
                     }

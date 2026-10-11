@@ -52,6 +52,9 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+    20261011164500: { objects: [{ type: 'trigger', name: 'resource_install_job_delete' }] },
+    20261011163000: { tables: ['resource_entry_graphs', 'resource_execution_journals'] },
+    20261011160000: { tables: ['resource_history_cleanup_plans', 'resource_history'] },
     20261011150000: { tables: ['resource_installed_artifacts', 'resource_operation_plans'] },
     20261011140000: { tables: ['resource_favorites'] },
     20261011123000: {},

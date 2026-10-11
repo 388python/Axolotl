@@ -15,6 +15,7 @@ export interface BrowseSearchResponse {
         installed?: boolean
         installing?: boolean
         provider: 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft'
+        providers?: ('modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft')[]
         provider_project_id?: string
         author_url?: string
     })[]

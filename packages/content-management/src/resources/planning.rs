@@ -127,6 +127,34 @@ fn numeric_version(value: &str) -> Option<Vec<u64>> {
     parts.filter(|parts| !parts.is_empty())
 }
 
+pub fn release_is_newer(
+    target: &ResourceRelease,
+    current: &ResourceRelease,
+) -> bool {
+    match (
+        numeric_version(&target.version),
+        numeric_version(&current.version),
+    ) {
+        (Some(target_version), Some(current_version))
+            if target_version.len() == current_version.len() =>
+        {
+            target_version > current_version
+                || (target_version == current_version
+                    && target.published_at > current.published_at)
+        }
+        _ => {
+            matches!((target.published_at, current.published_at), (Some(target), Some(current)) if target > current)
+        }
+    }
+}
+
+pub fn release_is_known_lower(
+    target: &ResourceRelease,
+    current: &ResourceRelease,
+) -> bool {
+    matches!((numeric_version(&target.version), numeric_version(&current.version)), (Some(target), Some(current)) if target.len() == current.len() && target < current)
+}
+
 /// Use one ordering basis for the complete set, never pairwise mixed ordering.
 pub fn select_automatic_release(
     mut releases: Vec<ResourceRelease>,

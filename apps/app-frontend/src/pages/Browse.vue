@@ -238,17 +238,25 @@ if (isWorldMapBrowse.value && curseForgeCapability.value.configured) {
     contentSource.value = 'curseforge'
 }
 const curseForgeCategoriesByClass = ref<Record<number, CurseForgeCategory[]>>({})
+const curseForgeCategoryRequests = new Map<number, Promise<void>>()
 
 async function ensureCurseForgeCategories(projectTypeValue: ProjectType) {
     if (!curseForgeCapability.value.configured) return
     const classId = curseForgeClassIds[projectTypeValue]
     if (!classId || curseForgeCategoriesByClass.value[classId]) return
 
-    const classCategories = await getCurseForgeCategories(classId)
-    curseForgeCategoriesByClass.value = {
-        ...curseForgeCategoriesByClass.value,
-        [classId]: classCategories,
-    }
+    const pending = curseForgeCategoryRequests.get(classId)
+    if (pending) return pending
+    const request = getCurseForgeCategories(classId)
+        .then((classCategories) => {
+            curseForgeCategoriesByClass.value = {
+                ...curseForgeCategoriesByClass.value,
+                [classId]: classCategories,
+            }
+        })
+        .finally(() => curseForgeCategoryRequests.delete(classId))
+    curseForgeCategoryRequests.set(classId, request)
+    return request
 }
 
 const initialCurseForgeCategoriesPromise =
@@ -534,7 +542,7 @@ async function refreshInstalledProjectIds() {
             !sameProjectIds(installedProjectIds.value, ids)
         installedProjectIds.value = ids
         installedProjectIdsInstanceId.value = requestInstanceId
-        await contentSelection.refreshInstalledIdentities()
+        if (changed) await contentSelection.refreshInstalledIdentities()
         return changed
     }
     return false
@@ -1750,47 +1758,7 @@ function getCardActions(
     result: Labrinth.Search.v2.ResultSearchProject | Labrinth.Search.v3.ResultSearchProject,
     currentProjectType: string,
 ): CardAction[] {
-    const actions = getPrimaryCardActions(result, currentProjectType)
-    const hit = result as typeof result & {
-        provider?: SourceId
-        source_candidates?: {
-            source: SourceId
-            projectId: string
-            slug: string | null
-            confirmed: boolean
-        }[]
-    }
-    const names: Record<SourceId, string> = {
-        modrinth: 'Modrinth',
-        curseforge: 'CurseForge',
-        mcarchive: 'MCArchive',
-        planet_minecraft: 'Planet Minecraft',
-    }
-    for (const candidate of hit.source_candidates ?? []) {
-        if (candidate.source === hit.provider) continue
-        const path =
-            candidate.source === 'modrinth'
-                ? `/project/${candidate.projectId}`
-                : candidate.source === 'curseforge'
-                  ? `/project/curseforge/${candidate.projectId}`
-                  : candidate.source === 'mcarchive'
-                    ? `/project/mcarchive/${candidate.slug ?? candidate.projectId}`
-                    : `/project/planet-minecraft/${candidate.projectId}`
-        actions.push({
-            key: `source-${candidate.source}-${candidate.projectId}`,
-            label: names[candidate.source],
-            tooltip: formatMessage(
-                candidate.confirmed ? messages.confirmedSource : messages.candidateSource,
-                { source: names[candidate.source] },
-            ),
-            icon: GlobeIcon,
-            type: 'transparent',
-            onClick: async () => {
-                await router.push({ path, query: { ...route.query, b: route.fullPath } })
-            },
-        })
-    }
-    return actions
+    return getPrimaryCardActions(result, currentProjectType)
 }
 
 function createFavoriteCardAction(
@@ -1979,7 +1947,8 @@ async function search(requestParams: string, signal: AbortSignal) {
         updated: 'projectUpdated',
     }
     const classId = curseForgeClassIds[projectType.value]
-    if (classId) await ensureCurseForgeCategories(projectType.value)
+    if (classId && categories.some((value) => !CURSEFORGE_LOADER_SLUGS.has(value)))
+        await ensureCurseForgeCategories(projectType.value)
     signal.throwIfAborted()
     const nonLoaderCategories = categories.filter((value) => !loaders.includes(value))
     const cfCategories = classId
@@ -2068,6 +2037,7 @@ async function search(requestParams: string, signal: AbortSignal) {
                 featured_gallery: metadata.gallery[0] ?? null,
                 color: null,
                 resource_entry: entry,
+                providers: [...new Set(projects.map((project) => project.project.source))],
                 source_candidates: projects.map((project) => ({
                     source: project.project.source,
                     projectId: project.project.projectId,

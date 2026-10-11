@@ -130,6 +130,7 @@ export interface ContentItem extends Omit<
     size?: number
     project_type: string
     /** Provider-qualified update returned by the launcher backend. */
+    resourceUpdate?: { project: { source: string; projectId: string }; releaseId: string } | null
     update:
         | {
               provider: 'modrinth'

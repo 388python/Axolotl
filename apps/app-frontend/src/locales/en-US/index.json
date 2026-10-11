@@ -6675,7 +6675,7 @@
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Tidy chaos."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Content updates and version changes show a dependency preview before queueing. Recorded updates can be restored from their verified history backups."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -13432,5 +13432,80 @@
   },
   "app.resources.route.retry": {
     "message": "Retry"
+  },
+  "app.resources.operation.header": {
+    "message": "Review content changes"
+  },
+  "app.resources.operation.loading": {
+    "message": "Resolving releases and dependencies…"
+  },
+  "app.resources.operation.artifact": {
+    "message": "{source} · release {release} · {file}"
+  },
+  "app.resources.operation.required": {
+    "message": "Required dependencies"
+  },
+  "app.resources.operation.optional": {
+    "message": "Available dependencies"
+  },
+  "app.resources.operation.satisfied": {
+    "message": "Already satisfied"
+  },
+  "app.resources.operation.changes": {
+    "message": "{count, plural, one {# file will change} other {# files will change}} in {instance}."
+  },
+  "app.resources.operation.add": {
+    "message": "Add {name}"
+  },
+  "app.resources.operation.remove": {
+    "message": "Remove {name}"
+  },
+  "app.resources.operation.required-by": {
+    "message": "Required by {names}"
+  },
+  "app.resources.operation.exception": {
+    "message": "Allow this release despite its game version or loader assessment"
+  },
+  "app.resources.operation.assessment": {
+    "message": "Game version: {game}; loader: {loader}"
+  },
+  "app.resources.operation.compatibility": {
+    "message": "{state, select, compatible {Compatible} incompatible {Incompatible} other {Unknown}}"
+  },
+  "app.resources.operation.retry": {
+    "message": "Retry"
+  },
+  "app.resources.operation.cancel": {
+    "message": "Cancel"
+  },
+  "app.resources.operation.apply": {
+    "message": "Queue changes"
+  },
+  "app.resources.operation.empty": {
+    "message": "No file changes are needed."
+  },
+  "app.resources.history.header": {
+    "message": "Installation history"
+  },
+  "app.resources.history.restore": {
+    "message": "Restore this backup"
+  },
+  "app.resources.history.unavailable": {
+    "message": "Rollback backup unavailable"
+  },
+  "app.resources.history.loading": {
+    "message": "Checking rollback backups…"
+  },
+  "app.resources.history.empty": {
+    "message": "No recorded installation history."
+  },
+  "app.resources.history.cancel": {
+    "message": "Close"
+  },
+  "app.resources.history.retry": {
+    "message": "Retry"
+  },
+  "app.resources.operation.refresh": {
+    "message": "Refresh this preview"
   }
 }

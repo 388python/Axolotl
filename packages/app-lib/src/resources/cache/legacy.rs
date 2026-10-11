@@ -43,6 +43,7 @@ impl ResourceCache {
                 expires FROM cache WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?")
                 .bind(MAX_LEGACY_PAYLOAD_BYTES).bind(last).bind(high_water).bind(PAGE_SIZE)
                 .fetch_all(main).await.map_err(cache_error)?;
+            let mut pending = Vec::new();
             let mut cursor = last;
             for row in &rows {
                 cursor = row.try_get("rowid").map_err(cache_error)?;
@@ -85,16 +86,31 @@ impl ResourceCache {
                     let expiry = retrieved
                         .saturating_add(query.ttl(&value))
                         .min(expires);
-                    self.import_value(
-                        &key, &value, retrieved, expiry, generation,
-                    )
-                    .await?;
+                    pending.push((
+                        key,
+                        serde_json::to_string(&value)?,
+                        retrieved,
+                        expiry,
+                    ));
                 }
             }
             let _guard = self.gate.read().await;
+            let mut transaction = pool.begin().await.map_err(cache_error)?;
+            for (key, payload, retrieved, expiry) in pending {
+                self.import_value(
+                    &key,
+                    &payload,
+                    retrieved,
+                    expiry,
+                    generation,
+                    &mut transaction,
+                )
+                .await?;
+            }
             sqlx::query("UPDATE resource_legacy_import SET last_rowid = MAX(last_rowid, ?), completed = ? WHERE id = 1 AND completed = 0 AND EXISTS (SELECT 1 FROM resource_cache_state WHERE id = 1 AND generation = ?)")
                 .bind(cursor).bind(rows.len() < PAGE_SIZE as usize).bind(generation)
-                .execute(pool).await.map_err(cache_error)?;
+                .execute(&mut *transaction).await.map_err(cache_error)?;
+            transaction.commit().await.map_err(cache_error)?;
             drop(_guard);
             tokio::task::yield_now().await;
         }
@@ -103,21 +119,18 @@ impl ResourceCache {
     async fn import_value(
         &self,
         key: &CacheKey,
-        value: &ProviderValue,
+        payload: &str,
         retrieved: i64,
         expires: i64,
         generation: i64,
+        transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ) -> ResourceResult<()> {
-        let _guard = self.gate.read().await;
-        let Some(pool) = &self.pool else {
-            return Ok(());
-        };
         sqlx::query("INSERT OR IGNORE INTO resource_cache_entries(namespace, source, query_key, value_version, payload, retrieved_at, expires_at)
             SELECT ?, ?, ?, ?, ?, ?, ? FROM resource_cache_state WHERE id = 1 AND generation = ? AND EXISTS (SELECT 1 FROM resource_legacy_import WHERE id = 1 AND completed = 0)")
             .bind(&key.namespace).bind(key.source.as_str()).bind(&key.query)
-            .bind(i64::from(RESOURCE_CONTRACT_VERSION)).bind(serde_json::to_string(value)?)
+            .bind(i64::from(RESOURCE_CONTRACT_VERSION)).bind(payload)
             .bind(retrieved.saturating_mul(1_000_000)).bind(expires).bind(generation)
-            .execute(pool).await.map_err(cache_error)?;
+            .execute(&mut **transaction).await.map_err(cache_error)?;
         Ok(())
     }
 }
