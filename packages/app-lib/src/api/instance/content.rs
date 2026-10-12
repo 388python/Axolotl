@@ -120,6 +120,12 @@ pub async fn plan_content_updates(
     scope: ContentUpdateScope,
     target: Option<&str>,
 ) -> crate::Result<ContentUpdatePlan> {
+    if scope != ContentUpdateScope::Pack {
+        return Err(crate::ErrorKind::InputError(
+            "Content updates require a reviewed resource operation plan".into(),
+        )
+        .into());
+    }
     plan_content_updates_with_refresh(instance_id, scope, target, true).await
 }
 

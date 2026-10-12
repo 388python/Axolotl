@@ -744,131 +744,7 @@ export async function check_installed(instanceId: string, projectId: string): Pr
     return await invoke('plugin:instance|instance_check_installed', { instanceId, projectId })
 }
 
-export async function update_all(instanceId: string): Promise<Record<string, string>> {
-    return await invoke('plugin:instance|instance_update_all', { instanceId })
-}
-
-// Updates a specified project
-export async function update_project(instanceId: string, projectPath: string): Promise<string> {
-    return await invoke('plugin:instance|instance_update_project', { instanceId, projectPath })
-}
-
-// Add a project to an instance from a version
-// Returns a path to the new project file
-export type DownloadReason = 'standalone' | 'dependency' | 'modpack' | 'update'
-
-export interface ResolutionPreferences {
-    game_versions?: string[]
-    loaders?: string[]
-}
-
-export interface ResolveContentRequest {
-    project_id: string
-    version_id?: string | null
-    content_type: Labrinth.Content.v3.ContentType
-    selected?: ResolutionPreferences
-    excluded_project_ids?: string[]
-    force_project_ids?: string[]
-}
-
-export interface ResolvedContent {
-    project_id: string
-    version_id: string
-    dependent_on_version_id?: string | null
-    required?: boolean
-    metadata?: ContentMetadata | null
-}
-
-export interface ContentMetadata {
-    title?: string | null
-    version_number?: string | null
-    icon_url?: string | null
-    filename?: string | null
-    sha1?: string | null
-}
-
-export interface ResolveContentPlan {
-    primary: ResolvedContent
-    dependencies: ResolvedContent[]
-    skipped: Array<{
-        project_id: string
-        version_id?: string | null
-        dependent_on_version_id?: string | null
-        reason: string
-    }>
-}
-
-export async function add_project_from_version(
-    instanceId: string,
-    versionId: string,
-    reason: DownloadReason,
-    dependentOnVersionId?: string,
-): Promise<string> {
-    return await invoke('plugin:instance|instance_add_project_from_version', {
-        instanceId,
-        versionId,
-        reason,
-        dependentOnVersionId,
-    })
-}
-
-export async function install_project_with_dependencies(
-    instanceId: string,
-    request: ResolveContentRequest,
-): Promise<ResolveContentPlan> {
-    return await invoke('plugin:instance|instance_install_project_with_dependencies', {
-        instanceId,
-        request,
-    })
-}
-
-export async function preview_project_with_dependencies(
-    instanceId: string,
-    request: ResolveContentRequest,
-): Promise<ResolveContentPlan> {
-    return await invoke('plugin:instance|instance_preview_project_with_dependencies', {
-        instanceId,
-        request,
-    })
-}
-
-export async function preview_project_with_dependencies_for_target(
-    request: ResolveContentRequest,
-    gameVersion: string,
-    loader: string,
-): Promise<ResolveContentPlan> {
-    return await invoke('plugin:instance|instance_preview_project_with_dependencies_for_target', {
-        request,
-        gameVersion,
-        loader,
-    })
-}
-
-export async function queue_project_with_dependencies(
-    instanceId: string,
-    request: ResolveContentRequest,
-    display: { title: string; iconUrl?: string | null },
-): Promise<InstallJobSnapshot> {
-    return await invoke('plugin:instance|instance_queue_project_with_dependencies', {
-        instanceId,
-        request,
-        displayTitle: display.title,
-        displayIcon: display.iconUrl ?? null,
-    })
-}
-
-export type InstallContentBatchItem =
-    | {
-          type: 'modrinth'
-          project_id: string
-          version_id?: string
-          content_type: Labrinth.Content.v3.ContentType
-          selected?: unknown
-          excluded_project_ids?: string[]
-          force_project_ids?: string[]
-      }
-    | { type: 'curse_forge'; request: unknown }
-    | { type: 'curse_forge_world'; request: unknown }
+export type InstallContentBatchItem = { type: 'curse_forge_world'; request: unknown }
 
 export async function queue_content_batch(
     instanceId: string,
@@ -882,18 +758,6 @@ export async function queue_content_batch(
             displayTitle: display.title,
             displayIcon: display.iconUrl ?? null,
         },
-    })
-}
-
-export async function switch_project_version_with_dependencies(
-    instanceId: string,
-    projectPath: string,
-    versionId: string,
-): Promise<string> {
-    return await invoke('plugin:instance|instance_switch_project_version_with_dependencies', {
-        instanceId,
-        projectPath,
-        versionId,
     })
 }
 
@@ -1048,27 +912,6 @@ export async function update_managed_modrinth_version(
 // Repair a managed Modrinth instance
 export async function update_repair_modrinth(instanceId: string): Promise<InstallJobSnapshot> {
     return await invoke('plugin:instance|instance_repair_managed_modrinth', { instanceId })
-}
-
-// Export an instance to .mrpack
-// included_overrides is an array of paths to override folders to include (ie: 'mods', 'resource_packs')
-// Version id is optional (ie: 1.1.5)
-export async function export_instance_mrpack(
-    instanceId: string,
-    exportLocation: string,
-    includedOverrides: string[],
-    versionId?: string,
-    description?: string,
-    name?: string,
-): Promise<void> {
-    return await invoke('plugin:instance|instance_export_mrpack', {
-        instanceId,
-        exportLocation,
-        includedOverrides,
-        versionId,
-        description,
-        name,
-    })
 }
 
 export interface GcLaunchIntent {

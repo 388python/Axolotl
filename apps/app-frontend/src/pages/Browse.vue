@@ -80,7 +80,6 @@ import {
     type CurseForgeCategory,
     getCurseForgeCapability,
     getCurseForgeCategories,
-    getCurseForgeFiles,
     getCurseForgeImageUrl,
 } from '@/helpers/curseforge'
 import {
@@ -835,10 +834,7 @@ const messages = defineMessages({
         id: 'app.browse.maps-unavailable-description',
         defaultMessage: 'Configure a CurseForge API key to browse and install maps.',
     },
-    mapsNoInstallableFile: {
-        id: 'app.browse.maps-no-installable-file',
-        defaultMessage: 'The selected CurseForge map does not have an installable file.',
-    },
+
     fuzzySearchPrefix: {
         id: 'app.browse.fuzzy-search.prefix',
         defaultMessage: 'No results found for “{original}”. Showing results for',
@@ -1236,7 +1232,7 @@ const installContext = computed(() => {
                     ? formatMessage(messages.serverInstanceContentWarning)
                     : undefined,
             selectedProjects: contentSelection.selectedProjects.value,
-            isInstallingSelected: processing || resolvingVersions.value,
+            isInstallingSelected: processing,
             installProgress: contentSelection.progress.value,
             installButtonLabel: formatMessage(messages.installSelected, {
                 count: contentSelection.selectedCount.value,
@@ -1246,22 +1242,13 @@ const installContext = computed(() => {
                 total: contentSelection.progress.value.total,
             }),
             clearSelected: contentSelection.clear,
-            async installSelected() {
-                resolvingVersions.value = true
-                try {
-                    await resolvePendingVersions()
-                    return await contentSelection.installSelected()
-                } finally {
-                    resolvingVersions.value = false
-                }
-            },
+            installSelected: contentSelection.installSelected,
         }
     }
     return null
 })
 
 const installingProjectIds = ref<Set<string>>(new Set())
-const resolvingVersions = ref(false)
 const CART_CONTENT_TYPES = new Set(['mod', 'resourcepack', 'datapack', 'shader', 'world'])
 
 function projectInstallingKey(projectId: string, instanceId?: string | null) {
@@ -1346,69 +1333,6 @@ async function toggleContentSelection(
     })
 
     if (!added) return
-}
-
-async function resolvePendingVersions() {
-    const target = activeInstance.value
-    if (!target) return
-
-    const pending: Array<{
-        key: string
-        provider: string
-        projectId: string
-        providerProjectId: string
-        contentType: string
-    }> = []
-    for (const [key, item] of contentSelection.items.value) {
-        if (item.versionPending && item.provider === 'curseforge') {
-            pending.push({
-                key,
-                provider: item.provider,
-                projectId: item.projectId,
-                providerProjectId: item.providerProjectId,
-                contentType: item.contentType,
-            })
-        }
-    }
-    if (pending.length === 0) return
-
-    const CONCURRENCY = 4
-    const errors: unknown[] = []
-    for (let i = 0; i < pending.length; i += CONCURRENCY) {
-        const batch = pending.slice(i, i + CONCURRENCY)
-        await Promise.allSettled(
-            batch.map(async ({ key, providerProjectId, contentType }) => {
-                try {
-                    const files = await getCurseForgeFiles(Number(providerProjectId), {
-                        gameVersion: usesTargetGameVersion(contentType)
-                            ? target.game_version
-                            : undefined,
-                        modLoaderType:
-                            contentType === 'mod'
-                                ? curseForgeLoaderTypes[target.loader]
-                                : undefined,
-                    })
-                    const matched = files.files.find((file) => file.isAvailable)
-                    const versionId = matched?.id.toString() ?? null
-                    const sha1 = matched?.hashes?.find((hash) => hash.algo === 1)?.value
-                    if (!versionId) {
-                        throw new Error(
-                            contentType === WORLD_BROWSE_PROJECT_TYPE
-                                ? formatMessage(messages.mapsNoInstallableFile)
-                                : formatMessage(messages.noCompatibleVersion),
-                        )
-                    }
-                    contentSelection.updateVersion(key, versionId, undefined, sha1)
-                } catch (err) {
-                    contentSelection.remove(key)
-                    errors.push(err)
-                }
-            }),
-        )
-    }
-    for (const err of errors) {
-        handleError(err)
-    }
 }
 
 const serverInstallQueue = {
@@ -1813,13 +1737,6 @@ function onSearchResultsInstalled(ids: string[]) {
         return
     }
     newlyInstalled.value = Array.from(new Set([...newlyInstalled.value, ...ids]))
-}
-
-const curseForgeLoaderTypes: Record<string, number> = {
-    forge: 1,
-    fabric: 4,
-    quilt: 5,
-    neoforge: 6,
 }
 
 function extractQuotedFilterValues(source: string): string[] {

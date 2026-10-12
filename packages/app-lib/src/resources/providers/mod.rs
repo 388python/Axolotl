@@ -25,6 +25,17 @@ pub use transport::{ProtocolRequest, ProtocolTransport};
     rename_all_fields = "camelCase"
 )]
 pub enum ProviderQuery {
+    ReleaseProtocol {
+        release_id: SourceReleaseId,
+        version: String,
+    },
+    ReleasesProtocol {
+        project_id: SourceProjectId,
+    },
+    SearchProtocol {
+        query: String,
+        version: String,
+    },
     ProjectProtocol {
         locator: String,
         version: String,
@@ -74,6 +85,10 @@ pub enum ProviderQuery {
 impl ProviderQuery {
     pub fn capability(&self) -> SourceCapability {
         match self {
+            Self::ReleaseProtocol { .. } | Self::ReleasesProtocol { .. } => {
+                SourceCapability::Releases
+            }
+            Self::SearchProtocol { .. } => SourceCapability::Search,
             Self::ProjectProtocol { .. } => SourceCapability::Project,
             Self::Locate { .. } => SourceCapability::Project,
             Self::Project { .. } => SourceCapability::Project,
@@ -91,6 +106,7 @@ impl ProviderQuery {
 
     pub(crate) fn batch_group(&self) -> u8 {
         match self {
+            Self::ReleaseProtocol { .. } => 5,
             Self::ProjectProtocol { .. } => 4,
             Self::Project { .. } => 0,
             Self::Release { .. } => 1,
@@ -107,13 +123,14 @@ impl ProviderQuery {
             return 6 * 60 * 60;
         }
         match self {
-            Self::Search { .. } => 60,
+            Self::Search { .. } | Self::SearchProtocol { .. } => 60,
             Self::ProjectProtocol { .. }
             | Self::Locate { .. }
             | Self::Project { .. }
             | Self::Description { .. } => 30 * 60,
-            Self::Releases { .. } => 5 * 60,
+            Self::Releases { .. } | Self::ReleasesProtocol { .. } => 5 * 60,
             Self::Release { .. }
+            | Self::ReleaseProtocol { .. }
             | Self::Changelog { .. }
             | Self::Identify { .. }
             | Self::IdentifyExport { .. } => 24 * 60 * 60,
@@ -195,6 +212,7 @@ pub struct ReleaseDocument {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ProviderValue {
+    Protocol(serde_json::Value),
     Project(ProjectDocument),
     Description(ResourceText),
     Release(ReleaseDocument),

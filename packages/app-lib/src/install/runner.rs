@@ -236,42 +236,6 @@ pub async fn upgrade_unmanaged_instance(
     .await
 }
 
-pub async fn install_content(
-    instance_id: String,
-    project_id: String,
-    version_id: Option<String>,
-    content_type: content_management::ContentType,
-    selected: content_management::ResolutionPreferences,
-    excluded_project_ids: Vec<String>,
-    display_title: String,
-    display_icon: Option<String>,
-) -> crate::Result<InstallJobSnapshot> {
-    start(InstallRequest::InstallContent {
-        instance_id,
-        project_id,
-        version_id,
-        content_type,
-        selected,
-        excluded_project_ids,
-        display_title,
-        display_icon,
-    })
-    .await
-}
-
-pub async fn install_curseforge_content(
-    request: crate::api::curseforge::CurseForgeInstallRequest,
-    display_title: String,
-    display_icon: Option<String>,
-) -> crate::Result<InstallJobSnapshot> {
-    start(InstallRequest::InstallCurseForgeContent {
-        request,
-        display_title,
-        display_icon,
-    })
-    .await
-}
-
 pub async fn install_curseforge_world(
     request: crate::api::curseforge::CurseForgeWorldInstallRequest,
     display_title: String,
@@ -609,6 +573,17 @@ pub async fn repair_cache_and_retry_job(
     let job = store::get_required(job_id, &state).await?;
     let cache_types = validated_cache_repair_types(&job)?;
     operation.cache_repair_started = true;
+    if cache_types
+        .iter()
+        .any(|kind| crate::resources::protocol::owns(*kind))
+    {
+        if let Err(error) =
+            async { state.resources().await?.cache().clear().await }.await
+        {
+            operation.cache_repair_started = false;
+            return Err(crate::resources::protocol::error(error));
+        }
+    }
 
     if let Err(error) =
         crate::state::CachedEntry::purge_cache_types(&cache_types, &state.pool)

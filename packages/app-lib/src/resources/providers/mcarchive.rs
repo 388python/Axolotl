@@ -54,7 +54,10 @@ impl McArchiveProvider {
         query: &ProviderQuery,
     ) -> ResourceResult<ProviderValue> {
         match query {
-            ProviderQuery::ProjectProtocol { .. } => {
+            ProviderQuery::ProjectProtocol { .. }
+            | ProviderQuery::ReleaseProtocol { .. }
+            | ProviderQuery::ReleasesProtocol { .. }
+            | ProviderQuery::SearchProtocol { .. } => {
                 Err(ResourceError::Unsupported(
                     "MCArchive has no alternative project protocol".into(),
                 ))

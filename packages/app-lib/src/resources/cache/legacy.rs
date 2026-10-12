@@ -14,8 +14,8 @@ const MAX_LEGACY_PAYLOAD_BYTES: i64 = 1024 * 1024;
 const LEGACY_TTL: i64 = 100 * 365 * 24 * 60 * 60;
 
 impl ResourceCache {
-    /// A bounded, resumable, network-free copy. Original resource rows remain
-    /// available to callers scheduled for migration in later phases.
+    /// A bounded, resumable, network-free copy of historical resource rows.
+    /// Runtime resource queries never write to the original cache table.
     pub async fn import_legacy(&self, main: &SqlitePool) -> ResourceResult<()> {
         let Some(pool) = &self.pool else {
             return Ok(());

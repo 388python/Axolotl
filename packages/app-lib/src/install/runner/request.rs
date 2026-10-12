@@ -1,6 +1,12 @@
 use super::super::model::InstallContentBatchItem;
 use super::*;
 
+pub(super) fn require_historical_release(
+    version_id: Option<String>,
+) -> crate::Result<String> {
+    version_id.filter(|id| !id.is_empty()).ok_or_else(|| ErrorKind::InputError("This historical task has no saved release; prepare a new content preview instead of selecting a new version during recovery".into()).into())
+}
+
 pub(super) async fn run_request(
     job_id: Uuid,
     job_state: &mut InstallJobState,
@@ -388,6 +394,7 @@ pub(super) async fn run_request(
             display_title: _,
             display_icon: _,
         } => {
+            let version_id = Some(require_historical_release(version_id)?);
             update_progress(
                 job_id,
                 job_state,
@@ -593,6 +600,7 @@ pub(super) async fn run_request(
                                 excluded_project_ids,
                                 force_project_ids,
                             } => {
+                                let version_id = Some(require_historical_release(version_id)?);
                                 let plan = crate::state::instances::commands::resolve_install_plan(
                                     &instance_id,
                                     crate::state::instances::commands::InstanceInstallProjectRequest {

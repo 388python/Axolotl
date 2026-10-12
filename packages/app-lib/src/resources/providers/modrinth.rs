@@ -21,6 +21,30 @@ impl ModrinthProvider {
         &self,
         queries: &[ProviderQuery],
     ) -> ResourceResult<Vec<ResourceResult<ProviderValue>>> {
+        if queries.iter().all(|query| {
+            matches!(query, ProviderQuery::ReleaseProtocol { version, .. } if version == "v3")
+        }) {
+            let ids: Vec<_> = queries.iter().filter_map(|query| {
+                if let ProviderQuery::ReleaseProtocol { release_id, .. } = query {
+                    Some(release_id.as_str())
+                } else {
+                    None
+                }
+            }).collect();
+            let mut request = ProtocolRequest::get("/v3/versions");
+            request.query.push(("ids".into(), serde_json::to_string(&ids)?));
+            let values: Vec<Value> = serde_json::from_value(self.request(request).await?)?;
+            let mut protocols = HashMap::new();
+            for value in values {
+                let id = value["id"].as_str().ok_or_else(|| ResourceError::InvalidResponse("release protocol ID missing".into()))?.to_owned();
+                if !ids.contains(&id.as_str()) || protocols.insert(id, value).is_some() {
+                    return Err(ResourceError::InvalidResponse("unexpected or duplicate release protocol".into()));
+                }
+            }
+            return Ok(ids.into_iter().map(|id| {
+                Ok(protocols.get(id).cloned().map(ProviderValue::Protocol).unwrap_or(ProviderValue::NotFound))
+            }).collect());
+        }
         if queries.iter().all(|query| matches!(query, ProviderQuery::ProjectProtocol { version, .. } if version == "v3")) {
             let locators: Vec<_> = queries.iter().filter_map(|query| if let ProviderQuery::ProjectProtocol { locator, .. } = query { Some(locator.as_str()) } else { None }).collect();
             let mut request = ProtocolRequest::get("/v3/projects");
@@ -297,6 +321,56 @@ impl ModrinthProvider {
         query: &ProviderQuery,
     ) -> ResourceResult<ProviderValue> {
         match query {
+            ProviderQuery::ReleasesProtocol { project_id } => {
+                let mut request = ProtocolRequest::get(format!(
+                    "/project/{}/version",
+                    urlencoding::encode(project_id.as_str())
+                ));
+                request
+                    .query
+                    .push(("include_changelog".into(), "false".into()));
+                let releases: Vec<RemoteRelease> =
+                    serde_json::from_value(self.request(request).await?)?;
+                let mut protocols = Vec::with_capacity(releases.len());
+                for release in releases {
+                    if release.project_id != project_id.as_str() {
+                        return Err(ResourceError::InvalidResponse(
+                            "release project mismatch".into(),
+                        ));
+                    }
+                    let document = release.document()?;
+                    protocols.push(document.protocol.ok_or_else(|| {
+                        ResourceError::InvalidResponse(
+                            "release protocol missing".into(),
+                        )
+                    })?);
+                }
+                Ok(ProviderValue::Protocol(Value::Array(protocols)))
+            }
+            ProviderQuery::SearchProtocol { query, version } => {
+                if !matches!(version.as_str(), "v2" | "v3") {
+                    return Err(ResourceError::Unsupported(
+                        "search protocol version".into(),
+                    ));
+                }
+                let mut request = ProtocolRequest::get(if version == "v3" {
+                    "/v3/search"
+                } else {
+                    "/search"
+                });
+                request.query = url::form_urlencoded::parse(
+                    query.trim_start_matches('?').as_bytes(),
+                )
+                .into_owned()
+                .collect();
+                let value = self.request(request).await?;
+                if !value["hits"].is_array() || !value["total_hits"].is_u64() {
+                    return Err(ResourceError::InvalidResponse(
+                        "invalid search protocol response".into(),
+                    ));
+                }
+                Ok(ProviderValue::Protocol(value))
+            }
             ProviderQuery::Locate { locator } => {
                 SourceProjectId::new(locator.clone())?;
                 let project: RemoteProject = serde_json::from_value(
@@ -599,7 +673,11 @@ impl ResourceProvider for ModrinthProvider {
         "modrinth-v2".into()
     }
     fn batch_limit(&self, query: &ProviderQuery) -> usize {
-        if matches!(query, ProviderQuery::ProjectProtocol { .. }) {
+        if matches!(
+            query,
+            ProviderQuery::ProjectProtocol { .. }
+                | ProviderQuery::ReleaseProtocol { .. }
+        ) {
             return 100;
         }
         if query.batch_group() < 3 { 100 } else { 1 }
@@ -617,6 +695,20 @@ impl ResourceProvider for ModrinthProvider {
             }
         };
         match query {
+            ProviderQuery::ReleaseProtocol {
+                release_id,
+                version,
+            } => {
+                valid_id(release_id.as_str())?;
+                if version != "v3" {
+                    return Err(ResourceError::Unsupported(
+                        "release protocol version".into(),
+                    ));
+                }
+            }
+            ProviderQuery::ReleasesProtocol { project_id } => {
+                valid_id(project_id.as_str())?
+            }
             ProviderQuery::ProjectProtocol { locator, version } => {
                 SourceProjectId::new(locator.clone())?;
                 if version != "v3" {

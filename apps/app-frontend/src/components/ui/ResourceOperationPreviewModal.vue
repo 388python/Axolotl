@@ -117,6 +117,7 @@ const names = ref<Record<string, { title: string; iconUrl: string | null; summar
 let controller: AbortController | null = null
 let generation = 0
 let resolveShow: ((job: InstallJobSnapshot | null) => void) | null = null
+const submittedRoots = ref<string[]>([])
 let retryAction: (() => Promise<void>) | null = null
 
 const active = computed(() => {
@@ -294,6 +295,7 @@ function show(value: Input): Promise<InstallJobSnapshot | null> {
     hide()
     input.value = value
     plan.value = null
+    submittedRoots.value = []
     names.value = {}
     error.value = null
     queueFailed.value = false
@@ -328,6 +330,7 @@ async function apply() {
     error.value = null
     try {
         const job = await resourceQueuePlan(plan.value.id, plan.value.revision)
+        submittedRoots.value = [...plan.value.activeRoots]
         const resolve = resolveShow
         resolveShow = null
         queueing.value = false
@@ -392,7 +395,11 @@ function showInstall(value: {
 }) {
     return show({ ...value, intent: 'install', entryIds: [] })
 }
-defineExpose({ show, showInstall })
+async function showInstallSelection(value: Parameters<typeof showInstall>[0]) {
+    const job = await showInstall(value)
+    return job ? { job, activeRoots: [...submittedRoots.value] } : null
+}
+defineExpose({ show, showInstall, showInstallSelection })
 </script>
 
 <template>

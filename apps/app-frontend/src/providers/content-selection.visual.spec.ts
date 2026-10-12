@@ -1,6 +1,8 @@
 import { expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import { getCurseForgeFiles } from '@/helpers/curseforge'
+import { queue_content_batch } from '@/helpers/instance'
 import type { GameInstance } from '@/helpers/types'
 
 import { createContentSelection } from './content-selection'
@@ -30,16 +32,12 @@ vi.mock('@/helpers/content-identity', () => ({
 vi.mock('@/helpers/curseforge', () => ({
     getCurseForgeFile: vi.fn(),
     getCurseForgeProjects: vi.fn(),
-    previewCurseForgeFile: vi.fn(),
-    queueCurseForgeFile: vi.fn(),
-    queueCurseForgeWorld: vi.fn(),
+    getCurseForgeFiles: vi.fn(),
 }))
 vi.mock('@/helpers/instance', () => ({
     get_content_snapshot: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue([]),
-    preview_project_with_dependencies: vi.fn(),
     queue_content_batch: vi.fn(),
-    queue_project_with_dependencies: vi.fn(),
 }))
 vi.mock('@/helpers/resources', () => ({
     resourceProjectDocuments: vi.fn().mockResolvedValue([]),
@@ -61,14 +59,16 @@ const instance = {
 } as GameInstance
 
 it('routes pending-version cart items into the resource preview as automatic releases', async () => {
-    const showInstall = vi.fn().mockResolvedValue({ job_id: 'job-1' })
+    const showInstall = vi
+        .fn()
+        .mockResolvedValue({ job: { job_id: 'job-1' }, activeRoots: ['modrinth:pending'] })
     const selection = createContentSelection({
         addNotification: vi.fn(),
         handleError: vi.fn(),
         downloadManager: { jobs: ref([]) } as never,
     })
     selection.setPreviewModal({} as never)
-    selection.setResourceInstallPreview({ showInstall } as never)
+    selection.setResourceInstallPreview({ showInstallSelection: showInstall } as never)
     selection.setTarget(instance)
 
     const item: ContentSelectionItem = {
@@ -103,4 +103,167 @@ it('routes pending-version cart items into the resource preview as automatic rel
     })
     expect(selection.items.value.size).toBe(0)
     expect(selection.state.value).toBe('idle')
+})
+
+it('resolves pending worlds before any queue and keeps failed items selected', async () => {
+    const showInstallSelection = vi.fn()
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget(instance)
+    selection.setPreviewModal({ showBatch: vi.fn() } as never)
+    selection.setResourceInstallPreview({ showInstallSelection } as never)
+    await selection.add({
+        key: 'curseforge:world',
+        provider: 'curseforge',
+        projectId: '42',
+        providerProjectId: '42',
+        contentType: 'world',
+        title: 'World',
+    })
+    await selection.add({
+        key: 'modrinth:pending',
+        provider: 'modrinth',
+        projectId: 'pending',
+        providerProjectId: 'pending',
+        contentType: 'mod',
+        title: 'Mod',
+    })
+    vi.mocked(getCurseForgeFiles).mockRejectedValueOnce(new Error('source unavailable'))
+    const queuedBefore = vi.mocked(queue_content_batch).mock.calls.length
+    await expect(selection.installSelected()).resolves.toBe(false)
+    expect(showInstallSelection).not.toHaveBeenCalled()
+    expect(queue_content_batch).toHaveBeenCalledTimes(queuedBefore)
+    expect(selection.items.value.size).toBe(2)
+    expect(selection.state.value).toBe('error')
+})
+
+it('queues only confirmed roots in a mixed batch and clears excluded worlds', async () => {
+    const showInstallSelection = vi
+        .fn()
+        .mockResolvedValue({ job: { job_id: 'resource-job' }, activeRoots: ['modrinth:a'] })
+    const showBatch = vi
+        .fn()
+        .mockResolvedValue({ primaryKeys: ['curseforge:world'], approvedIds: [] })
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget(instance)
+    selection.setPreviewModal({ showBatch } as never)
+    selection.setResourceInstallPreview({ showInstallSelection } as never)
+    for (const id of ['a', 'b']) {
+        await selection.add({
+            key: `modrinth:${id}`,
+            provider: 'modrinth',
+            projectId: id,
+            providerProjectId: id,
+            contentType: 'mod',
+            title: id,
+        })
+    }
+    for (const id of ['world', 'excluded']) {
+        await selection.add({
+            key: `curseforge:${id}`,
+            provider: 'curseforge',
+            projectId: id === 'world' ? '42' : '43',
+            providerProjectId: id === 'world' ? '42' : '43',
+            contentType: 'world',
+            title: id,
+        })
+    }
+    vi.mocked(getCurseForgeFiles).mockResolvedValue({
+        files: [{ id: 123, isAvailable: true, hashes: [] }],
+        pagination: {},
+    } as never)
+    vi.mocked(queue_content_batch).mockResolvedValueOnce({ job_id: 'world-job' } as never)
+    await expect(selection.installSelected()).resolves.toBe(true)
+    expect(selection.items.value.size).toBe(0)
+    expect(selection.isInstalling('modrinth:a')).toBe(true)
+    expect(selection.isInstalling('modrinth:b')).toBe(false)
+    expect(selection.isInstalling('curseforge:world')).toBe(true)
+    expect(selection.isInstalling('curseforge:excluded')).toBe(false)
+    expect(queue_content_batch).toHaveBeenLastCalledWith(
+        'instance-1',
+        [
+            {
+                type: 'curse_forge_world',
+                request: { instanceId: 'instance-1', projectId: 42, fileId: 123 },
+            },
+        ],
+        expect.anything(),
+    )
+})
+
+it('preserves the unqueued world when its batch fails after resource queue acceptance', async () => {
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget(instance)
+    selection.setPreviewModal({
+        showBatch: vi
+            .fn()
+            .mockResolvedValue({ primaryKeys: ['curseforge:world'], approvedIds: [] }),
+    } as never)
+    selection.setResourceInstallPreview({
+        showInstallSelection: vi
+            .fn()
+            .mockResolvedValue({ job: { job_id: 'resource-job' }, activeRoots: ['modrinth:a'] }),
+    } as never)
+    await selection.add({
+        key: 'modrinth:a',
+        provider: 'modrinth',
+        projectId: 'a',
+        providerProjectId: 'a',
+        contentType: 'mod',
+        title: 'Mod',
+    })
+    await selection.add({
+        key: 'curseforge:world',
+        provider: 'curseforge',
+        projectId: '42',
+        providerProjectId: '42',
+        contentType: 'world',
+        title: 'World',
+    })
+    vi.mocked(getCurseForgeFiles).mockResolvedValueOnce({
+        files: [{ id: 123, isAvailable: true, hashes: [] }],
+        pagination: {},
+    } as never)
+    vi.mocked(queue_content_batch).mockRejectedValueOnce(new Error('queue failed'))
+    await expect(selection.installSelected()).resolves.toBe(false)
+    expect([...selection.items.value.keys()]).toEqual(['curseforge:world'])
+    expect([...selection.errorKeys.value]).toEqual(['curseforge:world'])
+    expect(selection.isInstalling('modrinth:a')).toBe(true)
+})
+
+it('reports accepted jobs even when only a newly added optional root remains', async () => {
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget(instance)
+    selection.setResourceInstallPreview({
+        showInstallSelection: vi.fn().mockResolvedValue({
+            job: { job_id: 'optional-job' },
+            activeRoots: ['added-optional'],
+        }),
+    } as never)
+    await selection.add({
+        key: 'modrinth:a',
+        provider: 'modrinth',
+        projectId: 'a',
+        providerProjectId: 'a',
+        contentType: 'mod',
+        title: 'Mod',
+    })
+    await expect(selection.installSelected()).resolves.toBe(true)
+    expect(selection.items.value.size).toBe(0)
+    expect(selection.isInstalling('modrinth:a')).toBe(false)
 })

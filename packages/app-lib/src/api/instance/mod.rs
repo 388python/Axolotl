@@ -3,7 +3,6 @@
 mod backup;
 mod content;
 mod core_components;
-mod export_mrpack;
 mod get;
 mod groups;
 mod home;
@@ -70,7 +69,6 @@ pub use self::core_components::{
     preview_core_jar, remove_core_component, replace_core_jar,
     restore_core_component, set_core_component_enabled,
 };
-pub use self::export_mrpack::{create_mrpack_json, export_mrpack};
 pub use self::get::{get, get_many, list};
 pub use self::home::{
     get_daily_playtime, get_daily_playtime_details, set_pinned,
@@ -92,18 +90,13 @@ pub use self::planet_minecraft::{
 };
 pub(crate) use self::projects::emit_content_changed;
 pub use self::projects::{
-    ContentToggleResult, InstallContentBatchRequest,
-    InstallProjectWithDependenciesRequest, add_project_from_path,
-    add_project_from_version, import_world_save,
-    install_datapack_bytes_to_world, install_datapack_to_world,
-    install_project_with_dependencies, preview_project_with_dependencies,
-    preview_project_with_dependencies_for_target, queue_content_batch,
-    queue_curseforge_content, queue_curseforge_world,
-    queue_project_with_dependencies, remove_content_entry, remove_project,
-    repair_managed_modrinth, restore_pack_member_default, rollback_project,
-    switch_project_version_with_dependencies, toggle_content_entries,
-    toggle_content_entry, toggle_disable_project, update_all_projects,
-    update_managed_modrinth_version, update_project,
+    ContentToggleResult, InstallContentBatchRequest, add_project_from_path,
+    import_world_save, install_datapack_bytes_to_world,
+    install_datapack_to_world, queue_content_batch, queue_curseforge_world,
+    remove_content_entry, remove_project, repair_managed_modrinth,
+    restore_pack_member_default, rollback_project, toggle_content_entries,
+    toggle_content_entry, toggle_disable_project,
+    update_managed_modrinth_version,
 };
 pub use self::run::{
     GcLaunchIntent, GcLaunchReport, QuickPlayType, kill, run,

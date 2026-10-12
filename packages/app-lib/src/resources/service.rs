@@ -428,6 +428,95 @@ impl ResourceService {
                                 flight.started_at,
                             )
                             .await;
+                        if let ProviderValue::Identified(documents) = value {
+                            for document in documents {
+                                for project_id in [
+                                    None,
+                                    Some(
+                                        document
+                                            .release
+                                            .reference
+                                            .project
+                                            .project_id
+                                            .clone(),
+                                    ),
+                                ] {
+                                    let query = ProviderQuery::Release {
+                                        project_id,
+                                        release_id: document
+                                            .release
+                                            .reference
+                                            .release_id
+                                            .clone(),
+                                        slug: None,
+                                    };
+                                    let value = ProviderValue::Release(
+                                        document.clone(),
+                                    );
+                                    if validate_value(
+                                        &flight.key.cache.source,
+                                        &query,
+                                        &value,
+                                    )
+                                    .is_ok()
+                                    {
+                                        if let Ok(key) = CacheKey::new(
+                                            provider.namespace(),
+                                            flight.key.cache.source.clone(),
+                                            &query,
+                                        ) {
+                                            self.cache
+                                                .put(
+                                                    &key,
+                                                    &value,
+                                                    query.ttl(&value),
+                                                    flight.key.generation,
+                                                    flight.started_at,
+                                                )
+                                                .await;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if let ProviderValue::Release(document) = value {
+                            for project_id in [
+                                None,
+                                Some(
+                                    document
+                                        .release
+                                        .reference
+                                        .project
+                                        .project_id
+                                        .clone(),
+                                ),
+                            ] {
+                                let query = ProviderQuery::Release {
+                                    project_id,
+                                    release_id: document
+                                        .release
+                                        .reference
+                                        .release_id
+                                        .clone(),
+                                    slug: None,
+                                };
+                                if let Ok(key) = CacheKey::new(
+                                    provider.namespace(),
+                                    flight.key.cache.source.clone(),
+                                    &query,
+                                ) {
+                                    self.cache
+                                        .put(
+                                            &key,
+                                            value,
+                                            query.ttl(value),
+                                            flight.key.generation,
+                                            flight.started_at,
+                                        )
+                                        .await;
+                                }
+                            }
+                        }
                     }
                 }
                 flight.result.send_replace(Some(result.map(|value| {
@@ -475,6 +564,16 @@ pub(crate) fn validate_value(
     value: &ProviderValue,
 ) -> ResourceResult<()> {
     let valid = match (query, value) {
+        (ProviderQuery::ReleasesProtocol { project_id }, ProviderValue::Protocol(value)) => {
+            *source == SourceId::modrinth() && value.as_array().is_some_and(|values| values.iter().all(|value| value["project_id"].as_str() == Some(project_id.as_str()) && serde_json::from_value::<crate::state::Version>(value.clone()).is_ok()))
+        }
+        (ProviderQuery::ReleaseProtocol { release_id, version }, ProviderValue::Protocol(value)) => {
+            *source == SourceId::modrinth() && version == "v3" && value["id"].as_str() == Some(release_id.as_str())
+                && serde_json::from_value::<crate::state::VersionV3>(value.clone()).is_ok()
+        }
+        (ProviderQuery::SearchProtocol { version, .. }, ProviderValue::Protocol(value)) => {
+            *source == SourceId::modrinth() && matches!(version.as_str(), "v2" | "v3") && value["hits"].is_array() && value["total_hits"].is_u64()
+        }
         (ProviderQuery::ProjectProtocol { .. }, ProviderValue::Project(document)) => document.metadata.project.source == *source && document.description.source == *source && crate::state::instances::adapters::sqlite::resource_rows::validate_project(&document.metadata.project).is_ok(),
         (ProviderQuery::Locate { .. }, ProviderValue::Project(document)) => document.metadata.project.source == *source && document.description.source == *source && crate::state::instances::adapters::sqlite::resource_rows::validate_project(&document.metadata.project).is_ok(),
         (_, ProviderValue::NotFound) => !matches!(

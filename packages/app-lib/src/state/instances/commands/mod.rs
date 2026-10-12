@@ -57,8 +57,6 @@ mod apply_content_install;
 pub(crate) use self::apply_content_install::*;
 pub(crate) use apply_content_install::ProjectFileRecord;
 
-mod check_content_updates;
-
 mod instance_upgrade;
 pub(crate) use self::instance_upgrade::{
     ReadOnlyUpgradeSource, UpgradePlanRuntimeValidation,
@@ -69,9 +67,6 @@ pub(crate) use self::instance_upgrade::{
 
 mod post_upgrade_notice;
 pub(crate) use self::post_upgrade_notice::*;
-
-mod apply_content_update;
-pub(crate) use self::apply_content_update::*;
 
 mod import_world_save;
 pub(crate) use self::import_world_save::import_world_save;

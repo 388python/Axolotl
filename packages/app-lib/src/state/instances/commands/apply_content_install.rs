@@ -342,22 +342,6 @@ async fn resolve_install_plan_with_cache(
     Ok(plan)
 }
 
-pub(crate) async fn resolve_install_plan_for_target(
-    request: InstanceInstallProjectRequest,
-    game_version: String,
-    loader: ModLoader,
-    state: &State,
-) -> crate::Result<ResolveContentPlan> {
-    resolve_install_plan_for_target_with_policy(
-        request,
-        game_version,
-        loader,
-        DependencyPolicy::IncludeOptional,
-        state,
-    )
-    .await
-}
-
 pub(crate) async fn resolve_install_plan_for_target_with_policy(
     request: InstanceInstallProjectRequest,
     game_version: String,
@@ -426,15 +410,6 @@ pub(crate) async fn resolve_install_plan_for_target_with_policy(
     }
 
     Ok(plan)
-}
-
-pub(crate) async fn install_resolved_content_plan(
-    instance_id: &str,
-    plan: &ResolveContentPlan,
-    state: &State,
-) -> crate::Result<Vec<String>> {
-    install_resolved_content_plan_with_reporter(instance_id, plan, None, state)
-        .await
 }
 
 pub(crate) async fn install_resolved_content_plan_with_reporter(
@@ -535,23 +510,6 @@ async fn resolved_content_file_size(
         .find(|file| file.primary)
         .or_else(|| version.files.first());
     Ok(file.map_or(1, |file| (file.size as u64).max(1)))
-}
-
-pub(crate) async fn switch_project_version_with_dependencies(
-    instance_id: &str,
-    project_path: &str,
-    version_id: &str,
-    state: &State,
-) -> crate::Result<String> {
-    switch_project_version_with_dependencies_preserving_name(
-        instance_id,
-        project_path,
-        None,
-        version_id,
-        None,
-        state,
-    )
-    .await
 }
 
 pub(crate) async fn switch_project_version_with_dependencies_preserving_name(
@@ -986,24 +944,6 @@ async fn rename_project_file(
         };
     }
     Ok(())
-}
-
-pub(crate) async fn add_resolved_content(
-    instance_id: &str,
-    content: &ResolvedContent,
-    reason: DownloadReason,
-    auto_dependency: bool,
-    state: &State,
-) -> crate::Result<String> {
-    add_resolved_content_with_progress(
-        instance_id,
-        content,
-        reason,
-        auto_dependency,
-        None,
-        state,
-    )
-    .await
 }
 
 async fn add_resolved_content_with_progress(
@@ -2864,21 +2804,6 @@ pub(crate) async fn record_verified_curseforge_project_file_atomic(
     .await
 }
 
-pub(crate) async fn record_project_files_atomic(
-    instance_id: &str,
-    records: &[ProjectFileRecord],
-    state: &State,
-) -> crate::Result<()> {
-    record_project_files_atomic_with_pending_completion(
-        instance_id,
-        records,
-        &[],
-        None,
-        state,
-    )
-    .await
-}
-
 pub(crate) async fn record_project_files_with_verified_curseforge_atomic(
     instance_id: &str,
     records: &[ProjectFileRecord],
@@ -2942,6 +2867,12 @@ async fn record_project_files_transaction(
     if records.is_empty() {
         return Ok(());
     }
+    let verified_artifacts = crate::resources::packs::artifacts(
+        state,
+        records,
+        &tokio_util::sync::CancellationToken::new(),
+    )
+    .await;
     // Always acquire the global writer before the per-instance lock. This
     // avoids holding an instance lock while waiting for a progress checkpoint
     // or another install to release the database writer.
@@ -3006,6 +2937,28 @@ async fn record_project_files_transaction(
                 record.origin,
                 &mut tx,
             )
+            .await?;
+        }
+        if let Some(artifact) = verified_artifacts.get(&record.relative_path) {
+            let parts: Vec<_> = record.relative_path.split('/').collect();
+            let resource_scope = if parts.len() >= 4
+                && parts[0] == "saves"
+                && parts[2] == "datapacks"
+            {
+                crate::resources::InstallScope::World {
+                    relative_path: format!("saves/{}", parts[1]),
+                }
+            } else {
+                crate::resources::InstallScope::Instance
+            };
+            sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope")
+                .bind(&entry.id).bind(serde_json::to_string(artifact)?).bind(serde_json::to_string(&resource_scope)?).execute(&mut *tx).await?;
+        } else {
+            sqlx::query(
+                "DELETE FROM resource_installed_artifacts WHERE entry_id = ?",
+            )
+            .bind(&entry.id)
+            .execute(&mut *tx)
             .await?;
         }
         if record.ownership_kind == ContentOwnershipKind::PackManaged {

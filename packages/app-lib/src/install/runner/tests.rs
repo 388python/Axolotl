@@ -1,5 +1,15 @@
 use super::*;
 
+#[test]
+fn historical_content_recovery_requires_its_saved_release() {
+    assert_eq!(
+        request::require_historical_release(Some("original".into())).unwrap(),
+        "original"
+    );
+    assert!(request::require_historical_release(None).is_err());
+    assert!(request::require_historical_release(Some(String::new())).is_err());
+}
+
 fn update_one(content_id: &str) -> crate::install::ContentChangeIntent {
     crate::install::ContentChangeIntent::UpdateOne {
         content_id: content_id.to_string(),

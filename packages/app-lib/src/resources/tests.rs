@@ -13,6 +13,8 @@ mod fixtures;
 
 #[path = "plans_tests.rs"]
 mod plans_tests;
+#[path = "protocol_tests.rs"]
+mod protocol_tests;
 #[path = "search_tests.rs"]
 mod search_tests;
 

@@ -152,22 +152,6 @@ export interface CurseForgeFilesResponse {
     }
 }
 
-export interface CurseForgeInstallRequest {
-    instanceId: string
-    projectId: number
-    fileId: number
-    projectType: string
-    ownershipKind?: 'pack_managed' | 'user_added'
-    manualOperationKind?: 'pack_install' | 'pack_update' | 'content_install' | 'content_update'
-    gameVersion?: string
-    modLoaderType?: number
-    worldName?: string
-    installDependencies?: boolean
-    excludedDependencyProjectIds?: number[]
-    forceDependencyProjectIds?: number[]
-    dependencyPlanId?: string
-}
-
 export interface CurseForgeWorldInstallRequest {
     instanceId: string
     projectId: number
@@ -208,49 +192,6 @@ export interface CurseForgeInstallResult {
         fileId: number | null
         reason: string
     }>
-}
-
-export interface CurseForgeInstallPreview {
-    planId: string
-    primary: {
-        projectId: number
-        fileId: number
-        title: string
-        versionNumber: string
-        fileName: string
-        size: number
-        requiredByProjectIds: number[]
-        iconUrl?: string | null
-    }
-    dependencies: Array<{
-        projectId: number
-        fileId: number
-        title: string
-        versionNumber: string
-        fileName: string
-        size: number
-        requiredByProjectIds: number[]
-        iconUrl?: string | null
-        versionMismatch?: boolean
-        selectionReason?: 'native_strict_match' | 'sha1_verified_modrinth_fallback'
-        required?: boolean
-    }>
-    modrinthFallbacks?: Array<{
-        projectId: string
-        versionId: string
-        title: string
-        versionNumber: string
-        parentProjectId: number
-        iconUrl?: string | null
-        required?: boolean
-    }>
-    skipped: Array<{
-        projectId: number
-        fileId: number | null
-        reason: string
-    }>
-    optionalDependencies: number[]
-    incompatibleDependencies: number[]
 }
 
 export interface CurseForgeManualDownloadImport {
@@ -447,27 +388,6 @@ export function getCurseForgeCategories(classId?: number) {
     return invoke<CurseForgeCategory[]>('plugin:curseforge|curseforge_get_categories', { classId })
 }
 
-export function installCurseForgeFile(request: CurseForgeInstallRequest) {
-    return invoke<CurseForgeInstallResult>('plugin:curseforge|curseforge_install_file', { request })
-}
-
-export function previewCurseForgeFile(request: CurseForgeInstallRequest) {
-    return invoke<CurseForgeInstallPreview>('plugin:curseforge|curseforge_preview_install_file', {
-        request,
-    })
-}
-
-export function queueCurseForgeFile(
-    request: CurseForgeInstallRequest,
-    display: { title: string; iconUrl?: string | null },
-) {
-    return invoke<InstallJobSnapshot>('plugin:instance|instance_queue_curseforge_content', {
-        request,
-        displayTitle: display.title,
-        displayIcon: display.iconUrl ?? null,
-    })
-}
-
 export function queueCurseForgeWorld(
     request: CurseForgeWorldInstallRequest,
     display: { title: string; iconUrl?: string | null },
@@ -477,28 +397,6 @@ export function queueCurseForgeWorld(
         displayTitle: display.title,
         displayIcon: display.iconUrl ?? null,
     })
-}
-
-export function updateCurseForgeFile(instanceId: string, relativePath: string) {
-    return invoke<CurseForgeInstallResult>('plugin:curseforge|curseforge_update_installed_file', {
-        instanceId,
-        relativePath,
-    })
-}
-
-export function switchCurseForgeFileVersion(
-    instanceId: string,
-    relativePath: string,
-    fileId: number,
-) {
-    return invoke<CurseForgeInstallResult>(
-        'plugin:curseforge|curseforge_switch_installed_file_version',
-        {
-            instanceId,
-            relativePath,
-            fileId,
-        },
-    )
 }
 
 export function recognizeCurseForgeFiles(instanceId: string) {

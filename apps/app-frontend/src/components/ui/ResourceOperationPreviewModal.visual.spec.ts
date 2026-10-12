@@ -21,6 +21,7 @@ vi.mock('@/helpers/resources', () => ({
     resourceQueuePlan: vi.fn(),
     resourceRevisePlan: vi.fn(),
 }))
+vi.mock('@/helpers/instance', () => ({ refresh_content: vi.fn() }))
 vi.mock('@modrinth/ui', () => ({
     Avatar: defineComponent({ setup: () => () => h('span') }),
     Button: defineComponent({
@@ -280,18 +281,13 @@ it('refreshes a stale reviewed plan before queueing and keeps the selected root 
         vi.mocked(resourceQueuePlan).mockRejectedValueOnce({
             message: 'instance changed after review',
         })
+        vi.mocked(resourcePrepareOperation).mockResolvedValueOnce({ ...plan(7), id: 'refreshed' })
         await wrapper
             .findAll('button')
             .find((button) => button.text() === 'Queue changes')!
             .trigger('click')
         await flushPromises()
-        expect(wrapper.text()).toContain('instance changed after review')
-        vi.mocked(resourcePrepareOperation).mockResolvedValueOnce({ ...plan(7), id: 'refreshed' })
-        await wrapper
-            .findAll('button')
-            .find((button) => button.text() === 'Refresh this preview')!
-            .trigger('click')
-        await flushPromises()
+        expect(wrapper.text()).not.toContain('instance changed after review')
         expect(resourcePrepareOperation).toHaveBeenCalledWith(
             'instance',
             'update',
@@ -309,6 +305,46 @@ it('refreshes a stale reviewed plan before queueing and keeps the selected root 
         await flushPromises()
         expect(resourceQueuePlan).toHaveBeenLastCalledWith('refreshed', 7)
         expect(await result).toEqual({ job_id: 'refreshed-job' })
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('returns the submitted root range after a selection revision and modal closure', async () => {
+    ready()
+    vi.mocked(resourcePrepareOperation).mockResolvedValueOnce({ ...plan(), intent: 'install' })
+    vi.mocked(resourceRevisePlan).mockResolvedValueOnce({
+        ...plan(2),
+        intent: 'install',
+        activeRoots: ['added-optional'],
+    })
+    vi.mocked(resourceQueuePlan).mockResolvedValueOnce({ job_id: 'selected-job' } as Awaited<
+        ReturnType<typeof resourceQueuePlan>
+    >)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.showInstallSelection({
+        instanceId: 'instance',
+        instanceName: 'Example',
+        selections: [],
+        installDependencies: true,
+    })
+    try {
+        await flushPromises()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === '＋')!
+            .trigger('click')
+        await flushPromises()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+            .trigger('click')
+        await flushPromises()
+        expect(await result).toEqual({
+            job: { job_id: 'selected-job' },
+            activeRoots: ['added-optional'],
+        })
+        expect(resourceQueuePlan).toHaveBeenLastCalledWith('plan', 2)
     } finally {
         wrapper.unmount()
     }

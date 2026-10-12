@@ -1241,31 +1241,6 @@ pub async fn get_projects_with_cache_behaviour(
     .await
 }
 
-pub(crate) async fn get_projects_uncached(
-    project_ids: Vec<u32>,
-) -> crate::Result<Vec<CurseForgeProject>> {
-    if project_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut projects = Vec::new();
-    for project_ids in project_ids.chunks(MAX_PAGE_SIZE as usize) {
-        let response: CurseForgeResponse<Vec<CurseForgeProject>> =
-            request_json(
-                Method::POST,
-                "/v1/mods",
-                Vec::new(),
-                Some(json!({
-                    "modIds": project_ids,
-                    "filterPcOnly": true
-                })),
-                MirrorPolicy::MirrorFirst,
-            )
-            .await?;
-        projects.extend(response.data);
-    }
-    Ok(projects)
-}
-
 pub async fn get_description(project_id: u32) -> crate::Result<String> {
     let response: CurseForgeResponse<String> = request_json(
         Method::GET,
@@ -1364,29 +1339,71 @@ pub async fn get_file(
     project_id: u32,
     file_id: u32,
 ) -> crate::Result<CurseForgeFile> {
-    let response: CurseForgeResponse<CurseForgeFile> = request_json(
-        Method::GET,
-        &format!("/v1/mods/{project_id}/files/{file_id}"),
-        Vec::new(),
-        None,
-        MirrorPolicy::MirrorFirst,
+    let state = State::get().await?;
+    crate::resources::legacy_catalog::exact(
+        crate::resources::SourceId::curseforge(),
+        Some(project_id.to_string()),
+        file_id.to_string(),
+        &state,
     )
-    .await?;
-    Ok(response.data)
+    .await?
+    .ok_or_else(|| {
+        ErrorKind::InputError("CurseForge file not found".into()).into()
+    })
 }
 
 pub async fn get_files_many(
     file_ids: Vec<u32>,
 ) -> crate::Result<Vec<CurseForgeFile>> {
-    let response: CurseForgeResponse<Vec<CurseForgeFile>> = request_json(
-        Method::POST,
-        "/v1/mods/files",
-        Vec::new(),
-        Some(json!({ "fileIds": file_ids })),
-        MirrorPolicy::MirrorFirst,
-    )
-    .await?;
-    Ok(response.data)
+    use crate::resources::{
+        SourceId, SourceReleaseId,
+        providers::{ProviderQuery, ProviderValue},
+    };
+    let state = State::get().await?;
+    let service = state
+        .resources()
+        .await
+        .map_err(crate::resources::protocol::error)?;
+    let queries = file_ids
+        .into_iter()
+        .map(|id| {
+            Ok(ProviderQuery::Release {
+                project_id: None,
+                release_id: SourceReleaseId::new(id.to_string())
+                    .map_err(crate::resources::protocol::error)?,
+                slug: None,
+            })
+        })
+        .collect::<crate::Result<Vec<_>>>()?;
+    let values = service
+        .presentation_many(
+            &SourceId::curseforge(),
+            queries,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await;
+    let mut files = Vec::new();
+    for value in values {
+        match value.map_err(crate::resources::protocol::error)?.value {
+            ProviderValue::Release(document) => {
+                files.push(serde_json::from_value(
+                    document.protocol.ok_or_else(|| {
+                        ErrorKind::InputError(
+                            "CurseForge file projection missing".into(),
+                        )
+                    })?,
+                )?)
+            }
+            ProviderValue::NotFound => {}
+            _ => {
+                return Err(ErrorKind::InputError(
+                    "unexpected CurseForge file response".into(),
+                )
+                .into());
+            }
+        }
+    }
+    Ok(files)
 }
 
 pub async fn get_changelog(
@@ -5923,99 +5940,6 @@ fn merge_install_result(
     target
         .incompatible_dependencies
         .append(&mut source.incompatible_dependencies);
-}
-
-pub async fn update_installed_file(
-    instance_id: &str,
-    relative_path: &str,
-) -> crate::Result<CurseForgeInstallResult> {
-    use sqlx::Row;
-
-    let state = State::get().await?;
-    let row = sqlx::query(
-		"SELECT ref.provider_project_id, ref.provider_release_id, entry.project_type,
-				entry.ownership_kind,
-				content_set.game_version, content_set.loader,
-				instance.update_channel
-         FROM instance_files file
-         INNER JOIN instance_content_entries entry ON entry.file_id = file.id
-         INNER JOIN instance_content_provider_refs ref
-            ON ref.content_entry_id = entry.id AND ref.provider = 'curseforge'
-         INNER JOIN instance_content_sets content_set
-            ON content_set.id = entry.content_set_id
-         INNER JOIN instances instance ON instance.id = file.instance_id
-         WHERE file.instance_id = ? AND file.relative_path = ?
-         ORDER BY entry.modified_at DESC
-         LIMIT 1",
-    )
-    .bind(instance_id)
-    .bind(relative_path)
-    .fetch_optional(&state.pool)
-    .await?
-    .ok_or_else(|| {
-        ErrorKind::InputError(
-            "The selected file is not linked to CurseForge".to_string(),
-        )
-    })?;
-    let project_id = row
-        .try_get::<String, _>("provider_project_id")?
-        .parse::<u32>()
-        .map_err(|_| {
-            ErrorKind::InputError(
-                "Stored CurseForge project ID is invalid".to_string(),
-            )
-        })?;
-    let current_file_id = row
-        .try_get::<Option<String>, _>("provider_release_id")?
-        .and_then(|value| value.parse::<u32>().ok());
-    let project_type = row.try_get::<String, _>("project_type")?;
-    let ownership_kind =
-        crate::state::instances::ContentOwnershipKind::from_str(
-            &row.try_get::<String, _>("ownership_kind")?,
-        )?;
-    let game_version = row.try_get::<String, _>("game_version")?;
-    let loader = row.try_get::<String, _>("loader")?;
-    let update_channel = row
-        .try_get::<Option<String>, _>("update_channel")?
-        .as_deref()
-        .map(ReleaseChannel::from_key)
-        .unwrap_or(ReleaseChannel::Release);
-    let mod_loader_type = match loader.as_str() {
-        "forge" => Some(1),
-        "fabric" => Some(4),
-        "quilt" => Some(5),
-        "neoforge" => Some(6),
-        _ => None,
-    };
-    let latest = select_latest_compatible_file(
-        project_id,
-        Some(game_version.clone()),
-        mod_loader_type,
-        Some(update_channel),
-    )
-    .await?
-    .ok_or_else(|| {
-        ErrorKind::InputError(
-            "No compatible CurseForge update was found".to_string(),
-        )
-    })?;
-    if current_file_id == Some(latest.id) {
-        return Ok(CurseForgeInstallResult::default());
-    }
-
-    install_selected_file(
-        instance_id,
-        relative_path,
-        project_id,
-        current_file_id,
-        latest.id,
-        project_type,
-        ownership_kind,
-        game_version,
-        mod_loader_type,
-        None,
-    )
-    .await
 }
 
 pub async fn switch_installed_file_version(

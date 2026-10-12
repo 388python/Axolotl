@@ -327,8 +327,8 @@ import {
 } from '@/helpers/translation'
 import i18n from '@/i18n.config'
 import { injectContentInstall } from '@/providers/content-install'
+import { curseForgeLoaderType } from '@/providers/content-install-compat'
 import { injectContentSelection, makeContentSelectionKey } from '@/providers/content-selection'
-import { curseForgeLoaderType } from '@/providers/content-selection-types'
 import { useBreadcrumbs } from '@/store/breadcrumbs'
 import { useTheming } from '@/store/state.js'
 

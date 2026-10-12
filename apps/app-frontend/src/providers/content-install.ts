@@ -1,6 +1,6 @@
 import type { Labrinth } from '@modrinth/api-client'
 import type { ContentInstallInstance, ContentInstallProjectInfo, ContentItem } from '@modrinth/ui'
-import { useDebugLogger, usesTargetGameVersion, useVIntl } from '@modrinth/ui'
+import { useDebugLogger, useVIntl } from '@modrinth/ui'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import dayjs from 'dayjs'
 import { nextTick, ref } from 'vue'
@@ -18,7 +18,6 @@ import {
     getCurseForgeFile,
     getCurseForgeFiles,
     getCurseForgeProject,
-    installCurseForgeFile,
     installCurseForgeModpack,
     queueCurseForgeWorld,
     summarizeCurseForgeInstall,
@@ -34,20 +33,12 @@ import {
     installJobInstanceId,
     wait_for_install_job,
 } from '@/helpers/install'
-import {
-    edit,
-    get,
-    get_content_items,
-    get_install_candidates,
-    list,
-    remove_project,
-} from '@/helpers/instance'
+import { edit, get, get_install_candidates, list } from '@/helpers/instance'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { type ResourceType, sourceResource } from '@/helpers/resources'
 import { get_game_versions } from '@/helpers/tags'
 import type { GameInstance, InstanceLoader } from '@/helpers/types'
 import {
-    curseForgeLoaderType,
     findPreferredVersion,
     getInstallTargets,
     type InstallTargetInstance,
@@ -506,20 +497,6 @@ export function createContentInstall(opts: {
         return sessionId
     }
 
-    async function removeInstalledCurseForgeProject(instanceId: string, projectId: number) {
-        const content = await get_content_items(instanceId).catch(() => [])
-        for (const item of content) {
-            if (
-                item.provider_refs.some(
-                    (reference) =>
-                        reference.provider === 'curseforge' && reference.project_id === projectId,
-                )
-            ) {
-                await remove_project(instanceId, item.file_path ?? item.file_name)
-            }
-        }
-    }
-
     function rememberManualDownloads(
         instanceId: string,
         result: CurseForgeInstallResult,
@@ -624,7 +601,6 @@ export function createContentInstall(opts: {
         instance: InstallTargetInstance,
         project: Labrinth.Projects.v2.Project,
         version: Labrinth.Versions.v2.Version,
-        installDependencies: boolean,
     ) {
         const curseForgeProject = currentCurseForgeProject
         const file = currentCurseForgeFiles.get(version.id)
@@ -632,39 +608,15 @@ export function createContentInstall(opts: {
             throw new Error('CurseForge project or file was not loaded')
         }
 
-        let result: CurseForgeInstallResult
-        if (project.project_type === 'modpack') {
-            debugState('installCurrentCFVersion: modpack install', {
+        if (project.project_type !== 'modpack')
+            throw new Error('Resource installations require a reviewed resource plan')
+        const result = (
+            await installCurseForgeModpack({
                 instanceId: instance.id,
                 projectId: curseForgeProject.id,
                 fileId: file.id,
             })
-            result = (
-                await installCurseForgeModpack({
-                    instanceId: instance.id,
-                    projectId: curseForgeProject.id,
-                    fileId: file.id,
-                })
-            ).content
-        } else {
-            debugState('installCurrentCFVersion: file install', {
-                instanceId: instance.id,
-                projectId: curseForgeProject.id,
-                fileId: file.id,
-            })
-            await removeInstalledCurseForgeProject(instance.id, curseForgeProject.id)
-            result = await installCurseForgeFile({
-                instanceId: instance.id,
-                projectId: curseForgeProject.id,
-                fileId: file.id,
-                projectType: project.project_type,
-                gameVersion: usesTargetGameVersion(project.project_type)
-                    ? instance.game_version
-                    : undefined,
-                modLoaderType: curseForgeLoaderType(instance.loader),
-                installDependencies,
-            })
-        }
+        ).content
 
         debugState('installCurrentCFVersion: result', {
             instanceId: instance.id,
@@ -727,7 +679,7 @@ export function createContentInstall(opts: {
             } as Record<string, ResourceType>
         )[project.project_type]
         if (!resourceType) throw new Error('Unsupported resource install type')
-        return resourcePreview.showInstall({
+        const result = await resourcePreview.showInstallSelection({
             instanceId: instance.id,
             instanceName: instance.name,
             installDependencies: true,
@@ -747,6 +699,13 @@ export function createContentInstall(opts: {
                 },
             ],
         })
+        if (!result) return null
+        const primaryIncluded = result.activeRoots.includes(`${provider}:${projectId}`)
+        return {
+            job: result.job,
+            versionId: primaryIncluded ? version.id : undefined,
+            installedProjectIds: primaryIncluded ? [project.id] : [],
+        }
     }
 
     async function queueCurrentCurseForgeVersion(
@@ -863,7 +822,9 @@ export function createContentInstall(opts: {
                     title: currentProject.title,
                     source: 'ProjectInstallModal',
                 })
-                settleCurrentCallback(version.id, [currentProject.id])
+                if (storeInstance && !job.installedProjectIds.length)
+                    storeInstance.installing = false
+                settleCurrentCallback(job.versionId, job.installedProjectIds)
                 hideContentInstallModal()
             } catch (err) {
                 if (storeInstance) storeInstance.installing = false
@@ -895,7 +856,9 @@ export function createContentInstall(opts: {
                     title: currentProject.title,
                     source: 'ProjectInstallModal',
                 })
-                settleCurrentCallback(version.id, [currentProject.id])
+                if (storeInstance && !job.installedProjectIds.length)
+                    storeInstance.installing = false
+                settleCurrentCallback(job.versionId, job.installedProjectIds)
                 hideContentInstallModal()
             } catch (err) {
                 if (storeInstance) storeInstance.installing = false
@@ -918,7 +881,6 @@ export function createContentInstall(opts: {
                     selectedInstance,
                     currentProject,
                     version,
-                    true,
                 )
                 installedProjectIds.splice(
                     0,
@@ -993,17 +955,18 @@ export function createContentInstall(opts: {
 
         incompatibilityWarningInstalling.value = true
         addInstallingItem(instance.id, project, version)
+        let result: Awaited<ReturnType<typeof queueResourceVersion>> = null
         try {
             if (currentProvider === 'curseforge') {
-                const job = await queueCurrentCurseForgeVersion(instance, project, version)
-                if (!job) {
+                result = await queueCurrentCurseForgeVersion(instance, project, version)
+                if (!result) {
                     incompatibilityWarningInstalling.value = false
                     removeInstallingItems(instance.id, [project.id])
                     return
                 }
             } else {
-                const job = await queueResourceVersion(instance, project, version, 'modrinth')
-                if (!job) {
+                result = await queueResourceVersion(instance, project, version, 'modrinth')
+                if (!result) {
                     incompatibilityWarningInstalling.value = false
                     removeInstallingItems(instance.id, [project.id])
                     return
@@ -1018,8 +981,9 @@ export function createContentInstall(opts: {
         }
 
         incompatibilityWarningInstalling.value = false
-        incompatibilityWarningInstalled = true
-        callback(version.id, [project.id])
+        incompatibilityWarningInstalled = result.installedProjectIds.length > 0
+        if (!incompatibilityWarningInstalled) removeInstallingItems(instance.id, [project.id])
+        callback(result.versionId, result.installedProjectIds)
         markInstanceContentChanged(instance.id)
         incompatibilityWarningModalRef?.hide()
         removeInstallingItems(instance.id, [project.id])
@@ -1102,7 +1066,7 @@ export function createContentInstall(opts: {
                     title: currentProject!.title,
                     source: 'ProjectInstallModal',
                 })
-                settleCurrentCallback(version.id, [currentProject!.id])
+                settleCurrentCallback(contentJob.versionId, contentJob.installedProjectIds)
                 hideContentInstallModal()
                 return
             }
@@ -1130,7 +1094,7 @@ export function createContentInstall(opts: {
                     title: currentProject!.title,
                     source: 'ProjectInstallModal',
                 })
-                settleCurrentCallback(version.id, [currentProject!.id])
+                settleCurrentCallback(job.versionId, job.installedProjectIds)
                 hideContentInstallModal()
                 return
             }
@@ -1153,7 +1117,6 @@ export function createContentInstall(opts: {
                     },
                     currentProject!,
                     version,
-                    true,
                 )
                 installedProjectIds = result.installedProjectIds
                 removeInstallingItems(id, [currentProject!.id])
@@ -1317,7 +1280,7 @@ export function createContentInstall(opts: {
                     title: project.title,
                     source,
                 })
-                callback(version.id, [project.id])
+                callback(job.versionId, job.installedProjectIds)
             } else {
                 await showIncompatibilityWarning(
                     instance,
@@ -1447,7 +1410,7 @@ export function createContentInstall(opts: {
                     title: project.title,
                     source,
                 })
-                callback(version.id, [project.id])
+                callback(job.versionId, job.installedProjectIds)
             } else {
                 await showIncompatibilityWarning(instance, project, versions, version, callback)
             }
