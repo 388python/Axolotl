@@ -94,6 +94,8 @@ pub enum ExportSourceResolution {
 pub struct ExportResolvedFile {
     pub snapshot: ExportFileSnapshot,
     pub resolutions: Vec<ExportSourceResolution>,
+    #[serde(default)]
+    pub local_error: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -114,6 +116,17 @@ pub struct ExportResolutionSession {
     pub instance_revision: u32,
     pub state: ExportResolutionState,
     pub files: Vec<ExportResolvedFile>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportRefreshProgress {
+    pub session_id: SessionId,
+    pub request_id: RequestId,
+    pub selection_revision: u32,
+    pub completed: usize,
+    pub total: usize,
+    pub phase: String,
 }
 
 /// An explicit fallback is bound to the failed source and exact file snapshot.

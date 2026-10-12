@@ -173,16 +173,32 @@ impl ModrinthProvider {
                 })
                 .collect());
         }
-        if queries
-            .iter()
-            .all(|query| matches!(query, ProviderQuery::Identify { .. }))
-        {
+        if queries.iter().all(|query| {
+            matches!(
+                query,
+                ProviderQuery::Identify { .. }
+                    | ProviderQuery::IdentifyExport { .. }
+            )
+        }) {
             let mut by_algorithm: HashMap<&str, Vec<(usize, String)>> =
                 HashMap::new();
-            let mut result =
-                vec![Ok(ProviderValue::Matches(vec![])); queries.len()];
+            let mut result = queries
+                .iter()
+                .map(|query| {
+                    Ok(
+                        if matches!(query, ProviderQuery::IdentifyExport { .. })
+                        {
+                            ProviderValue::Identified(vec![])
+                        } else {
+                            ProviderValue::Matches(vec![])
+                        },
+                    )
+                })
+                .collect::<Vec<_>>();
             for (index, query) in queries.iter().enumerate() {
-                let ProviderQuery::Identify { integrity, .. } = query else {
+                let (ProviderQuery::Identify { integrity, .. }
+                | ProviderQuery::IdentifyExport { integrity, .. }) = query
+                else {
                     continue;
                 };
                 let hash = integrity
@@ -252,7 +268,18 @@ impl ModrinthProvider {
                             result[index] = Err(ResourceError::InvalidResponse("hash lookup contradicted its artifact metadata".into()));
                             continue;
                         }
-                        result[index] = Ok(ProviderValue::Matches(matching));
+                        result[index] = Ok(
+                            if matches!(
+                                queries[index],
+                                ProviderQuery::IdentifyExport { .. }
+                            ) {
+                                ProviderValue::Identified(vec![
+                                    document.clone(),
+                                ])
+                            } else {
+                                ProviderValue::Matches(matching)
+                            },
+                        );
                     }
                 }
             }
@@ -621,7 +648,8 @@ impl ResourceProvider for ModrinthProvider {
                 valid_id(project_id.as_str())?;
                 valid_id(release_id.as_str())?;
             }
-            ProviderQuery::Identify { integrity, .. } => {
+            ProviderQuery::Identify { integrity, .. }
+            | ProviderQuery::IdentifyExport { integrity, .. } => {
                 hashes(
                     integrity
                         .hashes

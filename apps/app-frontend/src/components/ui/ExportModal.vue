@@ -23,6 +23,6 @@ defineExpose({ show: ctx.show })
             disabled: ctx.exporting.value,
             onClick: () => modal?.hide(),
         }"
-        @hide="ctx.cancelScan"
+        @hide="ctx.close"
     />
 </template>

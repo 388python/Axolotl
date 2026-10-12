@@ -6657,7 +6657,7 @@
     "message": "Your Home, your layout"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories, then lets you adjust individual files before entering package information."
+    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. If a source request fails, retry or explicitly choose to embed that file."
   },
   "app.onboarding.instance-actions.title": {
     "message": "The main controls"
@@ -13633,5 +13633,23 @@
   },
   "app.export.selection": {
     "message": "{count, plural, one {# file selected} other {# files selected}} · {size}"
+  },
+  "app.export.analyzing": {
+    "message": "Verifying selected files and refreshing exact source matches…"
+  },
+  "app.export.analyzed": {
+    "message": "Selected files verified. Unmatched files will be embedded."
+  },
+  "app.export.retry-analysis": {
+    "message": "Retry analysis"
+  },
+  "app.export.failed-analysis": {
+    "message": "Some files could not be resolved. Retry, or explicitly embed the files with failed source requests."
+  },
+  "app.export.local-failure": {
+    "message": "This local file could not be read. Retry or remove it from the file selection."
+  },
+  "app.export.embed-failure": {
+    "message": "Embed this file and continue despite the failed source request"
   }
 }

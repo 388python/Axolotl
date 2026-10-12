@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 
 import type { InstallJobSnapshot } from './install'
 
@@ -475,4 +475,83 @@ export interface ResourceExportScan {
 }
 export function resourceExportScan(instanceId: string, signal?: AbortSignal) {
     return resourceRequest<ResourceExportScan>('resource_export_scan', { instanceId }, signal)
+}
+
+export type ExportSourceResolution =
+    | { kind: 'matched'; source: SourceId; artifacts: ResourceArtifact[] }
+    | { kind: 'noMatch'; source: SourceId }
+    | { kind: 'failed'; source: SourceId; code: string; message: string }
+export interface ExportResolvedFile {
+    snapshot: ExportFileSnapshot
+    resolutions: ExportSourceResolution[]
+    localError: string | null
+}
+export interface ExportResolutionSession {
+    id: string
+    requestId: string
+    selectionRevision: number
+    instanceRevision: number
+    state: 'refreshing' | 'ready' | 'needsDecision' | 'canceled'
+    files: ExportResolvedFile[]
+}
+export interface ExportRefreshProgress {
+    sessionId: string
+    requestId: string
+    selectionRevision: number
+    completed: number
+    total: number
+    phase: string
+}
+export interface ExportEmbeddedFailureChoice {
+    snapshot: ExportFileSnapshot
+    source: SourceId
+}
+export function resourceExportRefresh(
+    instanceId: string,
+    sessionId: string,
+    selectedFiles: ExportFileSnapshot[],
+    selectionRevision: number,
+    progress: (value: ExportRefreshProgress) => void,
+    signal?: AbortSignal,
+) {
+    const onProgress = new Channel<ExportRefreshProgress>()
+    onProgress.onmessage = progress
+    return resourceRequest<ExportResolutionSession>(
+        'resource_export_refresh',
+        { instanceId, sessionId, selectedFiles, selectionRevision, onProgress },
+        signal,
+    )
+}
+export function resourceExportRefreshRetry(
+    sessionId: string,
+    failedRefs: ExportEmbeddedFailureChoice[],
+    selectionRevision: number,
+    progress: (value: ExportRefreshProgress) => void,
+    signal?: AbortSignal,
+) {
+    const onProgress = new Channel<ExportRefreshProgress>()
+    onProgress.onmessage = progress
+    return resourceRequest<ExportResolutionSession>(
+        'resource_export_refresh_retry',
+        { sessionId, failedRefs, selectionRevision, onProgress },
+        signal,
+    )
+}
+export function resourceExportClose(sessionId: string) {
+    return invoke<void>('plugin:axolotl-resources|resource_export_close', { sessionId })
+}
+export function resourceExportLegacyExecute(
+    sessionId: string,
+    selectionRevision: number,
+    embeddedFailureChoices: ExportEmbeddedFailureChoice[],
+    packageInfo: { name: string; version: string; summary: string; author: string | null },
+    outputPath: string,
+) {
+    return invoke<void>('plugin:axolotl-resources|resource_export_legacy_execute', {
+        sessionId,
+        selectionRevision,
+        embeddedFailureChoices,
+        packageInfo,
+        outputPath,
+    })
 }

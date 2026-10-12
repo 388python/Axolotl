@@ -6615,7 +6615,7 @@
     "message": "你的主页，你的布局"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "从实例页头部启动、停止、修复、配置、导出或打开这个实例。导出时先选择类别，再微调具体文件，最后填写包信息。"
+    "message": "从实例页头部启动、停止、修复、配置、导出或打开这个实例。导出时先选择类别并微调文件，再核验当前文件并刷新来源匹配。来源请求失败时，可以重试或明确选择内嵌该文件。"
   },
   "app.onboarding.instance-actions.title": {
     "message": "主操作台"
@@ -13645,5 +13645,23 @@
   },
   "app.export.selection": {
     "message": "已选择 {count} 个文件 · {size}"
+  },
+  "app.export.analyzing": {
+    "message": "正在核验选中文件并强制刷新精确来源匹配…"
+  },
+  "app.export.analyzed": {
+    "message": "选中文件已完成核验，未匹配到来源的文件将内嵌。"
+  },
+  "app.export.retry-analysis": {
+    "message": "重试分析"
+  },
+  "app.export.failed-analysis": {
+    "message": "部分文件解析失败。请重试，或明确选择内嵌来源请求失败的文件。"
+  },
+  "app.export.local-failure": {
+    "message": "无法读取此本地文件。请重试，或返回文件选择将其移除。"
+  },
+  "app.export.embed-failure": {
+    "message": "来源请求失败，仍内嵌此文件并继续"
   }
 }

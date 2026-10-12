@@ -298,6 +298,10 @@ fn main() {
                         "resource_queue_plan",
                         "resource_list_history",
                         "resource_export_scan",
+                        "resource_export_refresh",
+                        "resource_export_refresh_retry",
+                        "resource_export_close",
+                        "resource_export_legacy_execute",
                         "resource_rollback",
                     ])
                     .default_permission(

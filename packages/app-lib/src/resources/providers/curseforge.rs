@@ -133,14 +133,21 @@ impl CurseForgeProvider {
                 })
                 .collect());
         }
-        if queries
-            .iter()
-            .all(|query| matches!(query, ProviderQuery::Identify { .. }))
-        {
+        if queries.iter().all(|query| {
+            matches!(
+                query,
+                ProviderQuery::Identify { .. }
+                    | ProviderQuery::IdentifyExport { .. }
+            )
+        }) {
             let fingerprints: Vec<_> = queries
                 .iter()
                 .filter_map(|query| {
-                    if let ProviderQuery::Identify { fingerprint, .. } = query {
+                    if let ProviderQuery::Identify { fingerprint, .. }
+                    | ProviderQuery::IdentifyExport {
+                        fingerprint, ..
+                    } = query
+                    {
                         *fingerprint
                     } else {
                         None
@@ -164,7 +171,7 @@ impl CurseForgeProvider {
                 .await?;
             let matches: FingerprintResponse =
                 serde_json::from_value(response["data"].clone())?;
-            let mut candidates: HashMap<u32, Vec<ResourceArtifact>> =
+            let mut candidates: HashMap<u32, Vec<ReleaseDocument>> =
                 HashMap::new();
             for matched in matches.exact_matches {
                 let fingerprint = matched.file.file_fingerprint;
@@ -176,7 +183,7 @@ impl CurseForgeProvider {
                 candidates
                     .entry(fingerprint)
                     .or_default()
-                    .extend(matched.file.document()?.release.artifacts);
+                    .push(matched.file.document()?);
             }
             return Ok(queries
                 .iter()
@@ -185,6 +192,18 @@ impl CurseForgeProvider {
                         fingerprint: Some(fingerprint),
                         ..
                     } => Ok(ProviderValue::Matches(
+                        candidates
+                            .get(fingerprint)
+                            .cloned()
+                            .unwrap_or_default()
+                            .into_iter()
+                            .flat_map(|document| document.release.artifacts)
+                            .collect(),
+                    )),
+                    ProviderQuery::IdentifyExport {
+                        fingerprint: Some(fingerprint),
+                        ..
+                    } => Ok(ProviderValue::Identified(
                         candidates
                             .get(fingerprint)
                             .cloned()

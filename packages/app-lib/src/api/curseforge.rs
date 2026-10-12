@@ -9795,14 +9795,14 @@ fn is_curseforge_fingerprint_whitespace(byte: u8) -> bool {
     matches!(byte, 9 | 10 | 13 | 32)
 }
 
-struct CurseForgeFingerprintHasher {
+pub(crate) struct CurseForgeFingerprintHasher {
     hash: u32,
     tail: [u8; 4],
     tail_len: usize,
 }
 
 impl CurseForgeFingerprintHasher {
-    fn new(normalized_size: u32) -> Self {
+    pub(crate) fn new(normalized_size: u32) -> Self {
         Self {
             hash: 1 ^ normalized_size,
             tail: [0; 4],
@@ -9810,7 +9810,7 @@ impl CurseForgeFingerprintHasher {
         }
     }
 
-    fn update(&mut self, bytes: &[u8]) {
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
         for &byte in bytes {
             if is_curseforge_fingerprint_whitespace(byte) {
                 continue;
@@ -9834,7 +9834,7 @@ impl CurseForgeFingerprintHasher {
         self.hash ^= value;
     }
 
-    fn finish(mut self) -> u32 {
+    pub(crate) fn finish(mut self) -> u32 {
         const M: u32 = 0x5bd1e995;
         match self.tail[..self.tail_len] {
             [a, b, c] => {

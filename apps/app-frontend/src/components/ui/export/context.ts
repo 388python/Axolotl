@@ -11,15 +11,22 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onBeforeUnmount, ref, type ShallowRef } from 'vue'
 import type { ComponentExposed } from 'vue-component-type-helpers'
 
-import { export_instance_mrpack } from '@/helpers/instance'
+import { resourceOperationError } from '@/helpers/resource-operation-logic'
 import {
     type ExportCategory,
+    type ExportRefreshProgress,
+    type ExportResolutionSession,
+    resourceExportClose,
+    resourceExportLegacyExecute,
+    resourceExportRefresh,
+    resourceExportRefreshRetry,
     type ResourceExportScan,
     resourceExportScan,
 } from '@/helpers/resources'
 import { highlightInFolder } from '@/helpers/utils'
 
 import { categoryMessages, exportMessages } from './messages'
+import { analysisReady, pendingFailures } from './resolution'
 import {
     categoryLeaves,
     defaultCategories,
@@ -40,6 +47,14 @@ export function createExportContext(
     const scanning = ref(false)
     const error = ref('')
     const exporting = ref(false)
+    const refreshing = ref(false)
+    const resolution = ref<ExportResolutionSession | null>(null)
+    const refreshProgress = ref<ExportRefreshProgress | null>(null)
+    const refreshError = ref('')
+    const embedded = ref<string[]>([])
+    let refreshController: AbortController | undefined
+    let refreshGeneration = 0
+    let revision = 0
     const draft = ref<ExportSelectionDraft>({ categories: [], included: [], excluded: [] })
     const currentPath = ref('')
     const search = ref('')
@@ -56,11 +71,105 @@ export function createExportContext(
     })
     const selectedSize = computed(() => {
         const paths = new Set(selection.value)
+        const frozen = new Map(
+            resolution.value?.files.map((file) => [
+                file.snapshot.relativePath,
+                file.snapshot.integrity.size,
+            ]) ?? [],
+        )
         return files.value.reduce(
-            (size, file) => size + (paths.has(file.relativePath) ? (file.integrity.size ?? 0) : 0),
+            (size, file) =>
+                size +
+                (paths.has(file.relativePath)
+                    ? (frozen.get(file.relativePath) ?? file.integrity.size ?? 0)
+                    : 0),
             0,
         )
     })
+    const canExport = computed(
+        () =>
+            !refreshing.value &&
+            !refreshError.value &&
+            analysisReady(resolution.value, selection.value, embedded.value),
+    )
+    const failedFiles = computed(
+        () =>
+            resolution.value?.files.filter(
+                (file) => file.localError || file.resolutions.some((r) => r.kind === 'failed'),
+            ) ?? [],
+    )
+    function cancelRefresh() {
+        refreshGeneration++
+        refreshController?.abort()
+        refreshing.value = false
+    }
+    async function refresh(retry = false) {
+        if (!snapshot.value || exporting.value) return
+        cancelRefresh()
+        refreshController = new AbortController()
+        const active = refreshController
+        const generation = refreshGeneration
+        const paths = new Set(selection.value)
+        const selected = files.value.filter((file) => paths.has(file.relativePath))
+        const session = snapshot.value.sessionId
+        const currentRevision = ++revision
+        refreshing.value = true
+        refreshError.value = ''
+        refreshProgress.value = null
+        embedded.value = []
+        try {
+            const onProgress = (progress: ExportRefreshProgress) => {
+                if (
+                    generation === refreshGeneration &&
+                    progress.sessionId === session &&
+                    progress.selectionRevision === currentRevision
+                )
+                    refreshProgress.value = progress
+            }
+            const failed =
+                resolution.value?.files.flatMap((file) =>
+                    file.resolutions
+                        .filter((r) => r.kind === 'failed')
+                        .map((r) => ({ snapshot: file.snapshot, source: r.source })),
+                ) ?? []
+            const result =
+                retry && failed.length && !resolution.value?.files.some((file) => file.localError)
+                    ? await resourceExportRefreshRetry(
+                          session,
+                          failed,
+                          currentRevision,
+                          onProgress,
+                          active.signal,
+                      )
+                    : await resourceExportRefresh(
+                          snapshot.value.instanceId,
+                          session,
+                          selected,
+                          currentRevision,
+                          onProgress,
+                          active.signal,
+                      )
+            if (generation !== refreshGeneration) return
+            resolution.value = result
+        } catch (failure) {
+            if (generation === refreshGeneration && !active.signal.aborted)
+                refreshError.value = resourceOperationError(failure)
+        } finally {
+            if (generation === refreshGeneration) refreshing.value = false
+        }
+    }
+    function embed(path: string, accepted: boolean) {
+        embedded.value = accepted
+            ? [...new Set([...embedded.value, path])]
+            : embedded.value.filter((value) => value !== path)
+    }
+    function close() {
+        cancelScan()
+        cancelRefresh()
+        if (snapshot.value) void resourceExportClose(snapshot.value.sessionId).catch(() => {})
+        snapshot.value = null
+        resolution.value = null
+    }
     const categories = computed(
         () =>
             snapshot.value?.categories.filter(
@@ -128,25 +237,29 @@ export function createExportContext(
             }
         } catch (failure) {
             if (generation === request && !activeController.signal.aborted)
-                error.value = String(failure)
+                error.value = resourceOperationError(failure)
         } finally {
             if (generation === request) scanning.value = false
         }
     }
     function show() {
-        cancelScan()
+        close()
         snapshot.value = null
         draft.value = { categories: [], included: [], excluded: [] }
         currentPath.value = ''
         search.value = ''
         selectedOnly.value = false
         packageInfo.value = { name: instance().name, version: '1.0.0', description: '' }
+        embedded.value = []
+        revision = 0
+        refreshError.value = ''
+        refreshProgress.value = null
         modal.value?.setStage('categories')
         modal.value?.show()
         void scan()
     }
     async function exportPack() {
-        if (exporting.value || !snapshot.value) return
+        if (exporting.value || !snapshot.value || !resolution.value || !canExport.value) return
         exporting.value = true
         try {
             const output = await save({
@@ -154,13 +267,17 @@ export function createExportContext(
                 filters: [{ name: 'Modrinth Modpack', extensions: ['mrpack'] }],
             })
             if (!output) return
-            await export_instance_mrpack(
-                snapshot.value.instanceId,
+            await resourceExportLegacyExecute(
+                snapshot.value.sessionId,
+                resolution.value.selectionRevision,
+                pendingFailures(resolution.value, embedded.value),
+                {
+                    name: packageInfo.value.name,
+                    version: packageInfo.value.version,
+                    summary: packageInfo.value.description,
+                    author: null,
+                },
                 output,
-                selection.value,
-                packageInfo.value.version,
-                packageInfo.value.description,
-                packageInfo.value.name,
             )
             notifications.addPopupNotification({
                 title: formatMessage(exportMessages.complete),
@@ -180,12 +297,14 @@ export function createExportContext(
             await nextTick()
             modal.value?.hide()
         } catch (failure) {
+            refreshError.value = resourceOperationError(failure)
+            resolution.value = null
             handleError(failure)
         } finally {
             exporting.value = false
         }
     }
-    onBeforeUnmount(cancelScan)
+    onBeforeUnmount(close)
     return {
         modal,
         snapshot,
@@ -212,6 +331,17 @@ export function createExportContext(
         show,
         exportPack,
         formatMessage,
+        refreshing,
+        resolution,
+        refreshProgress,
+        refreshError,
+        embedded,
+        canExport,
+        failedFiles,
+        refresh,
+        cancelRefresh,
+        embed,
+        close,
     }
 }
 

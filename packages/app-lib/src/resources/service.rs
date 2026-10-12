@@ -101,6 +101,10 @@ impl Subscription {
 }
 
 pub struct ResourceService {
+    pub(crate) export_sessions: DashMap<
+        SessionId,
+        Arc<tokio::sync::Mutex<super::export::refresh::ExportDraft>>,
+    >,
     pub(crate) searches: DashMap<String, super::search::SearchCursor>,
     store: Option<crate::state::resources::ResourceStore>,
     cache: Arc<ResourceCache>,
@@ -165,6 +169,7 @@ impl ResourceService {
             }
         }
         Ok(Arc::new(Self {
+            export_sessions: DashMap::new(),
             searches: DashMap::new(),
             store,
             cache,
@@ -256,7 +261,7 @@ impl ResourceService {
                 }
             }
             if !capabilities.capabilities.contains(&query.capability())
-                && !matches!(query, ProviderQuery::Identify { .. } if capabilities.capabilities.contains(&SourceCapability::IdentifyFingerprint))
+                && !matches!(query, ProviderQuery::Identify { .. } | ProviderQuery::IdentifyExport { .. } if capabilities.capabilities.contains(&SourceCapability::IdentifyFingerprint))
             {
                 subscriptions.push(Err(ResourceError::Unsupported(
                     "source capability unavailable".into(),
@@ -525,6 +530,10 @@ pub(crate) fn validate_value(
                     && valid_artifact(artifact)
             })
         }
+        (ProviderQuery::IdentifyExport { .. }, ProviderValue::Identified(documents)) => documents.iter().all(|document| {
+            document.release.reference.project.source == *source
+                && document.release.artifacts.iter().all(|artifact| artifact.reference.release == document.release.reference && valid_artifact(artifact))
+        }),
         _ => false,
     };
     if valid {

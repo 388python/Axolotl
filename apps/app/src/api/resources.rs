@@ -74,6 +74,10 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_queue_plan,
             resource_list_history,
             resource_export_scan,
+            resource_export_refresh,
+            resource_export_refresh_retry,
+            resource_export_close,
+            resource_export_legacy_execute,
             resource_rollback
         ])
         .build()
@@ -85,7 +89,77 @@ pub async fn resource_export_scan(
     request_id: RequestId,
 ) -> Result<ResourceExportScan> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(theseus::resources::export::scan::scan(instance_id, &cancel).await?)
+    let scan =
+        theseus::resources::export::scan::scan(instance_id, &cancel).await?;
+    service().await?.register_export(scan.clone())?;
+    Ok(scan)
+}
+
+#[tauri::command]
+pub async fn resource_export_refresh(
+    instance_id: String,
+    session_id: SessionId,
+    selected_files: Vec<ExportFileSnapshot>,
+    selection_revision: u32,
+    request_id: RequestId,
+    on_progress: tauri::ipc::Channel<ExportRefreshProgress>,
+) -> Result<ExportResolutionSession> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::export::refresh::refresh(
+        &service().await?,
+        instance_id,
+        session_id,
+        selected_files
+            .into_iter()
+            .map(|file| file.relative_path)
+            .collect(),
+        selection_revision,
+        request_id,
+        &cancel,
+        &move |progress| {
+            let _ = on_progress.send(progress);
+        },
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_refresh_retry(
+    session_id: SessionId,
+    failed_refs: Vec<ExportEmbeddedFailureChoice>,
+    selection_revision: u32,
+    request_id: RequestId,
+    on_progress: tauri::ipc::Channel<ExportRefreshProgress>,
+) -> Result<ExportResolutionSession> {
+    let (_guard, cancel) = request(&request_id)?;
+    let service = service().await?;
+    let draft = service.export_draft(&session_id)?;
+    let draft = tokio::select! { biased; _ = cancel.cancelled() => return Err(ResourceError::Canceled.into()), draft = draft.lock() => draft };
+    if failed_refs.is_empty() || failed_refs.iter().any(|choice| !draft.selected.contains(&choice.snapshot.relative_path) || !draft.results.get(&choice.snapshot.relative_path).is_some_and(|file| file.snapshot == choice.snapshot && file.resolutions.iter().any(|r| matches!(r, ExportSourceResolution::Failed { source, .. } if source == &choice.source)))) {
+        return Err(ResourceError::InvalidRequest("retry no longer matches the failed file snapshot".into()).into());
+    }
+    let instance_id = draft.scan.instance_id.clone();
+    let selected_files = draft.selected.clone();
+    drop(draft);
+    Ok(theseus::resources::export::refresh::refresh(
+        &service,
+        instance_id,
+        session_id,
+        selected_files,
+        selection_revision,
+        request_id,
+        &cancel,
+        &move |progress| {
+            let _ = on_progress.send(progress);
+        },
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_close(session_id: SessionId) -> Result<()> {
+    service().await?.close_export(&session_id);
+    Ok(())
 }
 
 #[tauri::command]
@@ -95,6 +169,26 @@ pub async fn resource_list_installed(
 ) -> Result<Vec<InstalledResource>> {
     let (_guard, cancel) = request(&request_id)?;
     Ok(theseus::resources::installed::list(instance_id, &cancel).await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_legacy_execute(
+    session_id: SessionId,
+    selection_revision: u32,
+    embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
+    package_info: ExportPackageInfo,
+    output_path: String,
+) -> Result<()> {
+    Ok(theseus::resources::export::legacy::execute(
+        &service().await?,
+        session_id,
+        selection_revision,
+        embedded_failure_choices,
+        package_info,
+        output_path.into(),
+        &CancellationToken::new(),
+    )
+    .await?)
 }
 
 #[tauri::command]

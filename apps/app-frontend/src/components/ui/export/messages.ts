@@ -1,6 +1,29 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const exportMessages = defineMessages({
+    analyzing: {
+        id: 'app.export.analyzing',
+        defaultMessage: 'Verifying selected files and refreshing exact source matches…',
+    },
+    analyzed: {
+        id: 'app.export.analyzed',
+        defaultMessage: 'Selected files verified. Unmatched files will be embedded.',
+    },
+    retryAnalysis: { id: 'app.export.retry-analysis', defaultMessage: 'Retry analysis' },
+    failedAnalysis: {
+        id: 'app.export.failed-analysis',
+        defaultMessage:
+            'Some files could not be resolved. Retry, or explicitly embed the files with failed source requests.',
+    },
+    localFailure: {
+        id: 'app.export.local-failure',
+        defaultMessage:
+            'This local file could not be read. Retry or remove it from the file selection.',
+    },
+    embedFailure: {
+        id: 'app.export.embed-failure',
+        defaultMessage: 'Embed this file and continue despite the failed source request',
+    },
     categories: { id: 'app.export.categories', defaultMessage: 'Choose categories' },
     files: { id: 'app.export.files', defaultMessage: 'Adjust files' },
     package: { id: 'app.export.package', defaultMessage: 'Package information' },

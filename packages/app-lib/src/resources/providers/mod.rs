@@ -65,6 +65,10 @@ pub enum ProviderQuery {
         integrity: ArtifactIntegrity,
         fingerprint: Option<u32>,
     },
+    IdentifyExport {
+        integrity: ArtifactIntegrity,
+        fingerprint: Option<u32>,
+    },
 }
 
 impl ProviderQuery {
@@ -79,7 +83,9 @@ impl ProviderQuery {
             }
             Self::Changelog { .. } => SourceCapability::Changelog,
             Self::Search { .. } => SourceCapability::Search,
-            Self::Identify { .. } => SourceCapability::IdentifyHash,
+            Self::Identify { .. } | Self::IdentifyExport { .. } => {
+                SourceCapability::IdentifyHash
+            }
         }
     }
 
@@ -88,7 +94,7 @@ impl ProviderQuery {
             Self::ProjectProtocol { .. } => 4,
             Self::Project { .. } => 0,
             Self::Release { .. } => 1,
-            Self::Identify { .. } => 2,
+            Self::Identify { .. } | Self::IdentifyExport { .. } => 2,
             _ => 3,
         }
     }
@@ -96,6 +102,7 @@ impl ProviderQuery {
     pub(crate) fn ttl(&self, value: &ProviderValue) -> i64 {
         if matches!(value, ProviderValue::NotFound)
             || matches!(value, ProviderValue::Matches(matches) if matches.is_empty())
+            || matches!(value, ProviderValue::Identified(matches) if matches.is_empty())
         {
             return 6 * 60 * 60;
         }
@@ -108,7 +115,8 @@ impl ProviderQuery {
             Self::Releases { .. } => 5 * 60,
             Self::Release { .. }
             | Self::Changelog { .. }
-            | Self::Identify { .. } => 24 * 60 * 60,
+            | Self::Identify { .. }
+            | Self::IdentifyExport { .. } => 24 * 60 * 60,
         }
     }
 
@@ -130,7 +138,9 @@ impl ProviderQuery {
             target.loaders.sort();
             target.loaders.dedup();
         }
-        if let Self::Identify { integrity, .. } = self {
+        if let Self::Identify { integrity, .. }
+        | Self::IdentifyExport { integrity, .. } = self
+        {
             for hash in &mut integrity.hashes {
                 hash.value.make_ascii_lowercase();
             }
@@ -193,6 +203,7 @@ pub enum ProviderValue {
     Search(SourcePage<SourceProjectMetadata>),
     /// Lookup candidates still require exact size/hash/role verification.
     Matches(Vec<ResourceArtifact>),
+    Identified(Vec<ReleaseDocument>),
     NotFound,
 }
 

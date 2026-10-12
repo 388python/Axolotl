@@ -215,9 +215,12 @@ impl McArchiveProvider {
                 }
                 Ok(ProviderValue::Matches(artifacts))
             }
-            ProviderQuery::Changelog { .. } => Err(ResourceError::Unsupported(
-                "MCArchive release descriptions are not changelogs".into(),
-            )),
+            ProviderQuery::Changelog { .. }
+            | ProviderQuery::IdentifyExport { .. } => {
+                Err(ResourceError::Unsupported(
+                    "MCArchive release descriptions are not changelogs".into(),
+                ))
+            }
         }
     }
 }

@@ -785,6 +785,93 @@ impl ProtocolTransport for FixtureTransport {
 }
 
 struct Available(Arc<dyn ResourceProvider>);
+#[tokio::test]
+async fn export_identification_reuses_fresh_multifile_release_and_rejects_fingerprint_collision()
+ {
+    let mr = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/version_files");
+        let release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+        Ok(json!({"574992b5760f3bf2f9aa0b70984f19fb1952b748": release}))
+    });
+    let provider = ModrinthProvider::new(mr.clone());
+    let results = provider
+        .fetch_many(&[ProviderQuery::IdentifyExport {
+            integrity: ArtifactIntegrity {
+                size: Some(2684113),
+                hashes: vec![ContentHash {
+                    algorithm: HashAlgorithm::Sha1,
+                    value: "574992b5760f3bf2f9aa0b70984f19fb1952b748".into(),
+                }],
+            },
+            fingerprint: None,
+        }])
+        .await;
+    let ProviderValue::Identified(documents) = results[0].as_ref().unwrap()
+    else {
+        panic!("wrong export result");
+    };
+    assert_eq!(documents.len(), 1);
+    assert!(documents[0].protocol.is_some());
+    assert_eq!(mr.requests.lock().unwrap().len(), 1);
+    let cf = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/v1/fingerprints/432");
+        Ok(
+            json!({"data":{"exactMatches":[{"id":455508,"file": serde_json::from_str::<Value>(fixtures::CF_IRIS).unwrap()}]}}),
+        )
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache,
+        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(cf))))],
+    )
+    .unwrap();
+    let mut draft = crate::resources::export::refresh::ExportDraft::new(
+        ResourceExportScan {
+            session_id: SessionId::new("fixture").unwrap(),
+            instance_id: "instance".into(),
+            instance_revision: 1,
+            files: vec![],
+            categories: vec![],
+            excluded_paths: vec![],
+            directories: vec![],
+            requirements: ExportGameRequirements {
+                game_version: "1.20.1".into(),
+                loader: None,
+                loader_version: None,
+            },
+        },
+    );
+    let file = ExportFileSnapshot {
+        relative_path: "mods/iris.jar".into(),
+        integrity: ArtifactIntegrity {
+            size: Some(2684113),
+            hashes: vec![ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: "b".repeat(40),
+            }],
+        },
+        revision: 1,
+        identifiable: true,
+        modified_at: None,
+        category_id: "mods".into(),
+        category_selected: true,
+    };
+    let results = crate::resources::export::refresh::resolve_source(
+        &service,
+        SourceId::curseforge(),
+        &[(file, 1967997505)],
+        &std::collections::HashMap::new(),
+        &mut draft,
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        &results[0],
+        ExportSourceResolution::NoMatch { .. }
+    ));
+    assert!(draft.projects.is_empty());
+}
 #[async_trait]
 impl ResourceProvider for Available {
     fn source(&self) -> ResourceSource {

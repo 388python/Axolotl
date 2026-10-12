@@ -322,7 +322,7 @@ export const onboardingMessages = defineMessages({
     instanceActionsDescription: {
         id: 'app.onboarding.instance-actions.description',
         defaultMessage:
-            'Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories, then lets you adjust individual files before entering package information.',
+            'Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. If a source request fails, retry or explicitly choose to embed that file.',
     },
     instanceTabsTitle: {
         id: 'app.onboarding.instance-tabs.title',

@@ -55,6 +55,7 @@ export const exportStages: StageConfigInput<ExportContext>[] = [
             loading: ctx.exporting.value,
             disabled:
                 ctx.exporting.value ||
+                !ctx.canExport.value ||
                 !ctx.packageInfo.value.name.trim() ||
                 !ctx.packageInfo.value.version.trim(),
             onClick: () => {
