@@ -1,11 +1,23 @@
 <script setup lang="ts">
-import { Button, Checkbox, commonMessages, StyledInput, useFormatBytes } from '@modrinth/ui'
+import {
+    Button,
+    Checkbox,
+    Combobox,
+    commonMessages,
+    StyledInput,
+    useFormatBytes,
+} from '@modrinth/ui'
 import { onBeforeUnmount, onMounted } from 'vue'
 
 import { injectExportContext } from './context'
 import { exportMessages } from './messages'
 const {
     packageInfo,
+    format,
+    exportJobId,
+    cancelExport,
+    cancelingExport,
+    exportError,
     exporting,
     selection,
     selectedSize,
@@ -28,6 +40,13 @@ const formatBytes = useFormatBytes()
 </script>
 <template>
     <div class="flex min-w-0 flex-col gap-4">
+        <div v-if="exportJobId" class="flex items-center justify-between gap-3" role="status">
+            <span>{{ formatMessage(exportMessages.writing) }}</span>
+            <Button :disabled="cancelingExport" @click="cancelExport">{{
+                formatMessage(exportMessages.cancelExport)
+            }}</Button>
+        </div>
+        <p v-if="exportError" class="m-0 break-all" role="alert">{{ exportError }}</p>
         <div v-if="refreshing" class="flex flex-col gap-2" role="status">
             <span>{{ formatMessage(exportMessages.analyzing) }}</span>
             <progress
@@ -100,6 +119,28 @@ const formatBytes = useFormatBytes()
                 wrapper-class="w-full"
             />
         </label>
+        <label class="flex flex-col gap-2">
+            <span class="font-semibold">{{ formatMessage(exportMessages.author) }}</span>
+            <StyledInput
+                v-model="packageInfo.author"
+                :disabled="exporting"
+                wrapper-class="w-full"
+            />
+        </label>
+        <label class="flex flex-col gap-2">
+            <span class="font-semibold">{{ formatMessage(exportMessages.format) }}</span>
+            <Combobox
+                v-model="format"
+                :disabled="exporting"
+                :options="
+                    (['modrinth', 'genericZip', 'curseForge'] as const).map((value) => ({
+                        value,
+                        label: formatMessage(exportMessages[value]),
+                    }))
+                "
+            />
+        </label>
+        <p class="m-0 text-sm">{{ formatMessage(exportMessages.formatHint) }}</p>
         <label class="flex flex-col gap-2">
             <span class="font-semibold">{{ formatMessage(commonMessages.descriptionLabel) }}</span>
             <StyledInput

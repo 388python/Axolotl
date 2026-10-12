@@ -95,6 +95,7 @@ const messages = defineMessages({
 })
 
 const phaseMessages = defineMessages({
+    exporting: { id: 'app.downloads.phase.exporting', defaultMessage: 'Exporting selected files' },
     preparing_instance: {
         id: 'app.install.phase.preparing_instance',
         defaultMessage: 'Queued to install',
@@ -465,6 +466,7 @@ export async function useInstallJobNotifications(opts: {
             return installProgressTextSource(job).type === 'bytes' ? 'bytes' : 'count'
         }
         if (
+            job.phase === 'exporting' ||
             job.phase === 'downloading_pack_file' ||
             job.phase === 'extracting_overrides' ||
             job.phase === 'downloading_minecraft'

@@ -213,6 +213,7 @@ fn display_from_request(state: &InstallJobState) -> Option<InstallJobDisplay> {
             title: display_title.clone(),
             icon: display_icon.clone(),
         }),
+        InstallRequest::ExportResource { plan, .. } => Some(InstallJobDisplay { title: plan.package_info.name.clone(), icon: None }),
         InstallRequest::DownloadJava { vendor, version } => Some(InstallJobDisplay {
             title: format!("Java {version} ({vendor})"),
             icon: None,
@@ -224,6 +225,13 @@ pub async fn apply_cleanup(
     job_state: &mut InstallJobState,
     state: &State,
 ) -> crate::Result<()> {
+    if let InstallRequest::ExportResource { plan, output_path } =
+        &job_state.request
+    {
+        crate::resources::export::writer::cleanup_partial(plan, output_path)
+            .await
+            .map_err(|e| crate::ErrorKind::InputError(e.to_string()))?;
+    }
     if let InstallRequest::InstallContentBatch { items, .. } =
         &job_state.request
     {
@@ -1092,6 +1100,10 @@ mod tests {
         let state = State::init_for_test(root.to_string_lossy().to_string())
             .await
             .unwrap();
+        let instance_count_before = crate::state::list_instances(&state.pool)
+            .await
+            .unwrap()
+            .len();
         let old_link = InstanceLink::ImportedModpack {
             project_id: Some("old-project".to_string()),
             version_id: Some("old-version".to_string()),
@@ -1445,7 +1457,7 @@ mod tests {
                 .await
                 .unwrap()
                 .len(),
-            1
+            instance_count_before + 1
         );
 
         let new_instance = crate::api::instance::create(

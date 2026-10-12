@@ -45,7 +45,7 @@ pub struct PackFile {
     pub hashes: HashMap<PackFileHash, String>,
     pub env: Option<HashMap<EnvType, SideType>>,
     pub downloads: Vec<String>,
-    pub file_size: u32,
+    pub file_size: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]

@@ -525,6 +525,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { exportMessages } from '@/components/ui/export/messages'
 import MissingModpackContentModal from '@/components/ui/modal/MissingModpackContentModal.vue'
 import { useDownloadTelemetry } from '@/composables/useDownloadTelemetry'
 import { listPendingCurseForgeManualDownloads } from '@/helpers/curseforge'
@@ -764,6 +765,7 @@ const statusMessages = defineMessages({
 })
 
 const phaseMessages = defineMessages({
+    exporting: { id: 'app.downloads.phase.exporting', defaultMessage: 'Exporting selected files' },
     preparing_instance: {
         id: 'app.downloads.phase.preparing-instance',
         defaultMessage: 'Preparing instance',
@@ -915,6 +917,7 @@ function providerIcon(value: InstallJobSnapshot['provider']) {
 }
 
 function jobTypeLabel(job: InstallJobSnapshot) {
+    if (job.kind === 'export_resource') return formatMessage(exportMessages.export)
     if (job.kind === 'change_content') {
         return formatMessage(
             job.content_change?.intent.type === 'update_all_user_added'

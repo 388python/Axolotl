@@ -322,7 +322,7 @@ export const onboardingMessages = defineMessages({
     instanceActionsDescription: {
         id: 'app.onboarding.instance-actions.description',
         defaultMessage:
-            'Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. If a source request fails, retry or explicitly choose to embed that file.',
+            'Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. Choose Modrinth, generic ZIP, or CurseForge ZIP and fill in package information. If a source request fails, retry or explicitly choose to embed that file.',
     },
     instanceTabsTitle: {
         id: 'app.onboarding.instance-tabs.title',

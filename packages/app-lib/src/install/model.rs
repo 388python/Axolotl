@@ -419,6 +419,7 @@ pub(crate) fn initial_phase_for_request(
         | InstallRequest::ChangeContent { .. } => {
             InstallPhaseId::DownloadingContent
         }
+        InstallRequest::ExportResource { .. } => InstallPhaseId::Exporting,
         _ => InstallPhaseId::PreparingInstance,
     }
 }
@@ -1932,6 +1933,10 @@ pub enum InstallRequest {
         #[serde(default)]
         display_icon: Option<String>,
     },
+    ExportResource {
+        plan: content_management::resources::ResourceExportPlan,
+        output_path: PathBuf,
+    },
     DownloadJava {
         vendor: String,
         version: u32,
@@ -1993,6 +1998,7 @@ impl InstallRequest {
             | Self::InstallCurseForgeWorld { .. }
             | Self::InstallContentBatch { .. }
             | Self::ChangeContent { .. }
+            | Self::ExportResource { .. }
             | Self::DownloadJava { .. } => false,
         }
     }
@@ -2032,6 +2038,7 @@ impl InstallRequest {
                 }
             },
             Self::ChangeContent { .. } => InstallJobKind::ChangeContent,
+            Self::ExportResource { .. } => InstallJobKind::ExportResource,
             Self::DownloadJava { .. } => InstallJobKind::DownloadJava,
         }
     }
@@ -2073,6 +2080,11 @@ impl InstallRequest {
                     instance_id: instance_id.clone(),
                 }
             }
+            Self::ExportResource { plan, .. } => {
+                InstallTarget::ExistingInstance {
+                    instance_id: plan.instance_id.clone(),
+                }
+            }
             Self::ChangeContent { instance_id, .. } => {
                 InstallTarget::ExistingInstance {
                     instance_id: instance_id.clone(),
@@ -2110,6 +2122,7 @@ impl InstallRequest {
             Self::InstallCurseForgeWorld { .. } => InstallCleanup::None,
             Self::InstallContentBatch { .. } => InstallCleanup::None,
             Self::ChangeContent { .. } => InstallCleanup::None,
+            Self::ExportResource { .. } => InstallCleanup::None,
             _ => InstallCleanup::DeleteNewInstance { instance_id: None },
         }
     }
@@ -2128,6 +2141,7 @@ pub enum InstallJobKind {
     InstallContent,
     ChangeContent,
     DownloadJava,
+    ExportResource,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
@@ -2242,6 +2256,7 @@ impl InstallJobKind {
             }
             Self::InstallContent => "install_content",
             Self::ChangeContent => "change_content",
+            Self::ExportResource => "export_resource",
             Self::DownloadJava => "download_java",
         }
     }
@@ -2258,6 +2273,7 @@ impl InstallJobKind {
             }
             "install_content" => Self::InstallContent,
             "change_content" => Self::ChangeContent,
+            "export_resource" => Self::ExportResource,
             "download_java" => Self::DownloadJava,
             _ => Self::CreateInstance,
         }
@@ -2359,6 +2375,7 @@ pub struct InstallParallelProgress {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InstallPhaseId {
+    Exporting,
     PreparingInstance,
     CreatingBackup,
     StagingContent,
@@ -2974,6 +2991,7 @@ impl InstallJobState {
             | InstallRequest::UpdateManagedCurseForgeModpack { .. } => {
                 InstallJobProvider::CurseForge
             }
+            InstallRequest::ExportResource { .. } => InstallJobProvider::Local,
             InstallRequest::DownloadJava { .. } => InstallJobProvider::Java,
             InstallRequest::ImportInstance { .. }
             | InstallRequest::DuplicateInstance { .. } => {

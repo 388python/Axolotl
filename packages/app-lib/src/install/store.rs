@@ -457,7 +457,16 @@ pub async fn complete_running_job(
         &state.request,
         &app_state.pool,
     )
-    .await?;
+    .await?
+        || (matches!(
+            state.request,
+            super::model::InstallRequest::ExportResource { .. }
+        ) && state.events.iter().any(|e| {
+            matches!(
+                e.kind,
+                super::model::InstallJobEventKind::JobSucceeded { .. }
+            )
+        }));
     let mut transaction = app_state.pool.begin().await?;
 
     if completes_instance_install_stage

@@ -1,6 +1,26 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const exportMessages = defineMessages({
+    failed: {
+        id: 'app.export.failed',
+        defaultMessage: 'Export failed. Retry analysis before exporting again.',
+    },
+    canceled: {
+        id: 'app.export.canceled',
+        defaultMessage: 'Export canceled. The previous output was preserved.',
+    },
+    author: { id: 'app.export.author', defaultMessage: 'Author (optional)' },
+    format: { id: 'app.export.format', defaultMessage: 'Export format' },
+    modrinth: { id: 'app.export.format.modrinth', defaultMessage: 'Modrinth standard (.mrpack)' },
+    genericZip: { id: 'app.export.format.genericZip', defaultMessage: 'Generic ZIP (.zip)' },
+    curseForge: { id: 'app.export.format.curseForge', defaultMessage: 'CurseForge ZIP (.zip)' },
+    formatHint: {
+        id: 'app.export.format-hint',
+        defaultMessage:
+            'Modrinth references matched MR files; generic ZIP uses verified public links; CurseForge references matched CF files. Other selected files are embedded.',
+    },
+    writing: { id: 'app.export.writing', defaultMessage: 'Writing the export archive…' },
+    cancelExport: { id: 'app.export.cancel', defaultMessage: 'Cancel export' },
     analyzing: {
         id: 'app.export.analyzing',
         defaultMessage: 'Verifying selected files and refreshing exact source matches…',

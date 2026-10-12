@@ -11,13 +11,17 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onBeforeUnmount, ref, type ShallowRef } from 'vue'
 import type { ComponentExposed } from 'vue-component-type-helpers'
 
+import { install_job_get } from '@/helpers/install'
 import { resourceOperationError } from '@/helpers/resource-operation-logic'
 import {
     type ExportCategory,
     type ExportRefreshProgress,
     type ExportResolutionSession,
+    resourceExportCancel,
     resourceExportClose,
-    resourceExportLegacyExecute,
+    resourceExportExecute,
+    type ResourceExportFormat,
+    resourceExportPlan,
     resourceExportRefresh,
     resourceExportRefreshRetry,
     type ResourceExportScan,
@@ -35,6 +39,7 @@ import {
     reviseFileSelection,
     selectedFiles,
 } from './selection'
+import { observeExportTask } from './task'
 
 export function createExportContext(
     modal: ShallowRef<ComponentExposed<typeof MultiStageModal> | null>,
@@ -59,7 +64,12 @@ export function createExportContext(
     const currentPath = ref('')
     const search = ref('')
     const selectedOnly = ref(false)
-    const packageInfo = ref({ name: '', version: '1.0.0', description: '' })
+    const packageInfo = ref({ name: '', version: '1.0.0', description: '', author: '' })
+    const format = ref<ResourceExportFormat>('modrinth')
+    const exportJobId = ref<string | null>(null)
+    const cancelingExport = ref(false)
+    const exportError = ref('')
+    let exportObserver: AbortController | undefined
     let controller: AbortController | undefined
     let generation = 0
     const files = computed(() => snapshot.value?.files ?? [])
@@ -115,6 +125,7 @@ export function createExportContext(
         const currentRevision = ++revision
         refreshing.value = true
         refreshError.value = ''
+        exportError.value = ''
         refreshProgress.value = null
         embedded.value = []
         try {
@@ -164,6 +175,7 @@ export function createExportContext(
             : embedded.value.filter((value) => value !== path)
     }
     function close() {
+        exportObserver?.abort()
         cancelScan()
         cancelRefresh()
         if (snapshot.value) void resourceExportClose(snapshot.value.sessionId).catch(() => {})
@@ -243,42 +255,75 @@ export function createExportContext(
         }
     }
     function show() {
+        if (exporting.value) return
         close()
         snapshot.value = null
         draft.value = { categories: [], included: [], excluded: [] }
         currentPath.value = ''
         search.value = ''
         selectedOnly.value = false
-        packageInfo.value = { name: instance().name, version: '1.0.0', description: '' }
+        packageInfo.value = { name: instance().name, version: '1.0.0', description: '', author: '' }
+        format.value = 'modrinth'
         embedded.value = []
         revision = 0
         refreshError.value = ''
+        exportError.value = ''
         refreshProgress.value = null
         modal.value?.setStage('categories')
         modal.value?.show()
         void scan()
     }
+    async function cancelExport() {
+        if (!exportJobId.value || cancelingExport.value) return
+        cancelingExport.value = true
+        try {
+            await resourceExportCancel(exportJobId.value)
+        } catch (failure) {
+            handleError(failure)
+            cancelingExport.value = false
+        }
+    }
     async function exportPack() {
         if (exporting.value || !snapshot.value || !resolution.value || !canExport.value) return
         exporting.value = true
+        exportError.value = ''
+        const activeGeneration = generation
         try {
+            const extension = format.value === 'modrinth' ? 'mrpack' : 'zip'
             const output = await save({
-                defaultPath: `${packageInfo.value.name} ${packageInfo.value.version}.mrpack`,
-                filters: [{ name: 'Modrinth Modpack', extensions: ['mrpack'] }],
+                defaultPath: `${packageInfo.value.name} ${packageInfo.value.version}.${extension}`,
+                filters: [
+                    { name: formatMessage(exportMessages[format.value]), extensions: [extension] },
+                ],
             })
             if (!output) return
-            await resourceExportLegacyExecute(
+            const plan = await resourceExportPlan(
                 snapshot.value.sessionId,
                 resolution.value.selectionRevision,
-                pendingFailures(resolution.value, embedded.value),
+                format.value,
                 {
                     name: packageInfo.value.name,
                     version: packageInfo.value.version,
                     summary: packageInfo.value.description,
-                    author: null,
+                    author: packageInfo.value.author.trim() || null,
                 },
-                output,
+                pendingFailures(resolution.value, embedded.value),
             )
+            const job = await resourceExportExecute(plan.id, plan.revision, output)
+            exportJobId.value = job.job_id
+            exportObserver = new AbortController()
+            const finished = await observeExportTask(
+                () => install_job_get(job.job_id),
+                exportObserver.signal,
+            )
+            if (!finished || generation !== activeGeneration) return
+            if (finished.status === 'canceled') {
+                exportError.value = formatMessage(exportMessages.canceled)
+                return
+            }
+            if (finished.status !== 'succeeded')
+                throw new Error(finished.error?.message ?? formatMessage(exportMessages.failed))
+            if (generation !== activeGeneration) return
             notifications.addPopupNotification({
                 title: formatMessage(exportMessages.complete),
                 text: formatMessage(exportMessages.completeDescription, {
@@ -297,11 +342,14 @@ export function createExportContext(
             await nextTick()
             modal.value?.hide()
         } catch (failure) {
+            if (generation !== activeGeneration) return
             refreshError.value = resourceOperationError(failure)
             resolution.value = null
             handleError(failure)
         } finally {
             exporting.value = false
+            exportJobId.value = null
+            cancelingExport.value = false
         }
     }
     onBeforeUnmount(close)
@@ -316,6 +364,11 @@ export function createExportContext(
         search,
         selectedOnly,
         packageInfo,
+        format,
+        exportJobId,
+        cancelExport,
+        cancelingExport,
+        exportError,
         files,
         categories,
         treeItems,

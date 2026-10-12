@@ -102,6 +102,11 @@ impl ResourceService {
                 .try_lock()
                 .map_or(true, |draft| draft.touched.elapsed().as_secs() < 3600)
         });
+        self.export_plans.retain(|_, prepared| {
+            prepared.try_lock().map_or(true, |p| {
+                self.export_sessions.contains_key(&p.plan.session_id)
+            })
+        });
         if self.export_sessions.len() >= 32 {
             return Err(ResourceError::InvalidRequest(
                 "too many active export sessions; close an export window"
@@ -116,6 +121,11 @@ impl ResourceService {
     }
     pub fn close_export(&self, id: &SessionId) {
         self.export_sessions.remove(id);
+        self.export_plans.retain(|_, prepared| {
+            prepared
+                .try_lock()
+                .map_or(true, |p| &p.plan.session_id != id)
+        });
     }
     pub fn export_draft(
         &self,

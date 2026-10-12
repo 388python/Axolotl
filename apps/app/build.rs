@@ -301,7 +301,9 @@ fn main() {
                         "resource_export_refresh",
                         "resource_export_refresh_retry",
                         "resource_export_close",
-                        "resource_export_legacy_execute",
+                        "resource_export_plan",
+                        "resource_export_execute",
+                        "resource_export_cancel",
                         "resource_rollback",
                     ])
                     .default_permission(

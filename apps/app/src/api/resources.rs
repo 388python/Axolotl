@@ -77,7 +77,9 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_export_refresh,
             resource_export_refresh_retry,
             resource_export_close,
-            resource_export_legacy_execute,
+            resource_export_plan,
+            resource_export_execute,
+            resource_export_cancel,
             resource_rollback
         ])
         .build()
@@ -172,23 +174,59 @@ pub async fn resource_list_installed(
 }
 
 #[tauri::command]
-pub async fn resource_export_legacy_execute(
+pub async fn resource_export_plan(
     session_id: SessionId,
     selection_revision: u32,
-    embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
+    format: ResourceExportFormat,
     package_info: ExportPackageInfo,
-    output_path: String,
-) -> Result<()> {
-    Ok(theseus::resources::export::legacy::execute(
+    embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
+) -> Result<ResourceExportPlan> {
+    Ok(theseus::resources::export::plan::prepare(
         &service().await?,
         session_id,
         selection_revision,
-        embedded_failure_choices,
+        format,
         package_info,
-        output_path.into(),
-        &CancellationToken::new(),
+        embedded_failure_choices,
     )
     .await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_execute(
+    plan_id: PlanId,
+    revision: u32,
+    output_path: String,
+) -> Result<theseus::install::InstallJobSnapshot> {
+    Ok(theseus::resources::export::plan::queue(
+        &service().await?,
+        plan_id,
+        revision,
+        output_path.into(),
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_cancel(
+    request_id_or_job_id: String,
+) -> Result<()> {
+    if let Ok(id) = uuid::Uuid::parse_str(&request_id_or_job_id) {
+        let state = theseus::State::get().await?;
+        if let Some(job) = theseus::install::store::get(id, &state).await? {
+            if matches!(
+                job.state.request,
+                theseus::install::InstallRequest::ExportResource { .. }
+            ) {
+                theseus::install::runner::cancel_job(id).await?;
+                return Ok(());
+            }
+        }
+    }
+    resource_cancel(
+        RequestId::new(request_id_or_job_id).map_err(ResourceError::from)?,
+    );
+    Ok(())
 }
 
 #[tauri::command]

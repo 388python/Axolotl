@@ -70,9 +70,21 @@
                                 {{ job.display?.title ?? phaseLabel(job.phase) }}
                             </button>
                             <button
-                                v-tooltip="formatMessage(messages.cancel)"
+                                v-tooltip="
+                                    formatMessage(
+                                        job.kind === 'export_resource'
+                                            ? exportMessages.cancelExport
+                                            : messages.cancel,
+                                    )
+                                "
                                 :disabled="cancelingJobs.has(job.job_id)"
-                                :aria-label="formatMessage(messages.cancel)"
+                                :aria-label="
+                                    formatMessage(
+                                        job.kind === 'export_resource'
+                                            ? exportMessages.cancelExport
+                                            : messages.cancel,
+                                    )
+                                "
                                 class="flex size-6 shrink-0 items-center justify-center rounded-full text-[var(--color-text-tertiary)] hover:bg-surface-5 hover:text-[var(--color-text-primary)]"
                                 @click="void cancel(job.job_id)"
                             >
@@ -133,6 +145,7 @@ import {
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { exportMessages } from '@/components/ui/export/messages'
 import { useDownloadTelemetry } from '@/composables/useDownloadTelemetry'
 import type { InstallJobSnapshot, InstallPhaseId } from '@/helpers/install'
 import {
@@ -197,6 +210,7 @@ const messages = defineMessages({
 
 const phaseDescriptors: Partial<Record<InstallPhaseId, (typeof messages)[keyof typeof messages]>> =
     {
+        exporting: exportMessages.writing,
         preparing_instance: messages.preparingInstance,
         resolving_pack: messages.resolvingPack,
         downloading_pack_file: messages.downloadingPack,

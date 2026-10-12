@@ -6657,7 +6657,7 @@
     "message": "Your Home, your layout"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. If a source request fails, retry or explicitly choose to embed that file."
+    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. Choose Modrinth, generic ZIP, or CurseForge ZIP and fill in package information. If a source request fails, retry or explicitly choose to embed that file."
   },
   "app.onboarding.instance-actions.title": {
     "message": "The main controls"
@@ -13651,5 +13651,38 @@
   },
   "app.export.embed-failure": {
     "message": "Embed this file and continue despite the failed source request"
+  },
+  "app.export.author": {
+    "message": "Author (optional)"
+  },
+  "app.export.format": {
+    "message": "Export format"
+  },
+  "app.export.format.modrinth": {
+    "message": "Modrinth standard (.mrpack)"
+  },
+  "app.export.format.genericZip": {
+    "message": "Generic ZIP (.zip)"
+  },
+  "app.export.format.curseForge": {
+    "message": "CurseForge ZIP (.zip)"
+  },
+  "app.export.format-hint": {
+    "message": "Modrinth references matched MR files; generic ZIP uses verified public links; CurseForge references matched CF files. Other selected files are embedded."
+  },
+  "app.export.writing": {
+    "message": "Writing the export archive…"
+  },
+  "app.export.cancel": {
+    "message": "Cancel export"
+  },
+  "app.export.canceled": {
+    "message": "Export canceled. The previous output was preserved."
+  },
+  "app.downloads.phase.exporting": {
+    "message": "Exporting selected files"
+  },
+  "app.export.failed": {
+    "message": "Export failed. Retry analysis before exporting again."
   }
 }

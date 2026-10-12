@@ -101,6 +101,10 @@ impl Subscription {
 }
 
 pub struct ResourceService {
+    pub(crate) export_plans: DashMap<
+        PlanId,
+        Arc<tokio::sync::Mutex<super::export::plan::PreparedExport>>,
+    >,
     pub(crate) export_sessions: DashMap<
         SessionId,
         Arc<tokio::sync::Mutex<super::export::refresh::ExportDraft>>,
@@ -170,6 +174,7 @@ impl ResourceService {
         }
         Ok(Arc::new(Self {
             export_sessions: DashMap::new(),
+            export_plans: DashMap::new(),
             searches: DashMap::new(),
             store,
             cache,

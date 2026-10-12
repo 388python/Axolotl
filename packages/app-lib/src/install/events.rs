@@ -468,6 +468,10 @@ impl InstallProgressReporter {
         }
         if refresh_missing_reason {
             refresh_missing_pause_reason(&mut state.job);
+            let record =
+                store::update_state(self.job_id, &state.job, &app_state)
+                    .await?;
+            state.mark_persisted(record.snapshot());
         }
         let Some(snapshot) = runtime_snapshot(&state) else {
             return Err(crate::ErrorKind::OtherError(

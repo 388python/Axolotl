@@ -38,6 +38,7 @@ use uuid::Uuid;
 
 mod adjunct;
 mod content_change;
+mod export;
 mod init;
 mod lifecycle;
 mod pack;
@@ -952,6 +953,13 @@ pub async fn clear_job_history() -> crate::Result<u64> {
     store::clear_finished(&state).await
 }
 
+pub async fn export_resource(
+    plan: crate::resources::ResourceExportPlan,
+    output_path: PathBuf,
+) -> crate::Result<InstallJobSnapshot> {
+    start(InstallRequest::ExportResource { plan, output_path }).await
+}
+
 async fn start(request: InstallRequest) -> crate::Result<InstallJobSnapshot> {
     let state = State::get().await?;
     let id = Uuid::new_v4();
@@ -1272,6 +1280,7 @@ fn install_error_code(
             "unrecognized_format"
         }
         ErrorKind::InputError(_) => match phase {
+            Exporting => "export_error",
             PreparingInstance | CreatingBackup | Finalizing | Completed => {
                 "instance_error"
             }

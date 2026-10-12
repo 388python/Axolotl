@@ -43,46 +43,6 @@ pub async fn export_mrpack(
     description: Option<String>,
     name: Option<String>,
 ) -> crate::Result<()> {
-    export_mrpack_inner(
-        instance_id,
-        export_path,
-        included_export_candidates,
-        version_id,
-        description,
-        name,
-        None,
-    )
-    .await
-}
-
-pub(crate) async fn export_mrpack_prepared(
-    instance_id: &str,
-    export_path: PathBuf,
-    files: Vec<String>,
-    pack: PackFormat,
-) -> crate::Result<()> {
-    export_mrpack_inner(
-        instance_id,
-        export_path,
-        files,
-        None,
-        None,
-        None,
-        Some(pack),
-    )
-    .await
-}
-
-async fn export_mrpack_inner(
-    instance_id: &str,
-    export_path: PathBuf,
-    included_export_candidates: Vec<String>,
-    version_id: Option<String>,
-    description: Option<String>,
-    name: Option<String>,
-    prepared: Option<PackFormat>,
-) -> crate::Result<()> {
-    let preserve_paths = prepared.is_some();
     let state = State::get().await?;
     let _permit: tokio::sync::SemaphorePermit =
         state.io_semaphore.0.acquire().await?;
@@ -148,17 +108,13 @@ async fn export_mrpack_inner(
                 Some("Preparing modpack metadata"),
             );
         };
-        let packfile = if let Some(pack) = prepared {
-            pack
-        } else {
-            create_mrpack_json_inner(
-                &metadata,
-                version_id,
-                description,
-                &mut on_metadata_progress,
-            )
-            .await?
-        };
+        let packfile = create_mrpack_json_inner(
+            &metadata,
+            version_id,
+            description,
+            &mut on_metadata_progress,
+        )
+        .await?;
         drop(on_metadata_progress);
         (metadata_progress, packfile)
     };
@@ -168,9 +124,7 @@ async fn export_mrpack_inner(
             &included_export_candidates,
         )
     });
-    if !preserve_paths {
-        strip_localized_pack_file_paths(&mut packfile.files);
-    }
+    strip_localized_pack_file_paths(&mut packfile.files);
 
     let mut path_list = Vec::new();
     for candidate in &included_export_candidates {
@@ -214,11 +168,8 @@ async fn export_mrpack_inner(
         ) {
             continue;
         }
-        let exported_path = if preserve_paths {
-            relative_path.as_str().to_string()
-        } else {
-            original_content_relative_path(relative_path.as_str())
-        };
+        let exported_path =
+            original_content_relative_path(relative_path.as_str());
         let Ok(metadata) = path.metadata() else {
             continue;
         };
@@ -242,11 +193,8 @@ async fn export_mrpack_inner(
     let mut bytes_written = 0u64;
     let mut write_progress = 0.0_f64;
     for (path, relative_path) in write_list {
-        let exported_path = if preserve_paths {
-            relative_path.as_str().to_string()
-        } else {
-            original_content_relative_path(relative_path.as_str())
-        };
+        let exported_path =
+            original_content_relative_path(relative_path.as_str());
         let entry_path = if exported_path != relative_path.as_str()
             && !disk_paths.contains(&exported_path)
             && written_override_paths.insert(exported_path.clone())
@@ -655,7 +603,7 @@ async fn create_mrpack_json_inner(
             hashes,
             env: Some(env),
             downloads: vec![download],
-            file_size,
+            file_size: u64::from(file_size),
         });
     }
     on_progress(1.0);

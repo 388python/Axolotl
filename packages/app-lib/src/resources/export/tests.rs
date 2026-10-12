@@ -1,4 +1,4 @@
-use super::{legacy::*, refresh::*};
+use super::{plan::*, refresh::*};
 use crate::resources::{cache::ResourceCache, providers::*, *};
 use async_trait::async_trait;
 use std::{
@@ -282,7 +282,18 @@ async fn force_refresh_all_selected_unknown_files_bypasses_warm_negative_cache_a
     std::fs::write(root.path().join(&selected[0]), "edit").unwrap();
     run(&service, &mut draft, root.path(), selected.clone(), 3).await;
     assert_eq!(before + 1, mr.calls.lock().unwrap().len());
-    let pack = mr_pack(&draft, info(), &[]).unwrap();
+    let plan = build(
+        &draft,
+        draft.selection_revision,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let pack: crate::pack::install_from::PackFormat =
+        serde_json::from_value(super::formats::manifest(&plan).unwrap().1)
+            .unwrap();
     assert_eq!(pack.files.len(), 105);
     assert_eq!(pack.name, "My package");
     assert!(
@@ -382,4 +393,568 @@ async fn fingerprint_and_hashes_use_current_bytes_and_cancel_before_network() {
     .await;
     assert!(matches!(result, Err(ResourceError::Canceled)));
     assert!(mr.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn three_formats_freeze_current_artifacts_paths_and_package_info() {
+    let (root, service, mr, cf) = setup(true).await;
+    for path in [
+        "mods/file.jar",
+        "mods/[中文]file.jar",
+        "mods/file.jar.disabled",
+        "config/settings.txt",
+    ] {
+        std::fs::create_dir_all(root.path().join(path).parent().unwrap())
+            .unwrap();
+        std::fs::write(root.path().join(path), "data").unwrap();
+    }
+    let paths: Vec<String> = [
+        "mods/file.jar",
+        "mods/[中文]file.jar",
+        "mods/file.jar.disabled",
+        "config/settings.txt",
+    ]
+    .map(String::from)
+    .into();
+    let mut draft = draft(paths.iter().map(|p| file(p)).collect());
+    run(&service, &mut draft, root.path(), paths.clone(), 1).await;
+    let original = draft.results[&paths[0]].clone();
+    let ExportSourceResolution::Matched { artifacts, .. } =
+        &original.resolutions[0]
+    else {
+        panic!()
+    };
+    let mut cf_artifact = artifacts[0].clone();
+    cf_artifact.reference.release.project.source = SourceId::curseforge();
+    let mut project = draft.projects.values().next().unwrap().clone();
+    project.metadata.project = cf_artifact.reference.release.project.clone();
+    draft
+        .projects
+        .insert(project.metadata.project.clone(), project);
+    for path in [&paths[0], &paths[1]] {
+        draft.results.get_mut(path).unwrap().resolutions[1] =
+            ExportSourceResolution::Matched {
+                source: SourceId::curseforge(),
+                artifacts: vec![cf_artifact.clone()],
+            };
+    }
+    let mut info = info();
+    info.author = Some("作者".into());
+    draft.scan.requirements.loader = Some("neoforge".into());
+    draft.scan.requirements.loader_version = Some("21.1.1".into());
+    let count = mr.calls.lock().unwrap().len() + cf.calls.lock().unwrap().len();
+    for format in [
+        ResourceExportFormat::Modrinth,
+        ResourceExportFormat::GenericZip,
+        ResourceExportFormat::CurseForge,
+    ] {
+        let plan = build(
+            &draft,
+            1,
+            format,
+            info.clone(),
+            vec![],
+            &SourceId::curseforge(),
+        )
+        .unwrap();
+        assert_eq!(plan.files.len(), paths.len());
+        assert!(matches!(plan.files[2], ExportFileAction::Embed { .. }));
+        assert!(matches!(plan.files[3], ExportFileAction::Embed { .. }));
+        let (_, manifest) = super::formats::manifest(&plan).unwrap();
+        assert_eq!(manifest["name"], "My package");
+        assert_eq!(manifest["author"], "作者");
+        match format {
+            ResourceExportFormat::CurseForge => {
+                assert!(matches!(
+                    plan.files[0],
+                    ExportFileAction::CurseForgeReference { .. }
+                ));
+                assert!(matches!(
+                    plan.files[1],
+                    ExportFileAction::Embed { .. }
+                ));
+                assert_eq!(
+                    manifest["minecraft"]["modLoaders"][0]["id"],
+                    "neoforge-21.1.1"
+                );
+                assert_eq!(manifest["files"][0]["projectID"], 12345678);
+                assert_eq!(manifest["files"][0]["fileID"], 87654321);
+            }
+            _ => {
+                let ExportFileAction::Download { artifact, .. } =
+                    &plan.files[0]
+                else {
+                    panic!()
+                };
+                assert_eq!(
+                    artifact.reference.release.project.source,
+                    if format == ResourceExportFormat::Modrinth {
+                        SourceId::modrinth()
+                    } else {
+                        SourceId::curseforge()
+                    }
+                );
+                assert_eq!(manifest["files"][1]["path"], "mods/[中文]file.jar");
+                assert!(manifest["files"][0].get("env").is_none());
+                let parsed: crate::pack::install_from::PackFormat =
+                    serde_json::from_value(manifest).unwrap();
+                assert_eq!(parsed.files.len(), 2);
+            }
+        }
+        let output = root.path().join(format!("out-{format:?}.zip"));
+        super::writer::write(
+            root.path(),
+            &plan,
+            &output,
+            &CancellationToken::new(),
+            &|_, _| {},
+        )
+        .await
+        .unwrap();
+        let detected =
+            crate::api::pack::detect::detect_local_pack_sync(&output).unwrap();
+        if format == ResourceExportFormat::CurseForge {
+            let (name, target) =
+                crate::api::curseforge::get_local_modpack_target(&output)
+                    .await
+                    .unwrap();
+            assert_eq!(name, "My package");
+            assert_eq!(target.loader, crate::state::ModLoader::NeoForge);
+            assert_eq!(target.loader_version.as_deref(), Some("21.1.1"));
+        }
+        assert_eq!(
+            detected.format,
+            if format == ResourceExportFormat::CurseForge {
+                crate::api::pack::detect::LocalPackFormat::CurseForge
+            } else {
+                crate::api::pack::detect::LocalPackFormat::Mrpack
+            }
+        );
+        let mut archive =
+            zip::ZipArchive::new(std::fs::File::open(output).unwrap()).unwrap();
+        assert!(archive.by_name("overrides/config/settings.txt").is_ok());
+        assert!(archive.by_name("overrides/mods/file.jar.disabled").is_ok());
+        assert!(archive.by_name("overrides/mods/file.jar").is_err());
+        assert_eq!(archive.file_names().filter(|n| *n == "manifest.json" || *n == "modrinth.index.json").count(), 1);
+    }
+    assert_eq!(
+        count,
+        mr.calls.lock().unwrap().len() + cf.calls.lock().unwrap().len()
+    );
+    draft.results.get_mut(&paths[0]).unwrap().resolutions[0] =
+        ExportSourceResolution::NoMatch {
+            source: SourceId::modrinth(),
+        };
+    let standard = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info.clone(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(standard.files[0], ExportFileAction::Embed { .. }));
+    let generic = build(
+        &draft,
+        1,
+        ResourceExportFormat::GenericZip,
+        info.clone(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(
+        generic.files[0],
+        ExportFileAction::Download { .. }
+    ));
+    let ExportSourceResolution::Matched { artifacts, .. } =
+        &mut draft.results.get_mut(&paths[0]).unwrap().resolutions[1]
+    else {
+        panic!()
+    };
+    artifacts[0].acquisition = ArtifactAcquisition::Unavailable;
+    let generic = build(
+        &draft,
+        1,
+        ResourceExportFormat::GenericZip,
+        info.clone(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(generic.files[0], ExportFileAction::Embed { .. }));
+    let cf = build(
+        &draft,
+        1,
+        ResourceExportFormat::CurseForge,
+        info,
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(
+        cf.files[0],
+        ExportFileAction::CurseForgeReference { .. }
+    ));
+}
+
+#[tokio::test]
+async fn export_failure_cancel_and_file_changes_preserve_existing_output() {
+    let (root, service, _, _) = setup(false).await;
+    std::fs::write(root.path().join("settings.txt"), "old settings").unwrap();
+    let mut draft = draft(vec![file("settings.txt")]);
+    run(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["settings.txt".into()],
+        1,
+    )
+    .await;
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::GenericZip,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let output = root.path().join("out.zip");
+    std::fs::write(&output, "previous output").unwrap();
+    let token = CancellationToken::new();
+    token.cancel();
+    assert!(matches!(
+        super::writer::write(root.path(), &plan, &output, &token, &|_, _| {})
+            .await,
+        Err(ResourceError::Canceled)
+    ));
+    let token = CancellationToken::new();
+    assert!(
+        super::writer::write(root.path(), &plan, &output, &token, &|_, _| {
+            token.cancel();
+        })
+        .await
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&output).unwrap(), b"previous output");
+    assert!(!std::fs::read_dir(root.path()).unwrap().any(|e| {
+        e.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".axolotl-export-")
+    }));
+    let token = CancellationToken::new();
+    assert!(
+        super::writer::write(root.path(), &plan, &output, &token, &|_, _| {
+            std::fs::write(root.path().join("settings.txt"), "mutated bytes")
+                .unwrap();
+        })
+        .await
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&output).unwrap(), b"previous output");
+    assert!(
+        super::writer::write(
+            root.path(),
+            &plan,
+            &output,
+            &CancellationToken::new(),
+            &|_, _| {}
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(std::fs::read(&output).unwrap(), b"previous output");
+    assert!(
+        super::writer::write(
+            root.path(),
+            &plan,
+            &root.path().join("settings.txt"),
+            &CancellationToken::new(),
+            &|_, _| {}
+        )
+        .await
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn export_uses_exact_bytes_and_valid_public_urls_and_keeps_real_environment()
+ {
+    let (root, service, _, _) = setup(true).await;
+    std::fs::write(root.path().join("file.jar"), "data").unwrap();
+    let mut draft = draft(vec![file("file.jar")]);
+    run(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["file.jar".into()],
+        1,
+    )
+    .await;
+    for p in draft.projects.values_mut() {
+        p.protocol = Some(
+            serde_json::json!({"client_side": "optional", "server_side": "unsupported"}),
+        );
+    }
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let (_, value) = super::formats::manifest(&plan).unwrap();
+    assert_eq!(
+        value["files"][0]["env"],
+        serde_json::json!({"client": "optional", "server": "unsupported"})
+    );
+    let ExportSourceResolution::Matched { artifacts, .. } =
+        &mut draft.results.get_mut("file.jar").unwrap().resolutions[0]
+    else {
+        panic!()
+    };
+    artifacts[0].acquisition = ArtifactAcquisition::PublicDownload {
+        urls: vec!["https://cdn.example/file?token=secret".into()],
+    };
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::GenericZip,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(plan.files[0], ExportFileAction::Embed { .. }));
+    let ExportSourceResolution::Matched { artifacts, .. } =
+        &mut draft.results.get_mut("file.jar").unwrap().resolutions[0]
+    else {
+        panic!()
+    };
+    artifacts[0].acquisition = ArtifactAcquisition::PublicDownload {
+        urls: vec!["https://cdn.example/file".into()],
+    };
+    artifacts[0].integrity.hashes[0].value = "0".repeat(40);
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert!(matches!(plan.files[0], ExportFileAction::Embed { .. }));
+    assert!(
+        build(
+            &draft,
+            2,
+            ResourceExportFormat::Modrinth,
+            info(),
+            vec![],
+            &SourceId::modrinth()
+        )
+        .is_err()
+    );
+}
+
+#[tokio::test]
+async fn export_revalidates_requirements_before_publish_and_cleans_interrupted_files()
+ {
+    let (root, service, _, _) = setup(false).await;
+    std::fs::write(root.path().join("settings.txt"), "settings").unwrap();
+    let mut draft = draft(vec![file("settings.txt")]);
+    run(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["settings.txt".into()],
+        1,
+    )
+    .await;
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let output = root.path().join("out.mrpack");
+    std::fs::write(&output, "old output").unwrap();
+    let validations = std::sync::atomic::AtomicUsize::new(0);
+    let result = super::writer::write_checked(
+        root.path(),
+        &plan,
+        &output,
+        &CancellationToken::new(),
+        &|_, _| {},
+        || async {
+            if validations.fetch_add(1, Ordering::SeqCst) == 0 {
+                Ok(())
+            } else {
+                Err(invalid("requirements changed"))
+            }
+        },
+    )
+    .await;
+    assert!(result.is_err());
+    assert_eq!(std::fs::read(&output).unwrap(), b"old output");
+    let temporary = super::writer::temporary_path(&plan, &output).unwrap();
+    std::fs::write(&temporary, "partial archive").unwrap();
+    super::writer::cleanup_partial(&plan, &output)
+        .await
+        .unwrap();
+    assert!(!temporary.exists());
+    assert_eq!(std::fs::read(&output).unwrap(), b"old output");
+}
+
+#[cfg(not(feature = "tauri"))]
+#[tokio::test]
+async fn frozen_export_job_survives_session_close_and_preserves_instance_stage()
+{
+    use crate::install::model::{
+        InstallCleanup, InstallJobState, InstallJobStatus, InstallRequest,
+    };
+    let state = if crate::State::initialized() {
+        crate::State::get().await.unwrap()
+    } else {
+        crate::State::init_for_test(
+            tempfile::tempdir()
+                .unwrap()
+                .keep()
+                .to_string_lossy()
+                .to_string(),
+        )
+        .await
+        .unwrap();
+        crate::State::get().await.unwrap()
+    };
+    let instance = crate::api::instance::create(
+        "Export task".into(),
+        "1.21.1".into(),
+        crate::state::ModLoader::Vanilla,
+        None,
+        None,
+        crate::state::InstanceLink::Unmanaged,
+        None,
+        None,
+    )
+    .await
+    .unwrap();
+    let root = crate::api::instance::get_full_path(&instance.instance.id)
+        .await
+        .unwrap();
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("settings.txt"), "task settings").unwrap();
+    let (_provider_root, service, mr, cf) = setup(false).await;
+    let mut draft = draft(vec![file("settings.txt")]);
+    draft.scan.instance_id = instance.instance.id.clone();
+    run(&service, &mut draft, &root, vec!["settings.txt".into()], 1).await;
+    let session = draft.scan.session_id.clone();
+    service.register_export(draft.scan.clone()).unwrap();
+    *service.export_draft(&session).unwrap().lock().await = draft;
+    let plan = prepare(
+        &service,
+        session.clone(),
+        1,
+        ResourceExportFormat::GenericZip,
+        info(),
+        vec![],
+    )
+    .await
+    .unwrap();
+    let output_dir = tempfile::tempdir().unwrap();
+    let output = output_dir.path().join("task.zip");
+    let request = InstallRequest::ExportResource {
+        plan: plan.clone(),
+        output_path: output.clone(),
+    };
+    assert!(!request.completes_instance_install_stage());
+    let decoded: InstallJobState = serde_json::from_value(
+        serde_json::to_value(InstallJobState::new(request)).unwrap(),
+    )
+    .unwrap();
+    assert!(matches!(
+        decoded.request,
+        InstallRequest::ExportResource { .. }
+    ));
+    assert_eq!(decoded.cleanup, InstallCleanup::None);
+    crate::state::instances::commands::set_instance_install_stage(
+        &instance.instance.id,
+        crate::state::InstanceInstallStage::PackInstalling,
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    let job = queue(&service, plan.id.clone(), 1, output.clone())
+        .await
+        .unwrap();
+    let again = queue(&service, plan.id.clone(), 1, output).await.unwrap();
+    assert_eq!(job.job_id, again.job_id);
+    service.close_export(&session);
+    service.cache().clear().await.unwrap();
+    let job = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let job =
+                crate::install::runner::get_job(job.job_id).await.unwrap();
+            if matches!(
+                job.status,
+                InstallJobStatus::Succeeded
+                    | InstallJobStatus::Failed
+                    | InstallJobStatus::Canceled
+            ) {
+                break job;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(job.status, InstallJobStatus::Succeeded, "{:?}", job.error);
+    let output = output_dir.path().join("task.zip");
+    let existing = std::fs::read(&output).unwrap();
+    let permits = state.install_job_semaphore.available_permits();
+    let permit = state
+        .install_job_semaphore
+        .acquire_many(permits as u32)
+        .await
+        .unwrap();
+    let queued = crate::install::runner::export_resource(plan, output.clone())
+        .await
+        .unwrap();
+    let canceled = crate::install::runner::cancel_job(queued.job_id)
+        .await
+        .unwrap();
+    drop(permit);
+    assert_eq!(canceled.status, InstallJobStatus::Canceled);
+    assert_eq!(std::fs::read(output).unwrap(), existing);
+    assert_eq!(
+        crate::state::get_instance(&instance.instance.id, &state.pool)
+            .await
+            .unwrap()
+            .unwrap()
+            .instance
+            .install_stage,
+        crate::state::InstanceInstallStage::PackInstalling
+    );
+    assert_eq!(
+        mr.calls.lock().unwrap().len() + cf.calls.lock().unwrap().len(),
+        0
+    );
+}
+
+#[test]
+fn large_index_file_sizes_round_trip_without_truncation() {
+    let pack: crate::pack::install_from::PackFormat = serde_json::from_value(serde_json::json!({
+        "game": "minecraft", "formatVersion": 1, "versionId": "1", "name": "Large", "dependencies": {"minecraft": "1.21.1"},
+        "files": [{"path": "mods/large.jar", "hashes": {"sha1": "0".repeat(40), "sha512": "0".repeat(128)}, "downloads": ["https://cdn.example/large.jar"], "fileSize": 5_000_000_000u64}]
+    })).unwrap();
+    assert_eq!(pack.files[0].file_size, 5_000_000_000);
 }

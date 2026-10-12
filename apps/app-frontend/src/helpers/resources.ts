@@ -540,18 +540,35 @@ export function resourceExportRefreshRetry(
 export function resourceExportClose(sessionId: string) {
     return invoke<void>('plugin:axolotl-resources|resource_export_close', { sessionId })
 }
-export function resourceExportLegacyExecute(
+export type ResourceExportFormat = 'modrinth' | 'genericZip' | 'curseForge'
+export interface ResourceExportPlan {
+    id: string
+    revision: number
+    sessionId: string
+    selectionRevision: number
+    format: ResourceExportFormat
+}
+export function resourceExportPlan(
     sessionId: string,
     selectionRevision: number,
-    embeddedFailureChoices: ExportEmbeddedFailureChoice[],
+    format: ResourceExportFormat,
     packageInfo: { name: string; version: string; summary: string; author: string | null },
-    outputPath: string,
+    embeddedFailureChoices: ExportEmbeddedFailureChoice[],
 ) {
-    return invoke<void>('plugin:axolotl-resources|resource_export_legacy_execute', {
+    return invoke<ResourceExportPlan>('plugin:axolotl-resources|resource_export_plan', {
         sessionId,
         selectionRevision,
-        embeddedFailureChoices,
+        format,
         packageInfo,
-        outputPath,
+        embeddedFailureChoices,
     })
+}
+export function resourceExportExecute(planId: string, revision: number, outputPath: string) {
+    return invoke<import('./install').InstallJobSnapshot>(
+        'plugin:axolotl-resources|resource_export_execute',
+        { planId, revision, outputPath },
+    )
+}
+export function resourceExportCancel(requestIdOrJobId: string) {
+    return invoke<void>('plugin:axolotl-resources|resource_export_cancel', { requestIdOrJobId })
 }

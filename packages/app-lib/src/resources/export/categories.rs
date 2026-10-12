@@ -229,6 +229,7 @@ const RULES: &[Rule] = &[
 ];
 
 const FORBIDDEN: &[&str] = &[
+    "**/.axolotl-export-*.tmp",
     "assets/",
     "versions/",
     "libraries/",

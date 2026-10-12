@@ -114,7 +114,18 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
     }
 
     let result =
-        if matches!(job_state.request, InstallRequest::ChangeContent { .. }) {
+        if matches!(job_state.request, InstallRequest::ExportResource { .. }) {
+            let result =
+                request::run_request(job_id, &mut job_state, &state).await;
+            if result.is_err() && cancellation.is_cancelled() {
+                RunResult::Canceled
+            } else {
+                RunResult::Completed(result)
+            }
+        } else if matches!(
+            job_state.request,
+            InstallRequest::ChangeContent { .. }
+        ) {
             RunResult::Completed(
                 request::run_request(job_id, &mut job_state, &state).await,
             )
@@ -154,7 +165,13 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
             if let Some(instance_id) = instance_id.as_ref() {
                 set_instance_id(&mut job_state, instance_id.clone());
             }
-            if cancellation.is_cancelled() && !resource_committed {
+            if cancellation.is_cancelled()
+                && !resource_committed
+                && !matches!(
+                    job_state.request,
+                    InstallRequest::ExportResource { .. }
+                )
+            {
                 finish_canceled_job(job_id, &mut job_state, &state).await?;
                 return Ok(());
             }

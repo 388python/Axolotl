@@ -1,13 +1,16 @@
 import { Checkbox, FileTreeSelect, I18N_INJECTION_KEY, MultiStageModal } from '@modrinth/ui'
 import { save } from '@tauri-apps/plugin-dialog'
 import { flushPromises } from '@vue/test-utils'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import { install_job_get } from '@/helpers/install'
 import {
     type ExportResolutionSession,
+    resourceExportCancel,
     resourceExportClose,
-    resourceExportLegacyExecute,
+    resourceExportExecute,
+    resourceExportPlan,
     resourceExportRefresh,
     resourceExportRefreshRetry,
     type ResourceExportScan,
@@ -22,14 +25,30 @@ vi.mock('@/helpers/resources', () => ({
     resourceExportRefresh: vi.fn(),
     resourceExportRefreshRetry: vi.fn(),
     resourceExportClose: vi.fn().mockResolvedValue(undefined),
-    resourceExportLegacyExecute: vi.fn(),
+    resourceExportExecute: vi.fn(),
+    resourceExportPlan: vi.fn(),
+    resourceExportCancel: vi.fn(),
 }))
+vi.mock('@/helpers/install', () => ({ install_job_get: vi.fn() }))
 vi.mock('@/helpers/utils', () => ({ highlightInFolder: vi.fn() }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }))
 beforeEach(() => {
+    const teleports = document.createElement('div')
+    teleports.id = 'teleports'
+    document.body.appendChild(teleports)
     vi.resetAllMocks()
     vi.mocked(resourceExportClose).mockResolvedValue(undefined)
+    vi.mocked(resourceExportPlan).mockResolvedValue({
+        id: 'plan',
+        revision: 1,
+        sessionId: 'fresh',
+        selectionRevision: 1,
+        format: 'modrinth',
+    })
+    vi.mocked(resourceExportExecute).mockResolvedValue({ job_id: 'export-job' } as never)
+    vi.mocked(install_job_get).mockResolvedValue({ status: 'succeeded' } as never)
 })
+afterEach(() => document.getElementById('teleports')?.remove())
 
 const snapshot = (id = 'fresh'): ResourceExportScan => ({
     sessionId: id,
@@ -187,7 +206,7 @@ it('shows serialized analysis errors and invalidates changed-file evidence befor
         .mockRejectedValueOnce({ message: 'Source unavailable', code: 'resource' })
         .mockResolvedValueOnce(resolved())
     vi.mocked(save).mockResolvedValue('out.mrpack')
-    vi.mocked(resourceExportLegacyExecute).mockRejectedValue({
+    vi.mocked(resourceExportExecute).mockRejectedValue({
         message: 'File changed after analysis',
         code: 'resource',
     })
@@ -237,7 +256,7 @@ it('locks explicit failure choices during export', async () => {
         .mockResolvedValueOnce(result)
         .mockImplementationOnce(() => new Promise(() => {}))
     vi.mocked(save).mockResolvedValue('out.mrpack')
-    vi.mocked(resourceExportLegacyExecute).mockImplementationOnce(() => new Promise(() => {}))
+    vi.mocked(resourceExportExecute).mockImplementationOnce(() => new Promise(() => {}))
     const wrapper = await mountExport()
     try {
         wrapper.vm.show()
@@ -261,7 +280,51 @@ it('locks explicit failure choices during export', async () => {
             ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
         ].find((button) => button.textContent?.includes('Retry analysis'))!
         expect(retry.disabled).toBe(true)
-        expect(resourceExportLegacyExecute).toHaveBeenCalledTimes(1)
+        expect(resourceExportExecute).toHaveBeenCalledTimes(1)
+    } finally {
+        wrapper.unmount()
+        vi.clearAllMocks()
+    }
+})
+
+it('submits the selected format and author without requerying and cancels its export job', async () => {
+    vi.mocked(resourceExportScan).mockResolvedValue(snapshot())
+    vi.mocked(resourceExportRefresh).mockResolvedValue(resolved())
+    vi.mocked(save).mockResolvedValue('out.zip')
+    vi.mocked(install_job_get).mockImplementationOnce(() => new Promise(() => {}))
+    vi.mocked(resourceExportCancel).mockResolvedValue(undefined)
+    const wrapper = await mountExport()
+    try {
+        wrapper.vm.show()
+        await flushPromises()
+        wrapper.findComponent(MultiStageModal).vm.setStage('package')
+        await flushPromises()
+        const inputs = document.querySelectorAll<HTMLInputElement>('[role="dialog"] input')
+        inputs[2].value = 'Author'
+        inputs[2].dispatchEvent(new Event('input', { bubbles: true }))
+        const dropdown = wrapper.findComponent({ name: 'Combobox' })
+        dropdown.vm.$emit('update:modelValue', 'curseForge')
+        await flushPromises()
+        const button = [
+            ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+        ].find((b) => b.textContent?.trim() === 'Export')!
+        button.click()
+        await flushPromises()
+        expect(resourceExportRefresh).toHaveBeenCalledTimes(1)
+        expect(resourceExportPlan).toHaveBeenCalledWith(
+            'fresh',
+            1,
+            'curseForge',
+            { name: 'Demo', version: '1.0.0', summary: '', author: 'Author' },
+            [],
+        )
+        expect(resourceExportExecute).toHaveBeenCalledWith('plan', 1, 'out.zip')
+        const cancel = [
+            ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+        ].find((b) => b.textContent?.trim() === 'Cancel export')!
+        cancel.click()
+        await flushPromises()
+        expect(resourceExportCancel).toHaveBeenCalledWith('export-job')
     } finally {
         wrapper.unmount()
         vi.clearAllMocks()
@@ -306,6 +369,36 @@ it('refreshes on entry while package edits reuse evidence and returning triggers
         modal.vm.hide()
         await flushPromises()
         expect(resourceExportClose).toHaveBeenCalledWith('fresh')
+    } finally {
+        wrapper.unmount()
+        vi.clearAllMocks()
+    }
+})
+
+it('retains analysis and package inputs when the download center cancels the export', async () => {
+    vi.mocked(resourceExportScan).mockResolvedValue(snapshot())
+    vi.mocked(resourceExportRefresh).mockResolvedValue(resolved())
+    vi.mocked(save).mockResolvedValue('out.mrpack')
+    vi.mocked(install_job_get).mockResolvedValue({ status: 'canceled' } as never)
+    const wrapper = await mountExport()
+    try {
+        wrapper.vm.show()
+        await flushPromises()
+        wrapper.findComponent(MultiStageModal).vm.setStage('package')
+        await flushPromises()
+        const input = document.querySelector<HTMLInputElement>('[role="dialog"] input')!
+        input.value = 'Retained package'
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        const button = [
+            ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+        ].find((b) => b.textContent?.trim() === 'Export')!
+        button.click()
+        await flushPromises()
+        expect(document.querySelector('[role="alert"]')?.textContent).toContain('Export canceled')
+        expect(input.value).toBe('Retained package')
+        expect(button.disabled).toBe(false)
+        expect(resourceExportRefresh).toHaveBeenCalledTimes(1)
+        expect(resourceExportCancel).not.toHaveBeenCalled()
     } finally {
         wrapper.unmount()
         vi.clearAllMocks()
