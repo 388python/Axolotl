@@ -184,15 +184,37 @@ pub(crate) async fn installed(
             _ => continue,
         };
         let path: String = row.get("relative_path");
-        let exact =
-            row.get::<Option<String>, _>("artifact").and_then(|value| {
+        let resource_type = if resource_type == ResourceType::Mod
+            && path.starts_with("plugins/")
+        {
+            ResourceType::Plugin
+        } else {
+            resource_type
+        };
+        let sha1: String = row.get("sha1");
+        let size: i64 = row.get("size");
+        let local_integrity = ArtifactIntegrity {
+            size: u64::try_from(size).ok(),
+            hashes: vec![ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: sha1,
+            }],
+        };
+        let exact = row
+            .get::<Option<String>, _>("artifact")
+            .and_then(|value| {
                 serde_json::from_str::<ResourceArtifact>(&value).ok()
+            })
+            .filter(|artifact| {
+                identity::exact_integrity(&local_integrity, &artifact.integrity)
             });
         let scope = row
             .get::<Option<String>, _>("scope")
             .and_then(|value| serde_json::from_str(&value).ok())
             .unwrap_or_else(|| {
-                if resource_type == ResourceType::DataPack {
+                if resource_type == ResourceType::DataPack
+                    && path.starts_with("saves/")
+                {
                     InstallScope::World {
                         relative_path: path
                             .split('/')
@@ -254,8 +276,6 @@ pub(crate) async fn installed(
                     artifact_id: SourceArtifactId::new(artifact_id).ok()?,
                 })
             });
-        let sha1: String = row.get("sha1");
-        let size: i64 = row.get("size");
         let ownership: String = row.get("ownership_kind");
         result.push(InstalledResource {
             entry_id: InstalledEntryId::new(entry_id)?,
@@ -263,13 +283,7 @@ pub(crate) async fn installed(
             resource_id,
             artifact: artifact.clone(),
             known_artifacts: artifact.into_iter().collect(),
-            integrity: ArtifactIntegrity {
-                size: u64::try_from(size).ok(),
-                hashes: vec![ContentHash {
-                    algorithm: HashAlgorithm::Sha1,
-                    value: sha1,
-                }],
-            },
+            integrity: local_integrity,
             relative_path: path,
             original_file_name: exact.and_then(|file| file.file_name),
             resource_type,
@@ -832,23 +846,6 @@ impl ResourceService {
                     );
                 }
             }
-            let candidates: Vec<_> = installed
-                .iter()
-                .filter(|item| {
-                    item.scope == selection.scope
-                        && item.resource_type == selection.resource_type
-                        && match &selection.resource {
-                            ResourceRef::Resource { id } => {
-                                item.resource_id.as_ref() == Some(id)
-                            }
-                            ResourceRef::Source { project } => {
-                                item.artifact.as_ref().is_some_and(|artifact| {
-                                    &artifact.release.project == project
-                                })
-                            }
-                        }
-                })
-                .collect();
             let current = selection.entry_id.as_ref().and_then(|entry_id| {
                 installed.iter().find(|item| {
                     &item.entry_id == entry_id
@@ -916,6 +913,8 @@ impl ResourceService {
             let satisfied = installed.iter().find(|item| {
                 !item.missing
                     && item.enabled
+                    && (!is_entry_update
+                        || selection.entry_id.as_ref() == Some(&item.entry_id))
                     && item.scope == selection.scope
                     && item.resource_type == selection.resource_type
                     && identity::exact_integrity(
@@ -924,7 +923,21 @@ impl ResourceService {
                     )
             });
             let state = if is_entry_update {
-                if satisfied.is_some() {
+                if current.is_some_and(|current| {
+                    !current.enabled
+                        && identity::exact_integrity(
+                            &current.integrity,
+                            &artifact.integrity,
+                        )
+                        && current.artifact.as_ref()
+                            == Some(&artifact.reference)
+                }) {
+                    DependencyNodeState::Disabled
+                } else if satisfied.is_some()
+                    && current.is_some_and(|current| {
+                        current.artifact.as_ref() == Some(&artifact.reference)
+                    })
+                {
                     DependencyNodeState::Satisfied
                 } else {
                     DependencyNodeState::Update
@@ -1004,7 +1017,11 @@ impl ResourceService {
             if !matches!(
                 &artifact.acquisition,
                 ArtifactAcquisition::PublicDownload { .. }
-            ) && satisfied.is_none()
+            ) && draft
+                .plan
+                .actions
+                .iter()
+                .any(|action| action.node_id == selection.id)
             {
                 issue(
                     &mut draft.plan,
@@ -1297,6 +1314,25 @@ pub async fn prepare(
     install_dependencies: bool,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceOperationPlan> {
+    prepare_with_installed(
+        instance_id,
+        intent,
+        selections,
+        install_dependencies,
+        cancel,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn prepare_with_installed(
+    instance_id: String,
+    intent: ResourceOperationIntent,
+    selections: Vec<ResourceSelection>,
+    install_dependencies: bool,
+    cancel: &CancellationToken,
+    verified: Option<&[InstalledResource]>,
+) -> ResourceResult<ResourceOperationPlan> {
     match intent {
         ResourceOperationIntent::Install
             if selections
@@ -1332,6 +1368,11 @@ pub async fn prepare(
     let instance = crate::state::get_instance(&instance_id, &state.pool)
         .await?
         .ok_or_else(|| invalid("unknown instance"))?;
+    if instance.instance.install_stage
+        != crate::state::InstanceInstallStage::Installed
+    {
+        return Err(invalid("instance is not ready for resource changes"));
+    }
     let revision = instance_revision(&state.pool, &instance_id).await?;
     let roots = selections
         .iter()
@@ -1364,7 +1405,9 @@ pub async fn prepare(
         loaders: vec![instance.applied_content_set.loader.as_str().into()],
         channels: update_channels(instance.instance.update_channel),
     };
-    let installed = if draft.plan.intent == ResourceOperationIntent::Install {
+    let installed = if let Some(verified) = verified {
+        verified.to_vec()
+    } else if draft.plan.intent == ResourceOperationIntent::Install {
         installed(&state.pool, &draft.plan.instance_id).await?
     } else {
         super::installed::hydrate(&state, &draft.plan.instance_id, cancel)
@@ -1549,6 +1592,33 @@ pub(crate) async fn execute_frozen_plan(
     state: &crate::State,
 ) -> crate::Result<()> {
     super::execution::execute(instance_id, plan, reporter, state).await
+}
+
+pub(crate) async fn frozen_request_completed(
+    request: &crate::install::InstallRequest,
+    pool: &SqlitePool,
+) -> crate::Result<bool> {
+    let crate::install::InstallRequest::InstallContentBatch { items, .. } =
+        request
+    else {
+        return Ok(false);
+    };
+    if items.is_empty() {
+        return Ok(false);
+    }
+    for item in items {
+        let crate::install::InstallContentBatchItem::FrozenResource { plan } =
+            item
+        else {
+            return Ok(false);
+        };
+        let completed: Option<i64> = sqlx::query_scalar("SELECT completed FROM resource_operation_plans WHERE id = ? AND revision = ?")
+            .bind(plan.id.as_str()).bind(plan.revision).fetch_optional(pool).await?;
+        if completed != Some(1) {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 pub(crate) async fn recover_frozen_plan(

@@ -183,8 +183,11 @@ pub(crate) async fn create_direct_link_instance(
         &state.file_watcher,
     )
     .await;
-    if let Err(error) =
-        crate::api::instance::reconcile_screenshots(&instance.id).await
+    if let Err(error) = crate::api::instance::reconcile_screenshots_with_state(
+        &instance.id,
+        state,
+    )
+    .await
     {
         tracing::debug!(%error, "Initial linked screenshot index reconciliation failed");
     }

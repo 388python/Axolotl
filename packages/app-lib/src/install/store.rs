@@ -453,6 +453,11 @@ pub async fn complete_running_job(
     let instance_id = instance_id(state);
     let completes_instance_install_stage =
         state.request.completes_instance_install_stage();
+    let resource_committed = crate::resources::plans::frozen_request_completed(
+        &state.request,
+        &app_state.pool,
+    )
+    .await?;
     let mut transaction = app_state.pool.begin().await?;
 
     if completes_instance_install_stage
@@ -480,7 +485,7 @@ pub async fn complete_running_job(
         "UPDATE install_jobs
          SET instance_id = (SELECT id FROM instances WHERE id = ?),
              status = ?, state = ?, modified = ?, finished = ?
-         WHERE id = ? AND status = ?",
+         WHERE id = ? AND (status = ? OR (status = 'canceling' AND ?))",
     )
     .bind(instance_id.as_deref())
     .bind(InstallJobStatus::Succeeded.as_str())
@@ -489,6 +494,7 @@ pub async fn complete_running_job(
     .bind(now.timestamp())
     .bind(&id_value)
     .bind(InstallJobStatus::Running.as_str())
+    .bind(resource_committed)
     .execute(&mut *transaction)
     .await?;
 

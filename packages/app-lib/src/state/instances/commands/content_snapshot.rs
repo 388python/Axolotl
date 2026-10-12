@@ -611,6 +611,20 @@ async fn get_content_snapshot_inner(
             .cloned();
     }
 
+    if let Err(error) = crate::resources::history::attach_to_snapshot(
+        instance_id,
+        &mut items,
+        state,
+    )
+    .await
+    {
+        warnings.push(InstanceContentWarning {
+            code: "resource_history_unavailable".into(),
+            message: error.to_string(),
+            provider: None,
+        });
+    }
+
     items.sort_by(|left, right| {
         left.expected_relative_path
             .to_lowercase()

@@ -325,8 +325,12 @@ import {
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
+    resourceChangelog,
     resourceCheckUpdates,
     resourceListHistory,
+    resourceReleaseDocuments,
+    resourceReleases,
+    type SourceProjectRef,
     type SourceReleaseRef,
 } from '@/helpers/resources'
 import type { CacheBehaviour, GameInstance } from '@/helpers/types'
@@ -1099,6 +1103,7 @@ function handleViewDependencies() {
 // TODO: Extract content operation and updater modal state into composables; this page currently owns file mutations, dependency installs, busy flags, and version selection flow.
 const updatingProject = ref<ContentItem | null>(null)
 const updatingProjectVersions = ref<Labrinth.Versions.v2.Version[]>([])
+const updaterReleaseRefs = new Map<string, SourceReleaseRef>()
 const loadingVersions = ref(false)
 const loadingChangelog = ref(false)
 const contentUpdateSubmitting = ref(false)
@@ -1445,11 +1450,76 @@ async function getUpdaterProjectVersions(
     pinnedVersionId?: string,
     item?: ContentItem | null,
 ) {
+    if (item?.instanceEntryId) {
+        const snapshot = contentSnapshot.value?.items.find(
+            (entry) => entry.entryId === item.instanceEntryId,
+        )
+        if (!snapshot?.provider || !snapshot.providerProjectId) return []
+        const project: SourceProjectRef = {
+            source: snapshot.provider,
+            projectId: snapshot.providerProjectId,
+        }
+        const requestId = activeUpdateRequestId.value
+        const releases = []
+        let cursor: string | null = null
+        const cursors = new Set<string>()
+        do {
+            const page = await resourceReleases({ kind: 'source', project }, undefined, cursor)
+            if (!isActiveUpdateRequest(requestId)) return []
+            releases.push(...page.entries)
+            cursor = page.cursor
+            if (cursor && cursors.has(cursor)) throw new Error('Release cursor repeated')
+            if (cursor) cursors.add(cursor)
+        } while (cursor)
+        if (
+            pinnedVersionId &&
+            !releases.some((release) => release.reference.releaseId === pinnedVersionId)
+        ) {
+            const [document] = await resourceReleaseDocuments(
+                project.source,
+                [pinnedVersionId],
+                project.projectId,
+            )
+            if (!isActiveUpdateRequest(requestId)) return []
+            if (document) releases.push(document.release)
+        }
+        return sortVersionsByPublishedDate(
+            releases.map((release) => {
+                updaterReleaseRefs.set(release.reference.releaseId, release.reference)
+                return {
+                    id: release.reference.releaseId,
+                    project_id: release.reference.project.projectId,
+                    name: release.version,
+                    version_number: release.version,
+                    date_published: release.publishedAt ?? '',
+                    version_type: release.channel,
+                    game_versions: release.compatibility.gameVersions,
+                    loaders: release.compatibility.loaders,
+                    changelog:
+                        project.source === 'mcarchive' || project.source === 'planet_minecraft'
+                            ? ''
+                            : undefined,
+                    files: release.artifacts.map((artifact) => ({
+                        filename: artifact.fileName ?? '',
+                        url:
+                            artifact.acquisition.kind === 'publicDownload'
+                                ? (artifact.acquisition.urls[0] ?? '')
+                                : '',
+                        primary: artifact.role === 'primary',
+                        size: artifact.integrity.size ?? 0,
+                        hashes: Object.fromEntries(
+                            artifact.integrity.hashes.map((hash) => [hash.algorithm, hash.value]),
+                        ),
+                    })),
+                } as Labrinth.Versions.v2.Version
+            }),
+        )
+    }
     const itemCurseForgeProjectId = getCurseForgeProjectIdForItem(item)
     const curseForgeProjectId = itemCurseForgeProjectId ?? parseCurseForgeProjectId(projectId)
     const useCurseForge =
         item?.origin_provider === 'curseforge' ||
-        isCurseForgeLinkedModpack.value ||
+        (!item && isCurseForgeLinkedModpack.value) ||
         projectId.startsWith('curseforge:')
     if (useCurseForge) {
         if (curseForgeProjectId == null) return []
@@ -2131,10 +2201,13 @@ async function switchProjectVersion(mod: ContentItem, version: Labrinth.Versions
             : 'modrinth'
     const projectId = source === 'curseforge' ? String(cfId) : version.project_id
     try {
-        return await reviewResourceChanges([mod.instanceEntryId], {
-            project: { source, projectId },
-            releaseId: version.id,
-        })
+        return await reviewResourceChanges(
+            [mod.instanceEntryId],
+            updaterReleaseRefs.get(version.id) ?? {
+                project: { source, projectId },
+                releaseId: version.id,
+            },
+        )
     } catch (err) {
         handleError(err as Error)
         return false
@@ -2184,6 +2257,7 @@ async function handleSwitchVersion(item: ContentItem) {
 
     const requestId = beginUpdateRequest()
     const itemId = getContentItemId(item)
+    updaterReleaseRefs.clear()
 
     updatingModpack.value = false
     updatingProject.value = item
@@ -2196,14 +2270,15 @@ async function handleSwitchVersion(item: ContentItem) {
     const initialVersionId = item.version.id
     contentUpdaterModal.value?.show(initialVersionId, { switchMode: true })
 
-    const versions = await getUpdaterProjectVersions(item.project.id, initialVersionId, item)
-
-    if (!isActiveUpdateRequest(requestId) || getContentItemId(updatingProject.value) !== itemId)
-        return
-
-    loadingVersions.value = false
-
-    updatingProjectVersions.value = versions
+    try {
+        const versions = await getUpdaterProjectVersions(item.project.id, initialVersionId, item)
+        if (isActiveUpdateRequest(requestId) && getContentItemId(updatingProject.value) === itemId)
+            updatingProjectVersions.value = versions
+    } catch (error) {
+        if (isActiveUpdateRequest(requestId)) handleError(error as Error)
+    } finally {
+        if (isActiveUpdateRequest(requestId)) loadingVersions.value = false
+    }
 }
 
 async function refreshContentState(cacheBehaviour?: CacheBehaviour) {
@@ -2360,11 +2435,29 @@ async function fetchAndSpliceCurseForgeVersion(
     }
 }
 
+async function fetchResourceChangelog(version: Labrinth.Versions.v2.Version, requestId: number) {
+    const reference = updaterReleaseRefs.get(version.id)
+    if (!reference) return
+    try {
+        const text = await resourceChangelog(reference)
+        if (isActiveUpdateRequest(requestId)) {
+            updatingProjectVersions.value = mergeVersionIntoList(updatingProjectVersions.value, {
+                ...version,
+                changelog: text.body,
+            })
+        }
+    } catch (error) {
+        if (isActiveUpdateRequest(requestId)) handleError(error as Error)
+    }
+}
+
 async function handleVersionSelect(version: Labrinth.Versions.v2.Version) {
     if (version.changelog != null) return
     const requestId = activeUpdateRequestId.value
     loadingChangelog.value = true
-    if (isCurseForgeUpdaterRequest()) {
+    if (updaterReleaseRefs.has(version.id)) {
+        await fetchResourceChangelog(version, requestId)
+    } else if (isCurseForgeUpdaterRequest()) {
         await fetchAndSpliceCurseForgeVersion(version.id, requestId)
     } else {
         await fetchAndSpliceVersion(
@@ -2381,6 +2474,10 @@ async function handleVersionSelect(version: Labrinth.Versions.v2.Version) {
 
 async function handleVersionHover(version: Labrinth.Versions.v2.Version) {
     if (version.changelog != null) return
+    if (updaterReleaseRefs.has(version.id)) {
+        await fetchResourceChangelog(version, activeUpdateRequestId.value)
+        return
+    }
     if (isCurseForgeUpdaterRequest()) {
         await fetchAndSpliceCurseForgeVersion(version.id, activeUpdateRequestId.value)
         return
@@ -2389,6 +2486,7 @@ async function handleVersionHover(version: Labrinth.Versions.v2.Version) {
 }
 
 function resetUpdateState() {
+    updaterReleaseRefs.clear()
     activeUpdateRequestId.value = 0
     updatingModpack.value = false
     updatingProject.value = null
@@ -2714,6 +2812,19 @@ function applyContentData(contentData: InstanceContentData) {
     }
     projects.value = contentItems
     linkedModpackContentItems.value = linkedContentItems
+    if (updatingProject.value) {
+        const entryId = updatingProject.value.instanceEntryId
+        const refreshed = [...contentItems, ...linkedContentItems].find((item) =>
+            entryId
+                ? item.instanceEntryId === entryId
+                : item.file_path === updatingProject.value?.file_path,
+        )
+        if (refreshed) updatingProject.value = refreshed
+        else {
+            contentUpdaterModal.value?.hide()
+            resetUpdateState()
+        }
+    }
     dependencyGraphModal.value?.setItems(allDependencyGraphItems())
 
     if (contentData.modpack) {

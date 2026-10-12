@@ -16,7 +16,8 @@ pub async fn check(
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceUpdateCheck> {
     let state = crate::State::get().await?;
-    let entries = installed::hydrate(&state, &instance_id, cancel).await?;
+    let hydrated =
+        installed::hydrate_with_failures(&state, &instance_id, cancel).await?;
     let instance = crate::state::get_instance(&instance_id, &state.pool)
         .await?
         .ok_or_else(|| {
@@ -33,12 +34,23 @@ pub async fn check(
         entries: vec![],
         releases: std::collections::HashMap::new(),
         unresolved: vec![],
-        failures: vec![],
-        failed_entries: vec![],
+        failures: hydrated
+            .failures
+            .iter()
+            .map(|(_, error)| error.clone())
+            .collect(),
+        failed_entries: hydrated
+            .failures
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect(),
     };
-    for entry in entries.into_iter().filter(|entry| !entry.missing) {
+    for entry in hydrated.entries.into_iter().filter(|entry| !entry.missing) {
         if cancel.is_cancelled() {
             return Err(ResourceError::Canceled);
+        }
+        if result.failed_entries.contains(&entry.entry_id) {
+            continue;
         }
         let Some(artifact) = &entry.artifact else {
             result.unresolved.push(entry.relative_path);
@@ -88,20 +100,11 @@ pub async fn check(
                 ) {
                     continue;
                 }
-                match service.release(&artifact.release, None, cancel).await {
-                    Ok(current) if release_is_newer(&release, &current) => {
-                        result
-                            .releases
-                            .insert(entry.entry_id.clone(), release.reference);
-                        result.entries.push(entry.entry_id)
-                    }
-                    Ok(_) => {}
-                    Err(error) => {
-                        result.failed_entries.push(entry.entry_id.clone());
-                        result
-                            .failures
-                            .push(format!("{}: {error}", entry.relative_path));
-                    }
+                if release_is_newer(&release, &current) {
+                    result
+                        .releases
+                        .insert(entry.entry_id.clone(), release.reference);
+                    result.entries.push(entry.entry_id)
                 }
             }
             Err(ResourceError::Canceled) => {

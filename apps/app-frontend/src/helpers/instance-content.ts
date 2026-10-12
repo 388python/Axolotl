@@ -123,7 +123,13 @@ export async function loadInstanceContentData(
                 dependency: item.dependency ?? null,
             }
         }) satisfies ContentItem[]
-        if (cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate') {
+        if (normalizedItems.some((item) => item.instanceEntryId)) {
+            for (const item of normalizedItems) {
+                item.update = null
+                item.resourceUpdate = null
+                if (item.instanceCapabilities)
+                    item.instanceCapabilities = { ...item.instanceCapabilities, canUpdate: false }
+            }
             try {
                 const updates = await resourceCheckUpdates(path)
                 for (const item of normalizedItems) {
@@ -133,7 +139,6 @@ export async function loadInstanceContentData(
                         updates.unresolved.includes(item.file_path ?? '')
                     )
                         continue
-                    item.update = null
                     item.resourceUpdate = updates.releases[item.instanceEntryId] ?? null
                     if (item.instanceCapabilities)
                         item.instanceCapabilities = {

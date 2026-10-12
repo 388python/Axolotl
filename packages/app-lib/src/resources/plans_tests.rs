@@ -57,13 +57,23 @@ async fn the_same_datapack_in_two_worlds_produces_two_scoped_actions() {
 async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
 {
     let mut a = release("root0000", "1", 'a');
-    let mr_dep = release("dep00000", "1", 'c');
+    let mut mr_dep = release("dep00000", "1", 'c');
     let mut cf_dep = release("123", "1", 'c');
     let mut cf_root = release("456", "1", 'd');
     for release in [&mut cf_dep, &mut cf_root] {
         release.reference.project.source = SourceId::curseforge();
+        release.reference.release_id = SourceReleaseId::new(
+            if release.reference.project.project_id.as_str() == "123" {
+                "101"
+            } else {
+                "102"
+            },
+        )
+        .unwrap();
         release.artifacts[0].reference.release = release.reference.clone();
     }
+    mr_dep.reference.release_id = SourceReleaseId::new("depver01").unwrap();
+    mr_dep.artifacts[0].reference.release = mr_dep.reference.clone();
     requires(&mut a, &mr_dep, ResourceDependencyKind::Required);
     requires(&mut cf_root, &cf_dep, ResourceDependencyKind::Required);
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -470,6 +480,35 @@ async fn optional_dependency_closure_only_appears_after_activation_and_can_be_re
 }
 
 #[tokio::test]
+async fn duplicate_with_target_bytes_does_not_satisfy_the_entry_being_updated()
+{
+    let old = release("root0000", "1", 'a');
+    let new = release("root0000", "2", 'b');
+    let (_directory, service) = service(vec![old.clone(), new.clone()]).await;
+    let mut already_new = installed(&new, "copy", "mods/copy.jar");
+    already_new.enabled = true;
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("root", &new, Some("old"))],
+                ResourceOperationIntent::Update,
+            ),
+            &target(),
+            &[installed(&old, "old", "mods/original.jar"), already_new],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(plan.actions.len(), 1);
+    assert_eq!(plan.actions[0].entry_id.as_str(), "old");
+    assert_eq!(plan.nodes[0].state, DependencyNodeState::Update);
+    assert!(plan.nodes[0].installed_entries.is_empty());
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn optional_dependency_of_a_required_dependency_stays_a_candidate() {
     let mut a = release("root0000", "1", 'a');
     let mut c = release("dep00000", "1", 'c');
@@ -505,8 +544,7 @@ async fn optional_dependency_of_a_required_dependency_stays_a_candidate() {
     }));
     let parent = draft.plan.nodes.iter().find(|node| {
         node.artifact.as_ref().is_some_and(|artifact| {
-            artifact.reference.release.project.project_id.as_str()
-                == "dep00000"
+            artifact.reference.release.project.project_id.as_str() == "dep00000"
         })
     });
     let parent = parent.expect("required dependency node");

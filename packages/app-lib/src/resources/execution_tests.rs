@@ -194,7 +194,13 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
  {
     let (_temp, state, original, old, root) = fixture().await;
     std::fs::write(root.join("new.zip"), b"new bytes").unwrap();
-    let target = artifact(SourceId::curseforge(), "123", "456", b"new bytes");
+    let mut target =
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes");
+    use sha2::Digest;
+    target.integrity.hashes = vec![ContentHash {
+        algorithm: HashAlgorithm::Sha512,
+        value: format!("{:x}", sha2::Sha512::digest(b"new bytes")),
+    }];
     let plan =
         local_plan(&state, original.clone(), target.clone(), "new.zip", None)
             .await;
@@ -217,6 +223,36 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     assert_eq!(changed.relative_path, original.relative_path);
     assert!(!changed.enabled);
     assert_eq!(changed.artifact, Some(target.reference));
+    let mut snapshot = vec![crate::state::InstanceContentSnapshotItem {
+        resource_id: None,
+        pack_resource_id: None,
+        file_id: None,
+        entry_id: Some(original.entry_id.as_str().into()),
+        member_id: None,
+        ownership_kind: ContentOwnershipKind::UserAdded,
+        materialization_state: crate::state::PackMemberMaterializationState::Present,
+        override_kind: crate::state::PackMemberOverrideKind::None,
+        expected_relative_path: original.relative_path.clone(),
+        required: false,
+        project_type: ProjectType::ResourcePack,
+        provider: None,
+        provider_project_id: None,
+        provider_release_id: None,
+        content: Some(crate::state::ContentItem {
+            file_name: "prefix-old.zip.disabled".into(),
+            ..serde_json::from_value(serde_json::json!({
+                "file_name": "prefix-old.zip.disabled", "project_type": "resourcepack",
+                "file_path": original.relative_path, "id": "test", "size": 9,
+                "enabled": false, "provider_refs": [], "external": false
+            })).unwrap()
+        }),
+        capabilities: Default::default(),
+        dependency: None,
+    }];
+    history::attach_to_snapshot("instance", &mut snapshot, &state)
+        .await
+        .unwrap();
+    assert!(snapshot[0].content.as_ref().unwrap().rollback.is_some());
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM instance_content_entries")
             .fetch_one(&state.pool)
@@ -242,6 +278,60 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     );
     assert!(serde_json::from_str::<serde_json::Value>(&history_json).unwrap()["previousArtifact"].is_object());
     execute("instance", &plan, None, &state).await.unwrap();
+    let request = crate::install::InstallRequest::InstallContentBatch {
+        instance_id: "instance".into(),
+        items: vec![crate::install::InstallContentBatchItem::FrozenResource {
+            plan: plan.clone(),
+        }],
+        display_title: "Test".into(),
+        display_icon: None,
+    };
+    assert!(
+        plans::frozen_request_completed(&request, &state.pool)
+            .await
+            .unwrap()
+    );
+    let mut job = crate::install::model::InstallJobState::new(request);
+    job.record_event(crate::install::InstallJobEventKind::JobSucceeded {
+        instance_id: Some("instance".into()),
+    });
+    let job_id = uuid::Uuid::new_v4();
+    crate::install::store::insert(
+        job_id,
+        &job,
+        crate::install::InstallJobStatus::Canceling,
+        &state,
+    )
+    .await
+    .unwrap();
+    let completed =
+        crate::install::store::complete_running_job(job_id, &job, &state)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        completed.status,
+        crate::install::InstallJobStatus::Succeeded
+    );
+    let restart_id = uuid::Uuid::new_v4();
+    crate::install::store::insert(
+        restart_id,
+        &job,
+        crate::install::InstallJobStatus::Running,
+        &state,
+    )
+    .await
+    .unwrap();
+    crate::install::recovery::recover_interrupted_jobs(&state)
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::install::store::get_required(restart_id, &state)
+            .await
+            .unwrap()
+            .status,
+        crate::install::InstallJobStatus::Succeeded
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM resource_history")
             .fetch_one(&state.pool)

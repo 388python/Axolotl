@@ -129,6 +129,18 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
                 None => RunResult::Canceled,
             }
         };
+    let resource_committed = crate::resources::plans::frozen_request_completed(
+        &job_state.request,
+        &state.pool,
+    )
+    .await?;
+    let result = if resource_committed {
+        RunResult::Completed(Ok(InstallExecutionOutcome::Completed(
+            current_instance_id(&job_state),
+        )))
+    } else {
+        result
+    };
     state.install_job_cancellations.remove(&job_id);
     let execution_state = job_state;
     let reporter_state = live_reporter.current_state().await?;
@@ -142,7 +154,7 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
             if let Some(instance_id) = instance_id.as_ref() {
                 set_instance_id(&mut job_state, instance_id.clone());
             }
-            if cancellation.is_cancelled() {
+            if cancellation.is_cancelled() && !resource_committed {
                 finish_canceled_job(job_id, &mut job_state, &state).await?;
                 return Ok(());
             }
@@ -196,6 +208,16 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
                     error = %error,
                     "Install job succeeded, but its final instance event could not be emitted"
                 );
+            }
+            if resource_committed
+                && let Some(instance_id) = instance_id.as_ref()
+            {
+                if let Err(error) =
+                    crate::api::instance::emit_content_changed(instance_id)
+                        .await
+                {
+                    tracing::warn!(%error, instance_id, "Could not emit committed resource content change");
+                }
             }
             if let Err(error) =
                 recovery::discard_content_rollback(&mut job_state, &state).await

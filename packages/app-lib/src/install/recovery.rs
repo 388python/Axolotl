@@ -22,6 +22,39 @@ pub async fn recover_interrupted_jobs(state: &State) -> crate::Result<()> {
     let jobs = store::list_interrupted_candidates(state).await?;
 
     for mut job in jobs {
+        if crate::resources::plans::frozen_request_completed(
+            &job.state.request,
+            &state.pool,
+        )
+        .await?
+        {
+            apply_cleanup(&mut job.state, state).await?;
+            job.state.progress.phase = InstallPhaseId::Finalizing;
+            job.state.progress.progress = None;
+            job.state.progress.details = InstallPhaseDetails::Empty;
+            job.state.progress.parallel = None;
+            job.state.error = None;
+            job.state.rollback_error = None;
+            job.state.context = None;
+            job.state.pause_reason = None;
+            job.state.missing_content = None;
+            job.state.rollback = None;
+            job.state.record_event(InstallJobEventKind::JobSucceeded {
+                instance_id: Some(job.instance_id.clone().ok_or_else(
+                    || {
+                        crate::ErrorKind::InputError(
+                            "committed resource job has no instance".into(),
+                        )
+                    },
+                )?),
+            });
+            if let Some(record) =
+                store::complete_running_job(job.id, &job.state, state).await?
+            {
+                emit_install_job(&record.snapshot()).await?;
+                continue;
+            }
+        }
         if job.state.display.is_none() {
             job.state.display = display_from_request(&job.state);
         }

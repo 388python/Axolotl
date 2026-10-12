@@ -12,15 +12,32 @@ pub async fn list(
     entry_id: Option<InstalledEntryId>,
 ) -> ResourceResult<Vec<ResourceHistoryEntry>> {
     let state = crate::State::get().await?;
+    list_with_state(&instance_id, entry_id.as_ref(), &state).await
+}
+
+pub(crate) async fn list_with_state(
+    instance_id: &str,
+    entry_id: Option<&InstalledEntryId>,
+    state: &crate::State,
+) -> ResourceResult<Vec<ResourceHistoryEntry>> {
+    read_history(instance_id, entry_id, state, true).await
+}
+
+async fn read_history(
+    instance_id: &str,
+    entry_id: Option<&InstalledEntryId>,
+    state: &crate::State,
+    verify_backups: bool,
+) -> ResourceResult<Vec<ResourceHistoryEntry>> {
     let rows = if let Some(entry_id) = entry_id {
-        sqlx::query("SELECT payload FROM resource_history WHERE instance_id = ? AND entry_id = ? ORDER BY recorded_at DESC, rowid DESC")
+        sqlx::query("SELECT payload, backup_available FROM resource_history WHERE instance_id = ? AND entry_id = ? ORDER BY recorded_at DESC, rowid DESC")
             .bind(&instance_id)
             .bind(entry_id.as_str())
             .fetch_all(&state.pool)
             .await
             .map_err(db)?
     } else {
-        sqlx::query("SELECT payload FROM resource_history WHERE instance_id = ? ORDER BY recorded_at DESC, rowid DESC")
+        sqlx::query("SELECT payload, backup_available FROM resource_history WHERE instance_id = ? ORDER BY recorded_at DESC, rowid DESC")
             .bind(&instance_id)
             .fetch_all(&state.pool)
             .await
@@ -39,27 +56,102 @@ pub async fn list(
     .map_err(|error| ResourceError::InvalidRequest(error.to_string()))?;
     let mut entries = Vec::new();
     for row in rows {
-        let mut entry: ResourceHistoryEntry =
-            serde_json::from_str(row.get("payload"))?;
+        let Ok(mut entry) =
+            serde_json::from_str::<ResourceHistoryEntry>(row.get("payload"))
+        else {
+            continue;
+        };
         entry.backup_available =
             match (&entry.backup_relative_path, &entry.backup_integrity) {
-                (Some(path), Some(integrity)) if entry.backup_available => {
-                    super::execution::matches_file(
-                        &super::execution::checked_path(&root, path).map_err(
-                            |error| {
-                                ResourceError::InvalidRequest(error.to_string())
-                            },
-                        )?,
-                        integrity,
-                    )
-                    .await
-                    .unwrap_or(false)
+                (Some(path), Some(integrity))
+                    if entry.backup_available
+                        && row.get::<i64, _>("backup_available") != 0 =>
+                {
+                    if !verify_backups {
+                        true
+                    } else {
+                        match super::execution::checked_path(&root, path) {
+                            Ok(path) => {
+                                super::execution::matches_file(&path, integrity)
+                                    .await
+                                    .unwrap_or(false)
+                            }
+                            Err(_) => false,
+                        }
+                    }
                 }
                 _ => false,
             };
         entries.push(entry);
     }
     Ok(entries)
+}
+
+pub(crate) async fn attach_to_snapshot(
+    instance_id: &str,
+    items: &mut [crate::state::InstanceContentSnapshotItem],
+    state: &crate::State,
+) -> ResourceResult<()> {
+    let histories = read_history(instance_id, None, state, false).await?;
+    if histories.is_empty() {
+        return Ok(());
+    }
+    let scope = crate::state::instances::commands::resolve_content_scope(
+        instance_id,
+        None,
+        state,
+    )
+    .await?;
+    let root = crate::state::instances::commands::instance_content_root(
+        &state.directories,
+        &scope.instance,
+    )
+    .map_err(|error| ResourceError::InvalidRequest(error.to_string()))?;
+    let installed = plans::installed(&state.pool, instance_id).await?;
+    for item in items {
+        let Some(current) = installed.iter().find(|entry| {
+            Some(entry.entry_id.as_str()) == item.entry_id.as_deref()
+        }) else {
+            continue;
+        };
+        let Some(content) = item.content.as_mut() else {
+            continue;
+        };
+        if let Some(history) = histories.iter().find(|history| {
+            history.entry_id == current.entry_id
+                && history.backup_available
+                && current.artifact == history.target.artifact
+                && current.relative_path == history.target.relative_path
+                && identity::exact_integrity(
+                    &current.integrity,
+                    &history.target.integrity,
+                )
+        }) {
+            let (Some(backup), Some(integrity)) =
+                (&history.backup_relative_path, &history.backup_integrity)
+            else {
+                continue;
+            };
+            let Ok(backup) = super::execution::checked_path(&root, backup)
+            else {
+                continue;
+            };
+            if !super::execution::matches_file(&backup, integrity)
+                .await
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            content.rollback = Some(crate::state::ContentItemRollback {
+                file_name: history
+                    .previous
+                    .original_file_name
+                    .clone()
+                    .unwrap_or_else(|| history.previous.relative_path.clone()),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub async fn rollback(

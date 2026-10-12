@@ -118,12 +118,14 @@ pub use self::screenshot_groups::{
     list_screenshot_groups, rename_screenshot_group,
     set_screenshot_group_memberships,
 };
-pub(crate) use self::screenshots::reconcile_screenshots;
 pub use self::screenshots::{
     InstanceScreenshot, ScreenshotEditSaveMode, ScreenshotKey,
     delete_screenshots, export_screenshots, get_screenshot_path,
     list_all_screenshots, list_all_screenshots_with_warnings, list_screenshots,
     list_synced_screenshots, move_screenshots, save_edited_screenshot,
+};
+pub(crate) use self::screenshots::{
+    reconcile_screenshots, reconcile_screenshots_with_state,
 };
 pub use self::synced_options::game_options::{
     GameOptionsSourceCandidate, GameSettingLocaleLabels,

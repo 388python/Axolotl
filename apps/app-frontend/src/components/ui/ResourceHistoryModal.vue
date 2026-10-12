@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
-import { onBeforeUnmount, ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
 import { resourceOperationError } from '@/helpers/resource-operation-logic'
@@ -72,8 +72,10 @@ async function rollback(entry: ResourceHistoryEntry) {
         const job = await resourceRollback(entry.instanceId, entry.entryId, entry.id)
         const resolve = resolveShow
         resolveShow = null
+        queueing.value = false
+        await nextTick()
+        await modal.value?.hide()
         resolve?.(job)
-        modal.value?.hide()
     } catch (failure) {
         error.value = resourceOperationError(failure)
     } finally {

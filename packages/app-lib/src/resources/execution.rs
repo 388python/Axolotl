@@ -428,6 +428,11 @@ pub(crate) async fn execute(
     let _writer = state.acquire_install_db_permit().await?;
     let _lock = state.lock_instance_content_exclusive(instance_id).await;
     let scope = resolve_content_scope(instance_id, None, state).await?;
+    if scope.instance.install_stage
+        != crate::state::InstanceInstallStage::Installed
+    {
+        return Err(input("instance is not ready for resource changes"));
+    }
     let root = instance_content_root(&state.directories, &scope.instance)?;
     if sqlx::query_scalar::<_, i64>(
         "SELECT completed FROM resource_operation_plans WHERE id = ?",
@@ -798,7 +803,19 @@ async fn persist_plan(
             )?;
             sqlx::query("UPDATE instance_content_entries SET ownership_kind = ?, source_kind = ?, auto_dependency = ?, server_requirement = ?, client_requirement = ? WHERE id = ?").bind(metadata.ownership_kind.as_str()).bind(metadata.source_kind.as_str()).bind(metadata.auto_dependency as i64).bind(metadata.server_requirement.as_str()).bind(metadata.client_requirement.as_str()).bind(id).execute(&mut *tx).await?;
         }
-        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id).bind(serde_json::to_string(&action.target)?).bind(serde_json::to_string(&plan.nodes.iter().find(|node| node.id == action.node_id).ok_or_else(|| input("node missing"))?.scope)?).execute(&mut *tx).await?;
+        let mut verified_artifact = action.target.clone();
+        if !verified_artifact
+            .integrity
+            .hashes
+            .iter()
+            .any(|hash| hash.algorithm == HashAlgorithm::Sha1)
+        {
+            verified_artifact.integrity.hashes.push(ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: sha1.clone(),
+            });
+        }
+        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id).bind(serde_json::to_string(&verified_artifact)?).bind(serde_json::to_string(&plan.nodes.iter().find(|node| node.id == action.node_id).ok_or_else(|| input("node missing"))?.scope)?).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM instance_content_update_checks WHERE content_entry_id = ?").bind(id).execute(&mut *tx).await?;
         sqlx::query("UPDATE instance_pack_members SET override_kind = 'version' WHERE content_entry_id = ?").bind(id).execute(&mut *tx).await?;
         node_entries

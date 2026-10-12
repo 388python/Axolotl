@@ -5,12 +5,14 @@ import type { ContentItem } from '@modrinth/ui'
 
 import { mergeContentItemMetadata } from './content-item-metadata.ts'
 
-test('lazy update metadata enables the update action on the existing stable entry', () => {
+test('lazy display metadata retains the resource update and history of the stable entry', () => {
     const item = {
         instanceEntryId: 'entry-a',
         instanceMaterializationState: 'present',
         instanceCapabilities: { canUpdate: false, canChangeVersion: true },
         update: null,
+        resourceUpdate: { project: { source: 'curseforge', projectId: '1' }, releaseId: '42' },
+        rollback: { file_name: 'old.jar' },
     } as ContentItem
     for (const update of [
         { provider: 'modrinth', target_version_id: 'new-version' },
@@ -20,10 +22,13 @@ test('lazy update metadata enables the update action on the existing stable entr
         assert.equal(refreshed.instanceEntryId, 'entry-a')
         assert.equal(refreshed.instanceCapabilities?.canUpdate, true)
         assert.equal(refreshed.instanceCapabilities?.canChangeVersion, true)
+        assert.equal(refreshed.update, null)
+        assert.deepEqual(refreshed.resourceUpdate, item.resourceUpdate)
+        assert.deepEqual(refreshed.rollback, item.rollback)
         assert.equal(
             mergeContentItemMetadata(refreshed, { update: null } as ContentItem)
                 .instanceCapabilities?.canUpdate,
-            false,
+            true,
         )
         assert.equal(item.instanceCapabilities?.canUpdate, false)
     }
