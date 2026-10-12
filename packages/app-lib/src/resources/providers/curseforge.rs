@@ -333,9 +333,6 @@ impl CurseForgeProvider {
                 page_size,
                 ..
             } => {
-                if !target.channels.is_empty() {
-                    return Err(ResourceError::Unsupported("CurseForge release channel filtering requires catalog-level pagination".into()));
-                }
                 let id = positive_id(project_id.as_str())?;
                 let start = offset(cursor)?;
                 let mut request =
@@ -354,6 +351,10 @@ impl CurseForgeProvider {
                 let entries = documents
                     .into_iter()
                     .map(|document| document.release)
+                    .filter(|release| {
+                        target.channels.is_empty()
+                            || target.channels.contains(&release.channel)
+                    })
                     .collect();
                 Ok(ProviderValue::Releases(page(
                     response, entries, start, count, *page_size,

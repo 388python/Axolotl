@@ -17,6 +17,7 @@ vi.mock('@/helpers/resources', () => ({
     resourceGet: vi.fn(),
     resourcePrepareEntryOperation: vi.fn(),
     resourcePrepareOperation: vi.fn(),
+    resourceProjectDocuments: vi.fn().mockResolvedValue([]),
     resourceQueuePlan: vi.fn(),
     resourceRevisePlan: vi.fn(),
 }))
@@ -48,7 +49,7 @@ vi.mock('@modrinth/ui', () => ({
     defineMessages: (messages: unknown) => messages,
     useVIntl: () => ({
         formatMessage: (message: { defaultMessage: string }, values?: Record<string, unknown>) =>
-            message.defaultMessage.replace(/\{(name|names|instance)\}/g, (_, key) =>
+            message.defaultMessage.replace(/\{(name|names|instance|path)\}/g, (_, key) =>
                 String(values?.[key] ?? ''),
             ),
     }),
@@ -308,6 +309,53 @@ it('refreshes a stale reviewed plan before queueing and keeps the selected root 
         await flushPromises()
         expect(resourceQueuePlan).toHaveBeenLastCalledWith('refreshed', 7)
         expect(await result).toEqual({ job_id: 'refreshed-job' })
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('hides satisfied entries, labels activated optionals, and phrases blocking issues in place', async () => {
+    ready()
+    const installed = node('installed', 'satisfied', { reference, fileName: 'Installed.jar' })
+    const dependency = node('dependency', 'install', { reference, fileName: 'Dependency.jar' })
+    const addedOptional = node('added-optional', 'selectedRoot', {
+        reference,
+        fileName: 'AddedOptional.jar',
+    })
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue({
+        ...plan(),
+        nodes: [root, installed, dependency, addedOptional, optional],
+        edges: [{ parent: 'dependency', child: 'added-optional', kind: 'optional' }],
+        issues: [
+            {
+                selectionId: 'root',
+                code: 'manualDownloadRequired',
+                blocking: true,
+                message: 'source requires an exact manual download',
+            },
+            {
+                selectionId: 'dependency',
+                code: 'invalidPath',
+                blocking: true,
+                message: 'target already exists: mods/conflict.jar',
+            },
+        ],
+    } as unknown as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        expect(wrapper.text()).not.toContain('Already satisfied')
+        expect(wrapper.text()).not.toContain('source requires an exact manual download')
+        expect(wrapper.text()).not.toContain('target already exists')
+        expect(wrapper.text()).toContain('requires a manual download')
+        expect(wrapper.text()).toContain('mods/conflict.jar is already used by another file')
+        expect(wrapper.text()).toContain('Optional dependency of dependency')
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await result).toBeNull()
     } finally {
         wrapper.unmount()
     }

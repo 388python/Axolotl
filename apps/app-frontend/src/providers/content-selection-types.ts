@@ -9,6 +9,7 @@ import type {
     ContentInstallPreviewPrimary,
     ContentInstallPreviewSkipped,
 } from '@/components/ui/ContentInstallPreviewModal.vue'
+import type ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import type { ContentIdentity } from '@/helpers/content-identity'
 import type { CurseForgeInstallPreview } from '@/helpers/curseforge'
 import type { ResolveContentPlan } from '@/helpers/instance'
@@ -76,6 +77,9 @@ export interface ContentSelectionContext {
         sha1?: string,
     ) => void
     installSelected: () => Promise<boolean>
+    setResourceInstallPreview: (
+        modal: InstanceType<typeof ResourceOperationPreviewModal> | null,
+    ) => void
     setPreviewModal: (modal: InstanceType<typeof ContentInstallPreviewModal> | null) => void
 }
 

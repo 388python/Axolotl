@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Avatar, Button, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
+import { refresh_content } from '@/helpers/instance'
 import { resourceOperationError } from '@/helpers/resource-operation-logic'
 import {
     type ResourceDependencyNode,
@@ -12,8 +13,10 @@ import {
     type ResourcePlanDecision,
     resourcePrepareEntryOperation,
     resourcePrepareOperation,
+    resourceProjectDocuments,
     resourceQueuePlan,
     resourceRevisePlan,
+    type ResourceSelection,
     type SourceReleaseRef,
 } from '@/helpers/resources'
 
@@ -42,6 +45,10 @@ const messages = defineMessages({
         id: 'app.resources.operation.required-by',
         defaultMessage: 'Required by {names}',
     },
+    optionalFor: {
+        id: 'app.resources.operation.optional-for',
+        defaultMessage: 'Optional dependency of {names}',
+    },
     exception: {
         id: 'app.resources.operation.exception',
         defaultMessage: 'Allow this release despite its game version or loader assessment',
@@ -60,12 +67,41 @@ const messages = defineMessages({
     cancel: { id: 'app.resources.operation.cancel', defaultMessage: 'Cancel' },
     apply: { id: 'app.resources.operation.apply', defaultMessage: 'Queue changes' },
     empty: { id: 'app.resources.operation.empty', defaultMessage: 'No file changes are needed.' },
+    manualDownload: {
+        id: 'app.resources.operation.manual-download',
+        defaultMessage: '{name} requires a manual download and cannot be installed automatically.',
+    },
+    pathOccupied: {
+        id: 'app.resources.operation.path-occupied',
+        defaultMessage: '{path} is already used by another file, so it cannot be installed.',
+    },
+    sourceUnavailable: {
+        id: 'app.resources.operation.source-unavailable',
+        defaultMessage: 'The source cannot provide this item right now.',
+    },
+    unresolvedOptional: {
+        id: 'app.resources.operation.unresolved-optional',
+        defaultMessage: 'Some optional dependencies could not be resolved.',
+    },
+    missingDependency: {
+        id: 'app.resources.operation.missing-dependency',
+        defaultMessage: 'A required dependency could not be resolved.',
+    },
+    versionConflict: {
+        id: 'app.resources.operation.version-conflict',
+        defaultMessage: 'A version conflict prevents installing this item.',
+    },
+    artifactMismatch: {
+        id: 'app.resources.operation.artifact-mismatch',
+        defaultMessage: 'The selected installed entry does not match this item.',
+    },
 })
 
 type Input = {
     instanceId: string
     instanceName: string
     entryIds: string[]
+    selections?: ResourceSelection[]
     intent: ResourceOperationIntent
     release?: SourceReleaseRef | null
     installDependencies: boolean
@@ -77,18 +113,85 @@ const busy = ref(false)
 const queueing = ref(false)
 const queueFailed = ref(false)
 const error = ref<string | null>(null)
-const names = ref<Record<string, { title: string; iconUrl: string | null }>>({})
+const names = ref<Record<string, { title: string; iconUrl: string | null; summary?: string }>>({})
 let controller: AbortController | null = null
 let generation = 0
 let resolveShow: ((job: InstallJobSnapshot | null) => void) | null = null
 let retryAction: (() => Promise<void>) | null = null
 
-const active = computed(
-    () => plan.value?.nodes.filter((node) => node.state !== 'optionalCandidate') ?? [],
-)
+const active = computed(() => {
+    const issues = plan.value?.issues ?? []
+    return (
+        plan.value?.nodes.filter(
+            (node) =>
+                node.state !== 'optionalCandidate' &&
+                (node.state !== 'satisfied' ||
+                    issues.some((issue) => issue.selectionId === node.id)),
+        ) ?? []
+    )
+})
 const candidates = computed(
     () => plan.value?.nodes.filter((node) => node.state === 'optionalCandidate') ?? [],
 )
+type PlanIssue = ResourceOperationPlan['issues'][number]
+type Notice = { text: string; blocking: boolean }
+function issueNotice(issue: PlanIssue): Notice | null {
+    if (issue.code === 'compatibilityUnknown' || issue.code === 'compatibilityMismatch') return null
+    const node = plan.value?.nodes.find((candidate) => candidate.id === issue.selectionId)
+    const text = (() => {
+        switch (issue.code) {
+            case 'manualDownloadRequired':
+                return formatMessage(messages.manualDownload, {
+                    name: node ? name(node) : (issue.selectionId ?? ''),
+                })
+            case 'invalidPath':
+                return issue.message.startsWith('target already exists: ')
+                    ? formatMessage(messages.pathOccupied, {
+                          path: issue.message.slice('target already exists: '.length),
+                      })
+                    : issue.message
+            case 'sourceUnavailable':
+                return issue.blocking
+                    ? formatMessage(messages.sourceUnavailable)
+                    : formatMessage(messages.unresolvedOptional)
+            case 'missingDependency':
+                return `${formatMessage(messages.missingDependency)} ${issue.message}`
+            case 'versionConflict':
+                return issue.blocking
+                    ? formatMessage(messages.versionConflict)
+                    : formatMessage(messages.unresolvedOptional)
+            case 'artifactMismatch':
+                return formatMessage(messages.artifactMismatch)
+            default:
+                return issue.message
+        }
+    })()
+    return { text, blocking: issue.blocking }
+}
+const notices = computed(() => {
+    const nodes = plan.value?.nodes ?? []
+    const bound = new Map<string, Notice[]>()
+    const other: Notice[] = []
+    for (const issue of plan.value?.issues ?? []) {
+        const notice = issueNotice(issue)
+        if (!notice) continue
+        const node = nodes.find((candidate) => candidate.id === issue.selectionId)
+        if (!node) {
+            other.push(notice)
+            continue
+        }
+        const list = bound.get(node.id) ?? []
+        if (!list.some((existing) => existing.text === notice.text)) list.push(notice)
+        bound.set(node.id, list)
+    }
+    return { bound, other }
+})
+function noticesFor(node: ResourceDependencyNode) {
+    return notices.value.bound.get(node.id) ?? []
+}
+function noticeClass(notice: Notice) {
+    return notice.blocking ? 'text-[var(--color-red)]' : 'text-[var(--color-text-tertiary)]'
+}
 const canApply = computed(
     () =>
         !busy.value &&
@@ -96,19 +199,47 @@ const canApply = computed(
         !plan.value?.issues.some((issue) => issue.blocking),
 )
 function name(node: ResourceDependencyNode) {
-    return names.value[node.id]?.title ?? node.artifact?.fileName ?? ''
+    return (
+        names.value[node.id]?.title ??
+        node.artifact?.fileName ??
+        (node.resource.kind === 'source' ? node.resource.project.projectId : node.resource.id)
+    )
 }
-function requiredBy(id: string) {
-    return (plan.value?.edges ?? [])
-        .filter((edge) => edge.child === id && edge.kind === 'required')
-        .map((edge) => plan.value?.nodes.find((node) => node.id === edge.parent))
-        .filter((node): node is ResourceDependencyNode => !!node)
-        .map(name)
-        .join(', ')
+function requiredBy(id: string, kind = 'required') {
+    return [
+        ...new Set(
+            (plan.value?.edges ?? [])
+                .filter((edge) => edge.child === id && edge.kind === kind)
+                .map((edge) => plan.value?.nodes.find((node) => node.id === edge.parent))
+                .filter((node): node is ResourceDependencyNode => !!node)
+                .map(name),
+        ),
+    ].join(', ')
 }
 async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current: number) {
     await Promise.allSettled(
         value.nodes.map(async (node) => {
+            const cachedRef =
+                node.artifact?.reference.release.project ??
+                (node.resource.kind === 'source' ? node.resource.project : null)
+            if (node.state === 'satisfied' && cachedRef) {
+                const [document] = await resourceProjectDocuments(
+                    cachedRef.source,
+                    [cachedRef.projectId],
+                    signal,
+                    'onlyCached',
+                )
+                if (document && current === generation && !signal.aborted)
+                    names.value = {
+                        ...names.value,
+                        [node.id]: {
+                            title: document.metadata.title,
+                            iconUrl: document.metadata.iconUrl,
+                            summary: document.metadata.summary,
+                        },
+                    }
+                return
+            }
             const resource = await resourceGet(node.resource, undefined, undefined, signal)
             if (current !== generation || signal.aborted) return
             const project =
@@ -119,7 +250,11 @@ async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current
             if (project)
                 names.value = {
                     ...names.value,
-                    [node.id]: { title: project.title, iconUrl: project.iconUrl },
+                    [node.id]: {
+                        title: project.title,
+                        iconUrl: project.iconUrl,
+                        summary: project.summary,
+                    },
                 }
         }),
     )
@@ -167,14 +302,22 @@ function show(value: Input): Promise<InstallJobSnapshot | null> {
         resolveShow = resolve
     })
     void run((signal) =>
-        resourcePrepareEntryOperation(
-            value.instanceId,
-            value.intent,
-            value.entryIds,
-            value.release ?? null,
-            value.installDependencies,
-            signal,
-        ),
+        value.selections
+            ? resourcePrepareOperation(
+                  value.instanceId,
+                  'install',
+                  value.selections,
+                  value.installDependencies,
+                  signal,
+              )
+            : resourcePrepareEntryOperation(
+                  value.instanceId,
+                  value.intent,
+                  value.entryIds,
+                  value.release ?? null,
+                  value.installDependencies,
+                  signal,
+              ),
     )
     return result
 }
@@ -187,9 +330,17 @@ async function apply() {
         const job = await resourceQueuePlan(plan.value.id, plan.value.revision)
         const resolve = resolveShow
         resolveShow = null
+        queueing.value = false
+        await nextTick()
+        await modal.value?.hide()
         resolve?.(job)
-        modal.value?.hide()
     } catch (failure) {
+        if (resourceOperationError(failure).includes('instance changed after review')) {
+            busy.value = false
+            queueing.value = false
+            await refresh()
+            return
+        }
         error.value = resourceOperationError(failure)
         retryAction = apply
         queueFailed.value = true
@@ -204,6 +355,8 @@ async function refresh() {
     if (!current || !value || busy.value) return
     queueFailed.value = false
     await run(async (signal) => {
+        await refresh_content(value.instanceId)
+        signal.throwIfAborted()
         const prepared = await resourcePrepareOperation(
             value.instanceId,
             current.intent,
@@ -231,7 +384,15 @@ function accept(node: ResourceDependencyNode) {
     })
 }
 onBeforeUnmount(hide)
-defineExpose({ show })
+function showInstall(value: {
+    instanceId: string
+    instanceName: string
+    selections: ResourceSelection[]
+    installDependencies: boolean
+}) {
+    return show({ ...value, intent: 'install', entryIds: [] })
+}
+defineExpose({ show, showInstall })
 </script>
 
 <template>
@@ -244,7 +405,21 @@ defineExpose({ show })
         width="min(42rem, 90vw)"
     >
         <div class="flex flex-col gap-3">
-            <p v-if="busy" class="m-0">{{ formatMessage(messages.loading) }}</p>
+            <div v-if="busy && !plan" class="flex flex-col gap-3" role="status">
+                <span class="sr-only">{{ formatMessage(messages.loading) }}</span>
+                <div
+                    v-for="index in 3"
+                    :key="index"
+                    class="flex flex-col gap-2 rounded-lg border border-surface-4 bg-surface-2 p-3"
+                >
+                    <div class="flex items-center gap-2">
+                        <div class="size-8 shrink-0 animate-pulse rounded-full bg-surface-3" />
+                        <div class="h-4 w-2/5 animate-pulse rounded bg-surface-3" />
+                    </div>
+                    <div class="h-3 w-3/5 animate-pulse rounded bg-surface-3" />
+                </div>
+            </div>
+            <p v-if="busy && plan" class="m-0">{{ formatMessage(messages.loading) }}</p>
             <p v-if="plan" class="m-0">
                 {{
                     formatMessage(messages.changes, {
@@ -283,6 +458,12 @@ defineExpose({ show })
                         >×</Button
                     >
                 </div>
+                <p
+                    v-if="names[node.id]?.summary"
+                    class="m-0 text-sm text-[var(--color-text-tertiary)]"
+                >
+                    {{ names[node.id].summary }}
+                </p>
                 <p v-if="node.artifact" class="m-0 break-all text-sm">
                     {{
                         formatMessage(messages.artifact, {
@@ -301,6 +482,21 @@ defineExpose({ show })
                 <p v-if="requiredBy(node.id)" class="m-0 text-sm">
                     {{ formatMessage(messages.requiredBy, { names: requiredBy(node.id) }) }}
                 </p>
+                <p v-else-if="requiredBy(node.id, 'optional')" class="m-0 text-sm">
+                    {{
+                        formatMessage(messages.optionalFor, {
+                            names: requiredBy(node.id, 'optional'),
+                        })
+                    }}
+                </p>
+                <p
+                    v-for="(notice, index) in noticesFor(node)"
+                    :key="index"
+                    class="m-0 text-sm"
+                    :class="noticeClass(notice)"
+                >
+                    {{ notice.text }}
+                </p>
                 <p
                     v-for="action in plan?.actions.filter((action) => action.nodeId === node.id)"
                     :key="action.entryId"
@@ -310,8 +506,9 @@ defineExpose({ show })
                 </p>
                 <template
                     v-if="
-                        node.compatibility.gameVersion !== 'compatible' ||
-                        node.compatibility.loader !== 'compatible'
+                        node.state !== 'satisfied' &&
+                        (node.compatibility.gameVersion !== 'compatible' ||
+                            node.compatibility.loader !== 'compatible')
                     "
                 >
                     <p class="m-0 text-sm">
@@ -354,7 +551,19 @@ defineExpose({ show })
                         :alt="name(node)"
                         size="32px"
                     />
-                    <span class="grow">{{ name(node) }}</span>
+                    <div class="flex min-w-0 grow flex-col gap-1">
+                        <span>{{ name(node) }}</span>
+                        <span
+                            v-if="requiredBy(node.id, 'optional')"
+                            class="text-sm text-[var(--color-text-tertiary)]"
+                        >
+                            {{
+                                formatMessage(messages.optionalFor, {
+                                    names: requiredBy(node.id, 'optional'),
+                                })
+                            }}
+                        </span>
+                    </div>
                     <Button
                         size="sm"
                         :disabled="busy"
@@ -364,20 +573,35 @@ defineExpose({ show })
                     >
                 </div>
             </template>
-            <p v-for="(issue, index) in plan?.issues" :key="index" class="m-0 text-sm">
-                {{ issue.message }}
+            <p
+                v-for="(notice, index) in notices.other"
+                :key="index"
+                class="m-0 text-sm"
+                :class="noticeClass(notice)"
+            >
+                {{ notice.text }}
             </p>
-            <p v-if="plan && !busy && !plan.actions.length" class="m-0">
+            <p
+                v-if="
+                    plan &&
+                    !busy &&
+                    !plan.actions.length &&
+                    !plan.issues.some((issue) => issue.blocking)
+                "
+                class="m-0"
+            >
                 {{ formatMessage(messages.empty) }}
             </p>
         </div>
         <template #actions>
-            <Button :disabled="queueing" @click="modal?.hide()">{{
-                formatMessage(messages.cancel)
-            }}</Button>
-            <Button color="brand" :disabled="!canApply" @click="apply">{{
-                formatMessage(messages.apply)
-            }}</Button>
+            <div class="flex items-center justify-end gap-2">
+                <Button :disabled="queueing" @click="modal?.hide()">{{
+                    formatMessage(messages.cancel)
+                }}</Button>
+                <Button color="brand" :disabled="!canApply" @click="apply">{{
+                    formatMessage(messages.apply)
+                }}</Button>
+            </div>
         </template>
     </NewModal>
 </template>

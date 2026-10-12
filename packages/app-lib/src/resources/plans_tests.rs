@@ -470,6 +470,179 @@ async fn optional_dependency_closure_only_appears_after_activation_and_can_be_re
 }
 
 #[tokio::test]
+async fn optional_dependency_of_a_required_dependency_stays_a_candidate() {
+    let mut a = release("root0000", "1", 'a');
+    let mut c = release("dep00000", "1", 'c');
+    let e = release("opt00000", "1", 'e');
+    requires(&mut a, &c, ResourceDependencyKind::Required);
+    requires(&mut c, &e, ResourceDependencyKind::Optional);
+    let (_directory, service) =
+        service(vec![a.clone(), c.clone(), e.clone()]).await;
+    let draft = service
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(draft.plan.issues.is_empty(), "{:?}", draft.plan.issues);
+    assert_eq!(draft.plan.actions.len(), 2);
+    assert_eq!(draft.candidates.len(), 1);
+    assert!(matches!(
+        &draft.candidates[0].resource,
+        ResourceRef::Source { project }
+            if project.project_id.as_str() == "opt00000"
+    ));
+    let candidate = &draft.candidates[0];
+    assert!(draft.plan.nodes.iter().any(|node| {
+        node.id == candidate.id
+            && node.state == DependencyNodeState::OptionalCandidate
+    }));
+    let parent = draft.plan.nodes.iter().find(|node| {
+        node.artifact.as_ref().is_some_and(|artifact| {
+            artifact.reference.release.project.project_id.as_str()
+                == "dep00000"
+        })
+    });
+    let parent = parent.expect("required dependency node");
+    assert!(draft.plan.edges.iter().any(|edge| {
+        edge.parent == parent.id
+            && edge.child == candidate.id
+            && edge.kind == ResourceDependencyKind::Optional
+    }));
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn curseforge_automatic_roots_and_optional_candidates_resolve_under_channel_targets()
+ {
+    fn file_for(id: u64) -> Value {
+        let mut file: Value = serde_json::from_str(fixtures::CF_IRIS).unwrap();
+        if id == 5425379 {
+            file["id"] = json!(5425379);
+            file["modId"] = json!(394468);
+            file["fileName"] = json!("optional-dependency-1.0.jar");
+            file["displayName"] = json!("Optional Dependency 1.0");
+            file["dependencies"] = json!([]);
+        } else {
+            file["dependencies"] =
+                json!([{"modId": 394468, "relationType": 2}]);
+        }
+        file
+    }
+    let transport = FixtureTransport::new(|_, request| {
+        match request.path.as_str() {
+            "/v1/mods/455508/files" | "/v1/mods/394468/files" => {
+                assert!(
+                    request
+                        .query
+                        .contains(&("gameVersion".into(), "1.20.1".into()))
+                );
+                assert!(
+                    request
+                        .query
+                        .contains(&("modLoaderType".into(), "4".into()))
+                );
+                let id = if request.path.starts_with("/v1/mods/394468") {
+                    5425379
+                } else {
+                    5425378
+                };
+                Ok(json!({
+                    "data": [file_for(id)],
+                    "pagination": {"index": 0, "resultCount": 1, "totalCount": 1}
+                }))
+            }
+            "/v1/mods/files" => {
+                let ids = request.body.as_ref().unwrap()["fileIds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .collect::<Vec<_>>();
+                Ok(json!({
+                    "data": ids.into_iter().map(file_for).collect::<Vec<_>>()
+                }))
+            }
+            "/v1/mods" => {
+                let ids = request.body.as_ref().unwrap()["modIds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .collect::<Vec<_>>();
+                Ok(json!({"data": ids.into_iter().map(|id| json!({
+                    "id": id,
+                    "name": format!("Project {id}"),
+                    "slug": format!("project-{id}"),
+                    "classId": 6
+                })).collect::<Vec<_>>()}))
+            }
+            path => panic!("unexpected endpoint {path}"),
+        }
+    });
+    let (_directory, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
+            transport.clone(),
+        ))))],
+    )
+    .unwrap();
+    let root = ResourceSelection {
+        id: SelectionId::new("root").unwrap(),
+        resource: ResourceRef::Source {
+            project: SourceProjectRef {
+                source: SourceId::curseforge(),
+                project_id: SourceProjectId::new("455508").unwrap(),
+            },
+        },
+        release: ReleaseSelection::Automatic,
+        resource_type: ResourceType::Mod,
+        scope: InstallScope::Instance,
+        entry_id: None,
+    };
+    let first = service
+        .build_operation(
+            draft(vec![root], ResourceOperationIntent::Install),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(first.plan.issues.is_empty(), "{:?}", first.plan.issues);
+    assert_eq!(first.plan.actions.len(), 1);
+    assert_eq!(first.candidates.len(), 1);
+    assert!(first.plan.nodes.iter().any(|node| {
+        node.state == DependencyNodeState::OptionalCandidate
+            && matches!(&node.resource, ResourceRef::Source { project } if project.project_id.as_str() == "394468")
+    }));
+    let mut active = first;
+    let candidate = active.candidates[0].clone();
+    active.plan.selections.push(candidate.clone());
+    active.plan.active_roots.push(candidate.id.clone());
+    let active = service
+        .build_operation(active, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(active.plan.issues.is_empty(), "{:?}", active.plan.issues);
+    assert_eq!(active.plan.actions.len(), 2);
+    assert_eq!(active.plan.edges.len(), 1);
+    assert!(active.plan.nodes.iter().any(|node| {
+        node.artifact.as_ref().is_some_and(|artifact| {
+            artifact.reference.release.project.project_id.as_str() == "394468"
+        })
+    }));
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn dependency_conflicts_and_foreign_entry_ownership_block_a_plan() {
     let mut a = release("root0000", "1", 'a');
     let mut d = release("root1111", "1", 'd');

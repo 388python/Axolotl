@@ -205,9 +205,28 @@ pub(crate) async fn installed(
                 }
             });
         let links = sqlx::query("SELECT resource_id, source, project_id, release_id, artifact_id, is_origin FROM resource_entry_links WHERE entry_id = ? ORDER BY is_origin DESC").bind(&entry_id).fetch_all(pool).await.map_err(db)?;
-        let resource_id = links.first().and_then(|row| {
+        let mut resource_id = links.first().and_then(|row| {
             ResourceId::new(row.get::<String, _>("resource_id")).ok()
         });
+        if resource_id.is_none() {
+            let refs = crate::state::instances::adapters::sqlite::content_rows::get_content_provider_refs(&entry_id, pool).await?;
+            let origin = crate::state::instances::adapters::sqlite::content_rows::get_content_origin_provider(&entry_id, pool).await?;
+            if let Some(reference) = refs
+                .iter()
+                .find(|reference| Some(reference.provider()) == origin)
+                .or_else(|| refs.first())
+            {
+                let project = SourceProjectRef {
+                    source: SourceId::new(reference.provider().as_str())?,
+                    project_id: SourceProjectId::new(
+                        reference.database_project_id(),
+                    )?,
+                };
+                if crate::state::instances::adapters::sqlite::resource_rows::validate_project(&project).is_ok() {
+                    resource_id = Some(crate::state::resources::ResourceStore::new(pool.clone()).ensure_project(&project, &[resource_type]).await?);
+                }
+            }
+        }
         let artifact = exact
             .as_ref()
             .map(|file| file.reference.clone())
@@ -324,6 +343,14 @@ impl ResourceService {
         ResourceArtifact,
         ReleaseSelectionBasis,
     )> {
+        let mut dependency_target;
+        let target = if selection.id.as_str().starts_with("dependency:") {
+            dependency_target = target.clone();
+            dependency_target.channels.clear();
+            &dependency_target
+        } else {
+            target
+        };
         let (_, projects) = self.source_projects(&selection.resource).await?;
         let (release, basis) = match &selection.release {
             ReleaseSelection::Release { reference } => {
@@ -348,6 +375,11 @@ impl ResourceService {
             }
             ReleaseSelection::Automatic => {
                 let mut releases = vec![];
+                let mut failures = Vec::new();
+                let mut catalog_target = target.clone();
+                if current.is_none() {
+                    catalog_target.channels.clear();
+                }
                 for project in projects {
                     let mut cursor = None;
                     let mut seen = HashSet::new();
@@ -357,20 +389,33 @@ impl ResourceService {
                         } else {
                             None
                         };
-                        let value = self
+                        let response = self
                             .query(
                                 &project.source,
                                 ProviderQuery::Releases {
                                     project_id: project.project_id.clone(),
                                     slug,
-                                    target: target.clone(),
+                                    target: catalog_target.clone(),
                                     cursor: cursor.clone(),
                                     page_size: 50,
                                 },
                                 CachePolicy::UseFresh,
                                 cancel,
                             )
-                            .await?;
+                            .await;
+                        let value = match response {
+                            Ok(value) => value,
+                            Err(ResourceError::Canceled) => {
+                                return Err(ResourceError::Canceled);
+                            }
+                            Err(error) => {
+                                failures.push(format!(
+                                    "{}: {error}",
+                                    project.source.as_str()
+                                ));
+                                break;
+                            }
+                        };
                         let ProviderValue::Releases(page) = value.value else {
                             return Err(invalid(
                                 "source returned no release page",
@@ -387,10 +432,6 @@ impl ResourceService {
                                     == CompatibilityState::Compatible
                                     && compatibility.loader
                                         == CompatibilityState::Compatible
-                                    && (target.channels.is_empty()
-                                        || target
-                                            .channels
-                                            .contains(&release.channel))
                                     && current.is_none_or(|current| {
                                         !release_is_known_lower(
                                             release, current,
@@ -415,8 +456,31 @@ impl ResourceService {
                         }
                     }
                 }
-                select_automatic_release(releases, preferred)
-                    .ok_or_else(|| invalid("no compatible release found"))?
+                let preferred_channels: Vec<_> = releases
+                    .iter()
+                    .filter(|release| {
+                        target.channels.is_empty()
+                            || target.channels.contains(&release.channel)
+                    })
+                    .cloned()
+                    .collect();
+                if !preferred_channels.is_empty() {
+                    releases = preferred_channels;
+                }
+                select_automatic_release(releases, preferred).ok_or_else(
+                    || {
+                        invalid(format!(
+                            "no compatible release found for {:?} / {:?}{}",
+                            target.game_versions,
+                            target.loaders,
+                            if failures.is_empty() {
+                                String::new()
+                            } else {
+                                format!("; {}", failures.join("; "))
+                            }
+                        ))
+                    },
+                )?
             }
         };
         let artifact = match &selection.release {
@@ -849,17 +913,16 @@ impl ResourceService {
                     "the selected installed entry is missing or belongs to another scope",
                 );
             }
-            let satisfied = candidates
-                .iter()
-                .find(|item| {
-                    !item.missing
-                        && item.enabled
-                        && identity::exact_integrity(
-                            &item.integrity,
-                            &artifact.integrity,
-                        )
-                })
-                .copied();
+            let satisfied = installed.iter().find(|item| {
+                !item.missing
+                    && item.enabled
+                    && item.scope == selection.scope
+                    && item.resource_type == selection.resource_type
+                    && identity::exact_integrity(
+                        &item.integrity,
+                        &artifact.integrity,
+                    )
+            });
             let state = if is_entry_update {
                 if satisfied.is_some() {
                     DependencyNodeState::Satisfied
@@ -1069,15 +1132,11 @@ impl ResourceService {
                         "dependency version constraint needs an exact release",
                     );
                 }
-                if dependency.kind == ResourceDependencyKind::Required
-                    && draft.install_dependencies
-                {
+                if dependency.kind == ResourceDependencyKind::Required {
                     if !resolved.contains_key(&key) {
                         queue.push_back(child);
                     }
-                } else if dependency.kind
-                    != ResourceDependencyKind::Incompatible
-                {
+                } else if dependency.kind == ResourceDependencyKind::Optional {
                     if !draft
                         .candidates
                         .iter()
@@ -1108,41 +1167,109 @@ impl ResourceService {
                 }
             }
         }
-        for candidate in draft.candidates.clone() {
-            if draft.plan.nodes.iter().any(|node| node.id == candidate.id) {
+        let mut candidates = Vec::<ResourceSelection>::new();
+        let mut candidate_ids = HashMap::<String, SelectionId>::new();
+        let mut installed = installed.to_vec();
+        if let Some(store) = self.store() {
+            for node in &mut draft.plan.nodes {
+                if let ResourceRef::Resource { id } = &mut node.resource {
+                    if let Some(current) = store.resolve(id).await? {
+                        *id = current;
+                    }
+                }
+            }
+            for item in &mut installed {
+                if let Some(id) = &item.resource_id {
+                    item.resource_id = store.resolve(id).await?;
+                }
+            }
+        }
+        for mut candidate in draft.candidates.clone() {
+            if let Some(store) = self.store() {
+                let current = match &candidate.resource {
+                    ResourceRef::Source { project } => {
+                        store.lookup(project).await?
+                    }
+                    ResourceRef::Resource { id } => store.resolve(id).await?,
+                };
+                if let Some(id) = current {
+                    candidate.resource = ResourceRef::Resource { id };
+                }
+            }
+            let key = format!(
+                "{}:{}",
+                serde_json::to_string(&candidate.resource)?,
+                serde_json::to_string(&candidate.scope)?
+            );
+            let active = draft.plan.nodes.iter().find(|node| {
+                node.resource == candidate.resource
+                    && node.scope == candidate.scope
+            });
+            let id = active
+                .map(|node| node.id.clone())
+                .or_else(|| candidate_ids.get(&key).cloned())
+                .unwrap_or_else(|| candidate.id.clone());
+            for edge in &mut draft.plan.edges {
+                if edge.child == candidate.id {
+                    edge.child = id.clone();
+                }
+            }
+            if active.is_some() || candidate_ids.contains_key(&key) {
                 continue;
             }
-            let _metadata = self
-                .get(&candidate.resource, None, None, cancel)
-                .await
-                .ok()
-                .and_then(|resource| resource.projects.into_iter().next());
+            candidate_ids.insert(key, id.clone());
+            candidate.id = id;
+            let satisfied: Vec<_> = installed
+                .iter()
+                .filter(|item| {
+                    !item.missing
+                        && item.enabled
+                        && item.scope == candidate.scope
+                        && item.resource_type == candidate.resource_type
+                        && match &candidate.resource {
+                            ResourceRef::Resource { id } => {
+                                item.resource_id.as_ref() == Some(id)
+                            }
+                            ResourceRef::Source { project } => {
+                                item.artifact.as_ref().is_some_and(|artifact| {
+                                    &artifact.release.project == project
+                                })
+                            }
+                        }
+                })
+                .map(|item| item.entry_id.clone())
+                .collect();
+            let node_resource = if satisfied.is_empty() {
+                candidate.resource.clone()
+            } else {
+                let (_, projects) =
+                    self.source_projects(&candidate.resource).await?;
+                ResourceRef::Source {
+                    project: projects[0].clone(),
+                }
+            };
             draft.plan.nodes.push(ResourceDependencyNode {
                 id: candidate.id.clone(),
-                resource: candidate.resource,
-                scope: candidate.scope,
-                state: DependencyNodeState::OptionalCandidate,
+                resource: node_resource,
+                scope: candidate.scope.clone(),
+                state: if satisfied.is_empty() {
+                    DependencyNodeState::OptionalCandidate
+                } else {
+                    DependencyNodeState::Satisfied
+                },
                 artifact: None,
-                installed_entries: vec![],
+                installed_entries: satisfied.clone(),
                 compatibility: CompatibilityAssessment {
                     game_version: CompatibilityState::Unknown,
                     loader: CompatibilityState::Unknown,
                     reasons: vec![],
                 },
             });
-            if draft.plan.edges.iter().any(|edge| {
-                edge.child == candidate.id
-                    && edge.kind == ResourceDependencyKind::Required
-            }) {
-                issue(
-                    &mut draft.plan,
-                    ResourceIssueCode::MissingDependency,
-                    &candidate.id,
-                    true,
-                    "dependency auto-install is disabled; explicitly add the required resource",
-                );
+            if satisfied.is_empty() {
+                candidates.push(candidate);
             }
         }
+        draft.candidates = candidates;
         Ok(draft)
     }
 }
@@ -1379,9 +1506,17 @@ pub async fn revise(
                 && !previous_issues.contains(issue)
         })
     {
-        return Err(invalid(
-            "unable to resolve the added dependency; your previous selection is retained",
-        ));
+        let reasons = draft
+            .plan
+            .issues
+            .iter()
+            .filter(|issue| issue.blocking && !previous_issues.contains(issue))
+            .map(|issue| issue.message.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(invalid(format!(
+            "unable to resolve the added dependency; your previous selection is retained: {reasons}",
+        )));
     }
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);

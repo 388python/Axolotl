@@ -1291,6 +1291,68 @@ async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_to
 }
 
 #[tokio::test]
+async fn curseforge_release_pages_filter_channels_client_side_without_losing_the_source_window()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/v1/mods/455508/files");
+        assert!(request.query.contains(&("index".into(), "0".into())));
+        assert!(request.query.contains(&("pageSize".into(), "50".into())));
+        let release: Value = serde_json::from_str(fixtures::CF_IRIS).unwrap();
+        let mut beta = release.clone();
+        beta["id"] = json!(5425379);
+        beta["releaseType"] = json!(2);
+        let mut alpha = release.clone();
+        alpha["id"] = json!(5425380);
+        alpha["releaseType"] = json!(3);
+        Ok(json!({
+            "data": [release, beta, alpha],
+            "pagination": {"index": 0, "resultCount": 3, "totalCount": 3}
+        }))
+    });
+    let query = |channels: Vec<ReleaseChannel>| ProviderQuery::Releases {
+        project_id: SourceProjectId::new("455508").unwrap(),
+        slug: None,
+        target: ipc::ResourceTarget {
+            game_versions: vec![],
+            loaders: vec![],
+            channels,
+        },
+        cursor: None,
+        page_size: 50,
+    };
+    let provider = CurseForgeProvider::new(transport);
+    let results = provider
+        .fetch_many(&[query(vec![ReleaseChannel::Release])])
+        .await;
+    let ProviderValue::Releases(stable) = results[0].as_ref().unwrap() else {
+        panic!("wrong page: {results:?}");
+    };
+    assert_eq!(stable.entries.len(), 1);
+    assert_eq!(stable.entries[0].channel, ReleaseChannel::Release);
+    assert_eq!(stable.total.value, Some(3));
+    assert_eq!(stable.total.precision, ipc::TotalPrecision::Exact);
+    assert!(stable.cursor.is_none());
+    assert!(!stable.window_exhausted);
+
+    let results = provider
+        .fetch_many(&[query(vec![
+            ReleaseChannel::Release,
+            ReleaseChannel::Beta,
+        ])])
+        .await;
+    let ProviderValue::Releases(prerelease) = results[0].as_ref().unwrap()
+    else {
+        panic!("wrong page: {results:?}");
+    };
+    assert_eq!(prerelease.entries.len(), 2);
+    assert!(prerelease.entries.iter().all(|release| matches!(
+        release.channel,
+        ReleaseChannel::Release | ReleaseChannel::Beta
+    )));
+    assert_eq!(prerelease.total.value, Some(3));
+}
+
+#[tokio::test]
 async fn clear_leaves_main_database_facts_and_source_namespaces_intact() {
     let (temp, cache) = cache().await;
     let main = sqlx::sqlite::SqlitePoolOptions::new()

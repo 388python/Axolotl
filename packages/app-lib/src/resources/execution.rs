@@ -11,6 +11,7 @@ use crate::state::{
 use crate::util::fetch::{
     self, ContentValidation, DownloadRequest, Integrity, ResourceClass,
 };
+use futures::{FutureExt, TryStreamExt, stream::FuturesUnordered};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::{
@@ -155,6 +156,7 @@ pub(crate) fn checked_path(
     if !plans::safe_relative_path(relative) {
         return Err(input("invalid resource relative path"));
     }
+    let canonical_root = std::fs::canonicalize(root)?;
     let path = relative
         .split('/')
         .fold(root.to_path_buf(), |path, part| path.join(part));
@@ -166,7 +168,8 @@ pub(crate) fn checked_path(
             }
             Ok(metadata) => {
                 if metadata.is_dir()
-                    && !std::fs::canonicalize(&probe)?.starts_with(root)
+                    && !std::fs::canonicalize(&probe)?
+                        .starts_with(&canonical_root)
                 {
                     return Err(input(
                         "resource directory escaped instance root",
@@ -254,104 +257,140 @@ pub(crate) async fn execute(
     let temporary = tempfile::Builder::new()
         .prefix(&staging_prefix(plan)?)
         .tempdir_in(staging)?;
-    let mut downloads = Vec::new();
+    let stage_cancel = cancel.child_token();
+    let concurrency = std::sync::Arc::new(tokio::sync::Semaphore::new(
+        state.download_concurrency().max(1),
+    ));
+    let pending = FuturesUnordered::new();
     for (index, action) in plan.actions.iter().enumerate() {
-        canceled(&cancel)?;
-        let node = plan
-            .nodes
-            .iter()
-            .find(|node| node.id == action.node_id)
-            .ok_or_else(|| input("action has no resource node"))?;
-        let kind = action
-            .current
-            .as_ref()
-            .map(|current| current.resource_type)
-            .or_else(|| {
-                plan.selections
-                    .iter()
-                    .find(|selection| selection.id == node.id)
-                    .map(|selection| selection.resource_type)
-            })
-            .unwrap_or_else(|| {
-                if action.target_relative_path.contains("/datapacks/") {
-                    ResourceType::DataPack
-                } else if action
-                    .target_relative_path
-                    .starts_with("resourcepacks/")
-                {
-                    ResourceType::ResourcePack
-                } else if action
-                    .target_relative_path
-                    .starts_with("shaderpacks/")
-                {
-                    ResourceType::Shader
-                } else {
-                    ResourceType::Mod
+        let cancel = &stage_cancel;
+        let draft = &draft;
+        let temporary = &temporary;
+        let reporter = &reporter;
+        let concurrency = concurrency.clone();
+        let download = async move {
+            let _permit = tokio::select! {
+                _ = cancel.cancelled() => return Err(input("resource operation canceled")),
+                permit = concurrency.acquire_owned() => permit.map_err(|error| input(error.to_string()))?,
+            };
+            canceled(&cancel)?;
+            let node = plan
+                .nodes
+                .iter()
+                .find(|node| node.id == action.node_id)
+                .ok_or_else(|| input("action has no resource node"))?;
+            let kind = action
+                .current
+                .as_ref()
+                .map(|current| current.resource_type)
+                .or_else(|| {
+                    plan.selections
+                        .iter()
+                        .find(|selection| selection.id == node.id)
+                        .map(|selection| selection.resource_type)
+                })
+                .unwrap_or_else(|| {
+                    if action.target_relative_path.contains("/datapacks/") {
+                        ResourceType::DataPack
+                    } else if action
+                        .target_relative_path
+                        .starts_with("resourcepacks/")
+                    {
+                        ResourceType::ResourcePack
+                    } else if action
+                        .target_relative_path
+                        .starts_with("shaderpacks/")
+                    {
+                        ResourceType::Shader
+                    } else {
+                        ResourceType::Mod
+                    }
+                });
+            project_type(kind)?;
+            provider_ref(&action.target)?;
+            if !valid_artifact(&action.target)
+                || !plans::safe_relative_path(&action.target_relative_path)
+            {
+                return Err(input("invalid frozen artifact or destination"));
+            }
+            if let Some(relative) = draft.local_files.get(&action.entry_id) {
+                let scope =
+                    resolve_content_scope(instance_id, None, state).await?;
+                let root =
+                    instance_content_root(&state.directories, &scope.instance)?;
+                let source = checked_path(&root, relative)?;
+                if !matches_file(&source, &action.target.integrity).await? {
+                    return Err(input(
+                        "rollback backup no longer matches reviewed bytes",
+                    ));
                 }
-            });
-        project_type(kind)?;
-        provider_ref(&action.target)?;
-        if !valid_artifact(&action.target)
-            || !plans::safe_relative_path(&action.target_relative_path)
-        {
-            return Err(input("invalid frozen artifact or destination"));
-        }
-        if let Some(relative) = draft.local_files.get(&action.entry_id) {
-            let scope = resolve_content_scope(instance_id, None, state).await?;
-            let root =
-                instance_content_root(&state.directories, &scope.instance)?;
-            let source = checked_path(&root, relative)?;
-            if !matches_file(&source, &action.target.integrity).await? {
-                return Err(input(
-                    "rollback backup no longer matches reviewed bytes",
+                let path = temporary.path().join(index.to_string());
+                tokio::fs::copy(source, &path).await?;
+                if !matches_file(&path, &action.target.integrity).await? {
+                    return Err(input("rollback backup changed while copying"));
+                }
+                let (size, sha1) = fetch::sha1_file_async(&path).await?;
+                return Ok::<_, crate::Error>((
+                    index,
+                    (path, kind, size, sha1, String::new()),
                 ));
             }
-            let path = temporary.path().join(index.to_string());
-            tokio::fs::copy(source, &path).await?;
-            if !matches_file(&path, &action.target.integrity).await? {
-                return Err(input("rollback backup changed while copying"));
-            }
-            let (size, sha1) = fetch::sha1_file_async(&path).await?;
-            downloads.push((path, kind, size, sha1, String::new()));
-            continue;
-        }
-        let urls = match &action.target.acquisition {
-            ArtifactAcquisition::PublicDownload { urls }
-                if !urls.is_empty() =>
-            {
-                urls
-            }
-            _ => return Err(input("artifact requires a manual download")),
-        };
-        let path = temporary.path().join(index.to_string());
-        let class =
-            match action.target.reference.release.project.source.as_str() {
-                "modrinth" => ResourceClass::Modrinth,
-                "curseforge" => ResourceClass::CurseForge,
-                _ => ResourceClass::Other,
+            let urls = match &action.target.acquisition {
+                ArtifactAcquisition::PublicDownload { urls }
+                    if !urls.is_empty() =>
+                {
+                    urls
+                }
+                _ => {
+                    return Err(input("artifact requires a manual download"));
+                }
             };
-        let mut request = DownloadRequest::new(&urls[0], class)
-            .with_integrity(integrity(&action.target, kind));
-        request.cancellation = Some(cancel.clone());
-        request.candidate_urls = urls.iter().skip(1).cloned().collect();
-        if let Some(reporter) = reporter.clone() {
-            request = request.with_install_tracking(
-                reporter,
-                action.target_relative_path.clone(),
-                action.target.file_name.clone().unwrap_or_default(),
-            );
-        }
-        fetch::download_to_path(
-            request,
-            &path,
-            &state.download_semaphore,
-            &state.pool,
-            None,
-        )
-        .await?;
-        let (size, sha1) = fetch::sha1_file_async(&path).await?;
-        downloads.push((path, kind, size, sha1, String::new()));
+            let path = temporary.path().join(index.to_string());
+            let class =
+                match action.target.reference.release.project.source.as_str() {
+                    "modrinth" => ResourceClass::Modrinth,
+                    "curseforge" => ResourceClass::CurseForge,
+                    _ => ResourceClass::Other,
+                };
+            let mut request = DownloadRequest::new(&urls[0], class)
+                .with_integrity(integrity(&action.target, kind));
+            request.cancellation = Some(cancel.clone());
+            request.candidate_urls = urls.iter().skip(1).cloned().collect();
+            if let Some(reporter) = reporter.as_ref().cloned() {
+                request = request.with_install_tracking(
+                    reporter,
+                    action.target_relative_path.clone(),
+                    action.target.file_name.clone().unwrap_or_default(),
+                );
+            }
+            request.cancellation = Some(cancel.clone());
+            fetch::download_to_path(
+                request,
+                &path,
+                &state.download_semaphore,
+                &state.pool,
+                None,
+            )
+            .await?;
+            let (size, sha1) = fetch::sha1_file_async(&path).await?;
+            Ok::<_, crate::Error>((
+                index,
+                (path, kind, size, sha1, String::new()),
+            ))
+        };
+        pending.push(download.boxed());
     }
+    let staged = pending.try_collect::<Vec<_>>().await;
+    let mut staged = match staged {
+        Ok(files) => files,
+        Err(error) => {
+            stage_cancel.cancel();
+            return Err(error);
+        }
+    };
+    staged.sort_by_key(|(index, _)| *index);
+    let mut downloads: Vec<_> =
+        staged.into_iter().map(|(_, file)| file).collect();
     for (action, (path, _, size, _, digest)) in
         plan.actions.iter().zip(&mut downloads)
     {

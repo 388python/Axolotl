@@ -6579,7 +6579,7 @@
     "message": "Set the vibe"
   },
   "app.onboarding.browse.description": {
-    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place."
+    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements."
   },
   "app.onboarding.browse.title": {
     "message": "Search with receipts"
@@ -13445,6 +13445,9 @@
   "app.resources.operation.required": {
     "message": "Required dependencies"
   },
+  "app.resources.operation.optional-for": {
+    "message": "Optional dependency of {names}"
+  },
   "app.resources.operation.optional": {
     "message": "Available dependencies"
   },
@@ -13507,5 +13510,26 @@
   },
   "app.resources.operation.refresh": {
     "message": "Refresh this preview"
+  },
+  "app.resources.operation.manual-download": {
+    "message": "{name} requires a manual download and cannot be installed automatically."
+  },
+  "app.resources.operation.path-occupied": {
+    "message": "{path} is already used by another file, so it cannot be installed."
+  },
+  "app.resources.operation.source-unavailable": {
+    "message": "The source cannot provide this item right now."
+  },
+  "app.resources.operation.unresolved-optional": {
+    "message": "Some optional dependencies could not be resolved."
+  },
+  "app.resources.operation.missing-dependency": {
+    "message": "A required dependency could not be resolved."
+  },
+  "app.resources.operation.version-conflict": {
+    "message": "A version conflict prevents installing this item."
+  },
+  "app.resources.operation.artifact-mismatch": {
+    "message": "The selected installed entry does not match this item."
   }
 }

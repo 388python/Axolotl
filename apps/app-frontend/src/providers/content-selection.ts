@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue'
 
 import type ContentInstallPreviewModal from '@/components/ui/ContentInstallPreviewModal.vue'
 import type { ContentInstallPreviewData } from '@/components/ui/ContentInstallPreviewModal.vue'
+import type ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import { get_project_many, get_version_many } from '@/helpers/cache.js'
 import {
     compareContentIdentities,
@@ -28,7 +29,11 @@ import {
     queue_content_batch,
     queue_project_with_dependencies,
 } from '@/helpers/instance'
-import { resourceProjectDocuments } from '@/helpers/resources'
+import {
+    resourceProjectDocuments,
+    type ResourceSelection,
+    sourceResource,
+} from '@/helpers/resources'
 import { getBrowseDefaultInstanceId, setBrowseDefaultInstanceId } from '@/helpers/settings'
 import type { GameInstance } from '@/helpers/types'
 import { aggregateContentSelectionDependencies } from '@/providers/content-selection-logic'
@@ -111,6 +116,7 @@ export function createContentSelection({
     const installedIdentityRequests = new Map<string, Promise<ContentIdentity[]>>()
     let installedIdentityRequestId = 0
     const heuristicOverrides = new Set<string>()
+    let resourcePreview: InstanceType<typeof ResourceOperationPreviewModal> | null = null
     let previewModal: InstanceType<typeof ContentInstallPreviewModal> | null = null
 
     const selectedProjects = computed<BrowseSelectedProject[]>(() =>
@@ -1001,6 +1007,57 @@ export function createContentSelection({
             addNotification({ title: formatMessage(messages.targetChanged), type: 'error' })
             return false
         }
+        if ([...items.value.values()].every((item) => item.contentType !== 'world')) {
+            // Items without a chosen version (browse additions) stay pending here and
+            // resolve through automatic release selection inside the preview plan.
+            if (!resourcePreview) return false
+            const selections: ResourceSelection[] = [...items.value.values()].map((item) => ({
+                id: item.key,
+                resource: sourceResource(item.provider, item.providerProjectId),
+                release: item.versionId
+                    ? {
+                          kind: 'release',
+                          reference: {
+                              project: { source: item.provider, projectId: item.providerProjectId },
+                              releaseId: item.versionId,
+                          },
+                      }
+                    : { kind: 'automatic' },
+                resourceType: (
+                    {
+                        mod: 'mod',
+                        plugin: 'plugin',
+                        datapack: 'dataPack',
+                        resourcepack: 'resourcePack',
+                        shader: 'shader',
+                    } as const
+                )[item.contentType as Exclude<typeof item.contentType, 'world'>],
+                scope: { kind: 'instance' },
+            }))
+            state.value = 'reviewing'
+            try {
+                const job = await resourcePreview.showInstall({
+                    instanceId: instance.id,
+                    instanceName: instance.name,
+                    selections,
+                    installDependencies: true,
+                })
+                if (!job) return false
+                const next = new Map(jobIdsByKey.value)
+                for (const selection of selections) {
+                    next.set(installJobKey(instance.id, selection.id), job.job_id)
+                    remove(selection.id)
+                }
+                jobIdsByKey.value = next
+                installedIdentityCache.delete(instance.id)
+                return true
+            } catch (error) {
+                handleError(error)
+                return false
+            } finally {
+                state.value = 'idle'
+            }
+        }
         // Reset browse-page installed indicators so they reflect the post-install state.
         // The identity cache itself is kept warm from the initial instance selection.
         installedIdentityKeys.value = new Set()
@@ -1204,6 +1261,9 @@ export function createContentSelection({
         hasPendingVersions,
         updateVersion,
         installSelected,
+        setResourceInstallPreview(modal) {
+            resourcePreview = modal
+        },
         setPreviewModal(modal) {
             previewModal = modal
         },

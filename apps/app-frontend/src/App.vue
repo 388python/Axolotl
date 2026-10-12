@@ -101,6 +101,7 @@ import OfflineAccountRestrictionModal from '@/components/ui/OfflineAccountRestri
 import OnboardingOverlay from '@/components/ui/onboarding/OnboardingOverlay.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import RemoteAnnouncements from '@/components/ui/RemoteAnnouncements.vue'
+import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
@@ -2103,7 +2104,6 @@ const {
     handleNavigate: handleContentInstallNavigate,
     handleCancel: handleContentInstallCancel,
     setContentInstallModal,
-    setContentInstallPreviewModal,
     setModpackInstallModal: setContentInstallModpackInstallModal,
     handleModpackInstall: handleContentInstallModpackInstall,
     handleModpackInstallCancel: handleContentInstallModpackInstallCancel,
@@ -2129,6 +2129,7 @@ const {
 } = serverInstall
 
 const modInstallModal = ref()
+const resourceInstallPreview = ref<InstanceType<typeof ResourceOperationPreviewModal> | null>(null)
 const contentInstallPreviewModal = ref<InstanceType<typeof ContentInstallPreviewModal> | null>(null)
 const modpackAlreadyInstalledModal = ref()
 const contentInstallModpackInstallModal = ref<InstanceType<typeof ModpackInstallModal> | null>(null)
@@ -2298,8 +2299,9 @@ onMounted(() => {
     setContentIncompatibilityWarningModal(incompatibilityWarningModal.value)
     dropIncompatibilityWarningModal.value = incompatibilityWarningModal.value
     setContentInstallModal(modInstallModal.value)
-    setContentInstallPreviewModal(contentInstallPreviewModal.value)
     contentSelection.setPreviewModal(contentInstallPreviewModal.value)
+    contentSelection.setResourceInstallPreview(resourceInstallPreview.value)
+    contentInstall.setResourceInstallPreview(resourceInstallPreview.value)
     setContentInstallModpackInstallModal(contentInstallModpackInstallModal.value!)
     setContentInstallCurseForgeManualDownloadsModal(
         contentInstallCurseForgeManualDownloadsModal.value,
@@ -3385,6 +3387,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         @cancel="handleContentInstallCancel"
     />
     <ContentInstallPreviewModal ref="contentInstallPreviewModal" />
+    <ResourceOperationPreviewModal ref="resourceInstallPreview" />
     <ModpackAlreadyInstalledModal
         ref="modpackAlreadyInstalledModal"
         @create-anyway="handleModpackDuplicateCreateAnyway"
