@@ -1,14 +1,13 @@
 use super::{
     formats,
     plan::{invalid, snapshot},
-    refresh::freeze,
 };
 use crate::resources::*;
 use async_zip::{
     Compression, DeflateOption, ZipEntryBuilder, tokio::write::ZipFileWriter,
 };
 use futures::io::AsyncWriteExt;
-use sha2::{Digest, Sha512};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
@@ -90,23 +89,143 @@ pub async fn validate_output(
     Ok(output)
 }
 
-pub async fn validate_files(
+pub fn work_size(plan: &ResourceExportPlan) -> u64 {
+    plan.files.iter().fold(1u64, |total, action| {
+        let size = snapshot(action).integrity.size.unwrap_or(0);
+        total.saturating_add(size).saturating_add(
+            if matches!(action, ExportFileAction::Embed { .. }) {
+                size
+            } else {
+                0
+            },
+        )
+    })
+}
+
+async fn checked_metadata(
     root: &Path,
-    plan: &ResourceExportPlan,
-    cancel: &CancellationToken,
-) -> ResourceResult<()> {
-    let mut paths = HashSet::new();
-    for action in &plan.files {
-        let original = snapshot(action);
-        if !paths.insert(&original.relative_path) {
-            return Err(invalid("duplicate export path"));
+    root_canonical: &Path,
+    snapshot: &ExportFileSnapshot,
+) -> ResourceResult<std::fs::Metadata> {
+    let safe = path_util::SafeRelativeUtf8UnixPathBuf::try_from(
+        snapshot.relative_path.clone(),
+    )
+    .map_err(|e| invalid(e.to_string()))?;
+    if super::categories::forbidden(safe.as_str()) {
+        return Err(invalid("protected export path"));
+    }
+    let mut path = root.to_path_buf();
+    for segment in safe.as_str().split('/') {
+        path.push(segment);
+        let metadata = tokio::fs::symlink_metadata(&path)
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
+        if super::scan::linked(&metadata) {
+            return Err(invalid(
+                "export path contains a symbolic link or junction",
+            ));
         }
-        if freeze(root, original, cancel).await?.0.integrity
-            != original.integrity
+    }
+    if !tokio::fs::canonicalize(&path)
+        .await
+        .map_err(|e| invalid(e.to_string()))?
+        .starts_with(root_canonical)
+    {
+        return Err(invalid("export file escaped the game directory"));
+    }
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|e| invalid(e.to_string()))?;
+    if !metadata.is_file() || snapshot.integrity.size != Some(metadata.len()) {
+        return Err(invalid(format!(
+            "{} changed after export analysis; refresh again",
+            snapshot.relative_path
+        )));
+    }
+    Ok(metadata)
+}
+
+fn same_metadata(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
+    left.len() == right.len() && left.modified().ok() == right.modified().ok()
+}
+
+fn matches_bytes(
+    snapshot: &ExportFileSnapshot,
+    size: u64,
+    hasher: Sha256,
+) -> bool {
+    let hash = format!("{:x}", hasher.finalize());
+    snapshot.integrity.size == Some(size)
+        && snapshot.integrity.hashes.iter().any(|h| {
+            h.algorithm == HashAlgorithm::Sha256
+                && h.value.eq_ignore_ascii_case(&hash)
+        })
+}
+
+async fn verify_files(
+    root: &Path,
+    root_canonical: &Path,
+    plan: &ResourceExportPlan,
+    initial: &[std::fs::Metadata],
+    cancel: &CancellationToken,
+    completed: &mut u64,
+    total: u64,
+    progress: &(impl Fn(u64, u64) + Send + Sync),
+) -> ResourceResult<()> {
+    let mut buffer = vec![0; 256 * 1024];
+    for (action, initial) in plan.files.iter().zip(initial) {
+        canceled(cancel)?;
+        let snapshot = snapshot(action);
+        let before = checked_metadata(root, root_canonical, snapshot).await?;
+        if !same_metadata(&before, initial) {
+            return Err(invalid(format!(
+                "{} changed during export; refresh again",
+                snapshot.relative_path
+            )));
+        }
+        let mut file =
+            tokio::fs::File::open(root.join(&snapshot.relative_path))
+                .await
+                .map_err(|e| invalid(e.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut size = 0u64;
+        loop {
+            let read = tokio::select! { biased; _ = cancel.cancelled() => return Err(ResourceError::Canceled), r = file.read(&mut buffer) => r.map_err(|e| invalid(e.to_string()))? };
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            size += read as u64;
+            if size > before.len() {
+                return Err(invalid(format!(
+                    "{} grew during export; refresh again",
+                    snapshot.relative_path
+                )));
+            }
+            *completed = completed.saturating_add(read as u64);
+            progress(*completed, total);
+        }
+        if !matches_bytes(snapshot, size, hasher)
+            || !same_metadata(
+                &before,
+                &file.metadata().await.map_err(|e| invalid(e.to_string()))?,
+            )
         {
             return Err(invalid(format!(
                 "{} changed after export analysis; refresh again",
-                original.relative_path
+                snapshot.relative_path
+            )));
+        }
+    }
+    for (action, initial) in plan.files.iter().zip(initial) {
+        canceled(cancel)?;
+        if !same_metadata(
+            initial,
+            &checked_metadata(root, root_canonical, snapshot(action)).await?,
+        ) {
+            return Err(invalid(format!(
+                "{} changed during export; refresh again",
+                snapshot(action).relative_path
             )));
         }
     }
@@ -147,7 +266,31 @@ where
     }
     let (manifest_name, manifest) = formats::manifest(plan)?;
     let output = validate_output(root, plan, output).await?;
-    validate_files(root, plan, cancel).await?;
+    let started = std::time::Instant::now();
+    let total = work_size(plan);
+    progress(0, total);
+    let root_canonical = tokio::fs::canonicalize(root)
+        .await
+        .map_err(|e| invalid(e.to_string()))?;
+    let mut initial = Vec::with_capacity(plan.files.len());
+    let mut paths = HashSet::new();
+    for action in &plan.files {
+        canceled(cancel)?;
+        if !paths.insert(&snapshot(action).relative_path) {
+            return Err(invalid("duplicate export path"));
+        }
+        if !snapshot(action)
+            .integrity
+            .hashes
+            .iter()
+            .any(|h| h.algorithm == HashAlgorithm::Sha256)
+        {
+            return Err(invalid("export snapshot has no SHA-256 hash"));
+        }
+        initial.push(
+            checked_metadata(root, &root_canonical, snapshot(action)).await?,
+        );
+    }
     canceled(cancel)?;
     let temporary_file = temporary_path(plan, &output)?;
     if plan
@@ -167,14 +310,6 @@ where
         .map_err(|e| invalid(e.to_string()))?;
     let mut file = opened;
     let mut zip = ZipFileWriter::with_tokio(&mut file);
-    let total: u64 = plan
-        .files
-        .iter()
-        .filter_map(|a| match a {
-            ExportFileAction::Embed { snapshot } => snapshot.integrity.size,
-            _ => None,
-        })
-        .fold(0u64, u64::saturating_add);
     let mut completed = 0;
     let mut buffer = vec![0; 256 * 1024];
     for action in &plan.files {
@@ -206,7 +341,7 @@ where
         let mut input = tokio::fs::File::open(&path)
             .await
             .map_err(|e| invalid(e.to_string()))?;
-        let mut sha512 = Sha512::new();
+        let mut sha256 = Sha256::new();
         let mut size = 0;
         loop {
             let read = tokio::select! { biased; _ = cancel.cancelled() => return Err(ResourceError::Canceled), r = input.read(&mut buffer) => r.map_err(|e| invalid(e.to_string()))? };
@@ -217,18 +352,22 @@ where
                 .write_all(&buffer[..read])
                 .await
                 .map_err(|e| invalid(e.to_string()))?;
-            sha512.update(&buffer[..read]);
+            sha256.update(&buffer[..read]);
             size += read as u64;
+            if snapshot
+                .integrity
+                .size
+                .is_none_or(|expected| size > expected)
+            {
+                return Err(invalid(format!(
+                    "{} grew during export; refresh again",
+                    snapshot.relative_path
+                )));
+            }
             completed += read as u64;
             progress(completed, total);
         }
-        let hash = format!("{:x}", sha512.finalize());
-        if snapshot.integrity.size != Some(size)
-            || !snapshot.integrity.hashes.iter().any(|h| {
-                h.algorithm == HashAlgorithm::Sha512
-                    && h.value.eq_ignore_ascii_case(&hash)
-            })
-        {
+        if !matches_bytes(snapshot, size, sha256) {
             return Err(invalid(format!(
                 "{} changed while being exported; refresh again",
                 snapshot.relative_path
@@ -247,7 +386,22 @@ where
     zip.close().await.map_err(|e| invalid(e.to_string()))?;
     file.sync_all().await.map_err(|e| invalid(e.to_string()))?;
     drop(file);
-    validate_files(root, plan, cancel).await?;
+    tracing::debug!(
+        plan_id = plan.id.as_str(),
+        elapsed_ms = started.elapsed().as_millis(),
+        "Finished writing export entries; verifying frozen bytes"
+    );
+    verify_files(
+        root,
+        &root_canonical,
+        plan,
+        &initial,
+        cancel,
+        &mut completed,
+        total,
+        progress,
+    )
+    .await?;
     validate_output(root, plan, &output).await?;
     validate().await?;
     canceled(cancel)?;
@@ -255,5 +409,11 @@ where
         .persist(&output)
         .map_err(|e| invalid(e.to_string()))?;
     progress(total, total);
+    tracing::debug!(
+        plan_id = plan.id.as_str(),
+        bytes_processed = completed,
+        elapsed_ms = started.elapsed().as_millis(),
+        "Published verified export archive"
+    );
     Ok(())
 }

@@ -6657,7 +6657,7 @@
     "message": "Your Home, your layout"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories and individual files, then verifies their current bytes and refreshes source matches. Choose Modrinth, generic ZIP, or CurseForge ZIP and fill in package information. If a source request fails, retry or explicitly choose to embed that file."
+    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export verifies all exportable files once in the background while you choose categories, adjust files, and fill in package information. Changing selections reuses that verification. You can queue the export before verification finishes and follow its progress in Downloads."
   },
   "app.onboarding.instance-actions.title": {
     "message": "The main controls"
@@ -13635,10 +13635,10 @@
     "message": "{count, plural, one {# file selected} other {# files selected}} · {size}"
   },
   "app.export.analyzing": {
-    "message": "Verifying selected files and refreshing exact source matches…"
+    "message": "Verifying exportable files and refreshing exact source matches…"
   },
   "app.export.analyzed": {
-    "message": "Selected files verified. Unmatched files will be embedded."
+    "message": "Background verification finished. Unmatched selected files will be embedded."
   },
   "app.export.retry-analysis": {
     "message": "Retry analysis"
@@ -13684,5 +13684,44 @@
   },
   "app.export.failed": {
     "message": "Export failed. Retry analysis before exporting again."
+  },
+  "app.export.queued": {
+    "message": "Export queued"
+  },
+  "app.export.queued-description": {
+    "message": "{name} will finish verification and export in Downloads."
+  },
+  "app.export.verify-local": {
+    "message": "Verifying exportable local files…"
+  },
+  "app.export.verify-source": {
+    "message": "Verifying exact matches on {source}…"
+  },
+  "app.export.check-attention": {
+    "message": "Some files need attention. Review them before export, or let the export task retry verification."
+  },
+  "app.install.phase.creating-backup": {
+    "message": "Creating backup"
+  },
+  "app.install.phase.staging-content": {
+    "message": "Staging content"
+  },
+  "app.install.phase.applying-content": {
+    "message": "Applying content"
+  },
+  "app.install.phase.updating-loader": {
+    "message": "Updating loader"
+  },
+  "app.install.phase.verifying": {
+    "message": "Verifying files"
+  },
+  "app.install.phase.completed": {
+    "message": "Completed"
+  },
+  "app.install.phase.unknown": {
+    "message": "Working"
+  },
+  "app.export.finalizing-analysis": {
+    "message": "Preparing verification results…"
   }
 }

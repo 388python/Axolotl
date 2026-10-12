@@ -123,42 +123,12 @@ export async function loadInstanceContentData(
                 dependency: item.dependency ?? null,
             }
         }) satisfies ContentItem[]
-        if (normalizedItems.some((item) => item.instanceEntryId)) {
-            for (const item of normalizedItems) {
-                item.update = null
-                item.resourceUpdate = null
-                if (item.instanceCapabilities)
-                    item.instanceCapabilities = { ...item.instanceCapabilities, canUpdate: false }
-            }
-            try {
-                const updates = await resourceCheckUpdates(path)
-                for (const item of normalizedItems) {
-                    if (
-                        !item.instanceEntryId ||
-                        updates.failedEntries.includes(item.instanceEntryId) ||
-                        updates.unresolved.includes(item.file_path ?? '')
-                    )
-                        continue
-                    item.resourceUpdate = updates.releases[item.instanceEntryId] ?? null
-                    if (item.instanceCapabilities)
-                        item.instanceCapabilities = {
-                            ...item.instanceCapabilities,
-                            canUpdate: !!item.resourceUpdate,
-                        }
-                }
-                if (updates.failures.length)
-                    snapshot.warnings.push({
-                        code: 'resource_update_unavailable',
-                        message: updates.failures.join('\n'),
-                        provider: null,
-                    })
-            } catch (error) {
-                snapshot.warnings.push({
-                    code: 'resource_update_unavailable',
-                    message: error instanceof Error ? error.message : String(error),
-                    provider: null,
-                })
-            }
+        for (const item of normalizedItems) {
+            if (!item.instanceEntryId) continue
+            item.update = null
+            item.resourceUpdate = null
+            if (item.instanceCapabilities)
+                item.instanceCapabilities = { ...item.instanceCapabilities, canUpdate: false }
         }
         const contentItems = normalizedItems.filter(
             (item) => item.instanceOwnershipKind !== 'pack_managed',
@@ -180,6 +150,63 @@ export async function loadInstanceContentData(
             return null
         }
         throw error
+    }
+}
+
+/** Update discovery runs after the local content snapshot has been displayed. */
+export async function refreshInstanceContentUpdates(
+    data: InstanceContentData,
+    signal?: AbortSignal,
+): Promise<InstanceContentData> {
+    if (signal?.aborted) return data
+    const items = [...data.contentItems, ...data.linkedContentItems].map((item) => ({
+        ...item,
+        instanceCapabilities: item.instanceCapabilities
+            ? { ...item.instanceCapabilities }
+            : undefined,
+    }))
+    const snapshot = {
+        ...data.snapshot,
+        warnings: data.snapshot.warnings.filter(
+            (warning) => warning.code !== 'resource_update_unavailable',
+        ),
+    }
+    if (items.some((item) => item.instanceEntryId)) {
+        try {
+            const updates = await resourceCheckUpdates(data.path, signal)
+            if (signal?.aborted) return data
+            for (const item of items) {
+                if (
+                    !item.instanceEntryId ||
+                    updates.failedEntries.includes(item.instanceEntryId) ||
+                    updates.unresolved.includes(item.file_path ?? '')
+                )
+                    continue
+                item.resourceUpdate = updates.releases[item.instanceEntryId] ?? null
+                if (item.instanceCapabilities)
+                    item.instanceCapabilities.canUpdate =
+                        !!item.resourceUpdate && item.instanceMaterializationState === 'present'
+            }
+            if (updates.failures.length)
+                snapshot.warnings.push({
+                    code: 'resource_update_unavailable',
+                    message: updates.failures.join('\n'),
+                    provider: null,
+                })
+        } catch (error) {
+            if (signal?.aborted) return data
+            snapshot.warnings.push({
+                code: 'resource_update_unavailable',
+                message: error instanceof Error ? error.message : String(error),
+                provider: null,
+            })
+        }
+    }
+    return {
+        ...data,
+        snapshot,
+        contentItems: items.filter((item) => item.instanceOwnershipKind !== 'pack_managed'),
+        linkedContentItems: items.filter((item) => item.instanceOwnershipKind === 'pack_managed'),
     }
 }
 

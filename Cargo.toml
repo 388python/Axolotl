@@ -213,6 +213,10 @@ tauri-plugin-window-state = { git = "https://github.com/Lintern/plugins-workspac
 [profile.dev.package.sqlx-macros]
 opt-level = 3
 
+# Unoptimized hash compression makes export verification stall on large files.
+[profile.dev.package.sha2]
+opt-level = 3
+
 # Optimize for speed and reduce size on release builds.
 # LTO stays off for local `pnpm app:build` and PR CI packaging. Tagged
 # releases re-enable fat LTO with CARGO_PROFILE_RELEASE_LTO=true.

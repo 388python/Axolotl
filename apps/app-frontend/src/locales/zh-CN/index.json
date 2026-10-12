@@ -6615,7 +6615,7 @@
     "message": "你的主页，你的布局"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "在实例顶部启动、停止、修复、配置、导出或打开实例。导出先选择类别并微调文件，再核验当前文件和来源匹配，填写包信息并选择 Modrinth、通用 ZIP 或 CurseForge ZIP。来源请求失败时，可重试或明确选择内嵌该文件。"
+    "message": "在实例顶部启动、停止、修复、配置、导出或打开实例。打开导出框后会在后台统一校验全部可导出文件，你可以同时选择类别、微调文件和填写包信息。修改勾选会复用校验结果。校验完成前也可将导出加入队列，在下载中心查看后续进度。"
   },
   "app.onboarding.instance-actions.title": {
     "message": "主操作台"
@@ -13647,10 +13647,10 @@
     "message": "已选择 {count} 个文件 · {size}"
   },
   "app.export.analyzing": {
-    "message": "正在核验选中文件并强制刷新精确来源匹配…"
+    "message": "正在核验可导出文件并刷新精确来源匹配…"
   },
   "app.export.analyzed": {
-    "message": "选中文件已完成核验，未匹配到来源的文件将内嵌。"
+    "message": "后台校验已完成，未匹配的选中文件将内嵌。"
   },
   "app.export.retry-analysis": {
     "message": "重试分析"
@@ -13696,5 +13696,44 @@
   },
   "app.export.failed": {
     "message": "导出失败，请重新分析后再导出。"
+  },
+  "app.export.queued": {
+    "message": "导出已加入队列"
+  },
+  "app.export.queued-description": {
+    "message": "{name} 将在下载中心继续完成校验和导出。"
+  },
+  "app.export.verify-local": {
+    "message": "正在核验可导出的本地文件…"
+  },
+  "app.export.verify-source": {
+    "message": "正在核验 {source} 的精确匹配…"
+  },
+  "app.export.check-attention": {
+    "message": "部分文件需要处理，可在导出前检查，或交给导出任务重试校验。"
+  },
+  "app.install.phase.creating-backup": {
+    "message": "正在创建备份"
+  },
+  "app.install.phase.staging-content": {
+    "message": "正在准备内容"
+  },
+  "app.install.phase.applying-content": {
+    "message": "正在应用内容"
+  },
+  "app.install.phase.updating-loader": {
+    "message": "正在更新加载器"
+  },
+  "app.install.phase.verifying": {
+    "message": "正在校验文件"
+  },
+  "app.install.phase.completed": {
+    "message": "已完成"
+  },
+  "app.install.phase.unknown": {
+    "message": "正在处理"
+  },
+  "app.export.finalizing-analysis": {
+    "message": "正在整理校验结果…"
   }
 }

@@ -875,6 +875,7 @@ async fn frozen_export_job_survives_session_close_and_preserves_instance_stage()
     let request = InstallRequest::ExportResource {
         plan: plan.clone(),
         output_path: output.clone(),
+        resolution: None,
     };
     assert!(!request.completes_instance_install_stage());
     let decoded: InstallJobState = serde_json::from_value(
@@ -935,6 +936,99 @@ async fn frozen_export_job_survives_session_close_and_preserves_instance_stage()
     drop(permit);
     assert_eq!(canceled.status, InstallJobStatus::Canceled);
     assert_eq!(std::fs::read(output).unwrap(), existing);
+    let mut pending = self::draft(vec![file("settings.txt")]);
+    pending.scan.instance_id = instance.instance.id.clone();
+    let session = pending.scan.session_id.clone();
+    service.register_export(pending.scan).unwrap();
+    let permit = state.install_job_semaphore.acquire().await.unwrap();
+    let output = output_dir.path().join("pending.zip");
+    let job = super::job::queue(
+        &service,
+        session.clone(),
+        vec!["settings.txt".into()],
+        ResourceExportFormat::GenericZip,
+        info(),
+        vec![],
+        output.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(job.phase, crate::install::InstallPhaseId::Verifying);
+    let repeated = super::job::queue(
+        &service,
+        session.clone(),
+        vec!["settings.txt".into()],
+        ResourceExportFormat::GenericZip,
+        info(),
+        vec![],
+        output.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(repeated.job_id, job.job_id);
+    assert!(
+        super::job::queue(
+            &service,
+            session.clone(),
+            vec!["settings.txt".into()],
+            ResourceExportFormat::GenericZip,
+            info(),
+            vec![],
+            output_dir.path().join("other.zip")
+        )
+        .await
+        .is_err()
+    );
+    let record = crate::install::store::get_required(job.job_id, &state)
+        .await
+        .unwrap();
+    let restored: InstallJobState =
+        serde_json::from_value(serde_json::to_value(&record.state).unwrap())
+            .unwrap();
+    assert!(matches!(
+        restored.request,
+        InstallRequest::ExportResource {
+            resolution: Some(_),
+            ..
+        }
+    ));
+    service.close_export(&session);
+    drop(permit);
+    let completed =
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let job =
+                    crate::install::runner::get_job(job.job_id).await.unwrap();
+                if matches!(
+                    job.status,
+                    InstallJobStatus::Succeeded
+                        | InstallJobStatus::Failed
+                        | InstallJobStatus::Canceled
+                ) {
+                    break job;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        completed.status,
+        InstallJobStatus::Succeeded,
+        "{:?}",
+        completed.error
+    );
+    let persisted = crate::install::store::get_required(job.job_id, &state)
+        .await
+        .unwrap();
+    assert!(matches!(
+        persisted.state.request,
+        InstallRequest::ExportResource {
+            resolution: None,
+            ..
+        }
+    ));
+    assert!(output.exists());
     assert_eq!(
         crate::state::get_instance(&instance.instance.id, &state.pool)
             .await
@@ -957,4 +1051,360 @@ fn large_index_file_sizes_round_trip_without_truncation() {
         "files": [{"path": "mods/large.jar", "hashes": {"sha1": "0".repeat(40), "sha512": "0".repeat(128)}, "downloads": ["https://cdn.example/large.jar"], "fileSize": 5_000_000_000u64}]
     })).unwrap();
     assert_eq!(pack.files[0].file_size, 5_000_000_000);
+}
+
+#[tokio::test]
+async fn export_reference_verification_reports_bytes_without_repeating_identification()
+ {
+    use sha2::{Digest, Sha256, Sha512};
+    let (root, _service, mr, cf) = setup(false).await;
+    let bytes = vec![42; 16 * 1024 * 1024];
+    std::fs::write(root.path().join("reference.jar"), &bytes).unwrap();
+    let mut frozen = file("reference.jar");
+    frozen.integrity = ArtifactIntegrity {
+        size: Some(bytes.len() as u64),
+        hashes: vec![
+            ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: sha1_smol::Sha1::from(&bytes).digest().to_string(),
+            },
+            ContentHash {
+                algorithm: HashAlgorithm::Sha256,
+                value: format!("{:x}", Sha256::digest(&bytes)),
+            },
+            ContentHash {
+                algorithm: HashAlgorithm::Sha512,
+                value: format!("{:x}", Sha512::digest(&bytes)),
+            },
+        ],
+    };
+    let artifact = ResourceArtifact {
+        reference: SourceArtifactRef {
+            release: SourceReleaseRef {
+                project: SourceProjectRef {
+                    source: SourceId::modrinth(),
+                    project_id: SourceProjectId::new("project").unwrap(),
+                },
+                release_id: SourceReleaseId::new("release").unwrap(),
+            },
+            artifact_id: SourceArtifactId::new("reference.jar").unwrap(),
+        },
+        file_name: Some("reference.jar".into()),
+        role: ArtifactRole::Primary,
+        available: Some(true),
+        integrity: frozen.integrity.clone(),
+        acquisition: ArtifactAcquisition::PublicDownload {
+            urls: vec!["https://cdn.example/reference.jar".into()],
+        },
+        dependencies: vec![],
+    };
+    let mut draft = draft(vec![frozen.clone()]);
+    draft.selection_revision = 1;
+    draft.selected = vec!["reference.jar".into()];
+    draft.results.insert(
+        "reference.jar".into(),
+        ExportResolvedFile {
+            snapshot: frozen,
+            resolutions: vec![
+                ExportSourceResolution::Matched {
+                    source: SourceId::modrinth(),
+                    artifacts: vec![artifact],
+                },
+                ExportSourceResolution::NoMatch {
+                    source: SourceId::curseforge(),
+                },
+            ],
+            local_error: None,
+        },
+    );
+    let plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let progress = Mutex::new(Vec::new());
+    let output = root.path().join("out.mrpack");
+    let started = std::time::Instant::now();
+    super::writer::write(
+        root.path(),
+        &plan,
+        &output,
+        &CancellationToken::new(),
+        &|current, total| {
+            progress.lock().unwrap().push((current, total));
+        },
+    )
+    .await
+    .unwrap();
+    eprintln!("Verified 16 MiB reference in {:?}", started.elapsed());
+    let progress = progress.lock().unwrap();
+    let total = bytes.len() as u64 + 1;
+    assert_eq!(super::writer::work_size(&plan), total);
+    assert_eq!(progress.first(), Some(&(0, total)));
+    assert_eq!(progress.last(), Some(&(total, total)));
+    assert!(
+        progress
+            .iter()
+            .any(|(current, _)| *current > 0 && *current < total)
+    );
+    assert!(progress.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+    assert!(
+        mr.calls.lock().unwrap().is_empty()
+            && cf.calls.lock().unwrap().is_empty()
+    );
+    assert!(std::fs::metadata(output).unwrap().len() < 1024 * 1024);
+    drop(progress);
+    let cancel = CancellationToken::new();
+    let result = super::writer::write(
+        root.path(),
+        &plan,
+        &root.path().join("cancel.mrpack"),
+        &cancel,
+        &|current, _| {
+            if current > 0 {
+                cancel.cancel();
+            }
+        },
+    )
+    .await;
+    assert!(matches!(result, Err(ResourceError::Canceled)));
+    assert!(!root.path().join("cancel.mrpack").exists());
+    let source = root.path().join("reference.jar");
+    let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(&source)
+        .unwrap();
+    std::io::Write::write_all(&mut file, b"changed").unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    drop(file);
+    let previous = std::fs::read(&root.path().join("out.mrpack")).unwrap();
+    assert!(
+        super::writer::write(
+            root.path(),
+            &plan,
+            &root.path().join("out.mrpack"),
+            &CancellationToken::new(),
+            &|_, _| {}
+        )
+        .await
+        .is_err()
+    );
+    assert_eq!(
+        std::fs::read(root.path().join("out.mrpack")).unwrap(),
+        previous
+    );
+}
+
+#[tokio::test]
+async fn queued_export_resumes_partial_fresh_evidence_and_never_implicitly_embeds_failures()
+ {
+    use super::job::{ExportResolutionCheckpoint, resolve};
+    let (root, service, mr, cf) = setup(true).await;
+    std::fs::write(root.path().join("a.jar"), "data").unwrap();
+    std::fs::write(root.path().join("b.jar"), "data").unwrap();
+    std::fs::write(root.path().join("c.jar"), "data").unwrap();
+    let mut draft = draft(vec![file("a.jar"), file("b.jar"), file("c.jar")]);
+    run(&service, &mut draft, root.path(), vec!["a.jar".into()], 1).await;
+    let mut plan = build(
+        &draft,
+        1,
+        ResourceExportFormat::Modrinth,
+        info(),
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    plan.files.push(ExportFileAction::Embed {
+        snapshot: file("b.jar"),
+    });
+    let checkpoint: ExportResolutionCheckpoint = serde_json::from_value(
+        serde_json::to_value(ExportResolutionCheckpoint::capture(
+            &draft,
+            SourceId::modrinth(),
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let before_mr = mr.calls.lock().unwrap().len();
+    let before_cf = cf.calls.lock().unwrap().len();
+    cf.failed.store(true, Ordering::SeqCst);
+    let mut restored = checkpoint.restore();
+    let progress = Mutex::new(Vec::new());
+    let failed = resolve(
+        &service,
+        &mut restored,
+        &plan,
+        root.path(),
+        &checkpoint.preferred_source,
+        HashMap::new(),
+        &CancellationToken::new(),
+        &|value| {
+            progress.lock().unwrap().push(value);
+        },
+    )
+    .await;
+    assert!(failed.is_err());
+    let updates = progress.lock().unwrap();
+    assert!(
+        updates
+            .windows(2)
+            .all(|pair| pair[0].overall_completed <= pair[1].overall_completed)
+    );
+    assert_eq!(updates.last().unwrap().overall_completed, 6);
+    assert_eq!(updates.last().unwrap().overall_total, 6);
+    drop(updates);
+    assert_eq!(restored.selected, vec!["a.jar", "b.jar"]);
+    assert_eq!(mr.calls.lock().unwrap().len(), before_mr + 1);
+    assert_eq!(cf.calls.lock().unwrap().len(), before_cf + 1);
+    assert!(matches!(
+        restored.results["b.jar"].resolutions[1],
+        ExportSourceResolution::Failed { .. }
+    ));
+    let checkpoint: ExportResolutionCheckpoint = serde_json::from_value(
+        serde_json::to_value(ExportResolutionCheckpoint::capture(
+            &restored,
+            SourceId::modrinth(),
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    let mut explicit = plan.clone();
+    explicit.embedded_failure_choices = vec![ExportEmbeddedFailureChoice {
+        snapshot: restored.results["b.jar"].snapshot.clone(),
+        source: SourceId::curseforge(),
+    }];
+    let embedded = resolve(
+        &service,
+        &mut checkpoint.restore(),
+        &explicit,
+        root.path(),
+        &checkpoint.preferred_source,
+        HashMap::new(),
+        &CancellationToken::new(),
+        &|_| {},
+    )
+    .await
+    .unwrap();
+    assert!(matches!(embedded.files[1], ExportFileAction::Embed { .. }));
+    assert_eq!(cf.calls.lock().unwrap().len(), before_cf + 1);
+    cf.failed.store(false, Ordering::SeqCst);
+    let mut expanded = explicit;
+    expanded.files.push(ExportFileAction::Embed {
+        snapshot: file("c.jar"),
+    });
+    let resolved = resolve(
+        &service,
+        &mut checkpoint.restore(),
+        &expanded,
+        root.path(),
+        &checkpoint.preferred_source,
+        HashMap::new(),
+        &CancellationToken::new(),
+        &|_| {},
+    )
+    .await
+    .unwrap();
+    assert!(matches!(resolved.files[1], ExportFileAction::Embed { .. }));
+    assert!(matches!(
+        resolved.files[2],
+        ExportFileAction::Download { .. }
+    ));
+    let completed = resolve(
+        &service,
+        &mut checkpoint.restore(),
+        &plan,
+        root.path(),
+        &checkpoint.preferred_source,
+        HashMap::new(),
+        &CancellationToken::new(),
+        &|_| {},
+    )
+    .await
+    .unwrap();
+    assert_eq!(completed.id, plan.id);
+    assert_eq!(completed.files.len(), 2);
+    assert!(
+        completed
+            .files
+            .iter()
+            .all(|action| matches!(action, ExportFileAction::Download { .. }))
+    );
+    assert_eq!(mr.calls.lock().unwrap().len(), before_mr + 2);
+    assert_eq!(cf.calls.lock().unwrap().len(), before_cf + 3);
+}
+
+#[tokio::test]
+async fn frozen_file_hashing_reports_progress_before_the_file_finishes() {
+    let root = tempfile::tempdir().unwrap();
+    let bytes = vec![42; 1024 * 1024];
+    std::fs::write(root.path().join("large.jar"), &bytes).unwrap();
+    let progress = Mutex::new(Vec::new());
+    let (snapshot, fingerprint) = freeze_with_progress(
+        root.path(),
+        &file("large.jar"),
+        &CancellationToken::new(),
+        &|current, total| {
+            progress.lock().unwrap().push((current, total));
+        },
+    )
+    .await
+    .unwrap();
+    let progress = progress.lock().unwrap();
+    assert_eq!(snapshot.integrity.size, Some(bytes.len() as u64));
+    assert_eq!(
+        fingerprint,
+        crate::api::curseforge::compute_fingerprint(&bytes)
+    );
+    let total = bytes.len() as u64 * 2;
+    assert_eq!(progress.first(), Some(&(0, total)));
+    assert_eq!(progress.last(), Some(&(total, total)));
+    assert!(
+        progress
+            .iter()
+            .any(|(current, _)| *current > 0 && *current < bytes.len() as u64)
+    );
+    assert!(progress.windows(2).all(|pair| pair[0].0 <= pair[1].0));
+}
+
+#[tokio::test]
+async fn source_verification_announces_the_provider_before_starting_its_requests()
+ {
+    let (root, service, mr, cf) = setup(false).await;
+    std::fs::write(root.path().join("file.jar"), "data").unwrap();
+    let mut draft = draft(vec![file("file.jar")]);
+    let phases = Mutex::new(Vec::new());
+    let result = refresh_local(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["file.jar".into()],
+        1,
+        RequestId::new("progress").unwrap(),
+        HashMap::new(),
+        &CancellationToken::new(),
+        &|value| {
+            phases.lock().unwrap().push((
+                value.phase,
+                mr.calls.lock().unwrap().len(),
+                cf.calls.lock().unwrap().len(),
+            ));
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.state, ExportResolutionState::Ready);
+    let phases = phases.lock().unwrap();
+    assert!(
+        phases
+            .iter()
+            .any(|(phase, mr_calls, _)| phase == "modrinth" && *mr_calls == 0)
+    );
+    assert!(phases.iter().any(|(phase, _, cf_calls)| phase == "curseforge" && *cf_calls == 0));
+    assert_eq!(phases.last().unwrap().0, "complete");
 }

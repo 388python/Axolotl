@@ -712,8 +712,23 @@ pub(super) async fn run_request(
             }
             Ok(InstallExecutionOutcome::Completed(Some(instance_id)))
         }
-        InstallRequest::ExportResource { plan, output_path } => {
-            export::run(job_id, job_state, &plan, &output_path).await?;
+        InstallRequest::ExportResource {
+            plan,
+            output_path,
+            resolution,
+        } => {
+            if let Some(checkpoint) = resolution {
+                export::resolve(
+                    job_id,
+                    job_state,
+                    &plan,
+                    &output_path,
+                    *checkpoint,
+                )
+                .await?;
+            } else {
+                export::run(job_id, job_state, &plan, &output_path).await?;
+            }
             Ok(InstallExecutionOutcome::Completed(Some(plan.instance_id)))
         }
         InstallRequest::DownloadJava { vendor, version } => {

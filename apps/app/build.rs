@@ -303,6 +303,7 @@ fn main() {
                         "resource_export_close",
                         "resource_export_plan",
                         "resource_export_execute",
+                        "resource_export_queue",
                         "resource_export_cancel",
                         "resource_rollback",
                     ])

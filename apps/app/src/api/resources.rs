@@ -79,6 +79,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_export_close,
             resource_export_plan,
             resource_export_execute,
+            resource_export_queue,
             resource_export_cancel,
             resource_rollback
         ])
@@ -202,6 +203,30 @@ pub async fn resource_export_execute(
         &service().await?,
         plan_id,
         revision,
+        output_path.into(),
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn resource_export_queue(
+    session_id: SessionId,
+    selected_files: Vec<ExportFileSnapshot>,
+    format: ResourceExportFormat,
+    package_info: ExportPackageInfo,
+    embedded_failure_choices: Vec<ExportEmbeddedFailureChoice>,
+    output_path: String,
+) -> Result<theseus::install::InstallJobSnapshot> {
+    Ok(theseus::resources::export::job::queue(
+        &service().await?,
+        session_id,
+        selected_files
+            .into_iter()
+            .map(|file| file.relative_path)
+            .collect(),
+        format,
+        package_info,
+        embedded_failure_choices,
         output_path.into(),
     )
     .await?)

@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import type { ExportResolutionSession } from '@/helpers/resources'
 
-import { analysisReady, pendingFailures } from './resolution.ts'
+import { pendingFailures } from './resolution.ts'
 
 const session = (): ExportResolutionSession => ({
     id: 'session',
@@ -41,29 +41,21 @@ const session = (): ExportResolutionSession => ({
         },
     ],
 })
-test('request failures require explicit embedding and bind the choice to the exact snapshot', () => {
+test('explicit fallback choices bind failed sources to the exact snapshot', () => {
     const result = session()
-    assert.equal(analysisReady(result, ['a.jar'], []), false)
-    assert.equal(analysisReady(result, ['a.jar'], ['a.jar']), true)
     assert.deepEqual(pendingFailures(result, ['a.jar']), [
         { snapshot: result.files[0].snapshot, source: 'curseforge' },
     ])
-    assert.equal(analysisReady(result, ['other.jar'], ['a.jar']), false)
 })
-test('unreadable files and incomplete analysis cannot be bypassed by embedding', () => {
-    const result = session()
-    result.files[0].localError = 'missing'
-    assert.equal(analysisReady(result, ['a.jar'], ['a.jar']), false)
-    result.files[0].localError = null
-    result.state = 'refreshing'
-    assert.equal(analysisReady(result, ['a.jar'], ['a.jar']), false)
+
+test('unchecked or unrelated files never receive implicit fallback choices', () => {
+    assert.deepEqual(pendingFailures(session(), []), [])
+    assert.deepEqual(pendingFailures(session(), ['other.jar']), [])
+    assert.deepEqual(pendingFailures(null, ['a.jar']), [])
 })
-test('successful no-match is ready without accepting a failure', () => {
+
+test('successful no-match results do not become failure fallback choices', () => {
     const result = session()
-    result.state = 'ready'
-    result.files[0].resolutions = [
-        { kind: 'noMatch', source: 'modrinth' },
-        { kind: 'noMatch', source: 'curseforge' },
-    ]
-    assert.equal(analysisReady(result, ['a.jar'], []), true)
+    result.files[0].resolutions[1] = { kind: 'noMatch', source: 'curseforge' }
+    assert.deepEqual(pendingFailures(result, ['a.jar']), [])
 })

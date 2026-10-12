@@ -1,5 +1,6 @@
 pub mod categories;
 pub mod formats;
+pub mod job;
 pub mod plan;
 pub mod refresh;
 pub mod scan;

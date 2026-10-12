@@ -419,6 +419,10 @@ pub(crate) fn initial_phase_for_request(
         | InstallRequest::ChangeContent { .. } => {
             InstallPhaseId::DownloadingContent
         }
+        InstallRequest::ExportResource {
+            resolution: Some(_),
+            ..
+        } => InstallPhaseId::Verifying,
         InstallRequest::ExportResource { .. } => InstallPhaseId::Exporting,
         _ => InstallPhaseId::PreparingInstance,
     }
@@ -1936,6 +1940,10 @@ pub enum InstallRequest {
     ExportResource {
         plan: content_management::resources::ResourceExportPlan,
         output_path: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resolution: Option<
+            Box<crate::resources::export::job::ExportResolutionCheckpoint>,
+        >,
     },
     DownloadJava {
         vendor: String,

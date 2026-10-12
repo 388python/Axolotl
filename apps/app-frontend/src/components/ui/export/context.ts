@@ -1,6 +1,4 @@
-import { FolderOpenIcon } from '@modrinth/assets'
 import {
-    commonMessages,
     createContext,
     injectNotificationManager,
     injectPopupNotificationManager,
@@ -11,26 +9,22 @@ import { save } from '@tauri-apps/plugin-dialog'
 import { computed, nextTick, onBeforeUnmount, ref, type ShallowRef } from 'vue'
 import type { ComponentExposed } from 'vue-component-type-helpers'
 
-import { install_job_get } from '@/helpers/install'
 import { resourceOperationError } from '@/helpers/resource-operation-logic'
 import {
     type ExportCategory,
     type ExportRefreshProgress,
     type ExportResolutionSession,
-    resourceExportCancel,
     resourceExportClose,
-    resourceExportExecute,
     type ResourceExportFormat,
-    resourceExportPlan,
+    resourceExportQueue,
     resourceExportRefresh,
     resourceExportRefreshRetry,
     type ResourceExportScan,
     resourceExportScan,
 } from '@/helpers/resources'
-import { highlightInFolder } from '@/helpers/utils'
 
 import { categoryMessages, exportMessages } from './messages'
-import { analysisReady, pendingFailures } from './resolution'
+import { pendingFailures } from './resolution'
 import {
     categoryLeaves,
     defaultCategories,
@@ -39,7 +33,6 @@ import {
     reviseFileSelection,
     selectedFiles,
 } from './selection'
-import { observeExportTask } from './task'
 
 export function createExportContext(
     modal: ShallowRef<ComponentExposed<typeof MultiStageModal> | null>,
@@ -66,10 +59,7 @@ export function createExportContext(
     const selectedOnly = ref(false)
     const packageInfo = ref({ name: '', version: '1.0.0', description: '', author: '' })
     const format = ref<ResourceExportFormat>('modrinth')
-    const exportJobId = ref<string | null>(null)
-    const cancelingExport = ref(false)
     const exportError = ref('')
-    let exportObserver: AbortController | undefined
     let controller: AbortController | undefined
     let generation = 0
     const files = computed(() => snapshot.value?.files ?? [])
@@ -98,14 +88,19 @@ export function createExportContext(
     })
     const canExport = computed(
         () =>
-            !refreshing.value &&
-            !refreshError.value &&
-            analysisReady(resolution.value, selection.value, embedded.value),
+            !!snapshot.value &&
+            !scanning.value &&
+            !exporting.value &&
+            !resolution.value?.files.some(
+                (file) => selection.value.includes(file.snapshot.relativePath) && file.localError,
+            ),
     )
     const failedFiles = computed(
         () =>
             resolution.value?.files.filter(
-                (file) => file.localError || file.resolutions.some((r) => r.kind === 'failed'),
+                (file) =>
+                    selection.value.includes(file.snapshot.relativePath) &&
+                    (file.localError || file.resolutions.some((r) => r.kind === 'failed')),
             ) ?? [],
     )
     function cancelRefresh() {
@@ -119,13 +114,12 @@ export function createExportContext(
         refreshController = new AbortController()
         const active = refreshController
         const generation = refreshGeneration
-        const paths = new Set(selection.value)
-        const selected = files.value.filter((file) => paths.has(file.relativePath))
+        const candidates = files.value
+        const paths = new Set(candidates.map((file) => file.relativePath))
         const session = snapshot.value.sessionId
         const currentRevision = ++revision
         refreshing.value = true
         refreshError.value = ''
-        exportError.value = ''
         refreshProgress.value = null
         embedded.value = []
         try {
@@ -143,8 +137,15 @@ export function createExportContext(
                         .filter((r) => r.kind === 'failed')
                         .map((r) => ({ snapshot: file.snapshot, source: r.source })),
                 ) ?? []
+            const sameVerificationScope =
+                resolution.value?.selectionRevision === currentRevision - 1 &&
+                resolution.value.files.length === candidates.length &&
+                resolution.value.files.every((file) => paths.has(file.snapshot.relativePath))
             const result =
-                retry && failed.length && !resolution.value?.files.some((file) => file.localError)
+                retry &&
+                sameVerificationScope &&
+                failed.length &&
+                !resolution.value?.files.some((file) => file.localError)
                     ? await resourceExportRefreshRetry(
                           session,
                           failed,
@@ -155,7 +156,7 @@ export function createExportContext(
                     : await resourceExportRefresh(
                           snapshot.value.instanceId,
                           session,
-                          selected,
+                          candidates,
                           currentRevision,
                           onProgress,
                           active.signal,
@@ -175,7 +176,6 @@ export function createExportContext(
             : embedded.value.filter((value) => value !== path)
     }
     function close() {
-        exportObserver?.abort()
         cancelScan()
         cancelRefresh()
         if (snapshot.value) void resourceExportClose(snapshot.value.sessionId).catch(() => {})
@@ -247,6 +247,7 @@ export function createExportContext(
                 included: [],
                 excluded: [],
             }
+            void refresh()
         } catch (failure) {
             if (generation === request && !activeController.signal.aborted)
                 error.value = resourceOperationError(failure)
@@ -273,20 +274,11 @@ export function createExportContext(
         modal.value?.show()
         void scan()
     }
-    async function cancelExport() {
-        if (!exportJobId.value || cancelingExport.value) return
-        cancelingExport.value = true
-        try {
-            await resourceExportCancel(exportJobId.value)
-        } catch (failure) {
-            handleError(failure)
-            cancelingExport.value = false
-        }
-    }
     async function exportPack() {
-        if (exporting.value || !snapshot.value || !resolution.value || !canExport.value) return
+        if (exporting.value || !snapshot.value || !canExport.value) return
         exporting.value = true
         exportError.value = ''
+        let queued = false
         const activeGeneration = generation
         try {
             const extension = format.value === 'modrinth' ? 'mrpack' : 'zip'
@@ -297,9 +289,11 @@ export function createExportContext(
                 ],
             })
             if (!output) return
-            const plan = await resourceExportPlan(
+            cancelRefresh()
+            const selected = new Set(selection.value)
+            await resourceExportQueue(
                 snapshot.value.sessionId,
-                resolution.value.selectionRevision,
+                files.value.filter((file) => selected.has(file.relativePath)),
                 format.value,
                 {
                     name: packageInfo.value.name,
@@ -307,49 +301,38 @@ export function createExportContext(
                     summary: packageInfo.value.description,
                     author: packageInfo.value.author.trim() || null,
                 },
-                pendingFailures(resolution.value, embedded.value),
+                pendingFailures(
+                    resolution.value
+                        ? {
+                              ...resolution.value,
+                              files: resolution.value.files.filter((file) =>
+                                  selected.has(file.snapshot.relativePath),
+                              ),
+                          }
+                        : null,
+                    embedded.value,
+                ),
+                output,
             )
-            const job = await resourceExportExecute(plan.id, plan.revision, output)
-            exportJobId.value = job.job_id
-            exportObserver = new AbortController()
-            const finished = await observeExportTask(
-                () => install_job_get(job.job_id),
-                exportObserver.signal,
-            )
-            if (!finished || generation !== activeGeneration) return
-            if (finished.status === 'canceled') {
-                exportError.value = formatMessage(exportMessages.canceled)
-                return
-            }
-            if (finished.status !== 'succeeded')
-                throw new Error(finished.error?.message ?? formatMessage(exportMessages.failed))
+            queued = true
             if (generation !== activeGeneration) return
             notifications.addPopupNotification({
-                title: formatMessage(exportMessages.complete),
-                text: formatMessage(exportMessages.completeDescription, {
+                title: formatMessage(exportMessages.queued),
+                text: formatMessage(exportMessages.queuedDescription, {
                     name: output.split(/[\\/]/).pop() ?? output,
                 }),
                 type: 'success',
-                buttons: [
-                    {
-                        label: formatMessage(commonMessages.openInFolderButton),
-                        icon: FolderOpenIcon,
-                        action: () => highlightInFolder(output).catch(handleError),
-                    },
-                ],
             })
             exporting.value = false
             await nextTick()
             modal.value?.hide()
         } catch (failure) {
             if (generation !== activeGeneration) return
-            refreshError.value = resourceOperationError(failure)
-            resolution.value = null
+            exportError.value = resourceOperationError(failure)
             handleError(failure)
         } finally {
             exporting.value = false
-            exportJobId.value = null
-            cancelingExport.value = false
+            if (!queued && snapshot.value && !refreshing.value && !resolution.value) void refresh()
         }
     }
     onBeforeUnmount(close)
@@ -365,9 +348,6 @@ export function createExportContext(
         selectedOnly,
         packageInfo,
         format,
-        exportJobId,
-        cancelExport,
-        cancelingExport,
         exportError,
         files,
         categories,

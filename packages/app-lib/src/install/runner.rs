@@ -957,7 +957,25 @@ pub async fn export_resource(
     plan: crate::resources::ResourceExportPlan,
     output_path: PathBuf,
 ) -> crate::Result<InstallJobSnapshot> {
-    start(InstallRequest::ExportResource { plan, output_path }).await
+    start(InstallRequest::ExportResource {
+        plan,
+        output_path,
+        resolution: None,
+    })
+    .await
+}
+
+pub async fn resolve_export_resource(
+    plan: crate::resources::ResourceExportPlan,
+    checkpoint: crate::resources::export::job::ExportResolutionCheckpoint,
+    output_path: PathBuf,
+) -> crate::Result<InstallJobSnapshot> {
+    start(InstallRequest::ExportResource {
+        plan,
+        output_path,
+        resolution: Some(Box::new(checkpoint)),
+    })
+    .await
 }
 
 async fn start(request: InstallRequest) -> crate::Result<InstallJobSnapshot> {

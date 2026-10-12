@@ -322,6 +322,7 @@ import {
     isWorldSaveContentItem,
     loadInstanceContentData,
     localContentIconUrl,
+    refreshInstanceContentUpdates,
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
@@ -1030,6 +1031,7 @@ const pendingContentChanges = computed(() =>
 )
 const isBulkOperating = localBulkOperating
 const isInstanceBusy = computed(() => props.instance?.install_stage !== 'installed')
+let contentEnrichmentController: AbortController | undefined
 let contentRequestGeneration = 0
 let activeBypassRefresh: Promise<void> | null = null
 
@@ -1043,6 +1045,7 @@ function isCurrentContentRequest(instanceId: string, generation: number) {
 }
 
 function invalidateContentRequests(clearState = false) {
+    contentEnrichmentController?.abort()
     contentRequestGeneration += 1
     if (!clearState) return
 
@@ -2727,6 +2730,7 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
     }
 
     const instanceId = props.instance.id
+    contentEnrichmentController?.abort()
     const generation = ++contentRequestGeneration
     debugState('initProjects start', { instanceId, cacheBehaviour, generation })
     let contentData: InstanceContentData | null
@@ -2743,29 +2747,89 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
         if (isCurrentContentRequest(instanceId, generation)) loading.value = false
         return
     }
-    try {
-        if (contentData.contentItems) {
-            contentData.contentItems = await translateContentItemTitles(
-                contentData.contentItems,
-                i18n.global.locale.value,
-            )
-        }
-        contentData.linkedContentItems = await translateContentItemTitles(
-            contentData.linkedContentItems,
-            i18n.global.locale.value,
-        )
-    } catch (error) {
-        if (isCurrentContentRequest(instanceId, generation)) {
-            handleError(error as Error)
-            loading.value = false
-        }
-        return
-    }
     if (!isCurrentContentRequest(instanceId, generation)) return
-    applyContentData(contentData)
+    try {
+        if (applyContentData(contentData)) enrichContentData(contentData, generation)
+    } catch (error) {
+        if (isCurrentContentRequest(instanceId, generation)) handleError(error as Error)
+    } finally {
+        if (isCurrentContentRequest(instanceId, generation)) loading.value = false
+    }
     if (cacheBehaviour !== 'bypass' && beginLegacyCurseForgeReconciliation(contentData)) {
         await initProjects('bypass')
     }
+}
+
+function enrichContentData(data: InstanceContentData, generation: number) {
+    contentEnrichmentController?.abort()
+    const controller = new AbortController()
+    contentEnrichmentController = controller
+    const isCurrent = () =>
+        !controller.signal.aborted && isCurrentContentRequest(data.path, generation)
+    void refreshInstanceContentUpdates(data, controller.signal)
+        .then((updated) => {
+            if (!isCurrent()) return
+            const byEntry = new Map(
+                [...updated.contentItems, ...updated.linkedContentItems]
+                    .filter((item) => item.instanceEntryId)
+                    .map((item) => [item.instanceEntryId, item]),
+            )
+            const merge = (items: ContentItem[]) =>
+                items.map((item) => {
+                    const update = byEntry.get(item.instanceEntryId)
+                    if (!update || hasContentOperation(item) || item.file_path !== update.file_path)
+                        return item
+                    return {
+                        ...item,
+                        resourceUpdate: update.resourceUpdate,
+                        instanceCapabilities: item.instanceCapabilities
+                            ? {
+                                  ...item.instanceCapabilities,
+                                  canUpdate:
+                                      !!update.resourceUpdate &&
+                                      item.instanceMaterializationState === 'present',
+                              }
+                            : item.instanceCapabilities,
+                    }
+                })
+            projects.value = merge(projects.value)
+            linkedModpackContentItems.value = merge(linkedModpackContentItems.value)
+            if (contentSnapshot.value)
+                contentSnapshot.value = {
+                    ...contentSnapshot.value,
+                    warnings: updated.snapshot.warnings,
+                }
+        })
+        .catch((error) => {
+            if (isCurrent()) handleError(error as Error)
+        })
+    const originals = [...data.contentItems, ...data.linkedContentItems]
+    void translateContentItemTitles(originals, i18n.global.locale.value)
+        .then((translated) => {
+            if (!isCurrent()) return
+            const byId = new Map(
+                translated.map((item, index) => [item.id, { item, original: originals[index] }]),
+            )
+            const merge = (items: ContentItem[]) =>
+                items.map((item) => {
+                    const translated = byId.get(item.id)
+                    if (
+                        !translated?.item.project ||
+                        hasContentOperation(item) ||
+                        item.project?.title !== translated.original.project?.title
+                    )
+                        return item
+                    return {
+                        ...item,
+                        project: { ...item.project, title: translated.item.project.title },
+                    }
+                })
+            projects.value = merge(projects.value)
+            linkedModpackContentItems.value = merge(linkedModpackContentItems.value)
+        })
+        .catch((error) => {
+            if (isCurrent()) handleError(error as Error)
+        })
 }
 
 function beginLegacyCurseForgeReconciliation(contentData: InstanceContentData) {
@@ -3196,6 +3260,7 @@ async function loadInitialContent(): Promise<void> {
     }
 
     if (props.preloadedContent && applyContentData(props.preloadedContent)) {
+        enrichContentData(props.preloadedContent, ++contentRequestGeneration)
         if (beginLegacyCurseForgeReconciliation(props.preloadedContent)) {
             await initProjects('bypass')
         }

@@ -225,8 +225,9 @@ pub async fn apply_cleanup(
     job_state: &mut InstallJobState,
     state: &State,
 ) -> crate::Result<()> {
-    if let InstallRequest::ExportResource { plan, output_path } =
-        &job_state.request
+    if let InstallRequest::ExportResource {
+        plan, output_path, ..
+    } = &job_state.request
     {
         crate::resources::export::writer::cleanup_partial(plan, output_path)
             .await

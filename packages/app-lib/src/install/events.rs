@@ -400,6 +400,36 @@ impl InstallProgressReporter {
         Ok(snapshot)
     }
 
+    pub(crate) async fn checkpoint_export(
+        &self,
+        plan: crate::resources::ResourceExportPlan,
+        resolution: Option<
+            crate::resources::export::job::ExportResolutionCheckpoint,
+        >,
+    ) -> crate::Result<()> {
+        let app_state = crate::State::get().await?;
+        let mut state = self.state.lock().await;
+        self.sync_latest(&mut state, &app_state).await?;
+        let super::model::InstallRequest::ExportResource {
+            output_path, ..
+        } = &state.job.request
+        else {
+            return Err(crate::ErrorKind::InputError(
+                "not an export task".into(),
+            )
+            .into());
+        };
+        state.job.request = super::model::InstallRequest::ExportResource {
+            plan,
+            output_path: output_path.clone(),
+            resolution: resolution.map(Box::new),
+        };
+        let record =
+            store::update_state(self.job_id, &state.job, &app_state).await?;
+        state.mark_persisted(record.snapshot());
+        emit_install_job(&record.snapshot()).await
+    }
+
     pub async fn current_state(&self) -> crate::Result<InstallJobState> {
         let app_state = crate::State::get().await?;
         let mut state = self.state.lock().await;

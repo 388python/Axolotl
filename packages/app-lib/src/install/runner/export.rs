@@ -6,6 +6,85 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
+pub(super) async fn resolve(
+    job_id: Uuid,
+    job_state: &mut InstallJobState,
+    plan: &crate::resources::ResourceExportPlan,
+    output: &Path,
+    checkpoint: crate::resources::export::job::ExportResolutionCheckpoint,
+) -> crate::Result<()> {
+    validate(plan)
+        .await
+        .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    let state = State::get().await?;
+    let root = crate::api::instance::get_full_path(&plan.instance_id).await?;
+    let service = state
+        .resources()
+        .await
+        .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    let reporter = InstallProgressReporter::new(job_id, job_state.clone());
+    reporter
+        .update(InstallPhaseId::Verifying, None, InstallPhaseDetails::Empty)
+        .await?;
+    let cancel = reporter.cancellation_token();
+    let mut draft = checkpoint.restore();
+    let known = crate::resources::export::refresh::known_references(
+        &state.pool,
+        &plan.instance_id,
+    )
+    .await
+    .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    let resolved = {
+        let (updates, mut progress) = tokio::sync::watch::channel(
+            None::<crate::resources::ExportRefreshProgress>,
+        );
+        let on_progress = move |value| {
+            updates.send_replace(Some(value));
+        };
+        let resolving = crate::resources::export::job::resolve(
+            &service,
+            &mut draft,
+            plan,
+            &root,
+            &checkpoint.preferred_source,
+            known,
+            &cancel,
+            &on_progress,
+        );
+        tokio::pin!(resolving);
+        let mut tick =
+            tokio::time::interval(std::time::Duration::from_millis(250));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut reported = None;
+        loop {
+            tokio::select! {
+                result = &mut resolving => break result,
+                _ = tick.tick() => {
+                    let value = progress.borrow_and_update().clone();
+                    if let Some(value) = value {
+                        let current = ((value.overall_completed as f64 + value.current_file_fraction) * 1000.0) as u64;
+                        let total = (value.overall_total as u64).saturating_mul(1000);
+                        if reported != Some((current, total)) {
+                            reporter.update(InstallPhaseId::Verifying, Some(InstallProgress { current, total, secondary: None }), InstallPhaseDetails::Empty).await?;
+                            reported = Some((current, total));
+                        }
+                    }
+                }
+            }
+        }
+    };
+    match resolved {
+        Ok(resolved) => {
+            reporter.checkpoint_export(resolved.clone(), None).await?;
+            run(job_id, job_state, &resolved, output).await
+        }
+        Err(error) => {
+            reporter.checkpoint_export(plan.clone(), Some(crate::resources::export::job::ExportResolutionCheckpoint::capture(&draft, checkpoint.preferred_source))).await?;
+            Err(ErrorKind::InputError(error.to_string()).into())
+        }
+    }
+}
+
 pub(super) async fn run(
     job_id: Uuid,
     job_state: &mut InstallJobState,
@@ -19,16 +98,7 @@ pub(super) async fn run(
     let reporter = InstallProgressReporter::new(job_id, job_state.clone());
     let cancel = reporter.cancellation_token();
     let progress = Arc::new(AtomicU64::new(0));
-    let total: u64 = plan
-        .files
-        .iter()
-        .filter_map(|a| match a {
-            crate::resources::ExportFileAction::Embed { snapshot } => {
-                snapshot.integrity.size
-            }
-            _ => None,
-        })
-        .fold(0u64, u64::saturating_add);
+    let total = crate::resources::export::writer::work_size(plan);
     let track = progress.clone();
     let on_progress = move |current, _| {
         track.store(current, Ordering::Relaxed);
@@ -53,11 +123,17 @@ pub(super) async fn run(
     );
     tokio::pin!(writing);
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut reported = None;
     loop {
         tokio::select! {
             result = &mut writing => { result.map_err(|e| ErrorKind::InputError(e.to_string()))?; break; }
             _ = tick.tick() => {
-                reporter.update(InstallPhaseId::Exporting, Some(InstallProgress { current: progress.load(Ordering::Relaxed), total, secondary: None }), InstallPhaseDetails::Empty).await?;
+                let current = progress.load(Ordering::Relaxed);
+                if reported != Some(current) {
+                    reporter.update(InstallPhaseId::Exporting, Some(InstallProgress { current, total, secondary: None }), InstallPhaseDetails::Empty).await?;
+                    reported = Some(current);
+                }
             }
         }
     }

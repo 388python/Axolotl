@@ -1,6 +1,28 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const exportMessages = defineMessages({
+    finalizingAnalysis: {
+        id: 'app.export.finalizing-analysis',
+        defaultMessage: 'Preparing verification results…',
+    },
+    queued: { id: 'app.export.queued', defaultMessage: 'Export queued' },
+    queuedDescription: {
+        id: 'app.export.queued-description',
+        defaultMessage: '{name} will finish verification and export in Downloads.',
+    },
+    verifyingLocal: {
+        id: 'app.export.verify-local',
+        defaultMessage: 'Verifying exportable local files…',
+    },
+    verifyingSource: {
+        id: 'app.export.verify-source',
+        defaultMessage: 'Verifying exact matches on {source}…',
+    },
+    checkNeedsAttention: {
+        id: 'app.export.check-attention',
+        defaultMessage:
+            'Some files need attention. Review them before export, or let the export task retry verification.',
+    },
     failed: {
         id: 'app.export.failed',
         defaultMessage: 'Export failed. Retry analysis before exporting again.',
@@ -23,11 +45,12 @@ export const exportMessages = defineMessages({
     cancelExport: { id: 'app.export.cancel', defaultMessage: 'Cancel export' },
     analyzing: {
         id: 'app.export.analyzing',
-        defaultMessage: 'Verifying selected files and refreshing exact source matches…',
+        defaultMessage: 'Verifying exportable files and refreshing exact source matches…',
     },
     analyzed: {
         id: 'app.export.analyzed',
-        defaultMessage: 'Selected files verified. Unmatched files will be embedded.',
+        defaultMessage:
+            'Background verification finished. Unmatched selected files will be embedded.',
     },
     retryAnalysis: { id: 'app.export.retry-analysis', defaultMessage: 'Retry analysis' },
     failedAnalysis: {

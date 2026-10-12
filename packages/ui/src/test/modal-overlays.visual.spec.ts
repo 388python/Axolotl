@@ -4,6 +4,7 @@ import { defineComponent, effectScope, h, nextTick, ref } from 'vue'
 
 import Combobox from '../components/base/Combobox.vue'
 import MultiSelect from '../components/base/MultiSelect.vue'
+import MultiStageModal from '../components/base/MultiStageModal.vue'
 import TeleportOverflowMenu from '../components/base/TeleportOverflowMenu.vue'
 import NewModal from '../components/modal/NewModal.vue'
 import { useBodyScrollLock } from '../composables/body-scroll-lock'
@@ -52,6 +53,48 @@ function escape(target: Element) {
         }),
     )
 }
+
+it('keeps additional workflow header content outside the stage scroll area', async () => {
+    const stage = defineComponent({ setup: () => () => h('p', 'Stage content') })
+    const wrapper = await mountThemed(
+        MultiStageModal,
+        {
+            context: {},
+            stages: [
+                {
+                    id: 'first',
+                    title: 'First',
+                    stageContent: stage,
+                    leftButtonConfig: null,
+                    rightButtonConfig: null,
+                },
+            ],
+        },
+        'dark',
+        {
+            slots: {
+                'header-extra': () =>
+                    h('progress', { 'data-header-progress': '', max: 10, value: 4 }),
+            },
+            global: {
+                directives: { tooltip: {} },
+                provide: {
+                    [I18N_INJECTION_KEY as symbol]: {
+                        locale: ref('en-US'),
+                        t: (key: string) => key,
+                        setLocale: () => undefined,
+                    },
+                },
+            },
+        },
+    )
+    cleanup.push(() => wrapper.unmount())
+    ;(wrapper.vm as unknown as { show: () => void }).show()
+    await waitFor(() => !!document.querySelector('[data-header-progress]'))
+    const progress = document.querySelector('[data-header-progress]')!
+    expect(progress.closest('[data-modal-content]')).toBeNull()
+    expect(document.querySelector('[data-modal-content]')?.textContent).toContain('Stage content')
+})
 
 for (const kind of ['combobox', 'searchable-combobox', 'multiselect'] as const) {
     it(`closes only the ${kind} on the first Escape and the modal on the next`, async () => {

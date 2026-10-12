@@ -17,6 +17,8 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::sync::CancellationToken;
 
 pub struct ExportDraft {
+    pub accepted_failures: Vec<ExportEmbeddedFailureChoice>,
+    pub queued: Option<super::job::QueuedExport>,
     pub scan: ResourceExportScan,
     pub results: HashMap<String, ExportResolvedFile>,
     pub releases: HashMap<SourceReleaseRef, ReleaseDocument>,
@@ -29,6 +31,8 @@ pub struct ExportDraft {
 impl ExportDraft {
     pub fn new(scan: ResourceExportScan) -> Self {
         Self {
+            accepted_failures: vec![],
+            queued: None,
             scan,
             results: HashMap::new(),
             releases: HashMap::new(),
@@ -158,6 +162,15 @@ pub async fn freeze(
     original: &ExportFileSnapshot,
     cancel: &CancellationToken,
 ) -> ResourceResult<(ExportFileSnapshot, u32)> {
+    freeze_with_progress(root, original, cancel, &|_, _| {}).await
+}
+
+pub async fn freeze_with_progress(
+    root: &Path,
+    original: &ExportFileSnapshot,
+    cancel: &CancellationToken,
+    progress: &(dyn Fn(u64, u64) + Send + Sync),
+) -> ResourceResult<(ExportFileSnapshot, u32)> {
     canceled(cancel)?;
     let safe = path_util::SafeRelativeUtf8UnixPathBuf::try_from(
         original.relative_path.clone(),
@@ -185,6 +198,8 @@ pub async fn freeze(
     if !before.is_file() {
         return Err(invalid("export path is no longer a file"));
     }
+    let work_size = before.len().saturating_mul(2).max(1);
+    progress(0, work_size);
     let mut buffer = vec![0; 256 * 1024];
     let mut sha1 = sha1_smol::Sha1::new();
     let mut sha256 = Sha256::new();
@@ -215,6 +230,7 @@ pub async fn freeze(
             .iter()
             .filter(|byte| !matches!(byte, 9 | 10 | 13 | 32))
             .count() as u64;
+        progress(size, work_size);
     }
     file.rewind().await.map_err(|e| invalid(e.to_string()))?;
     let mut fingerprint =
@@ -222,6 +238,7 @@ pub async fn freeze(
             normalized as u32,
         );
     let mut second_sha1 = sha1_smol::Sha1::new();
+    let mut second_size = 0u64;
     if identifiable {
         loop {
             let read = tokio::select! { biased; _ = cancel.cancelled() => return Err(ResourceError::Canceled), result = file.read(&mut buffer) => result.map_err(|e| invalid(e.to_string()))? };
@@ -230,6 +247,8 @@ pub async fn freeze(
             }
             fingerprint.update(&buffer[..read]);
             second_sha1.update(&buffer[..read]);
+            second_size = second_size.saturating_add(read as u64);
+            progress(size.saturating_add(second_size), work_size);
         }
         if second_sha1.digest() != sha1.digest() {
             return Err(invalid(
@@ -280,6 +299,7 @@ pub async fn freeze(
             },
         ],
     };
+    progress(work_size, work_size);
     Ok((snapshot, fingerprint.finish()))
 }
 
@@ -562,6 +582,77 @@ pub async fn resolve_source(
         .collect())
 }
 
+struct ProgressEmitter<'a> {
+    callback: &'a (dyn Fn(ExportRefreshProgress) + Send + Sync),
+    last: std::sync::Mutex<Option<(Instant, String)>>,
+}
+
+impl ProgressEmitter<'_> {
+    fn emit(&self, value: ExportRefreshProgress) {
+        let mut last = self.last.lock().unwrap();
+        if last.as_ref().is_some_and(|(time, phase)| {
+            phase == &value.phase
+                && time.elapsed() < std::time::Duration::from_millis(250)
+        }) {
+            return;
+        }
+        *last = Some((Instant::now(), value.phase.clone()));
+        drop(last);
+        (self.callback)(value);
+    }
+
+    fn finish(&self, value: ExportRefreshProgress) {
+        (self.callback)(value);
+    }
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    #[test]
+    fn fast_file_updates_are_coalesced_but_phase_changes_and_completion_are_delivered()
+     {
+        let calls = std::sync::Mutex::new(Vec::new());
+        let callback = |value| {
+            calls.lock().unwrap().push(value);
+        };
+        let emitter = ProgressEmitter {
+            callback: &callback,
+            last: std::sync::Mutex::new(None),
+        };
+        let mut value = ExportRefreshProgress {
+            session_id: SessionId::new("session").unwrap(),
+            request_id: RequestId::new("request").unwrap(),
+            selection_revision: 1,
+            completed: 0,
+            total: 10000,
+            phase: "hashing".into(),
+            overall_completed: 0,
+            overall_total: 30000,
+            current_file_fraction: 0.0,
+        };
+        emitter.emit(value.clone());
+        for index in 1..10000 {
+            value.completed = index;
+            value.overall_completed = index;
+            emitter.emit(value.clone());
+        }
+        let hashing_events = calls.lock().unwrap().len();
+        assert!(hashing_events < 100, "too many events: {hashing_events}");
+        value.phase = "modrinth".into();
+        emitter.emit(value.clone());
+        assert_eq!(calls.lock().unwrap().len(), hashing_events + 1);
+        value.phase = "complete".into();
+        value.overall_completed = value.overall_total;
+        emitter.finish(value);
+        assert_eq!(
+            calls.lock().unwrap().last().unwrap().overall_completed,
+            30000
+        );
+    }
+}
+
 pub async fn refresh_local(
     service: &Arc<ResourceService>,
     draft: &mut ExportDraft,
@@ -573,6 +664,10 @@ pub async fn refresh_local(
     cancel: &CancellationToken,
     progress: &(dyn Fn(ExportRefreshProgress) + Send + Sync),
 ) -> ResourceResult<ExportResolutionSession> {
+    let progress = ProgressEmitter {
+        callback: progress,
+        last: std::sync::Mutex::new(None),
+    };
     if revision <= draft.selection_revision {
         return Err(invalid("stale export selection revision"));
     }
@@ -595,11 +690,60 @@ pub async fn refresh_local(
     draft.selection_revision = revision;
     draft.touched = Instant::now();
     let mut locals = vec![];
+    let source_sets: HashMap<_, _> = draft
+        .selected
+        .iter()
+        .map(|path| {
+            let mut sources =
+                HashSet::from([SourceId::modrinth(), SourceId::curseforge()]);
+            sources.extend(
+                known
+                    .get(path)
+                    .into_iter()
+                    .flatten()
+                    .map(|reference| reference.release.project.source.clone()),
+            );
+            (path.clone(), sources)
+        })
+        .collect();
+    let overall_total = draft.selected.len()
+        + source_sets.values().map(HashSet::len).sum::<usize>();
+    let total_local_weight: f64 = draft
+        .selected
+        .iter()
+        .map(|path| allowed[path].integrity.size.unwrap_or(0).max(1) as f64)
+        .sum();
+    let mut processed_local_weight = 0.0;
+    let mut completed_sources = 0;
+
     for (index, path) in draft.selected.clone().iter().enumerate() {
         let mut original = allowed[path].clone();
         original.identifiable |=
             known.get(path).is_some_and(|refs| !refs.is_empty());
-        match freeze(root, &original, cancel).await {
+        let file_weight = original.integrity.size.unwrap_or(0).max(1) as f64;
+        let on_file_progress = |current: u64, total: u64| {
+            let fraction =
+                (current as f64 / total.max(1) as f64).clamp(0.0, 1.0);
+            let local_completed = (processed_local_weight
+                + fraction * file_weight)
+                / total_local_weight.max(1.0)
+                * draft.selected.len() as f64;
+            let cumulative = completed_sources as f64 + local_completed;
+            progress.emit(ExportRefreshProgress {
+                session_id: draft.scan.session_id.clone(),
+                request_id: request.clone(),
+                selection_revision: revision,
+                completed: index,
+                total: draft.selected.len(),
+                phase: "hashing".into(),
+                overall_completed: cumulative.floor() as usize,
+                overall_total,
+                current_file_fraction: cumulative.fract(),
+            });
+        };
+        match freeze_with_progress(root, &original, cancel, &on_file_progress)
+            .await
+        {
             Ok((mut snapshot, fingerprint)) => {
                 let previous = draft.results.get(path);
                 let same = previous.is_some_and(|p| {
@@ -643,13 +787,32 @@ pub async fn refresh_local(
                 );
             }
         }
-        progress(ExportRefreshProgress {
+        let file = &draft.results[path];
+        let sources = &source_sets[path];
+        completed_sources += if file.local_error.is_some()
+            || !file.snapshot.identifiable
+        {
+            sources.len()
+        } else {
+            sources.iter().filter(|source| file.resolutions.iter().any(|resolution| match resolution {
+                ExportSourceResolution::Matched { source: current, .. } | ExportSourceResolution::NoMatch { source: current } => current == *source,
+                ExportSourceResolution::Failed { source: current, .. } => current == *source && draft.accepted_failures.iter().any(|choice| choice.source == *current && choice.snapshot == file.snapshot),
+            })).count()
+        };
+        processed_local_weight += file_weight;
+        let cumulative = completed_sources as f64
+            + processed_local_weight / total_local_weight.max(1.0)
+                * draft.selected.len() as f64;
+        progress.emit(ExportRefreshProgress {
             session_id: draft.scan.session_id.clone(),
             request_id: request.clone(),
             selection_revision: revision,
             completed: index + 1,
             total: draft.selected.len(),
             phase: "hashing".into(),
+            overall_completed: cumulative.floor() as usize,
+            overall_total,
+            current_file_fraction: cumulative.fract(),
         });
     }
     let mut sources = vec![SourceId::modrinth(), SourceId::curseforge()];
@@ -672,6 +835,11 @@ pub async fn refresh_local(
                                 .any(|r| r.release.project.source == source)
                         });
                 applicable
+                    && !draft.accepted_failures.iter().any(|choice| {
+                        choice.source == source
+                            && choice.snapshot
+                                == draft.results[&file.relative_path].snapshot
+                    })
                     && !draft.results[&file.relative_path]
                         .resolutions
                         .iter()
@@ -688,7 +856,19 @@ pub async fn refresh_local(
             })
             .cloned()
             .collect::<Vec<_>>();
+        let mut source_completed = locals.len() - pending.len();
         for batch in pending.chunks(100) {
+            progress.emit(ExportRefreshProgress {
+                session_id: draft.scan.session_id.clone(),
+                request_id: request.clone(),
+                selection_revision: revision,
+                completed: source_completed,
+                total: locals.len(),
+                phase: source.as_str().into(),
+                overall_completed: draft.selected.len() + completed_sources,
+                overall_total,
+                current_file_fraction: 0.0,
+            });
             let resolutions = resolve_source(
                 service,
                 source.clone(),
@@ -710,39 +890,33 @@ pub async fn refresh_local(
                 });
                 result.resolutions.push(resolution);
             }
-            progress(ExportRefreshProgress {
+            source_completed += batch.len();
+            completed_sources += batch.len();
+            progress.emit(ExportRefreshProgress {
                 session_id: draft.scan.session_id.clone(),
                 request_id: request.clone(),
                 selection_revision: revision,
-                completed: draft
-                    .results
-                    .values()
-                    .filter(|f| {
-                        draft.selected.contains(&f.snapshot.relative_path)
-                            && f.resolutions.iter().any(|resolution| {
-                                match resolution {
-                                    ExportSourceResolution::Matched {
-                                        source: s,
-                                        ..
-                                    }
-                                    | ExportSourceResolution::NoMatch {
-                                        source: s,
-                                    }
-                                    | ExportSourceResolution::Failed {
-                                        source: s,
-                                        ..
-                                    } => s == &source,
-                                }
-                            })
-                    })
-                    .count()
-                    .min(locals.len()),
+                completed: source_completed,
                 total: locals.len(),
                 phase: source.as_str().into(),
+                overall_completed: draft.selected.len() + completed_sources,
+                overall_total,
+                current_file_fraction: 0.0,
             });
         }
     }
     canceled(cancel)?;
+    progress.finish(ExportRefreshProgress {
+        session_id: draft.scan.session_id.clone(),
+        request_id: request.clone(),
+        selection_revision: revision,
+        completed: draft.selected.len(),
+        total: draft.selected.len(),
+        phase: "complete".into(),
+        overall_completed: draft.selected.len() + completed_sources,
+        overall_total,
+        current_file_fraction: 0.0,
+    });
     Ok(draft.response(request))
 }
 

@@ -7,66 +7,38 @@ import {
     StyledInput,
     useFormatBytes,
 } from '@modrinth/ui'
-import { onBeforeUnmount, onMounted } from 'vue'
 
 import { injectExportContext } from './context'
 import { exportMessages } from './messages'
 const {
     packageInfo,
     format,
-    exportJobId,
-    cancelExport,
-    cancelingExport,
     exportError,
     exporting,
     selection,
     selectedSize,
     formatMessage,
     refreshing,
-    refreshProgress,
     refreshError,
     resolution,
     failedFiles,
     embedded,
     refresh,
-    cancelRefresh,
     embed,
 } = injectExportContext()
-onMounted(() => {
-    void refresh()
-})
-onBeforeUnmount(cancelRefresh)
 const formatBytes = useFormatBytes()
 </script>
 <template>
     <div class="flex min-w-0 flex-col gap-4">
-        <div v-if="exportJobId" class="flex items-center justify-between gap-3" role="status">
-            <span>{{ formatMessage(exportMessages.writing) }}</span>
-            <Button :disabled="cancelingExport" @click="cancelExport">{{
-                formatMessage(exportMessages.cancelExport)
-            }}</Button>
-        </div>
         <p v-if="exportError" class="m-0 break-all" role="alert">{{ exportError }}</p>
-        <div v-if="refreshing" class="flex flex-col gap-2" role="status">
-            <span>{{ formatMessage(exportMessages.analyzing) }}</span>
-            <progress
-                v-if="refreshProgress"
-                :max="Math.max(1, refreshProgress.total)"
-                :value="refreshProgress.completed"
-                class="w-full"
-            />
-        </div>
-        <div v-else-if="refreshError" class="flex flex-col items-start gap-2" role="alert">
+        <div v-if="refreshError" class="flex flex-col items-start gap-2" role="alert">
             <p class="m-0 break-all">{{ refreshError }}</p>
             <Button :disabled="exporting" @click="refresh(true)">{{
                 formatMessage(exportMessages.retryAnalysis)
             }}</Button>
         </div>
-        <template v-else-if="resolution">
-            <p v-if="!failedFiles.length" class="m-0">
-                {{ formatMessage(exportMessages.analyzed) }}
-            </p>
-            <div v-else class="flex flex-col gap-3">
+        <template v-else-if="resolution && !refreshing">
+            <div v-if="failedFiles.length" class="flex flex-col gap-3">
                 <p class="m-0">{{ formatMessage(exportMessages.failedAnalysis) }}</p>
                 <div
                     v-for="file in failedFiles"

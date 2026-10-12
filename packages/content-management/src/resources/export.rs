@@ -127,6 +127,12 @@ pub struct ExportRefreshProgress {
     pub completed: usize,
     pub total: usize,
     pub phase: String,
+    #[serde(default)]
+    pub overall_completed: usize,
+    #[serde(default)]
+    pub overall_total: usize,
+    #[serde(default)]
+    pub current_file_fraction: f64,
 }
 
 /// An explicit fallback is bound to the failed source and exact file snapshot.

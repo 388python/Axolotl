@@ -4,6 +4,7 @@ import { shallowRef } from 'vue'
 import type { ComponentExposed } from 'vue-component-type-helpers'
 
 import { createExportContext, provideExportContext } from './export/context'
+import ExportProgress from './export/ExportProgress.vue'
 import { exportStages } from './export/stages'
 
 const props = defineProps<{ instance: { id: string; name: string } }>()
@@ -17,6 +18,7 @@ defineExpose({ show: ctx.show })
         ref="modal"
         :stages="exportStages"
         :context="ctx"
+        disable-progress
         :breadcrumbs="!ctx.exporting.value"
         :cancel-button="{
             label: ctx.formatMessage(commonMessages.cancelButton),
@@ -24,5 +26,7 @@ defineExpose({ show: ctx.show })
             onClick: () => modal?.hide(),
         }"
         @hide="ctx.close"
-    />
+    >
+        <template #header-extra><ExportProgress /></template>
+    </MultiStageModal>
 </template>

@@ -501,6 +501,9 @@ export interface ExportRefreshProgress {
     completed: number
     total: number
     phase: string
+    overallCompleted?: number
+    overallTotal?: number
+    currentFileFraction?: number
 }
 export interface ExportEmbeddedFailureChoice {
     snapshot: ExportFileSnapshot
@@ -567,6 +570,20 @@ export function resourceExportExecute(planId: string, revision: number, outputPa
     return invoke<import('./install').InstallJobSnapshot>(
         'plugin:axolotl-resources|resource_export_execute',
         { planId, revision, outputPath },
+    )
+}
+
+export function resourceExportQueue(
+    sessionId: string,
+    selectedFiles: ExportFileSnapshot[],
+    format: ResourceExportFormat,
+    packageInfo: { name: string; version: string; summary: string; author: string | null },
+    embeddedFailureChoices: ExportEmbeddedFailureChoice[],
+    outputPath: string,
+) {
+    return invoke<import('./install').InstallJobSnapshot>(
+        'plugin:axolotl-resources|resource_export_queue',
+        { sessionId, selectedFiles, format, packageInfo, embeddedFailureChoices, outputPath },
     )
 }
 export function resourceExportCancel(requestIdOrJobId: string) {
