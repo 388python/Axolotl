@@ -4756,5 +4756,11 @@
   },
   "browse.search.refreshing": {
     "defaultMessage": "正在刷新结果…"
+  },
+  "files.layout.no-matches": {
+    "defaultMessage": "此视图中没有匹配的文件"
+  },
+  "files.select-view": {
+    "defaultMessage": "选择此视图中的全部文件"
   }
 }

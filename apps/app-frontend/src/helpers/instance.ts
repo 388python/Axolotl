@@ -1071,18 +1071,6 @@ export async function export_instance_mrpack(
     })
 }
 
-// Given a folder path, populate an array of all the subfolders
-// Intended to be used for finding potential override folders
-// profile
-// -- mods
-// -- resourcepacks
-// -- file1
-// => [mods, resourcepacks]
-// allows selection for 'included_overrides' in export_instance_mrpack
-export async function get_pack_export_candidates(instanceId: string): Promise<string[]> {
-    return await invoke('plugin:instance|instance_get_pack_export_candidates', { instanceId })
-}
-
 export interface GcLaunchIntent {
     active_preset_id: string
     block_tokens: string[]

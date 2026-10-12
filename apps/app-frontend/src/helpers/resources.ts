@@ -445,3 +445,34 @@ export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {
           ? 'onlyCached'
           : 'useFresh'
 }
+
+export interface ExportFileSnapshot {
+    relativePath: string
+    integrity: ResourceArtifact['integrity']
+    revision: number
+    identifiable: boolean
+    modifiedAt: number | null
+    categoryId: string
+    categorySelected: boolean
+}
+export interface ExportCategory {
+    id: string
+    defaultSelected: boolean
+    paths: string[]
+    children: ExportCategory[]
+    title: string | null
+    modifiedAt: number | null
+}
+export interface ResourceExportScan {
+    sessionId: string
+    instanceId: string
+    instanceRevision: number
+    files: ExportFileSnapshot[]
+    directories: { relativePath: string; modifiedAt: number | null }[]
+    categories: ExportCategory[]
+    excludedPaths: string[]
+    requirements: { gameVersion: string; loader: string | null; loaderVersion: string | null }
+}
+export function resourceExportScan(instanceId: string, signal?: AbortSignal) {
+    return resourceRequest<ResourceExportScan>('resource_export_scan', { instanceId }, signal)
+}

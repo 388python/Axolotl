@@ -126,7 +126,6 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_cache_icon,
             instance_edit_icon,
             instance_export_mrpack,
-            instance_get_pack_export_candidates,
             instance_list_screenshots,
             instance_list_all_screenshots,
             instance_list_synced_screenshots,
@@ -2021,13 +2020,6 @@ pub async fn instance_export_mrpack(
     )
     .await?;
     Ok(())
-}
-
-#[tauri::command]
-pub async fn instance_get_pack_export_candidates(
-    instance_id: &str,
-) -> Result<Vec<SafeRelativeUtf8UnixPathBuf>> {
-    Ok(theseus::instance::get_pack_export_candidates(instance_id).await?)
 }
 
 #[tauri::command]

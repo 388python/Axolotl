@@ -70,9 +70,7 @@ pub use self::core_components::{
     preview_core_jar, remove_core_component, replace_core_jar,
     restore_core_component, set_core_component_enabled,
 };
-pub use self::export_mrpack::{
-    create_mrpack_json, export_mrpack, get_pack_export_candidates,
-};
+pub use self::export_mrpack::{create_mrpack_json, export_mrpack};
 pub use self::get::{get, get_many, list};
 pub use self::home::{
     get_daily_playtime, get_daily_playtime_details, set_pinned,

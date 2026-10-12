@@ -73,9 +73,19 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_revise_plan,
             resource_queue_plan,
             resource_list_history,
+            resource_export_scan,
             resource_rollback
         ])
         .build()
+}
+
+#[tauri::command]
+pub async fn resource_export_scan(
+    instance_id: String,
+    request_id: RequestId,
+) -> Result<ResourceExportScan> {
+    let (_guard, cancel) = request(&request_id)?;
+    Ok(theseus::resources::export::scan::scan(instance_id, &cancel).await?)
 }
 
 #[tauri::command]

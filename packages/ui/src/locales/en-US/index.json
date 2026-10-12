@@ -4756,5 +4756,11 @@
   },
   "browse.search.refreshing": {
     "defaultMessage": "Refreshing results…"
+  },
+  "files.layout.no-matches": {
+    "defaultMessage": "No files match this view"
+  },
+  "files.select-view": {
+    "defaultMessage": "Select all files in this view"
   }
 }

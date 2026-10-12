@@ -297,6 +297,7 @@ fn main() {
                         "resource_revise_plan",
                         "resource_queue_plan",
                         "resource_list_history",
+                        "resource_export_scan",
                         "resource_rollback",
                     ])
                     .default_permission(
@@ -648,7 +649,6 @@ fn main() {
                         "instance_cache_icon",
                         "instance_edit_icon",
                         "instance_export_mrpack",
-                        "instance_get_pack_export_candidates",
                         "instance_list_screenshots",
                         "instance_list_all_screenshots",
                         "instance_list_synced_screenshots",

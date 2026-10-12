@@ -2084,9 +2084,6 @@
   "app.error.try-sign-in-again": {
     "message": "Try signing in again"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Enter modpack description..."
-  },
   "app.export-modal.export-button": {
     "message": "Export"
   },
@@ -2096,20 +2093,11 @@
   "app.export-modal.export-complete-description": {
     "message": "{name} was exported successfully."
   },
-  "app.export-modal.header": {
-    "message": "Export modpack"
-  },
   "app.export-modal.modpack-name-label": {
-    "message": "Modpack name"
-  },
-  "app.export-modal.modpack-name-placeholder": {
     "message": "Modpack name"
   },
   "app.export-modal.version-number-label": {
     "message": "Version number"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.gc-notice.fallback": {
     "message": "Java did not accept {preferred}; using {chosen}."
@@ -6669,7 +6657,7 @@
     "message": "Your Home, your layout"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "Launch, stop, repair, configure, export, or open the instance from its header."
+    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export starts with categories, then lets you adjust individual files before entering package information."
   },
   "app.onboarding.instance-actions.title": {
     "message": "The main controls"
@@ -13531,5 +13519,119 @@
   },
   "app.resources.operation.artifact-mismatch": {
     "message": "The selected installed entry does not match this item."
+  },
+  "app.export.categories": {
+    "message": "Choose categories"
+  },
+  "app.export.category-hint": {
+    "message": "Choose what to include, then adjust individual files on the next step."
+  },
+  "app.export.category.defaultConfig": {
+    "message": "Default configuration"
+  },
+  "app.export.category.emiRecords": {
+    "message": "EMI personal records"
+  },
+  "app.export.category.gameSettings": {
+    "message": "Game settings"
+  },
+  "app.export.category.importantData": {
+    "message": "Scripts, data packs and important resources"
+  },
+  "app.export.category.jeiRecords": {
+    "message": "JEI personal records"
+  },
+  "app.export.category.mapRecords": {
+    "message": "Personal maps and waypoints"
+  },
+  "app.export.category.modConfig": {
+    "message": "Mod configuration"
+  },
+  "app.export.category.mods": {
+    "message": "Mods and plugins"
+  },
+  "app.export.category.oldResources": {
+    "message": "Disabled and old resources"
+  },
+  "app.export.category.optifine": {
+    "message": "OptiFine settings"
+  },
+  "app.export.category.other": {
+    "message": "Other folders and root files"
+  },
+  "app.export.category.patchouliRecords": {
+    "message": "Patchouli personal records"
+  },
+  "app.export.category.personalRecords": {
+    "message": "Personal game records"
+  },
+  "app.export.category.recordings": {
+    "message": "Replays and videos"
+  },
+  "app.export.category.resourcePacks": {
+    "message": "Resource packs"
+  },
+  "app.export.category.schematics": {
+    "message": "Schematics"
+  },
+  "app.export.category.screenshots": {
+    "message": "Screenshots"
+  },
+  "app.export.category.servers": {
+    "message": "Server list"
+  },
+  "app.export.category.shaders": {
+    "message": "Shader packs and settings"
+  },
+  "app.export.category.worlds": {
+    "message": "World saves"
+  },
+  "app.export.count": {
+    "message": "{count, plural, one {# file} other {# files}} · {size}"
+  },
+  "app.export.excluded": {
+    "message": "{count, plural, one {# protected path excluded} other {# protected paths excluded}}. Authentication files, runtime libraries and symbolic links cannot be exported."
+  },
+  "app.export.file-hint": {
+    "message": "Folder checkboxes include all files in the snapshot, even unopened subfolders. Manual exclusions are kept when you change categories."
+  },
+  "app.export.files": {
+    "message": "Adjust files"
+  },
+  "app.export.next": {
+    "message": "Next"
+  },
+  "app.export.no-files": {
+    "message": "This instance has no exportable files."
+  },
+  "app.export.package": {
+    "message": "Package information"
+  },
+  "app.export.requirements": {
+    "message": "Game and loader requirements"
+  },
+  "app.export.requirements-description": {
+    "message": "Included in the manifest. Game files and runtime libraries are excluded."
+  },
+  "app.export.restore": {
+    "message": "Restore category selection"
+  },
+  "app.export.retry": {
+    "message": "Retry scan"
+  },
+  "app.export.scan": {
+    "message": "Scanning local files…"
+  },
+  "app.export.scan-failed": {
+    "message": "Could not scan the instance files"
+  },
+  "app.export.search": {
+    "message": "Search file paths"
+  },
+  "app.export.selected": {
+    "message": "Selected files"
+  },
+  "app.export.selection": {
+    "message": "{count, plural, one {# file selected} other {# files selected}} · {size}"
   }
 }

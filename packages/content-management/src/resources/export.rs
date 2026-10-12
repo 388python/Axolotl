@@ -30,6 +30,12 @@ pub struct ExportFileSnapshot {
     pub integrity: ArtifactIntegrity,
     pub revision: u32,
     pub identifiable: bool,
+    #[serde(default)]
+    pub modified_at: Option<u64>,
+    #[serde(default)]
+    pub category_id: String,
+    #[serde(default)]
+    pub category_selected: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -39,6 +45,17 @@ pub struct ExportCategory {
     pub default_selected: bool,
     pub paths: Vec<String>,
     pub children: Vec<ExportCategory>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub modified_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportDirectorySnapshot {
+    pub relative_path: String,
+    pub modified_at: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -50,6 +67,8 @@ pub struct ResourceExportScan {
     pub files: Vec<ExportFileSnapshot>,
     pub categories: Vec<ExportCategory>,
     pub excluded_paths: Vec<String>,
+    pub directories: Vec<ExportDirectorySnapshot>,
+    pub requirements: ExportGameRequirements,
 }
 
 /// A successful no-match response is distinct from a failed request.

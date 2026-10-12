@@ -2084,9 +2084,6 @@
   "app.error.try-sign-in-again": {
     "message": "再次尝试登录"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "输入整合包描述……"
-  },
   "app.export-modal.export-button": {
     "message": "导出"
   },
@@ -2094,22 +2091,13 @@
     "message": "导出完成"
   },
   "app.export-modal.export-complete-description": {
-    "message": "{name} 已成功导出。"
-  },
-  "app.export-modal.header": {
-    "message": "导出整合包"
+    "message": "已成功导出 {name}。"
   },
   "app.export-modal.modpack-name-label": {
     "message": "整合包名称"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "整合包名称"
-  },
   "app.export-modal.version-number-label": {
     "message": "版本号"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.gc-notice.fallback": {
     "message": "Java 不接受 {preferred}，已改用 {chosen}。"
@@ -6627,7 +6615,7 @@
     "message": "你的主页，你的布局"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "从实例页头部启动、停止、修复、配置、导出或打开这个实例。"
+    "message": "从实例页头部启动、停止、修复、配置、导出或打开这个实例。导出时先选择类别，再微调具体文件，最后填写包信息。"
   },
   "app.onboarding.instance-actions.title": {
     "message": "主操作台"
@@ -13543,5 +13531,119 @@
   },
   "app.resources.operation.artifact-mismatch": {
     "message": "所选已安装条目与目标内容不匹配。"
+  },
+  "app.export.categories": {
+    "message": "选择类别"
+  },
+  "app.export.category-hint": {
+    "message": "先选择要包含的类别，再到下一步微调具体文件。"
+  },
+  "app.export.category.defaultConfig": {
+    "message": "默认配置"
+  },
+  "app.export.category.emiRecords": {
+    "message": "EMI 个人信息"
+  },
+  "app.export.category.gameSettings": {
+    "message": "游戏设置"
+  },
+  "app.export.category.importantData": {
+    "message": "脚本、数据包及重要资源"
+  },
+  "app.export.category.jeiRecords": {
+    "message": "JEI 个人信息"
+  },
+  "app.export.category.mapRecords": {
+    "message": "个人地图与路标"
+  },
+  "app.export.category.modConfig": {
+    "message": "模组配置"
+  },
+  "app.export.category.mods": {
+    "message": "模组与插件"
+  },
+  "app.export.category.oldResources": {
+    "message": "禁用及旧资源"
+  },
+  "app.export.category.optifine": {
+    "message": "OptiFine 设置"
+  },
+  "app.export.category.other": {
+    "message": "其他目录及根文件"
+  },
+  "app.export.category.patchouliRecords": {
+    "message": "Patchouli 个人信息"
+  },
+  "app.export.category.personalRecords": {
+    "message": "游戏个人记录"
+  },
+  "app.export.category.recordings": {
+    "message": "录像与视频"
+  },
+  "app.export.category.resourcePacks": {
+    "message": "资源包"
+  },
+  "app.export.category.schematics": {
+    "message": "结构"
+  },
+  "app.export.category.screenshots": {
+    "message": "截图"
+  },
+  "app.export.category.servers": {
+    "message": "服务器列表"
+  },
+  "app.export.category.shaders": {
+    "message": "光影包及配置"
+  },
+  "app.export.category.worlds": {
+    "message": "存档"
+  },
+  "app.export.count": {
+    "message": "{count} 个文件 · {size}"
+  },
+  "app.export.excluded": {
+    "message": "已排除 {count} 个受保护路径。认证文件、运行库和符号链接不可导出。"
+  },
+  "app.export.file-hint": {
+    "message": "勾选目录会包含快照中所有文件，包括未展开的子目录。更改类别后仍会保留手动排除。"
+  },
+  "app.export.files": {
+    "message": "微调文件"
+  },
+  "app.export.next": {
+    "message": "下一步"
+  },
+  "app.export.no-files": {
+    "message": "此实例没有可导出的文件。"
+  },
+  "app.export.package": {
+    "message": "包信息"
+  },
+  "app.export.requirements": {
+    "message": "游戏与加载器要求"
+  },
+  "app.export.requirements-description": {
+    "message": "写入清单；不内嵌游戏文件或运行库。"
+  },
+  "app.export.restore": {
+    "message": "恢复类别预选"
+  },
+  "app.export.retry": {
+    "message": "重试扫描"
+  },
+  "app.export.scan": {
+    "message": "正在扫描本地文件…"
+  },
+  "app.export.scan-failed": {
+    "message": "无法扫描实例文件"
+  },
+  "app.export.search": {
+    "message": "搜索文件路径"
+  },
+  "app.export.selected": {
+    "message": "仅显示已选文件"
+  },
+  "app.export.selection": {
+    "message": "已选择 {count} 个文件 · {size}"
   }
 }

@@ -5,6 +5,7 @@ pub use content_management::resources::*;
 pub mod cache;
 pub mod catalog;
 mod execution;
+pub mod export;
 pub mod favorites;
 pub mod history;
 pub mod identity;

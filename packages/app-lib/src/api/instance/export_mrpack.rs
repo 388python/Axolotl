@@ -41,16 +41,19 @@ pub async fn export_mrpack(
     included_export_candidates: Vec<String>,
     version_id: Option<String>,
     description: Option<String>,
-    _name: Option<String>,
+    name: Option<String>,
 ) -> crate::Result<()> {
     let state = State::get().await?;
     let _permit: tokio::sync::SemaphorePermit =
         state.io_semaphore.0.acquire().await?;
-    let metadata = get(instance_id).await?.ok_or_else(|| {
+    let mut metadata = get(instance_id).await?.ok_or_else(|| {
         crate::ErrorKind::OtherError(format!(
             "Tried to export a nonexistent instance {instance_id}!"
         ))
     })?;
+    if let Some(name) = name.filter(|name| !name.trim().is_empty()) {
+        metadata.instance.name = name;
+    }
     // Directly associated instances own no files: everything lives in the
     // linked launcher's `.minecraft`, so there is nothing exportable here.
     if metadata.instance.is_direct_linked() {
@@ -65,6 +68,9 @@ pub async fn export_mrpack(
         .into_iter()
         .map(|candidate| candidate.replace('\\', "/"))
         .filter(|x| {
+            if crate::resources::export::categories::forbidden(x) {
+                return false;
+            }
             if let Some(f) = PathBuf::from(x).file_name()
                 && f.to_string_lossy().starts_with(".DS_Store")
             {
@@ -121,7 +127,22 @@ pub async fn export_mrpack(
     strip_localized_pack_file_paths(&mut packfile.files);
 
     let mut path_list = Vec::new();
-    add_all_recursive_folder_paths(&instance_base_path, &mut path_list).await?;
+    for candidate in &included_export_candidates {
+        let candidate =
+            SafeRelativeUtf8UnixPathBuf::try_from(candidate.clone())?;
+        let path = instance_base_path.join(candidate.as_str());
+        let metadata = tokio::fs::symlink_metadata(&path).await?;
+        if crate::resources::export::scan::linked(&metadata) {
+            continue;
+        }
+        if metadata.is_dir() {
+            add_all_recursive_folder_paths(&path, &mut path_list).await?;
+        } else if metadata.is_file() {
+            path_list.push(path);
+        }
+    }
+    path_list.sort();
+    path_list.dedup();
     let disk_paths = path_list
         .iter()
         .filter(|path| path.is_file())
@@ -134,11 +155,19 @@ pub async fn export_mrpack(
     let mut write_list: Vec<(PathBuf, String)> = Vec::new();
     let mut write_total_bytes: u64 = 0;
     for path in &path_list {
+        if path == &export_path {
+            continue;
+        }
         let Ok(relative_path) =
             pack_get_relative_path(&instance_base_path, path)
         else {
             continue;
         };
+        if crate::resources::export::categories::forbidden(
+            relative_path.as_str(),
+        ) {
+            continue;
+        }
         let exported_path =
             original_content_relative_path(relative_path.as_str());
         let Ok(metadata) = path.metadata() else {
@@ -319,38 +348,6 @@ fn strip_localized_pack_file_paths(files: &mut [PackFile]) {
         used.insert(stripped);
         file.path = path;
     }
-}
-
-#[tracing::instrument]
-pub async fn get_pack_export_candidates(
-    instance_id: &str,
-) -> crate::Result<Vec<SafeRelativeUtf8UnixPathBuf>> {
-    let mut path_list = Vec::new();
-    let instance_base_dir = get_full_path(instance_id).await?;
-    let mut read_dir = io::read_dir(&instance_base_dir).await?;
-    while let Some(entry) = read_dir
-        .next_entry()
-        .await
-        .map_err(|e| IOError::with_path(e, &instance_base_dir))?
-    {
-        let path = entry.path();
-        if path.is_dir() {
-            let mut read_dir = io::read_dir(&path).await?;
-            while let Some(entry) = read_dir
-                .next_entry()
-                .await
-                .map_err(|e| IOError::with_path(e, &instance_base_dir))?
-            {
-                path_list.push(pack_get_relative_path(
-                    &instance_base_dir,
-                    &entry.path(),
-                )?);
-            }
-        } else {
-            path_list.push(pack_get_relative_path(&instance_base_dir, &path)?);
-        }
-    }
-    Ok(path_list)
 }
 
 fn pack_get_relative_path(
@@ -634,6 +631,10 @@ async fn add_all_recursive_folder_paths(
         .map_err(|e| IOError::with_path(e, folder))?
     {
         let path = entry.path();
+        let metadata = tokio::fs::symlink_metadata(&path).await?;
+        if crate::resources::export::scan::linked(&metadata) {
+            continue;
+        }
         if path.is_dir() {
             add_all_recursive_folder_paths(&path, output).await?;
         } else {
