@@ -102,7 +102,7 @@ const messages = defineMessages({
     },
 })
 
-type Input = {
+type OperationInput = {
     instanceId: string
     instanceName: string
     entryIds: string[]
@@ -113,7 +113,7 @@ type Input = {
 }
 const modal = ref<InstanceType<typeof NewModal> | null>(null)
 const plan = ref<ResourceOperationPlan | null>(null)
-const input = ref<Input | null>(null)
+const input = ref<OperationInput | null>(null)
 const busy = ref(false)
 const queueing = ref(false)
 const queueFailed = ref(false)
@@ -297,7 +297,7 @@ function hide() {
     resolveShow = null
     resolve?.(null)
 }
-function show(value: Input): Promise<InstallJobSnapshot | null> {
+function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
     hide()
     input.value = value
     plan.value = null

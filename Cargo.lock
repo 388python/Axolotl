@@ -6988,7 +6988,6 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "paste",
- "path-util",
  "quartz_nbt",
  "regex",
  "serde",

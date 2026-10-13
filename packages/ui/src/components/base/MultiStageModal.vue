@@ -159,12 +159,14 @@
 
 <script lang="ts">
 import { ChevronLeftIcon, ChevronRightIcon, SpinnerIcon } from '@modrinth/assets'
-import { commonMessages, NewModal, useVIntl } from '@modrinth/ui'
 import type { Component } from 'vue'
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import Button from '#ui/components/base/buttons/Button.vue'
 import type { ButtonColor } from '#ui/components/base/buttons/types'
+import NewModal from '#ui/components/modal/NewModal.vue'
+import { useVIntl } from '#ui/composables/i18n'
+import { commonMessages } from '#ui/utils/common-messages'
 
 export interface StageButtonConfig {
     label?: string
