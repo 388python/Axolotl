@@ -678,6 +678,7 @@ mod tests {
         file_id: Option<&str>,
     ) -> InstanceContentSnapshotItem {
         InstanceContentSnapshotItem {
+            compatibility: None,
             resource_id: None,
             pack_resource_id: None,
             file_id: file_id.map(str::to_string),

@@ -66,6 +66,9 @@ pub struct SourceProjectMetadata {
     pub downloads: Option<u64>,
     pub followers: Option<u64>,
     pub created_at: Option<DateTime<Utc>>,
+    /// When the project first became public, distinct from creating it or releasing a file.
+    #[serde(default)]
+    pub project_published_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub first_published_at: Option<DateTime<Utc>>,
     pub latest_published_at: Option<DateTime<Utc>>,

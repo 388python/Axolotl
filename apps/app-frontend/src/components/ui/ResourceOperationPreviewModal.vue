@@ -49,9 +49,10 @@ const messages = defineMessages({
         id: 'app.resources.operation.optional-for',
         defaultMessage: 'Optional dependency of {names}',
     },
-    exception: {
-        id: 'app.resources.operation.exception',
-        defaultMessage: 'Allow this release despite its game version or loader assessment',
+    acceptDimension: {
+        id: 'app.resources.operation.accept-dimension',
+        defaultMessage:
+            '{dimension, select, gameVersion {Accept Minecraft compatibility exception} other {Accept loader compatibility exception}}',
     },
     assessment: {
         id: 'app.resources.operation.assessment',
@@ -373,23 +374,35 @@ async function refresh() {
             value.installDependencies,
             signal,
         )
-        if (!current.exceptions.length) return prepared
+        const retainedExceptions = current.exceptions.filter((exception) =>
+            prepared.nodes.some(
+                (node) =>
+                    node.id === exception.selectionId &&
+                    node.artifact?.reference.release.project.source ===
+                        exception.release.project.source &&
+                    node.artifact.reference.release.project.projectId ===
+                        exception.release.project.projectId &&
+                    node.artifact.reference.release.releaseId === exception.release.releaseId,
+            ),
+        )
+        if (!retainedExceptions.length) return prepared
         return resourceRevisePlan(
             prepared.id,
             prepared.revision,
-            current.exceptions.map((exception) => ({ kind: 'acceptCompatibility', exception })),
+            retainedExceptions.map((exception) => ({ kind: 'acceptCompatibility', exception })),
             signal,
         )
     })
 }
-function accept(node: ResourceDependencyNode) {
+function accept(node: ResourceDependencyNode, dimension: 'gameVersion' | 'loader') {
     if (!node.artifact) return
-    const dimensions = (['gameVersion', 'loader'] as const).filter(
-        (dimension) => node.compatibility[dimension] !== 'compatible',
-    )
     void revise({
         kind: 'acceptCompatibility',
-        exception: { selectionId: node.id, release: node.artifact.reference.release, dimensions },
+        exception: {
+            selectionId: node.id,
+            release: node.artifact.reference.release,
+            dimensions: [dimension],
+        },
     })
 }
 onBeforeUnmount(hide)
@@ -544,20 +557,24 @@ defineExpose({ show, showInstall, showInstallSelection })
                             })
                         }}
                     </p>
-                    <Button
-                        v-if="
-                            plan?.issues.some(
-                                (issue) =>
-                                    issue.selectionId === node.id &&
-                                    ['compatibilityUnknown', 'compatibilityMismatch'].includes(
-                                        issue.code,
-                                    ),
-                            )
-                        "
-                        :disabled="busy"
-                        @click="accept(node)"
-                        >{{ formatMessage(messages.exception) }}</Button
+                    <template
+                        v-for="dimension in ['gameVersion', 'loader'] as const"
+                        :key="dimension"
                     >
+                        <Button
+                            v-if="
+                                node.compatibility[dimension] !== 'compatible' &&
+                                !plan?.exceptions.some(
+                                    (exception) =>
+                                        exception.selectionId === node.id &&
+                                        exception.dimensions.includes(dimension),
+                                )
+                            "
+                            :disabled="busy"
+                            @click="accept(node, dimension)"
+                            >{{ formatMessage(messages.acceptDimension, { dimension }) }}</Button
+                        >
+                    </template>
                 </template>
             </div>
             <template v-if="candidates.length">

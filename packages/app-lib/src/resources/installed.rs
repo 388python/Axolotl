@@ -1,6 +1,84 @@
 use super::{identity::LocalArtifactIdentity, *};
 use tokio_util::sync::CancellationToken;
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct InstalledArtifactRecord {
+    #[serde(flatten)]
+    pub artifact: ResourceArtifact,
+    #[serde(default)]
+    pub declared_compatibility: Option<ReleaseCompatibility>,
+}
+
+pub(crate) async fn attach_compatibility(
+    pool: &sqlx::SqlitePool,
+    instance_id: &str,
+    game_version: &str,
+    loader: &str,
+    items: &mut [crate::state::instances::InstanceContentSnapshotItem],
+) -> crate::Result<()> {
+    let rows: Vec<(String, String, i64, Option<String>, Option<String>)> = sqlx::query_as(
+        "SELECT entry.id, file.sha1, file.size, file.local_mod_data, exact.artifact FROM instance_content_entries entry JOIN instance_files file ON file.id = entry.file_id LEFT JOIN resource_installed_artifacts exact ON exact.entry_id = entry.id WHERE entry.instance_id = ? AND file.missing = 0"
+    ).bind(instance_id).fetch_all(pool).await?;
+    let target = ipc::ResourceTarget {
+        game_versions: vec![game_version.into()],
+        loaders: vec![loader.into()],
+        channels: vec![],
+    };
+    let indices: std::collections::HashMap<_, _> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| item.entry_id.clone().map(|id| (id, index)))
+        .collect();
+    for (id, sha1, size, local, artifact) in rows {
+        let Some(&index) = indices.get(&id) else {
+            continue;
+        };
+        let item = &mut items[index];
+        let kind = match item.project_type {
+            crate::state::ProjectType::Mod => ResourceType::Mod,
+            crate::state::ProjectType::ResourcePack => {
+                ResourceType::ResourcePack
+            }
+            crate::state::ProjectType::ShaderPack => ResourceType::Shader,
+            crate::state::ProjectType::DataPack => ResourceType::DataPack,
+            _ => continue,
+        };
+        item.compatibility = None;
+        let exact = artifact
+            .and_then(|artifact| {
+                serde_json::from_str::<InstalledArtifactRecord>(&artifact).ok()
+            })
+            .filter(|artifact| {
+                artifact.artifact.integrity.size == u64::try_from(size).ok()
+                    && artifact.artifact.integrity.hashes.iter().any(|hash| {
+                        hash.algorithm == HashAlgorithm::Sha1
+                            && hash.value.eq_ignore_ascii_case(&sha1)
+                    })
+            });
+        let declared = exact
+            .and_then(|record| record.declared_compatibility)
+            .or_else(|| {
+                let metadata = serde_json::from_str::<
+                    crate::mod_metadata::LocalModMetadata,
+                >(local.as_deref()?)
+                .ok()?;
+                Some(ReleaseCompatibility {
+                    game_versions: metadata
+                        .minecraft_version
+                        .into_iter()
+                        .collect(),
+                    loaders: metadata.loader.into_iter().collect(),
+                })
+            });
+        if let Some(declared) = declared {
+            item.compatibility =
+                Some(assess_declared_compatibility(&declared, &target, kind));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) async fn hydrate(
     state: &crate::State,
     instance_id: &str,
@@ -336,7 +414,24 @@ pub(crate) async fn hydrate_with_failures(
     }
     let mut tx = state.pool.begin().await.map_err(plans::db)?;
     for (id, artifact, scope) in persisted {
-        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id.as_str()).bind(serde_json::to_string(&artifact)?).bind(serde_json::to_string(&scope)?).execute(&mut *tx).await.map_err(plans::db)?;
+        let previous: Option<String> = sqlx::query_scalar("SELECT artifact FROM resource_installed_artifacts WHERE entry_id = ?").bind(id.as_str()).fetch_optional(&mut *tx).await.map_err(plans::db)?;
+        let declared_compatibility = previous
+            .and_then(|payload| {
+                serde_json::from_str::<InstalledArtifactRecord>(&payload).ok()
+            })
+            .filter(|previous| {
+                previous.artifact.reference == artifact.reference
+                    && identity::exact_integrity(
+                        &previous.artifact.integrity,
+                        &artifact.integrity,
+                    )
+            })
+            .and_then(|previous| previous.declared_compatibility);
+        let record = InstalledArtifactRecord {
+            artifact,
+            declared_compatibility,
+        };
+        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id.as_str()).bind(serde_json::to_string(&record)?).bind(serde_json::to_string(&scope)?).execute(&mut *tx).await.map_err(plans::db)?;
     }
     tx.commit().await.map_err(plans::db)?;
     Ok(HydratedInstalled { entries, failures })

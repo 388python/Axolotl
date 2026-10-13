@@ -34,7 +34,8 @@ export class ResourceSearchPages {
             this.pages = []
         }
         const generation = this.generation
-        if (this.pages[index]?.sourceFailures.length) this.pages.splice(index)
+        if (this.pages[index]?.sourceFailures.some((failure) => failure.retryable))
+            this.pages.splice(index)
         for (let page = this.pages.length; page <= index; page++) {
             signal.throwIfAborted()
             const previous = this.pages[page - 1]

@@ -611,6 +611,15 @@ async fn get_content_snapshot_inner(
             .cloned();
     }
 
+    crate::resources::installed::attach_compatibility(
+        &state.pool,
+        instance_id,
+        &content_set.game_version,
+        content_set.loader.as_str(),
+        &mut items,
+    )
+    .await?;
+
     if let Err(error) = crate::resources::history::attach_to_snapshot(
         instance_id,
         &mut items,
@@ -1661,6 +1670,7 @@ fn snapshot_item(
         .is_some_and(|content| !content.provider_refs.is_empty());
 
     InstanceContentSnapshotItem {
+        compatibility: None,
         resource_id: None,
         pack_resource_id: None,
         file_id,

@@ -1,5 +1,6 @@
 use super::*;
 use crate::resources::ipc::*;
+use std::collections::HashSet;
 
 struct SearchProvider {
     source: SourceId,
@@ -52,7 +53,11 @@ impl ResourceProvider for SearchProvider {
                 SourceCapability::Project,
                 SourceCapability::Description,
             ],
-            supported_search_sorts: vec![ResourceSearchSort::Relevance],
+            supported_search_sorts: vec![
+                ResourceSearchSort::Relevance,
+                ResourceSearchSort::Created,
+                ResourceSearchSort::FirstPublished,
+            ],
         }
     }
     fn namespace(&self) -> String {
@@ -530,6 +535,111 @@ async fn long_search_chains_retry_failed_sources_without_losing_their_cursor() {
     }
     assert_eq!(returned.len(), 151);
     assert!(service.searches.len() <= 2);
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn hundred_item_deep_pages_keep_dates_ties_duplicates_and_unequal_source_remainders()
+ {
+    let (_directory, cache) = cache().await;
+    let mut mr = SearchProvider::new(
+        SourceId::modrinth(),
+        &(0..713)
+            .map(|index| format!("MR {index}"))
+            .collect::<Vec<_>>(),
+    );
+    let mut cf = SearchProvider::new(
+        SourceId::curseforge(),
+        &(0..457)
+            .map(|index| format!("CF {index}"))
+            .collect::<Vec<_>>(),
+    );
+    for provider in [&mut mr, &mut cf] {
+        let data = Arc::get_mut(provider).unwrap();
+        for (index, entry) in data.entries.iter_mut().enumerate() {
+            entry.created_at = chrono::DateTime::from_timestamp(
+                100000 - (index / 2) as i64,
+                0,
+            );
+            entry.first_published_at = chrono::DateTime::from_timestamp(
+                500000 - (index / 2) as i64,
+                0,
+            );
+        }
+        let duplicate = data.entries[49].clone();
+        data.entries.insert(50, duplicate);
+    }
+    let service =
+        ResourceService::new(cache.clone(), vec![mr.clone(), cf.clone()])
+            .unwrap();
+    let mut search = query(100);
+    search.sort = ResourceSearchSort::Created;
+    search.target.game_versions = vec!["1.21.1".into()];
+    search.target.loaders = vec!["neoforge".into()];
+    let mut cursor = None;
+    let mut seen = HashSet::new();
+    let mut previous = None;
+    let mut page_count = 0;
+    loop {
+        let before = [
+            mr.calls.lock().unwrap().len(),
+            cf.calls.lock().unwrap().len(),
+        ];
+        let page = service
+            .search(
+                search.clone(),
+                cursor,
+                RequestId::new(format!("deep-{page_count}")).unwrap(),
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        page_count += 1;
+        for result in page.entries {
+            let metadata = &result.projects[0];
+            assert!(seen.insert(metadata.project.clone()));
+            if let Some(previous) = previous {
+                assert!(metadata.created_at <= previous);
+            }
+            previous = Some(metadata.created_at);
+            assert_ne!(metadata.created_at, metadata.first_published_at);
+        }
+        assert!(mr.calls.lock().unwrap().len() - before[0] <= 2);
+        assert!(cf.calls.lock().unwrap().len() - before[1] <= 2);
+        if !page.has_more {
+            break;
+        }
+        cursor = page.cursor;
+        assert!(page_count < 30);
+    }
+    assert_eq!(seen.len(), 1170);
+    assert!(page_count > 10);
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn unavailable_sort_is_reported_without_querying_or_widening_the_source()
+{
+    let (_directory, cache) = cache().await;
+    let mr = SearchProvider::new(SourceId::modrinth(), &["Ignored".into()]);
+    let service =
+        ResourceService::new(cache.clone(), vec![mr.clone()]).unwrap();
+    let mut search = query(100);
+    search.sort = ResourceSearchSort::LatestPublished;
+    let page = service
+        .search(
+            search,
+            None,
+            RequestId::new("unsupported-sort").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(page.entries.is_empty());
+    assert!(!page.has_more);
+    assert_eq!(page.source_failures.len(), 1);
+    assert!(!page.source_failures[0].retryable);
+    assert!(mr.calls.lock().unwrap().is_empty());
     cache.close().await;
 }
 

@@ -29,6 +29,7 @@ export interface UseBrowseSearchOptions {
     maxResultsOptions?: ComputedRef<number[]>
     displayMode?: Ref<BrowseDisplayMode> | ComputedRef<BrowseDisplayMode>
     initialSearchResponse?: BrowseSearchResponse
+    sortOptions?: readonly SortType[]
 }
 
 export interface BrowseSearchState {
@@ -94,6 +95,7 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         options.tags,
         options.providedFilters ?? computed(() => []),
         options.environmentOverride ?? computed(() => undefined),
+        options.sortOptions,
     )
 
     const {

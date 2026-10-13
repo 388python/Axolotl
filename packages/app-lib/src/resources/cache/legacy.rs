@@ -152,9 +152,9 @@ fn project_values(
             }
             let project_id = document.metadata.project.project_id.clone();
             let namespace = if data_type == "project" {
-                "modrinth-v2"
+                "modrinth-v2-dates"
             } else {
-                "curseforge-v1"
+                "curseforge-v1-dates"
             };
             if data_type == "project" {
                 output.push((
@@ -201,7 +201,7 @@ fn project_values(
             if document.release.reference.release_id.as_str() != id {
                 return output;
             }
-            output.extend(release_values("modrinth-v2", document));
+            output.extend(release_values("modrinth-v2-dates", document));
         }
         _ => {}
     }

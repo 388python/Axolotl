@@ -18,6 +18,13 @@ export interface BrowseSearchResponse {
         providers?: ('modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft')[]
         provider_project_id?: string
         author_url?: string
+        resource_dates?: {
+            createdAt?: string | null
+            projectPublishedAt?: string | null
+            updatedAt?: string | null
+            firstPublishedAt?: string | null
+            latestPublishedAt?: string | null
+        }
     })[]
     serverHits: Labrinth.Search.v3.ResultSearchProject[]
     total_hits: number

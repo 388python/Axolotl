@@ -50,11 +50,36 @@ pub fn assess_compatibility(
     target: &ipc::ResourceTarget,
     kind: ResourceType,
 ) -> CompatibilityAssessment {
-    let game_version = dimension(
-        &release.compatibility.game_versions,
-        &target.game_versions,
-        matches_game_version,
-    );
+    assess_declared_compatibility(&release.compatibility, target, kind)
+}
+
+pub fn assess_declared_compatibility(
+    declared: &ReleaseCompatibility,
+    target: &ipc::ResourceTarget,
+    kind: ResourceType,
+) -> CompatibilityAssessment {
+    let game_version =
+        if declared.game_versions.is_empty() || target.game_versions.is_empty()
+        {
+            CompatibilityState::Unknown
+        } else {
+            let states: Vec<_> = declared
+                .game_versions
+                .iter()
+                .flat_map(|pattern| {
+                    target.game_versions.iter().map(move |version| {
+                        assess_game_version(pattern, version)
+                    })
+                })
+                .collect();
+            if states.contains(&CompatibilityState::Compatible) {
+                CompatibilityState::Compatible
+            } else if states.contains(&CompatibilityState::Unknown) {
+                CompatibilityState::Unknown
+            } else {
+                CompatibilityState::Incompatible
+            }
+        };
     let loader = if matches!(
         kind,
         ResourceType::ResourcePack
@@ -64,8 +89,10 @@ pub fn assess_compatibility(
     ) {
         CompatibilityState::Compatible
     } else {
-        dimension(&release.compatibility.loaders, &target.loaders, |a, b| {
+        dimension(&declared.loaders, &target.loaders, |a, b| {
             a.eq_ignore_ascii_case(b)
+                || a.eq_ignore_ascii_case("fabric")
+                    && b.eq_ignore_ascii_case("quilt")
         })
     };
     let mut reasons = vec![];
@@ -97,17 +124,99 @@ fn dimension(
 }
 
 pub fn matches_game_version(pattern: &str, version: &str) -> bool {
-    let parts: Vec<_> = pattern.split('.').collect();
-    let actual: Vec<_> = version.split('.').collect();
-    for (index, part) in parts.iter().enumerate() {
-        if matches!(*part, "x" | "X" | "*") {
-            return index + 1 == parts.len() && actual.len() > index;
+    assess_game_version(pattern, version) == CompatibilityState::Compatible
+}
+
+/// Unsupported range syntax is unknown rather than evidence of compatibility.
+pub fn assess_game_version(pattern: &str, version: &str) -> CompatibilityState {
+    fn numeric(value: &str) -> Option<[u64; 3]> {
+        if value.trim().starts_with('v') {
+            return None;
         }
-        if actual.get(index) != Some(part) {
-            return false;
+        let parts = numeric_version(value.trim())?;
+        if !(2..=3).contains(&parts.len()) {
+            return None;
         }
+        Some([parts[0], parts[1], *parts.get(2).unwrap_or(&0)])
     }
-    parts.len() == actual.len()
+    fn evaluate(pattern: &str, actual: [u64; 3]) -> Option<bool> {
+        for operator in [">=", "<=", ">", "<"] {
+            if let Some(bound) = pattern.strip_prefix(operator) {
+                let bound = numeric(bound)?;
+                return Some(match operator {
+                    ">=" => actual >= bound,
+                    "<=" => actual <= bound,
+                    ">" => actual > bound,
+                    _ => actual < bound,
+                });
+            }
+        }
+        if matches!(pattern.as_bytes().first(), Some(b'[' | b'(')) {
+            let lower_inclusive = pattern.starts_with('[');
+            let upper_inclusive = pattern.ends_with(']');
+            if !upper_inclusive && !pattern.ends_with(')') {
+                return None;
+            }
+            let (lower, upper) =
+                pattern[1..pattern.len() - 1].split_once(',')?;
+            let lower = if lower.trim().is_empty() {
+                None
+            } else {
+                Some(numeric(lower)?)
+            };
+            let upper = if upper.trim().is_empty() {
+                None
+            } else {
+                Some(numeric(upper)?)
+            };
+            if lower.is_none() && upper.is_none()
+                || matches!((lower, upper), (Some(a), Some(b)) if a > b)
+            {
+                return None;
+            }
+            return Some(
+                lower.is_none_or(|bound| {
+                    actual > bound || lower_inclusive && actual == bound
+                }) && upper.is_none_or(|bound| {
+                    actual < bound || upper_inclusive && actual == bound
+                }),
+            );
+        }
+        if let Some((lower, upper)) = pattern.split_once('-') {
+            let lower = numeric(lower)?;
+            let upper = numeric(upper)?;
+            return (lower <= upper)
+                .then_some(actual >= lower && actual <= upper);
+        }
+        let parts: Vec<_> = pattern.split('.').collect();
+        if parts
+            .last()
+            .is_some_and(|part| matches!(*part, "x" | "X" | "*"))
+        {
+            if !(2..=3).contains(&parts.len()) {
+                return None;
+            }
+            let prefix: Option<Vec<u64>> = parts[..parts.len() - 1]
+                .iter()
+                .map(|part| part.parse().ok())
+                .collect();
+            let prefix = prefix?;
+            return Some(actual[..prefix.len()] == prefix);
+        }
+        Some(actual == numeric(pattern)?)
+    }
+    let pattern = pattern.trim();
+    if let Some(actual) = numeric(version) {
+        match evaluate(pattern, actual) {
+            Some(true) => CompatibilityState::Compatible,
+            Some(false) => CompatibilityState::Incompatible,
+            None => CompatibilityState::Unknown,
+        }
+    } else if pattern == version && !pattern.is_empty() {
+        CompatibilityState::Compatible
+    } else {
+        CompatibilityState::Unknown
+    }
 }
 
 fn numeric_version(value: &str) -> Option<Vec<u64>> {
@@ -385,6 +494,40 @@ mod tests {
         assert!(matches_game_version("1.x", "1.21.1"));
         assert!(!matches_game_version("1.x", "2.0"));
         assert!(!matches_game_version("1.x.2", "1.20.2"));
+        for wildcard in ["1.20.x", "1.20.X", "1.20.*"] {
+            assert!(matches_game_version(wildcard, "1.20.0"));
+            assert!(!matches_game_version(wildcard, "2.20.0"));
+        }
+    }
+
+    #[test]
+    fn game_ranges_preserve_open_bounds_and_unknown_syntax() {
+        for (range, version, expected) in [
+            ("1.20", "1.20.0", true),
+            ("<1.20", "1.19.4", true),
+            ("<1.20", "1.20.0", false),
+            (">1.20.9", "1.21.0", true),
+            ("[1.20,1.21)", "1.20.0", true),
+            ("[1.20,1.21)", "1.21.0", false),
+            ("(1.20,1.21]", "1.20.0", false),
+            ("(1.20,1.21]", "1.21.0", true),
+            ("(,1.20]", "1.19.4", true),
+            ("[1.20,)", "1.21.0", true),
+            ("1.20 - 1.21", "1.21.0", true),
+        ] {
+            assert_eq!(
+                matches_game_version(range, version),
+                expected,
+                "{range}: {version}"
+            );
+        }
+        for range in ["supports 1.20.4", "1.20.x.1", ">=unknown", "[1.21,1.20]"]
+        {
+            assert_eq!(
+                assess_game_version(range, "1.20.4"),
+                CompatibilityState::Unknown
+            );
+        }
     }
 
     #[test]

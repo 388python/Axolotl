@@ -542,7 +542,7 @@ impl ModrinthProvider {
                             .collect(),
                     );
                 }
-                let index = match query.sort { ResourceSearchSort::Relevance => "relevance", ResourceSearchSort::Downloads => "downloads", ResourceSearchSort::Followers => "follows", ResourceSearchSort::ProjectUpdated => "updated", ResourceSearchSort::Created => "newest", _ => return Err(ResourceError::Unsupported("Modrinth search exposes project dates, not exact release-date ordering".into())) };
+                let index = match query.sort { ResourceSearchSort::Relevance => "relevance", ResourceSearchSort::Downloads => "downloads", ResourceSearchSort::Followers => "follows", ResourceSearchSort::ProjectUpdated => "updated", ResourceSearchSort::ProjectPublished => "newest", _ => return Err(ResourceError::Unsupported("Modrinth search exposes publication dates, not project creation or exact release-date ordering".into())) };
                 let start = offset(cursor)?;
                 if !(1..=100).contains(&query.page_size) {
                     return Err(ResourceError::InvalidRequest(
@@ -664,13 +664,13 @@ impl ResourceProvider for ModrinthProvider {
                 ResourceSearchSort::Relevance,
                 ResourceSearchSort::Downloads,
                 ResourceSearchSort::Followers,
-                ResourceSearchSort::Created,
+                ResourceSearchSort::ProjectPublished,
                 ResourceSearchSort::ProjectUpdated,
             ],
         }
     }
     fn namespace(&self) -> String {
-        "modrinth-v2".into()
+        "modrinth-v2-dates".into()
     }
     fn batch_limit(&self, query: &ProviderQuery) -> usize {
         if matches!(
@@ -813,6 +813,8 @@ pub(crate) struct RemoteProject {
     #[serde(default)]
     published: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default)]
+    approved: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default)]
     updated: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default)]
     downloads: Option<u64>,
@@ -873,6 +875,7 @@ impl RemoteProject {
                 downloads: self.downloads,
                 followers: self.followers,
                 created_at: self.published,
+                project_published_at: self.approved,
                 updated_at: self.updated,
                 first_published_at: None,
                 latest_published_at: None,
@@ -1156,7 +1159,8 @@ impl SearchHit {
                 .map(str::to_owned),
             downloads: self.downloads,
             followers: self.follows,
-            created_at: self.date_created,
+            created_at: None,
+            project_published_at: self.date_created,
             updated_at: self.date_modified,
             first_published_at: None,
             latest_published_at: None,

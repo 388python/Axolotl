@@ -1008,3 +1008,157 @@ async fn disabled_unchanged_file_does_not_trigger_reinstall_and_unknown_requires
         && issue.blocking));
     service.cache().close().await;
 }
+
+#[tokio::test]
+async fn fixed_compatibility_exceptions_are_dimension_release_and_selection_scoped()
+ {
+    let mut root = release("root0000", "1", 'a');
+    root.compatibility = ReleaseCompatibility {
+        game_versions: vec!["1.12.2".into()],
+        loaders: vec!["forge".into()],
+    };
+    let mut child = release("child000", "1", 'b');
+    child.compatibility.game_versions = vec!["1.12.2".into()];
+    requires(&mut root, &child, ResourceDependencyKind::Required);
+    let (_directory, service) =
+        service(vec![root.clone(), child.clone()]).await;
+    let environment = target();
+    let cancel = CancellationToken::new();
+    let mut initial = draft(
+        vec![selection("root", &root, None)],
+        ResourceOperationIntent::Install,
+    );
+    initial.plan.exceptions.push(CompatibilityException {
+        selection_id: SelectionId::new("root").unwrap(),
+        release: root.reference.clone(),
+        dimensions: vec![CompatibilityDimension::GameVersion],
+    });
+    let assessed = service
+        .build_operation(initial.clone(), &environment, &[], &cancel)
+        .await
+        .unwrap()
+        .plan;
+    assert!(assessed.issues.iter().any(|issue| {
+        issue
+            .selection_id
+            .as_ref()
+            .is_some_and(|id| id.as_str() == "root")
+            && issue.code == ResourceIssueCode::CompatibilityMismatch
+    }));
+    assert!(
+        assessed
+            .nodes
+            .iter()
+            .find(|node| node.id.as_str() == "root")
+            .unwrap()
+            .compatibility
+            .game_version
+            == CompatibilityState::Incompatible
+    );
+    initial.plan.exceptions[0]
+        .dimensions
+        .push(CompatibilityDimension::Loader);
+    let accepted = service
+        .build_operation(initial.clone(), &environment, &[], &cancel)
+        .await
+        .unwrap()
+        .plan;
+    assert!(!accepted.issues.iter().any(|issue| {
+        issue
+            .selection_id
+            .as_ref()
+            .is_some_and(|id| id.as_str() == "root")
+            && issue.code == ResourceIssueCode::CompatibilityMismatch
+    }));
+    assert!(accepted.issues.iter().any(|issue| {
+        issue
+            .selection_id
+            .as_ref()
+            .is_some_and(|id| id.as_str() != "root")
+            && issue.code == ResourceIssueCode::CompatibilityMismatch
+    }));
+    assert_eq!(
+        accepted
+            .actions
+            .iter()
+            .find(|action| action.node_id.as_str() == "root")
+            .unwrap()
+            .target,
+        root.artifacts[0]
+    );
+    initial.plan.exceptions[0].release.release_id =
+        SourceReleaseId::new("another-release").unwrap();
+    let changed = service
+        .build_operation(initial, &environment, &[], &cancel)
+        .await
+        .unwrap()
+        .plan;
+    assert!(changed.issues.iter().any(|issue| {
+        issue
+            .selection_id
+            .as_ref()
+            .is_some_and(|id| id.as_str() == "root")
+            && issue.code == ResourceIssueCode::CompatibilityMismatch
+    }));
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn automatic_selection_does_not_use_explicit_compatibility_exceptions() {
+    let compatible = release("root0000", "1", 'a');
+    let mut incompatible = release("root0000", "2", 'b');
+    incompatible.compatibility.game_versions = vec!["1.12.2".into()];
+    let (_directory, service) =
+        service(vec![compatible.clone(), incompatible.clone()]).await;
+    let mut automatic = selection("root", &incompatible, None);
+    automatic.release = ReleaseSelection::Automatic;
+    let mut initial = draft(vec![automatic], ResourceOperationIntent::Install);
+    initial.plan.exceptions.push(CompatibilityException {
+        selection_id: SelectionId::new("root").unwrap(),
+        release: incompatible.reference,
+        dimensions: vec![CompatibilityDimension::GameVersion],
+    });
+    let plan = service
+        .build_operation(initial, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap()
+        .plan;
+    assert_eq!(
+        plan.actions[0].target.reference,
+        compatible.artifacts[0].reference
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn compatibility_exceptions_cannot_authorize_an_unsafe_artifact_path() {
+    let mut root = release("root0000", "1", 'a');
+    root.compatibility.game_versions = vec!["1.12.2".into()];
+    root.artifacts[0].file_name = Some("../unsafe.jar".into());
+    let (_directory, service) = service(vec![root.clone()]).await;
+    let mut initial = draft(
+        vec![selection("root", &root, None)],
+        ResourceOperationIntent::Install,
+    );
+    initial.plan.exceptions.push(CompatibilityException {
+        selection_id: SelectionId::new("root").unwrap(),
+        release: root.reference,
+        dimensions: vec![
+            CompatibilityDimension::GameVersion,
+            CompatibilityDimension::Loader,
+        ],
+    });
+    let plan = service
+        .build_operation(initial, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.actions.is_empty());
+    assert!(plan.issues.iter().any(|issue| matches!(
+        issue.code,
+        ResourceIssueCode::InvalidPath
+            | ResourceIssueCode::SourceUnavailable
+            | ResourceIssueCode::MissingDependency
+    ) && issue.blocking));
+    service.cache().close().await;
+}

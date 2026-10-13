@@ -368,7 +368,14 @@ const props = defineProps<{
     downloads?: number
     dateUpdated?: string
     datePublished?: string
-    displayedDate?: 'updated' | 'published'
+    displayedDate?:
+        | 'updated'
+        | 'published'
+        | 'created'
+        | 'projectModified'
+        | 'releaseUpdated'
+        | 'projectPublished'
+        | 'firstRelease'
     serverRegion?: string
     serverOnlinePlayers?: number
     serverStatusOnline?: boolean
@@ -430,9 +437,13 @@ const autoDisplayDate = computed(() => {
 })
 
 const date = computed(() => {
-    if (autoDisplayDate.value === 'updated') {
+    if (['updated', 'projectModified', 'releaseUpdated'].includes(autoDisplayDate.value ?? '')) {
         return updatedDate.value
-    } else if (autoDisplayDate.value === 'published') {
+    } else if (
+        ['published', 'created', 'projectPublished', 'firstRelease'].includes(
+            autoDisplayDate.value ?? '',
+        )
+    ) {
         return publishedDate.value
     }
     return undefined

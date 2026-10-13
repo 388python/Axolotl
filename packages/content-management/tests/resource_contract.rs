@@ -341,6 +341,7 @@ fn history_is_self_contained_and_keeps_the_original_source_and_path() {
     target.artifact = Some(resource_artifact().reference);
     target.relative_path = "mods/中文-new.jar.disabled".into();
     let dependency = ResourceDependencyNode {
+        declared_compatibility: None,
         id: SelectionId::new("dependency").unwrap(),
         resource: ResourceRef::Source {
             project: project(SourceId::curseforge()),

@@ -3,6 +3,9 @@ import type { ContentItem } from '@modrinth/ui'
 export function mergeContentItemMetadata(item: ContentItem, metadata: ContentItem): ContentItem {
     const merged = { ...item, ...metadata }
     if (item.instanceEntryId) {
+        merged.installedSource = item.installedSource
+        merged.compatibility = item.compatibility
+        merged.instanceOwnershipKind = item.instanceOwnershipKind
         merged.update = null
         merged.resourceUpdate = item.resourceUpdate ?? null
         merged.rollback = item.rollback

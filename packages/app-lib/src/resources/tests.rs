@@ -71,7 +71,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
             .bind(id).bind(version.to_string()).bind(now + legacy_ttl).execute(&main).await.unwrap();
     }
     let key = CacheKey::new(
-        "modrinth-v2".into(),
+        "modrinth-v2-dates".into(),
         SourceId::modrinth(),
         &project_query("abcdefgh"),
     )
@@ -93,7 +93,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
         cache
             .get(
                 &CacheKey::new(
-                    "modrinth-v2".into(),
+                    "modrinth-v2-dates".into(),
                     SourceId::modrinth(),
                     &project_query("large123")
                 )
@@ -106,7 +106,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
         cache
             .get(
                 &CacheKey::new(
-                    "modrinth-v2".into(),
+                    "modrinth-v2-dates".into(),
                     SourceId::modrinth(),
                     &project_query("stale123")
                 )
@@ -120,7 +120,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
         slug: None,
     };
     assert!(
-        matches!(cache.get(&CacheKey::new("modrinth-v2".into(), SourceId::modrinth(), &description_query).unwrap()).await, Some(ProviderValue::Description(text)) if text.body == "Body")
+        matches!(cache.get(&CacheKey::new("modrinth-v2-dates".into(), SourceId::modrinth(), &description_query).unwrap()).await, Some(ProviderValue::Description(text)) if text.body == "Body")
     );
     let cf_query = ProviderQuery::Release {
         project_id: Some(SourceProjectId::new("456").unwrap()),
@@ -131,7 +131,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
         cache
             .get(
                 &CacheKey::new(
-                    "curseforge-v1".into(),
+                    "curseforge-v1-dates".into(),
                     SourceId::curseforge(),
                     &cf_query
                 )
@@ -149,7 +149,7 @@ async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
         cache
             .get(
                 &CacheKey::new(
-                    "modrinth-v2".into(),
+                    "modrinth-v2-dates".into(),
                     SourceId::modrinth(),
                     &last_query
                 )
@@ -246,6 +246,7 @@ fn project_value(source: SourceId, id: &str, title: &str) -> ProviderValue {
             downloads: None,
             followers: None,
             created_at: None,
+            project_published_at: None,
             updated_at: None,
             first_published_at: None,
             latest_published_at: None,
@@ -1317,7 +1318,8 @@ async fn source_search_projections_preserve_variants_and_date_semantics() {
     let ProviderValue::Search(cf_page) = cf_result else {
         panic!("wrong search");
     };
-    assert!(mr_page.entries[0].created_at.is_some());
+    assert!(mr_page.entries[0].created_at.is_none());
+    assert!(mr_page.entries[0].project_published_at.is_some());
     assert!(mr_page.entries[0].updated_at.is_some());
     assert!(mr_page.entries[0].first_published_at.is_none());
     assert!(mr_page.entries[0].latest_published_at.is_none());
@@ -1340,6 +1342,82 @@ async fn source_search_projections_preserve_variants_and_date_semantics() {
             .any(|project| project.title == "ItemPhysic Legacy Unofficial")
     );
     assert_eq!(cf_page.total.precision, ipc::TotalPrecision::Unknown);
+}
+
+#[tokio::test]
+async fn modrinth_search_publication_matches_detail_approval_without_reordering_by_creation()
+ {
+    let transport = FixtureTransport::new(|_, request| {
+        if request.path == "/search" {
+            assert!(request.query.contains(&("index".into(), "newest".into())));
+            assert!(request.query.contains(&("limit".into(), "100".into())));
+            Ok(
+                json!({"hits":[{"project_id":"kgA13GJP", "slug":"sample", "title":"Sample", "project_type":"mod", "description":"", "date_created":"2026-10-13T05:50:26.298835+08:00"}], "total_hits":1}),
+            )
+        } else {
+            assert_eq!(request.path, "/projects");
+            Ok(
+                json!([{"id":"kgA13GJP", "slug":"sample", "title":"Sample", "project_type":"mod", "description":"", "published":"2026-09-09T19:39:43.551169Z", "approved":"2026-10-12T21:50:26.298835Z"}]),
+            )
+        }
+    });
+    let provider = ModrinthProvider::new(transport);
+    let mut query = ipc::ResourceSearchQuery {
+        filter: None,
+        text: String::new(),
+        types: vec![ResourceType::Mod],
+        sources: vec![],
+        target: ipc::ResourceTarget {
+            game_versions: vec!["1.21.1".into()],
+            loaders: vec!["neoforge".into()],
+            channels: vec![],
+        },
+        categories: vec![],
+        sort: ipc::ResourceSearchSort::ProjectPublished,
+        page_size: 100,
+    };
+    let ProviderValue::Search(page) = provider
+        .fetch_many(&[ProviderQuery::Search {
+            query: query.clone(),
+            cursor: None,
+        }])
+        .await
+        .remove(0)
+        .unwrap()
+    else {
+        panic!("search page missing");
+    };
+    let ProviderValue::Project(project) = provider
+        .fetch_many(&[ProviderQuery::Project {
+            id: SourceProjectId::new("kgA13GJP").unwrap(),
+            slug: None,
+        }])
+        .await
+        .remove(0)
+        .unwrap()
+    else {
+        panic!("project missing");
+    };
+    assert_eq!(
+        page.entries[0].project_published_at,
+        project.metadata.project_published_at
+    );
+    assert_ne!(
+        page.entries[0].project_published_at,
+        project.metadata.created_at
+    );
+    assert!(page.entries[0].created_at.is_none());
+    query.sort = ipc::ResourceSearchSort::Created;
+    assert!(matches!(
+        provider
+            .fetch_many(&[ProviderQuery::Search {
+                query,
+                cursor: None
+            }])
+            .await
+            .remove(0),
+        Err(ResourceError::Unsupported(_))
+    ));
 }
 
 #[tokio::test]
@@ -1377,6 +1455,66 @@ async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_to
     assert!(page.cursor.is_none());
     assert_eq!(page.entries.len(), 10);
     assert_eq!(page.total.precision, ipc::TotalPrecision::Estimate);
+}
+
+#[tokio::test]
+async fn curseforge_search_never_uses_game_version_sort_for_publication_dates()
+{
+    let transport = FixtureTransport::new(|_, request| {
+        assert!(request.query.contains(&("sortField".into(), "11".into())));
+        assert!(
+            request
+                .query
+                .contains(&("gameVersion".into(), "1.21.1".into()))
+        );
+        assert!(
+            request
+                .query
+                .contains(&("modLoaderType".into(), "6".into()))
+        );
+        Ok(
+            json!({"data":[{"id":238222,"name":"Sample","slug":"sample","classId":6,"dateCreated":"2015-11-23T23:00:41.923Z","dateReleased":"2026-10-12T14:05:52.453Z"}],"pagination":{"index":0,"resultCount":1,"totalCount":1}}),
+        )
+    });
+    let provider = CurseForgeProvider::new(transport);
+    let mut query = ipc::ResourceSearchQuery {
+        filter: None,
+        text: String::new(),
+        types: vec![ResourceType::Mod],
+        sources: vec![],
+        target: ipc::ResourceTarget {
+            game_versions: vec!["1.21.1".into()],
+            loaders: vec!["neoforge".into()],
+            channels: vec![],
+        },
+        categories: vec![],
+        sort: ipc::ResourceSearchSort::Created,
+        page_size: 50,
+    };
+    let ProviderValue::Search(page) = provider
+        .fetch_many(&[ProviderQuery::Search {
+            query: query.clone(),
+            cursor: None,
+        }])
+        .await
+        .remove(0)
+        .unwrap()
+    else {
+        panic!("search page missing");
+    };
+    assert!(page.entries[0].first_published_at.is_none());
+    assert!(page.entries[0].latest_published_at > page.entries[0].created_at);
+    query.sort = ipc::ResourceSearchSort::FirstPublished;
+    assert!(matches!(
+        provider
+            .fetch_many(&[ProviderQuery::Search {
+                query,
+                cursor: None
+            }])
+            .await
+            .remove(0),
+        Err(ResourceError::Unsupported(_))
+    ));
 }
 
 #[tokio::test]

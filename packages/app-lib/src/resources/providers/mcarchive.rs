@@ -369,6 +369,7 @@ impl RemoteProject {
                 downloads: None,
                 followers: None,
                 created_at: None,
+                project_published_at: None,
                 updated_at: None,
                 first_published_at: None,
                 latest_published_at: None,

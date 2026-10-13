@@ -1072,6 +1072,7 @@ impl ResourceService {
                     .map(|item| item.entry_id.clone())
                     .collect(),
                 compatibility: assessment,
+                declared_compatibility: Some(release.compatibility.clone()),
             });
             draft.plan.selection_reasons.push(ReleaseSelectionReason {
                 node_id: selection.id.clone(),
@@ -1303,6 +1304,7 @@ impl ResourceService {
                     loader: CompatibilityState::Unknown,
                     reasons: vec![],
                 },
+                declared_compatibility: None,
             });
             if satisfied.is_empty() {
                 candidates.push(candidate);
@@ -1614,6 +1616,10 @@ pub async fn revise(
                     .selections
                     .retain(|selection| selection.id != node_id);
                 draft.plan.active_roots.retain(|root| root != &node_id);
+                draft
+                    .plan
+                    .exceptions
+                    .retain(|exception| exception.selection_id != node_id);
             }
             ResourcePlanDecision::AcceptCompatibility { exception } => {
                 if !draft.plan.nodes.iter().any(|node| {
@@ -1629,6 +1635,10 @@ pub async fn revise(
                 draft.plan.exceptions.push(exception);
             }
             ResourcePlanDecision::SelectRelease { node_id, selection } => {
+                draft
+                    .plan
+                    .exceptions
+                    .retain(|exception| exception.selection_id != node_id);
                 draft
                     .plan
                     .selections

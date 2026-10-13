@@ -6621,7 +6621,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "通过这些标签管理内容、文件、截图、存档和日志。更新或切换内容版本时，会先显示依赖预览，再加入任务队列。已记录的更新可从经过核验的历史备份恢复。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按实际安装平台或归属筛选。更新和切换版本会先显示依赖预览；兼容例外仅适用于所选发布和维度。已记录的更新可从经过核验的历史备份中恢复。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -13466,9 +13466,6 @@
   "app.resources.operation.required-by": {
     "message": "{names} 需要此资源"
   },
-  "app.resources.operation.exception": {
-    "message": "接受此发布的游戏版本或加载器评估结果并继续"
-  },
   "app.resources.operation.assessment": {
     "message": "游戏版本：{game}；加载器：{loader}"
   },
@@ -13738,5 +13735,17 @@
   },
   "app.export.finalizing-analysis": {
     "message": "正在整理校验结果…"
+  },
+  "app.drop.compatibility.unknown": {
+    "message": "未知"
+  },
+  "app.drop.compatibility-review-warning": {
+    "message": "{file} 声明支持 {modVersion}（{modLoader}）；实例为 {instVersion}（{instLoader}）。Minecraft：{gameState, select, compatible {兼容} incompatible {不兼容} other {未知}}；加载器：{loaderState, select, compatible {兼容} incompatible {不兼容} other {未知}}。确认后将按这些兼容例外导入此文件。"
+  },
+  "app.resources.installed.compatibility": {
+    "message": "Minecraft：{game, select, compatible {兼容} incompatible {不兼容} other {未知}}；加载器：{loader, select, compatible {兼容} incompatible {不兼容} other {未知}}。安装不会改变工件声明的兼容性。"
+  },
+  "app.resources.operation.accept-dimension": {
+    "message": "{dimension, select, gameVersion {接受 Minecraft 兼容例外} other {接受加载器兼容例外}}"
   }
 }

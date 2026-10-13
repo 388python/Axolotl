@@ -935,26 +935,8 @@
   "content.metadata-filter.select-all": {
     "defaultMessage": "全选"
   },
-  "content.metadata-filter.source": {
-    "defaultMessage": "来源"
-  },
   "content.metadata-filter.source.curseforge": {
     "defaultMessage": "CurseForge"
-  },
-  "content.metadata-filter.source.imported-modpack": {
-    "defaultMessage": "导入整合包"
-  },
-  "content.metadata-filter.source.local": {
-    "defaultMessage": "本地"
-  },
-  "content.metadata-filter.source.modrinth-modpack": {
-    "defaultMessage": "Modrinth 整合包"
-  },
-  "content.metadata-filter.source.server-project": {
-    "defaultMessage": "服务器项目"
-  },
-  "content.metadata-filter.source.shared-instance": {
-    "defaultMessage": "共享实例"
   },
   "content.metadata-filter.toggle": {
     "defaultMessage": "筛选"
@@ -4762,5 +4744,59 @@
   },
   "files.select-view": {
     "defaultMessage": "选择此视图中的全部文件"
+  },
+  "browse.sort.first-release": {
+    "defaultMessage": "首次发布时间"
+  },
+  "browse.sort.latest-release": {
+    "defaultMessage": "最近发布时间"
+  },
+  "browse.sort.project-created": {
+    "defaultMessage": "项目创建时间"
+  },
+  "browse.sort.project-modified": {
+    "defaultMessage": "项目修改时间"
+  },
+  "content.metadata-filter.installed-source": {
+    "defaultMessage": "安装来源平台"
+  },
+  "content.metadata-filter.ownership": {
+    "defaultMessage": "内容归属"
+  },
+  "content.metadata-filter.ownership.local-discovered": {
+    "defaultMessage": "本地发现"
+  },
+  "content.metadata-filter.ownership.pack-managed": {
+    "defaultMessage": "整合包管理"
+  },
+  "content.metadata-filter.ownership.user-added": {
+    "defaultMessage": "用户添加"
+  },
+  "content.metadata-filter.source.mcarchive": {
+    "defaultMessage": "MCArchive"
+  },
+  "content.metadata-filter.source.modrinth": {
+    "defaultMessage": "Modrinth"
+  },
+  "content.metadata-filter.source.planet-minecraft": {
+    "defaultMessage": "Planet Minecraft"
+  },
+  "project-card.date.created.tooltip": {
+    "defaultMessage": "项目创建于 {date}"
+  },
+  "project-card.date.project-modified.tooltip": {
+    "defaultMessage": "项目修改于 {date}"
+  },
+  "project-card.date.release-updated.tooltip": {
+    "defaultMessage": "最近发布于 {date}"
+  },
+  "browse.sort.project-published": {
+    "defaultMessage": "项目首次公开时间"
+  },
+  "project-card.date.project-published.tooltip": {
+    "defaultMessage": "项目首次公开于 {date}"
+  },
+  "project-card.date.first-release.tooltip": {
+    "defaultMessage": "首次发布于 {date}"
   }
 }

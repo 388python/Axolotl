@@ -96,6 +96,7 @@ interface Props {
     disabled?: boolean
     disabledTooltip?: string | null
     postUpgradeWarningTooltip?: string | null
+    compatibilityWarningTooltip?: string | null
     toggleDisabled?: boolean
     toggleDisabledTooltip?: string | null
     dependencyBadge?: {
@@ -140,6 +141,7 @@ const props = withDefaults(defineProps<Props>(), {
     disabled: false,
     disabledTooltip: undefined,
     postUpgradeWarningTooltip: undefined,
+    compatibilityWarningTooltip: undefined,
     toggleDisabled: false,
     toggleDisabledTooltip: undefined,
     dependencyBadge: null,
@@ -254,8 +256,12 @@ const deleteHovered = ref(false)
                 <div class="flex min-w-0 flex-col gap-0.5">
                     <div class="flex min-w-0 items-center gap-1">
                         <TriangleAlertIcon
-                            v-if="postUpgradeWarningTooltip"
-                            v-tooltip="postUpgradeWarningTooltip"
+                            v-if="postUpgradeWarningTooltip || compatibilityWarningTooltip"
+                            v-tooltip="
+                                [postUpgradeWarningTooltip, compatibilityWarningTooltip]
+                                    .filter(Boolean)
+                                    .join('\n')
+                            "
                             class="size-4 shrink-0 text-brand-orange"
                             aria-hidden="true"
                         />
@@ -563,8 +569,12 @@ const deleteHovered = ref(false)
                             <MinecraftFormattedText :text="project.title" />
                         </AutoLink>
                         <TriangleAlertIcon
-                            v-if="postUpgradeWarningTooltip"
-                            v-tooltip="postUpgradeWarningTooltip"
+                            v-if="postUpgradeWarningTooltip || compatibilityWarningTooltip"
+                            v-tooltip="
+                                [postUpgradeWarningTooltip, compatibilityWarningTooltip]
+                                    .filter(Boolean)
+                                    .join('\n')
+                            "
                             class="size-4 shrink-0 text-brand-orange"
                             aria-hidden="true"
                         />

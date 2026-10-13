@@ -150,8 +150,9 @@ async fn force_refresh_never_falls_back_to_saved_protocol_metadata() {
         release_id: SourceReleaseId::new("G5dd9TM4").unwrap(),
         slug: None,
     };
-    let key = CacheKey::new("modrinth-v2".into(), SourceId::modrinth(), &query)
-        .unwrap();
+    let key =
+        CacheKey::new("modrinth-v2-dates".into(), SourceId::modrinth(), &query)
+            .unwrap();
     cache
         .put(
             &key,
@@ -327,8 +328,9 @@ async fn imported_pack_member_persists_exact_artifact_and_identity_after_cache_c
         release_id: document.release.reference.release_id.clone(),
         slug: None,
     };
-    let key = CacheKey::new("modrinth-v2".into(), SourceId::modrinth(), &query)
-        .unwrap();
+    let key =
+        CacheKey::new("modrinth-v2-dates".into(), SourceId::modrinth(), &query)
+            .unwrap();
     service
         .cache()
         .put(

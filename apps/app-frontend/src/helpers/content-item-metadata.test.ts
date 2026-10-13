@@ -49,3 +49,27 @@ test('update metadata does not enable mutation of a missing or removed file', ()
         )
     }
 })
+
+test('lazy recognition preserves actual provenance, ownership and compatibility', () => {
+    for (const installedSource of [null, 'curseforge']) {
+        const item = {
+            instanceEntryId: 'entry-a',
+            installedSource,
+            instanceOwnershipKind: 'pack_managed',
+            compatibility: {
+                gameVersion: 'incompatible',
+                loader: 'unknown',
+                reasons: ['gameVersion', 'loader'],
+            },
+        } as ContentItem
+        const merged = mergeContentItemMetadata(item, {
+            origin_provider: 'modrinth',
+            installedSource: 'modrinth',
+            instanceOwnershipKind: 'user_added',
+            compatibility: null,
+        } as ContentItem)
+        assert.equal(merged.installedSource, installedSource)
+        assert.equal(merged.instanceOwnershipKind, 'pack_managed')
+        assert.deepEqual(merged.compatibility, item.compatibility)
+    }
+})

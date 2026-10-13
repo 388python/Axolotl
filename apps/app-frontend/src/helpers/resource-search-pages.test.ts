@@ -104,3 +104,23 @@ test('a failed page is requested again and an expired cursor rebuilds the query 
     assert.equal(second.requestId, '1')
     assert.equal(calls, 5)
 })
+
+test('permanent source capability notices do not restart successful cursor pages', async () => {
+    let calls = 0
+    const pager = new ResourceSearchPages(async () => ({
+        ...page(calls++),
+        sourceFailures: [
+            {
+                source: 'modrinth',
+                code: 'sourceUnavailable',
+                message: 'release ordering unsupported',
+                retryable: false,
+            },
+        ],
+    }))
+    const signal = new AbortController().signal
+    const first = await pager.get(query(), 0, signal)
+    assert.equal(await pager.get(query(), 0, signal), first)
+    await pager.get(query(), 1, signal)
+    assert.equal(calls, 2)
+})

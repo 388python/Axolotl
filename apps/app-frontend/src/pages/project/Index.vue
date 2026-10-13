@@ -50,6 +50,7 @@
             />
             <ProjectSidebarDetails
                 :project="data"
+                :resource-dates="data.resourceDates"
                 :has-versions="versions.length > 0"
                 :link-target="`_blank`"
                 :hide-license="isServerProject"

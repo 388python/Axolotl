@@ -51,6 +51,7 @@ export interface ContentCardTableItem {
     disabled?: boolean
     disabledTooltip?: string | null
     postUpgradeWarningTooltip?: string | null
+    compatibilityWarningTooltip?: string | null
     toggleDisabled?: boolean
     toggleDisabledTooltip?: string | null
     installing?: boolean
@@ -146,6 +147,13 @@ export interface ContentItem extends Omit<
           }
         | null
     origin_provider: 'modrinth' | 'curseforge' | null
+    /** Actual installed artifact source; recognition counterparts do not change it. */
+    installedSource?: string | null
+    compatibility?: {
+        gameVersion: 'compatible' | 'incompatible' | 'unknown'
+        loader: 'compatible' | 'incompatible' | 'unknown'
+        reasons: string[]
+    } | null
     date_added?: string
     environment?: string
     /** Local content source kind (local / curseforge / modrinth_modpack / server_project / imported_modpack / shared_instance). */

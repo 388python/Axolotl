@@ -959,26 +959,8 @@
   "content.metadata-filter.select-all": {
     "defaultMessage": "Select all"
   },
-  "content.metadata-filter.source": {
-    "defaultMessage": "Source"
-  },
   "content.metadata-filter.source.curseforge": {
     "defaultMessage": "CurseForge"
-  },
-  "content.metadata-filter.source.imported-modpack": {
-    "defaultMessage": "Imported modpack"
-  },
-  "content.metadata-filter.source.local": {
-    "defaultMessage": "Local"
-  },
-  "content.metadata-filter.source.modrinth-modpack": {
-    "defaultMessage": "Modrinth modpack"
-  },
-  "content.metadata-filter.source.server-project": {
-    "defaultMessage": "Server project"
-  },
-  "content.metadata-filter.source.shared-instance": {
-    "defaultMessage": "Shared instance"
   },
   "content.metadata-filter.toggle": {
     "defaultMessage": "Filter"
@@ -4762,5 +4744,59 @@
   },
   "files.select-view": {
     "defaultMessage": "Select all files in this view"
+  },
+  "browse.sort.first-release": {
+    "defaultMessage": "First release published"
+  },
+  "browse.sort.latest-release": {
+    "defaultMessage": "Latest release published"
+  },
+  "browse.sort.project-created": {
+    "defaultMessage": "Project created"
+  },
+  "browse.sort.project-modified": {
+    "defaultMessage": "Project modified"
+  },
+  "content.metadata-filter.installed-source": {
+    "defaultMessage": "Installation source"
+  },
+  "content.metadata-filter.ownership": {
+    "defaultMessage": "Content ownership"
+  },
+  "content.metadata-filter.ownership.local-discovered": {
+    "defaultMessage": "Locally discovered"
+  },
+  "content.metadata-filter.ownership.pack-managed": {
+    "defaultMessage": "Pack managed"
+  },
+  "content.metadata-filter.ownership.user-added": {
+    "defaultMessage": "User added"
+  },
+  "content.metadata-filter.source.mcarchive": {
+    "defaultMessage": "MCArchive"
+  },
+  "content.metadata-filter.source.modrinth": {
+    "defaultMessage": "Modrinth"
+  },
+  "content.metadata-filter.source.planet-minecraft": {
+    "defaultMessage": "Planet Minecraft"
+  },
+  "project-card.date.created.tooltip": {
+    "defaultMessage": "Project created {date}"
+  },
+  "project-card.date.project-modified.tooltip": {
+    "defaultMessage": "Project modified {date}"
+  },
+  "project-card.date.release-updated.tooltip": {
+    "defaultMessage": "Latest release published {date}"
+  },
+  "browse.sort.project-published": {
+    "defaultMessage": "Project first published"
+  },
+  "project-card.date.project-published.tooltip": {
+    "defaultMessage": "Project first published {date}"
+  },
+  "project-card.date.first-release.tooltip": {
+    "defaultMessage": "First release published {date}"
   }
 }

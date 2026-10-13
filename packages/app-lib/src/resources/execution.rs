@@ -815,7 +815,16 @@ async fn persist_plan(
                 value: sha1.clone(),
             });
         }
-        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id).bind(serde_json::to_string(&verified_artifact)?).bind(serde_json::to_string(&plan.nodes.iter().find(|node| node.id == action.node_id).ok_or_else(|| input("node missing"))?.scope)?).execute(&mut *tx).await?;
+        let node = plan
+            .nodes
+            .iter()
+            .find(|node| node.id == action.node_id)
+            .ok_or_else(|| input("node missing"))?;
+        let record = super::installed::InstalledArtifactRecord {
+            artifact: verified_artifact,
+            declared_compatibility: node.declared_compatibility.clone(),
+        };
+        sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(id).bind(serde_json::to_string(&record)?).bind(serde_json::to_string(&node.scope)?).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM instance_content_update_checks WHERE content_entry_id = ?").bind(id).execute(&mut *tx).await?;
         sqlx::query("UPDATE instance_pack_members SET override_kind = 'version' WHERE content_entry_id = ?").bind(id).execute(&mut *tx).await?;
         node_entries

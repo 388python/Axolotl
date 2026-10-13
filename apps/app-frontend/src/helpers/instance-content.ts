@@ -116,6 +116,8 @@ export async function loadInstanceContentData(
                 instanceEntryId: item.entryId ?? undefined,
                 instanceMemberId: item.memberId ?? undefined,
                 instanceOwnershipKind: item.ownershipKind,
+                installedSource: item.content?.origin_provider ?? null,
+                compatibility: item.compatibility ?? null,
                 instanceCapabilities: item.capabilities,
                 instanceMaterializationState: item.materializationState,
                 instanceOverrideKind: item.overrideKind,

@@ -21,6 +21,7 @@ import { commonMessages, formatProjectTypeSentence } from '#ui/utils/common-mess
 import type { SortType } from '#ui/utils/search'
 
 import SelectedProjectsFloatingBar from './components/SelectedProjectsFloatingBar.vue'
+import { projectCardDates } from './composables/project-dates'
 import BrowseInstallHeader from './header.vue'
 import { injectBrowseManager } from './providers/browse-manager'
 
@@ -85,7 +86,21 @@ const messages = defineMessages({
     sortDownloads: { id: 'browse.sort.downloads', defaultMessage: 'Downloads' },
     sortFollowers: { id: 'browse.sort.followers', defaultMessage: 'Followers' },
     sortDatePublished: { id: 'browse.sort.date-published', defaultMessage: 'Date published' },
+    sortProjectPublished: {
+        id: 'browse.sort.project-published',
+        defaultMessage: 'Project first published',
+    },
     sortDateUpdated: { id: 'browse.sort.date-updated', defaultMessage: 'Date updated' },
+    sortCreated: { id: 'browse.sort.project-created', defaultMessage: 'Project created' },
+    sortModified: { id: 'browse.sort.project-modified', defaultMessage: 'Project modified' },
+    sortFirstRelease: {
+        id: 'browse.sort.first-release',
+        defaultMessage: 'First release published',
+    },
+    sortLatestRelease: {
+        id: 'browse.sort.latest-release',
+        defaultMessage: 'Latest release published',
+    },
     sortVerifiedPlays: { id: 'browse.sort.verified-plays', defaultMessage: 'Verified plays' },
     sortPlayers: { id: 'browse.sort.players', defaultMessage: 'Players' },
 })
@@ -95,8 +110,11 @@ function formatSortType(sortType: SortType): string {
         relevance: messages.sortRelevance,
         downloads: messages.sortDownloads,
         follows: messages.sortFollowers,
-        newest: messages.sortDatePublished,
-        updated: messages.sortDateUpdated,
+        newest: ctx.variant === 'app' ? messages.sortProjectPublished : messages.sortDatePublished,
+        created: messages.sortCreated,
+        updated: ctx.variant === 'app' ? messages.sortModified : messages.sortDateUpdated,
+        firstPublished: messages.sortFirstRelease,
+        latestPublished: messages.sortLatestRelease,
         'minecraft_java_server.verified_plays_2w': messages.sortVerifiedPlays,
         'minecraft_java_server.ping.data.players_online': messages.sortPlayers,
         date_created: messages.sortDatePublished,
@@ -456,13 +474,7 @@ const skeletonCount = computed(() => {
                                             : `https://modrinth.com/organization/${result.organization_id}`
                                       : undefined,
                         }"
-                        :date-updated="result.date_modified"
-                        :date-published="result.date_created"
-                        :displayed-date="
-                            ctx.effectiveCurrentSortType.value.name === 'newest'
-                                ? 'published'
-                                : 'updated'
-                        "
+                        v-bind="projectCardDates(result, ctx.effectiveCurrentSortType.value.name)"
                         :downloads="result.downloads"
                         :summary="result.description"
                         :tags="result.display_categories"

@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { IntlMessageFormat } from 'intl-messageformat'
 import { expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 
@@ -49,10 +50,10 @@ vi.mock('@modrinth/ui', () => ({
     }),
     defineMessages: (messages: unknown) => messages,
     useVIntl: () => ({
-        formatMessage: (message: { defaultMessage: string }, values?: Record<string, unknown>) =>
-            message.defaultMessage.replace(/\{(name|names|instance|path)\}/g, (_, key) =>
-                String(values?.[key] ?? ''),
-            ),
+        formatMessage: (
+            message: { defaultMessage: string },
+            values?: Record<string, string | number>,
+        ) => new IntlMessageFormat(message.defaultMessage, 'en').format(values),
     }),
 }))
 
@@ -266,10 +267,24 @@ it('blocks unaccepted compatibility and binds an exception to exactly one releas
                 .find((button) => button.text() === 'Queue changes')!
                 .attributes('disabled'),
         ).toBeDefined()
-        vi.mocked(resourceRevisePlan).mockResolvedValue(plan(2))
+        vi.mocked(resourceRevisePlan).mockResolvedValue({
+            ...plan(2),
+            nodes: [incompatible],
+            exceptions: [
+                { selectionId: 'root', release: reference.release, dimensions: ['gameVersion'] },
+            ],
+            issues: [
+                {
+                    selectionId: 'root',
+                    code: 'compatibilityUnknown',
+                    blocking: true,
+                    message: 'unknown loader',
+                },
+            ],
+        } as ResourceOperationPlan)
         await wrapper
             .findAll('button')
-            .find((button) => button.text().startsWith('Allow this release'))!
+            .find((button) => button.text() === 'Accept Minecraft compatibility exception')!
             .trigger('click')
         await flushPromises()
         expect(resourceRevisePlan).toHaveBeenCalledWith(
@@ -281,7 +296,39 @@ it('blocks unaccepted compatibility and binds an exception to exactly one releas
                     exception: {
                         selectionId: 'root',
                         release: reference.release,
-                        dimensions: ['gameVersion', 'loader'],
+                        dimensions: ['gameVersion'],
+                    },
+                },
+            ],
+            expect.any(AbortSignal),
+        )
+        expect(
+            wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Queue changes')!
+                .attributes('disabled'),
+        ).toBeDefined()
+        expect(
+            wrapper
+                .findAll('button')
+                .some((button) => button.text() === 'Accept Minecraft compatibility exception'),
+        ).toBe(false)
+        vi.mocked(resourceRevisePlan).mockResolvedValue(plan(3))
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Accept loader compatibility exception')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceRevisePlan).toHaveBeenLastCalledWith(
+            'plan',
+            2,
+            [
+                {
+                    kind: 'acceptCompatibility',
+                    exception: {
+                        selectionId: 'root',
+                        release: reference.release,
+                        dimensions: ['loader'],
                     },
                 },
             ],

@@ -473,6 +473,7 @@ export type PackMemberMaterializationState = 'present' | 'pending_manual' | 'mis
 export type PackMemberOverrideKind = 'none' | 'disabled' | 'removed' | 'version'
 
 export interface InstanceContentSnapshotItem {
+    compatibility?: ContentItem['compatibility']
     fileId: string | null
     entryId: string | null
     memberId: string | null

@@ -3,8 +3,8 @@ import { invoke } from '@tauri-apps/api/core'
 import { restoreCachedUrls } from './download-url'
 import {
     resourceCachePolicy,
+    resourceLocate,
     resourceProjectDocuments,
-    resourceProjectProtocol,
     resourceReleaseDocuments,
     resourceRequest,
 } from './resources'
@@ -13,16 +13,25 @@ async function readCache(command, args) {
     return restoreCachedUrls(await invoke(command, args))
 }
 
-/** @returns {Promise<import('@modrinth/api-client').Labrinth.Projects.v2.Project>} */
+/** @returns {Promise<import('@modrinth/api-client').Labrinth.Projects.v2.Project & { resourceDates: Pick<import('./resources').SourceProjectMetadata, 'createdAt' | 'projectPublishedAt' | 'updatedAt' | 'firstPublishedAt' | 'latestPublishedAt'> }>} */
 export async function get_project(id, cacheBehaviour) {
-    return restoreCachedUrls(
-        await resourceProjectProtocol(
-            'modrinth',
-            id,
-            undefined,
-            resourceCachePolicy(cacheBehaviour),
-        ),
+    const document = await resourceLocate(
+        'modrinth',
+        id,
+        undefined,
+        resourceCachePolicy(cacheBehaviour),
     )
+    if (!document?.protocol) throw new Error('Source presentation is unavailable')
+    return restoreCachedUrls({
+        ...document.protocol,
+        resourceDates: {
+            createdAt: document.metadata.createdAt,
+            projectPublishedAt: document.metadata.projectPublishedAt,
+            updatedAt: document.metadata.updatedAt,
+            firstPublishedAt: document.metadata.firstPublishedAt,
+            latestPublishedAt: document.metadata.latestPublishedAt,
+        },
+    })
 }
 
 /** @returns {Promise<import('@modrinth/api-client').Labrinth.Projects.v2.Project[]>} */

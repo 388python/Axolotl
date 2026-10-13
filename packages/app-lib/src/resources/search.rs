@@ -159,13 +159,23 @@ impl ResourceService {
                     } else {
                         split.clone().unwrap_or_else(|| query.text.clone())
                     };
+                    let supported_sort =
+                        source.supported_search_sorts.contains(&query.sort);
                     SourceBuffer {
-                        failure: None,
+                        failure: (!supported_sort).then(|| {
+                            source_failure(
+                                source.id.clone(),
+                                ResourceError::Unsupported(format!(
+                                    "source cannot provide {:?} ordering",
+                                    query.sort
+                                )),
+                            )
+                        }),
                         source: source.id,
                         query: source_query,
                         cursor: None,
                         started: false,
-                        done: false,
+                        done: !supported_sort,
                         exhausted: false,
                         entries: VecDeque::new(),
                         total: ResourceTotal {
@@ -532,6 +542,8 @@ fn sort_metadata(
         ResourceSearchSort::Created => {
             entries.sort_by_key(|entry| std::cmp::Reverse(entry.created_at))
         }
+        ResourceSearchSort::ProjectPublished => entries
+            .sort_by_key(|entry| std::cmp::Reverse(entry.project_published_at)),
         ResourceSearchSort::ProjectUpdated => {
             entries.sort_by_key(|entry| std::cmp::Reverse(entry.updated_at))
         }

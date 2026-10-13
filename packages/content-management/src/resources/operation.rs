@@ -133,6 +133,8 @@ pub struct ResourceDependencyNode {
     pub artifact: Option<ResourceArtifact>,
     pub installed_entries: Vec<InstalledEntryId>,
     pub compatibility: CompatibilityAssessment,
+    #[serde(default)]
+    pub declared_compatibility: Option<super::ReleaseCompatibility>,
 }
 
 /// Preserve all parent requirements. Requiredness is derived from active paths.

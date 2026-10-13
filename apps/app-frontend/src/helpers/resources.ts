@@ -38,6 +38,7 @@ export interface SourceProjectMetadata {
     downloads: number | null
     followers: number | null
     createdAt: string | null
+    projectPublishedAt?: string | null
     updatedAt: string | null
     firstPublishedAt: string | null
     latestPublishedAt: string | null
@@ -92,6 +93,7 @@ export interface ResourceSearchQuery {
     target: ResourceTarget
     categories: string[]
     sort:
+        | 'projectPublished'
         | 'relevance'
         | 'downloads'
         | 'followers'
@@ -309,6 +311,7 @@ export type ResourceDependencyNode = {
         loader: 'compatible' | 'incompatible' | 'unknown'
         reasons: string[]
     }
+    declaredCompatibility?: { gameVersions: string[]; loaders: string[] } | null
 }
 export function resourceListInstalled(instanceId: string, signal?: AbortSignal) {
     return resourceRequest<InstalledResource[]>('resource_list_installed', { instanceId }, signal)

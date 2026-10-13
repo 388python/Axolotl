@@ -176,13 +176,15 @@ pub async fn rollback(
             .await
             .map_err(db)?;
     let payload: serde_json::Value = serde_json::from_str(&payload)?;
-    let artifact: ResourceArtifact = serde_json::from_value(
-        payload.get("previousArtifact").cloned().ok_or_else(|| {
-            ResourceError::InvalidRequest(
-                "history lacks exact artifact metadata".into(),
-            )
-        })?,
-    )?;
+    let record: super::installed::InstalledArtifactRecord =
+        serde_json::from_value(
+            payload.get("previousArtifact").cloned().ok_or_else(|| {
+                ResourceError::InvalidRequest(
+                    "history lacks exact artifact metadata".into(),
+                )
+            })?,
+        )?;
+    let artifact = record.artifact;
     let current = plans::installed(&state.pool, &instance_id)
         .await?
         .into_iter()
@@ -238,6 +240,7 @@ pub async fn rollback(
                 loader: CompatibilityState::Unknown,
                 reasons: vec!["restoring previously installed artifact".into()],
             },
+            declared_compatibility: record.declared_compatibility,
         }],
         edges: history.previous_dependencies.clone(),
         actions: vec![ResourceEntryAction {

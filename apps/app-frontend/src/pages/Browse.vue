@@ -1863,8 +1863,11 @@ async function search(requestParams: string, signal: AbortSignal) {
         relevance: 'relevance',
         downloads: 'downloads',
         follows: 'followers',
-        newest: 'created',
+        newest: 'projectPublished',
+        created: 'created',
         updated: 'projectUpdated',
+        firstPublished: 'firstPublished',
+        latestPublished: 'latestPublished',
     }
     const classId = curseForgeClassIds[projectType.value]
     const categoryFailure =
@@ -1953,6 +1956,13 @@ async function search(requestParams: string, signal: AbortSignal) {
                 date_modified: metadata.updatedAt ?? '',
                 first_published_at: metadata.firstPublishedAt,
                 latest_published_at: metadata.latestPublishedAt,
+                resource_dates: {
+                    createdAt: metadata.createdAt,
+                    projectPublishedAt: metadata.projectPublishedAt,
+                    updatedAt: metadata.updatedAt,
+                    firstPublishedAt: metadata.firstPublishedAt,
+                    latestPublishedAt: metadata.latestPublishedAt,
+                },
                 latest_version: '',
                 license: metadata.license ?? '',
                 client_side: resourceEnvironmentSides(metadata.environments).client,
@@ -2049,6 +2059,16 @@ function setDisplayMode(mode: BrowseDisplayMode) {
 }
 
 const searchState = useBrowseSearch({
+    sortOptions: [
+        { name: 'relevance', display: 'Relevance' },
+        { name: 'downloads', display: 'Downloads' },
+        { name: 'follows', display: 'Followers' },
+        { name: 'newest', display: 'Project published' },
+        { name: 'created', display: 'Project created' },
+        { name: 'updated', display: 'Project modified' },
+        { name: 'firstPublished', display: 'First release published' },
+        { name: 'latestPublished', display: 'Latest release published' },
+    ],
     projectType,
     tags,
     providedFilters: combinedProvidedFilters,

@@ -161,6 +161,10 @@ async fn local_plan(
                 loader: CompatibilityState::Compatible,
                 reasons: vec![],
             },
+            declared_compatibility: Some(ReleaseCompatibility {
+                game_versions: vec!["1.20.1".into()],
+                loaders: vec![],
+            }),
         }],
         edges: vec![],
         actions: vec![ResourceEntryAction {
@@ -224,6 +228,7 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     assert!(!changed.enabled);
     assert_eq!(changed.artifact, Some(target.reference));
     let mut snapshot = vec![crate::state::InstanceContentSnapshotItem {
+        compatibility: None,
         resource_id: None,
         pack_resource_id: None,
         file_id: None,
@@ -252,6 +257,58 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     history::attach_to_snapshot("instance", &mut snapshot, &state)
         .await
         .unwrap();
+    super::installed::attach_compatibility(
+        &state.pool,
+        "instance",
+        "1.21.1",
+        "neoforge",
+        &mut snapshot,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        snapshot[0].compatibility.as_ref().unwrap().game_version,
+        CompatibilityState::Incompatible
+    );
+    assert_eq!(
+        snapshot[0].compatibility.as_ref().unwrap().loader,
+        CompatibilityState::Compatible
+    );
+    super::installed::attach_compatibility(
+        &state.pool,
+        "instance",
+        "1.20.1",
+        "fabric",
+        &mut snapshot,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        snapshot[0].compatibility.as_ref().unwrap().game_version,
+        CompatibilityState::Compatible
+    );
+    let saved: String = sqlx::query_scalar(
+        "SELECT artifact FROM resource_installed_artifacts WHERE entry_id = ?",
+    )
+    .bind(original.entry_id.as_str())
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    let record: super::installed::InstalledArtifactRecord =
+        serde_json::from_str(&saved).unwrap();
+    assert_eq!(
+        record
+            .declared_compatibility
+            .as_ref()
+            .unwrap()
+            .game_versions,
+        vec!["1.20.1"]
+    );
+    let legacy: ResourceArtifact = serde_json::from_str(&saved).unwrap();
+    assert_eq!(legacy.reference, record.artifact.reference);
+    let historical: super::installed::InstalledArtifactRecord =
+        serde_json::from_str(&serde_json::to_string(&legacy).unwrap()).unwrap();
+    assert!(historical.declared_compatibility.is_none());
     assert!(snapshot[0].content.as_ref().unwrap().rollback.is_some());
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM instance_content_entries")

@@ -34,6 +34,11 @@
             />
             <ProjectSidebarDetails
                 :project="data"
+                :resource-dates="{
+                    createdAt: project?.dateCreated,
+                    updatedAt: project?.dateModified,
+                    latestPublishedAt: project?.dateReleased,
+                }"
                 :has-versions="versions.length > 0"
                 hide-license
                 link-target="_blank"

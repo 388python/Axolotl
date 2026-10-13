@@ -498,6 +498,11 @@ const messages = defineMessages({
         defaultMessage:
             'This content was preserved during the instance upgrade without installing a new compatible version. It may be incompatible with the current Minecraft version.',
     },
+    compatibilityWarning: {
+        id: 'app.resources.installed.compatibility',
+        defaultMessage:
+            'Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {unknown}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {unknown}}. Installation does not change the declared compatibility.',
+    },
     openInMcmod: {
         id: 'app.project.open-in-mcmod',
         defaultMessage: 'Open in MC Mod',
@@ -3178,6 +3183,15 @@ provideContentManager({
             postUpgradeWarningTooltip: postUpgradeWarning
                 ? formatMessage(messages.postUpgradeWarningTooltip)
                 : null,
+            compatibilityWarningTooltip:
+                item.compatibility &&
+                (item.compatibility.gameVersion !== 'compatible' ||
+                    item.compatibility.loader !== 'compatible')
+                    ? formatMessage(messages.compatibilityWarning, {
+                          game: item.compatibility.gameVersion,
+                          loader: item.compatibility.loader,
+                      })
+                    : null,
             enabled: item.enabled,
             disabledTooltip:
                 item.instanceMaterializationState === 'missing'

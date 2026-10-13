@@ -405,7 +405,6 @@ impl CurseForgeProvider {
                     ResourceSearchSort::Relevance => 1,
                     ResourceSearchSort::Downloads => 6,
                     ResourceSearchSort::ProjectUpdated => 3,
-                    ResourceSearchSort::FirstPublished => 8,
                     ResourceSearchSort::Created => 11,
                     _ => return Err(ResourceError::Unsupported(
                         "CurseForge cannot provide requested sort semantics"
@@ -498,13 +497,12 @@ impl ResourceProvider for CurseForgeProvider {
                 ResourceSearchSort::Relevance,
                 ResourceSearchSort::Downloads,
                 ResourceSearchSort::ProjectUpdated,
-                ResourceSearchSort::FirstPublished,
                 ResourceSearchSort::Created,
             ],
         }
     }
     fn namespace(&self) -> String {
-        "curseforge-v1".into()
+        "curseforge-v1-dates".into()
     }
     fn batch_limit(&self, query: &ProviderQuery) -> usize {
         if query.batch_group() < 3 { 50 } else { 1 }
@@ -662,9 +660,10 @@ impl RemoteProject {
                 downloads: self.download_count,
                 followers: None,
                 created_at: self.date_created,
+                project_published_at: None,
                 updated_at: self.date_modified,
-                first_published_at: self.date_released,
-                latest_published_at: None,
+                first_published_at: None,
+                latest_published_at: self.date_released,
             },
             description: ResourceText {
                 source: SourceId::curseforge(),
