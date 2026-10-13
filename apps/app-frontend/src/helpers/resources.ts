@@ -370,6 +370,7 @@ export type ResourceOperationPlan = {
     selectionReasons: unknown[]
 }
 export type ResourcePlanDecision =
+    | { kind: 'addRequired'; nodeId: string }
     | { kind: 'addOptional'; nodeId: string }
     | { kind: 'removeOptional'; nodeId: string }
     | { kind: 'removeRoot'; selectionId: string }

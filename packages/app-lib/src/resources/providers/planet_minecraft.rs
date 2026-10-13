@@ -60,12 +60,19 @@ impl PlanetMinecraftProvider {
                 Ok(ProviderValue::Releases(slice_page(releases, offset(cursor)?, *page_size)?))
             }
             ProviderQuery::Search { query, cursor } => {
-                if query.sort != ResourceSearchSort::Relevance || !query.types.is_empty() || !query.categories.is_empty() || !query.target.loaders.is_empty() || query.target.game_versions.len() > 1 { return Err(ResourceError::Unsupported("connector search exposes keyword and one game version only".into())); }
+                validate_search(query)?;
                 let mut request = ProtocolRequest::get("/projects");
                 request.query.push(("query".into(), query.text.clone()));
                 if let Some(version) = query.target.game_versions.first() { request.query.push(("game_version".into(), version.clone())); }
                 let projects: Vec<RemoteProject> = serde_json::from_value(self.transport.request(&SourceId::planet_minecraft(), request).await?)?;
                 let entries = projects.into_iter().map(|project| project.document().map(|document| document.metadata)).collect::<ResourceResult<Vec<_>>>()?;
+                if (!query.types.is_empty() || query.filter.as_ref().is_some_and(has_type_filter)) && entries.iter().any(|entry| entry.types.is_empty()) {
+                    return Err(ResourceError::Unsupported("connector returned untyped projects; the requested content type cannot be verified".into()));
+                }
+                let entries = entries.into_iter().filter(|entry| {
+                    (query.types.is_empty() || query.types.iter().all(|kind| entry.types.contains(kind)))
+                        && query.filter.as_ref().is_none_or(|filter| matches_type_filter(filter, &entry.types))
+                }).collect();
                 Ok(ProviderValue::Search(slice_page(entries, offset(cursor)?, query.page_size)?))
             }
             _ => Err(ResourceError::Unsupported("connector does not expose identification, dependency or changelog endpoints".into())),
@@ -79,7 +86,13 @@ impl ResourceProvider for PlanetMinecraftProvider {
         ResourceSource {
             id: SourceId::planet_minecraft(),
             available: connector_namespace().is_some(),
-            types: vec![],
+            types: vec![
+                ResourceType::Mod,
+                ResourceType::ResourcePack,
+                ResourceType::DataPack,
+                ResourceType::Shader,
+                ResourceType::World,
+            ],
             capabilities: vec![
                 SourceCapability::Project,
                 SourceCapability::Description,
@@ -97,6 +110,12 @@ impl ResourceProvider for PlanetMinecraftProvider {
     fn batch_limit(&self, _: &ProviderQuery) -> usize {
         1
     }
+    fn validate_query(&self, query: &ProviderQuery) -> ResourceResult<()> {
+        if let ProviderQuery::Search { query, .. } = query {
+            validate_search(query)?;
+        }
+        Ok(())
+    }
     async fn fetch_many(
         &self,
         queries: &[ProviderQuery],
@@ -111,6 +130,101 @@ impl ResourceProvider for PlanetMinecraftProvider {
             });
         }
         result
+    }
+}
+
+fn validate_search(query: &ResourceSearchQuery) -> ResourceResult<()> {
+    if query.sort != ResourceSearchSort::Relevance
+        || !query.categories.is_empty()
+        || !query.target.loaders.is_empty()
+        || query.target.game_versions.len() > 1
+    {
+        return Err(ResourceError::Unsupported("connector search exposes keyword, declared content types and one game version only".into()));
+    }
+    if let Some(filter) = &query.filter {
+        validate_filter(filter, &query.target.game_versions, 0)?;
+    }
+    Ok(())
+}
+
+fn validate_filter(
+    filter: &ResourceSearchExpression,
+    versions: &[String],
+    depth: usize,
+) -> ResourceResult<()> {
+    if depth > 16 {
+        return Err(ResourceError::InvalidRequest(
+            "search filter nesting exceeded".into(),
+        ));
+    }
+    match filter {
+        ResourceSearchExpression::All { terms }
+        | ResourceSearchExpression::Any { terms } => {
+            for term in terms {
+                validate_filter(term, versions, depth + 1)?;
+            }
+            Ok(())
+        }
+        ResourceSearchExpression::Predicate { field, .. }
+            if matches!(field.as_str(), "type" | "allTypes") =>
+        {
+            Ok(())
+        }
+        ResourceSearchExpression::Predicate {
+            field,
+            values,
+            excluded: false,
+        } if field == "gameVersion"
+            && values.len() == 1
+            && values == versions =>
+        {
+            Ok(())
+        }
+        _ => Err(ResourceError::Unsupported(
+            "connector cannot express these search filters".into(),
+        )),
+    }
+}
+
+fn has_type_filter(filter: &ResourceSearchExpression) -> bool {
+    match filter {
+        ResourceSearchExpression::All { terms }
+        | ResourceSearchExpression::Any { terms } => {
+            terms.iter().any(has_type_filter)
+        }
+        ResourceSearchExpression::Predicate { field, .. } => {
+            matches!(field.as_str(), "type" | "allTypes")
+        }
+    }
+}
+
+fn matches_type_filter(
+    filter: &ResourceSearchExpression,
+    types: &[ResourceType],
+) -> bool {
+    match filter {
+        ResourceSearchExpression::All { terms } => {
+            terms.iter().all(|term| matches_type_filter(term, types))
+        }
+        ResourceSearchExpression::Any { terms } => {
+            terms.iter().any(|term| matches_type_filter(term, types))
+        }
+        ResourceSearchExpression::Predicate {
+            field,
+            values,
+            excluded,
+        } if matches!(field.as_str(), "type" | "allTypes") => {
+            let matched = types.iter().any(|kind| {
+                serde_json::to_value(kind)
+                    .ok()
+                    .and_then(|value| value.as_str().map(str::to_lowercase))
+                    .is_some_and(|kind| {
+                        values.iter().any(|value| value.to_lowercase() == kind)
+                    })
+            });
+            matched != *excluded
+        }
+        _ => true,
     }
 }
 

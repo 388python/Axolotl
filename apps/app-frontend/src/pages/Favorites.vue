@@ -46,11 +46,11 @@ import {
     contentFavoriteKey,
     type FavoriteContentType,
     type FavoriteProvider,
+    resolveContentFavorite,
 } from '@/helpers/content-favorites'
 import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
-import { resourceLocate } from '@/helpers/resources'
 import {
     getLastBrowseContentDisplayMode,
     setLastBrowseContentDisplayMode,
@@ -375,13 +375,10 @@ async function refreshProjects() {
         const resolved = await Promise.all(
             favorites.map(async (favorite): Promise<FavoriteProject> => {
                 try {
-                    const { metadata } = await resourceLocate(
-                        favorite.provider,
-                        favorite.project_id,
-                    )
+                    const metadata = await resolveContentFavorite(favorite)
                     return {
                         favorite,
-                        provider: favorite.provider,
+                        provider: metadata.project.source,
                         projectId: metadata.project.projectId,
                         title: metadata.title,
                         description: metadata.summary,
@@ -419,7 +416,9 @@ const activeFavoriteKeys = computed(
 const availableProjects = computed(() =>
     projects.value
         .filter((project) =>
-            activeFavoriteKeys.value.has(contentFavoriteKey(project.provider, project.projectId)),
+            activeFavoriteKeys.value.has(
+                contentFavoriteKey(project.favorite.provider, project.favorite.project_id),
+            ),
         )
         .sort((left, right) => right.favorite.saved_at - left.favorite.saved_at),
 )

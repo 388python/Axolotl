@@ -1,7 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { parseResourceSearchFilter } from './resource-search-filter.ts'
+import {
+    loadResourceSearchCategories,
+    parseResourceSearchFilter,
+} from './resource-search-filter.ts'
+
+test('category failures do not prevent an independent source search', async () => {
+    let calls = 0
+    const load = async () => {
+        calls += 1
+        throw new Error('categories unavailable')
+    }
+    assert.equal(await loadResourceSearchCategories('modrinth', load), null)
+    assert.equal(calls, 0)
+    assert.equal(
+        await loadResourceSearchCategories('all', load),
+        'CurseForge: categories unavailable',
+    )
+    await assert.rejects(loadResourceSearchCategories('curseforge', load), /categories unavailable/)
+})
 
 test('preserves OR environment groups, license, negative categories and advanced exclusions', () => {
     assert.deepEqual(

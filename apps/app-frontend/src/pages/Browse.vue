@@ -100,7 +100,10 @@ import { getMcArchiveGameVersions, type McArchiveGameVersion } from '@/helpers/m
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { planetMinecraftConnectorAvailable } from '@/helpers/planet-minecraft'
-import { parseResourceSearchFilter } from '@/helpers/resource-search-filter'
+import {
+    loadResourceSearchCategories,
+    parseResourceSearchFilter,
+} from '@/helpers/resource-search-filter'
 import { ResourceSearchPages } from '@/helpers/resource-search-pages'
 import {
     resourceSearch,
@@ -1864,8 +1867,12 @@ async function search(requestParams: string, signal: AbortSignal) {
         updated: 'projectUpdated',
     }
     const classId = curseForgeClassIds[projectType.value]
-    if (classId && categories.some((value) => !CURSEFORGE_LOADER_SLUGS.has(value)))
-        await ensureCurseForgeCategories(projectType.value)
+    const categoryFailure =
+        classId && categories.some((value) => !CURSEFORGE_LOADER_SLUGS.has(value))
+            ? await loadResourceSearchCategories(contentSource.value, () =>
+                  ensureCurseForgeCategories(projectType.value),
+              )
+            : null
     signal.throwIfAborted()
     const nonLoaderCategories = categories.filter((value) => !loaders.includes(value))
     const cfCategories = classId
@@ -1988,6 +1995,7 @@ async function search(requestParams: string, signal: AbortSignal) {
         per_page: limit,
         page: resourceSearchPages.indexOf(page) + 1,
         resourceNotice: [
+            ...(categoryFailure ? [categoryFailure] : []),
             ...page.sourceFailures.map((failure) => `${failure.source}: ${failure.message}`),
             ...page.exhaustedSources.map((source) =>
                 formatMessage(messages.sourceWindowExhausted, { source }),

@@ -237,6 +237,9 @@ pub struct ResourceOperationPlan {
     rename_all_fields = "camelCase"
 )]
 pub enum ResourcePlanDecision {
+    AddRequired {
+        node_id: SelectionId,
+    },
     AddOptional {
         node_id: SelectionId,
     },

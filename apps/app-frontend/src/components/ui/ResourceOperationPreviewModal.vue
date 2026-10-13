@@ -87,6 +87,11 @@ const messages = defineMessages({
         id: 'app.resources.operation.missing-dependency',
         defaultMessage: 'A required dependency could not be resolved.',
     },
+    unselectedDependency: {
+        id: 'app.resources.operation.unselected-dependency',
+        defaultMessage:
+            'Automatic dependency installation is off. Add this required dependency to continue.',
+    },
     versionConflict: {
         id: 'app.resources.operation.version-conflict',
         defaultMessage: 'A version conflict prevents installing this item.',
@@ -156,6 +161,7 @@ function issueNotice(issue: PlanIssue): Notice | null {
                     ? formatMessage(messages.sourceUnavailable)
                     : formatMessage(messages.unresolvedOptional)
             case 'missingDependency':
+                if (node?.state === 'missing') return formatMessage(messages.unselectedDependency)
                 return `${formatMessage(messages.missingDependency)} ${issue.message}`
             case 'versionConflict':
                 return issue.blocking
@@ -486,6 +492,14 @@ defineExpose({ show, showInstall, showInstallSelection })
                 <p v-if="node.state === 'satisfied'" class="m-0 text-sm">
                     {{ formatMessage(messages.satisfied) }}
                 </p>
+                <Button
+                    v-if="node.state === 'missing'"
+                    size="sm"
+                    :disabled="busy"
+                    :aria-label="formatMessage(messages.add, { name: name(node) })"
+                    @click="revise({ kind: 'addRequired', nodeId: node.id })"
+                    >＋</Button
+                >
                 <p v-if="requiredBy(node.id)" class="m-0 text-sm">
                     {{ formatMessage(messages.requiredBy, { names: requiredBy(node.id) }) }}
                 </p>

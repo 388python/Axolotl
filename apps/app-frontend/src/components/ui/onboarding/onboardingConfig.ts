@@ -73,7 +73,7 @@ export const onboardingMessages = defineMessages({
     browseDescription: {
         id: 'app.onboarding.browse.description',
         defaultMessage:
-            'Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements.',
+            'Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements. When automatic dependency installation is off, use + to explicitly add missing required dependencies.',
     },
     favoritesTitle: {
         id: 'app.onboarding.favorites.title',

@@ -6567,7 +6567,7 @@
     "message": "Set the vibe"
   },
   "app.onboarding.browse.description": {
-    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements."
+    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements. When automatic dependency installation is off, use + to explicitly add missing required dependencies."
   },
   "app.onboarding.browse.title": {
     "message": "Search with receipts"
@@ -13513,6 +13513,9 @@
   },
   "app.resources.operation.missing-dependency": {
     "message": "A required dependency could not be resolved."
+  },
+  "app.resources.operation.unselected-dependency": {
+    "message": "Automatic dependency installation is off. Add this required dependency to continue."
   },
   "app.resources.operation.version-conflict": {
     "message": "A version conflict prevents installing this item."

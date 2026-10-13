@@ -670,11 +670,12 @@ async fn cached_only_projection_keeps_expired_metadata_without_requesting_a_sour
 }
 
 #[tokio::test]
-async fn unsupported_content_type_is_reported_for_explicit_and_combined_connector_search()
+async fn untyped_connector_results_report_capability_difference_without_broadening_search()
  {
     let (_directory, cache) = cache().await;
-    let transport = FixtureTransport::new(|_, _| {
-        panic!("unsupported filter must not broaden the query")
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/projects");
+        Ok(json!([{"id":"untyped", "title":"Unknown project"}]))
     });
     let connector =
         Arc::new(Available(Arc::new(PlanetMinecraftProvider::new(transport))));
@@ -718,6 +719,72 @@ fn compatibility_projection_does_not_cache_credentials_or_signed_download_urls()
     assert!(cleaned["downloadUrl"].is_null());
     assert!(cleaned["nested"].get("headers").is_none());
     assert_eq!(cleaned["nested"]["url"], "https://example.com/public");
+}
+
+#[tokio::test]
+async fn typed_connector_search_filters_the_complete_collection_before_paging()
+{
+    let (_directory, cache) = cache().await;
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/projects");
+        Ok(json!([
+            {"id":"first-mod", "title":"First mod", "projectType":"mod"},
+            {"id":"world", "title":"World", "projectType":"world"},
+            {"id":"second-mod", "title":"Second mod", "projectType":"mod"}
+        ]))
+    });
+    let connector =
+        Arc::new(Available(Arc::new(PlanetMinecraftProvider::new(transport))));
+    let service = ResourceService::new(cache.clone(), vec![connector]).unwrap();
+    let mut query = query(1);
+    query.sources = vec![SourceId::planet_minecraft()];
+    query.filter = Some(ResourceSearchExpression::All {
+        terms: vec![
+            ResourceSearchExpression::Predicate {
+                field: "type".into(),
+                values: vec!["mod".into()],
+                excluded: false,
+            },
+            ResourceSearchExpression::Predicate {
+                field: "allTypes".into(),
+                values: vec!["modpack".into()],
+                excluded: true,
+            },
+        ],
+    });
+    let token = CancellationToken::new();
+    let first = service
+        .search(
+            query.clone(),
+            None,
+            RequestId::new("first").unwrap(),
+            &token,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        first.entries[0].entry.default_project.project_id.as_str(),
+        "first-mod"
+    );
+    assert!(first.has_more);
+    let second = service
+        .search(
+            query,
+            first.cursor,
+            RequestId::new("second").unwrap(),
+            &token,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        second.entries[0].entry.default_project.project_id.as_str(),
+        "second-mod"
+    );
+    assert!(!second.has_more);
+    assert!(
+        first.source_failures.is_empty() && second.source_failures.is_empty()
+    );
+    cache.close().await;
 }
 
 #[tokio::test]

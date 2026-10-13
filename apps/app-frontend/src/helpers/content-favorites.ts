@@ -1,6 +1,26 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { ResourceType, SourceProjectRef } from './resources'
+import {
+    resourceGet,
+    resourceLocate,
+    type ResourceType,
+    type SourceProjectRef,
+} from './resources.ts'
+
+export async function resolveContentFavorite(favorite: ContentFavorite) {
+    if (!favorite.resource_id) {
+        return (await resourceLocate(favorite.provider, favorite.locator ?? favorite.project_id))
+            .metadata
+    }
+    const resource = await resourceGet({ kind: 'resource', id: favorite.resource_id })
+    const metadata = resource.projects.find(
+        (project) =>
+            project.project.source === resource.defaultProject.source &&
+            project.project.projectId === resource.defaultProject.projectId,
+    )
+    if (!metadata) throw new Error('Favorite resource presentation is unavailable')
+    return metadata
+}
 
 export type FavoriteProvider = 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft'
 export type FavoriteContentType = 'mod' | 'resourcepack' | 'datapack' | 'shader'

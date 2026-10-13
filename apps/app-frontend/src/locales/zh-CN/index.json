@@ -6525,7 +6525,7 @@
     "message": "调成你的顺眼样子"
   },
   "app.onboarding.browse.description": {
-    "message": "同时搜索可用来源。同名项目在文件核验前只是候选。项目页面集中展示版本、更新日志、图库和安装选项。 安装预览会展开必选前置；点击＋添加可选前置后，才会解析它所需的前置。"
+    "message": "同时搜索可用来源。同名项目在文件核验前只是候选。项目页面集中展示版本、更新日志、图库和安装选项。安装预览会展开必选前置；点击＋添加可选前置后，才会解析它所需的前置。关闭自动安装依赖后，也需要点击＋明确添加缺失的必需前置。"
   },
   "app.onboarding.browse.title": {
     "message": "搜索，不靠玄学"
@@ -13525,6 +13525,9 @@
   },
   "app.resources.operation.missing-dependency": {
     "message": "无法解析所需的依赖。"
+  },
+  "app.resources.operation.unselected-dependency": {
+    "message": "已关闭自动安装依赖。请添加此必需依赖后继续。"
   },
   "app.resources.operation.version-conflict": {
     "message": "存在版本冲突，无法安装此内容。"

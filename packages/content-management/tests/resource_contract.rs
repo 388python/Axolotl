@@ -211,6 +211,18 @@ fn active_dependency_edges_preserve_every_parent_and_optional_decisions() {
         serde_json::to_value(decision).unwrap(),
         json!({"kind": "addOptional", "nodeId": "shared"})
     );
+    let required = ResourcePlanDecision::AddRequired {
+        node_id: SelectionId::new("required").unwrap(),
+    };
+    let encoded = serde_json::to_value(&required).unwrap();
+    assert_eq!(
+        encoded,
+        json!({"kind": "addRequired", "nodeId": "required"})
+    );
+    assert_eq!(
+        serde_json::from_value::<ResourcePlanDecision>(encoded).unwrap(),
+        required
+    );
 }
 
 #[test]

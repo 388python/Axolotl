@@ -69,6 +69,7 @@ import {
     type ModpackInstallModalRef,
     provideContentInstall,
 } from '@/providers/content-install-types'
+import { useTheming } from '@/store/state'
 
 import { createContentInstallDepNotifications } from './content-install-dep-notifications'
 import * as contentInstallMessages from './content-install-messages'
@@ -107,6 +108,7 @@ export function createContentInstall(opts: {
     }) => void
 }): ContentInstallContext {
     const { formatMessage } = useVIntl()
+    const themeStore = useTheming()
     const debugState = useDebugLogger('content-install')
     const instances = ref<ContentInstallInstance[]>([])
     const compatibleLoaders = ref<string[]>([])
@@ -175,6 +177,10 @@ export function createContentInstall(opts: {
     }).catch(opts.handleError)
 
     let modalRef: ModalRef | null = null
+    function hideContentInstallModal() {
+        contentInstallModalOpen = false
+        modalRef?.hide()
+    }
     let resourcePreview: InstanceType<typeof ResourceOperationPreviewModal> | null = null
     let modpackInstallModalRef: ModpackInstallModalRef | null = null
     let curseForgeManualDownloadsModalRef: CurseForgeManualDownloadsModalRef | null = null
@@ -682,7 +688,7 @@ export function createContentInstall(opts: {
         const result = await resourcePreview.showInstallSelection({
             instanceId: instance.id,
             instanceName: instance.name,
-            installDependencies: true,
+            installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
             selections: [
                 {
                     id: `${provider}:${projectId}`,
@@ -1154,6 +1160,7 @@ export function createContentInstall(opts: {
     }
 
     function handleNavigate(instance: ContentInstallInstance) {
+        settleCurrentCallback()
         hideContentInstallModal()
         opts.router.push(`/instance/${encodeURIComponent(instance.id)}`)
     }

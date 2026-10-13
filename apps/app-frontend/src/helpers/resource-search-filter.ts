@@ -1,4 +1,18 @@
-import type { ResourceSearchExpression } from './resources'
+import type { ResourceSearchExpression, SourceId } from './resources'
+
+export async function loadResourceSearchCategories(
+    source: SourceId | 'all',
+    load: () => Promise<void>,
+): Promise<string | null> {
+    if (source !== 'all' && source !== 'curseforge') return null
+    try {
+        await load()
+        return null
+    } catch (error) {
+        if (source === 'curseforge') throw error
+        return `CurseForge: ${error instanceof Error ? error.message : String(error)}`
+    }
+}
 
 const fieldNames: Record<string, string> = {
     project_types: 'type',

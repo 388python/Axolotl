@@ -123,6 +123,68 @@ const input = {
     installDependencies: true,
 }
 
+it('requires explicit addition of a missing dependency when automatic installation is off', async () => {
+    ready()
+    const missing = node('required', 'missing', { reference, fileName: 'Required.jar' })
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue({
+        ...plan(),
+        nodes: [root, missing],
+        edges: [
+            {
+                parent: 'root',
+                child: 'required',
+                kind: 'required',
+                declaredBy: reference,
+                versionConstraint: null,
+            },
+        ],
+        issues: [
+            {
+                code: 'missingDependency',
+                selectionId: 'required',
+                blocking: true,
+                message: 'explicit addition required',
+            },
+        ],
+    } as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show({ ...input, installDependencies: false })
+    try {
+        await flushPromises()
+        expect(wrapper.text()).toContain('Automatic dependency installation is off')
+        expect(
+            wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Queue changes')!
+                .attributes('disabled'),
+        ).toBeDefined()
+        vi.mocked(resourceRevisePlan).mockResolvedValue({
+            ...plan(2),
+            nodes: [root, { ...missing, state: 'selectedRoot' }],
+            activeRoots: ['root', 'required'],
+        })
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === '＋')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceRevisePlan).toHaveBeenCalledWith(
+            'plan',
+            1,
+            [{ kind: 'addRequired', nodeId: 'required' }],
+            expect.any(AbortSignal),
+        )
+        expect(wrapper.text()).not.toContain('Automatic dependency installation is off')
+        wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        await result
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('previews an exact path, retains the previous revision on optional failure, and queues only the successful reviewed revision', async () => {
     ready()
     const wrapper = mount(ResourceOperationPreviewModal)

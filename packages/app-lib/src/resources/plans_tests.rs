@@ -150,12 +150,203 @@ struct PlanProvider {
     releases: Vec<ResourceRelease>,
     requests: Mutex<Vec<ProviderQuery>>,
 }
+
+#[tokio::test]
+async fn incompatible_roots_are_blocked_in_both_selection_orders() {
+    let mut a = release("root0000", "1", 'a');
+    let b = release("root1111", "1", 'b');
+    requires(&mut a, &b, ResourceDependencyKind::Incompatible);
+    let (_directory, service) = service(vec![a.clone(), b.clone()]).await;
+    for roots in [
+        vec![selection("a", &a, None), selection("b", &b, None)],
+        vec![selection("b", &b, None), selection("a", &a, None)],
+    ] {
+        let plan = service
+            .build_operation(
+                draft(roots, ResourceOperationIntent::Install),
+                &target(),
+                &[],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        assert!(
+            plan.issues
+                .iter()
+                .any(|issue| issue.code == ResourceIssueCode::VersionConflict
+                    && issue.blocking)
+        );
+        let edge = plan
+            .edges
+            .iter()
+            .find(|edge| edge.kind == ResourceDependencyKind::Incompatible)
+            .unwrap();
+        assert_eq!(edge.child.as_str(), "b");
+    }
+    let b2 = release("root1111", "2", 'c');
+    let (_directory2, other) = self::service(vec![a.clone(), b2.clone()]).await;
+    let plan = other
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None), selection("b", &b2, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[installed(&b, "existing", "mods/existing.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(
+        plan.issues
+            .iter()
+            .any(|issue| issue.code == ResourceIssueCode::VersionConflict
+                && issue.blocking)
+    );
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[installed(&b, "existing", "mods/existing.jar.disabled")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    service.cache().close().await;
+    other.cache().close().await;
+}
+
+#[tokio::test]
+async fn automatic_non_mod_releases_do_not_filter_by_the_instances_mod_loader()
+{
+    for (kind, loader) in [
+        (ResourceType::ResourcePack, "minecraft"),
+        (ResourceType::Shader, "iris"),
+        (ResourceType::DataPack, "datapack"),
+    ] {
+        let mut release = release("root0000", "1", 'a');
+        release.compatibility.loaders = vec![loader.into()];
+        release.artifacts[0].file_name = Some("file.zip".into());
+        let (_directory, service) = service(vec![release.clone()]).await;
+        let mut root = selection("root", &release, None);
+        root.release = ReleaseSelection::Automatic;
+        root.resource_type = kind;
+        if kind == ResourceType::DataPack {
+            root.scope = InstallScope::World {
+                relative_path: "saves/world".into(),
+            };
+        }
+        let plan = service
+            .build_operation(
+                draft(vec![root], ResourceOperationIntent::Install),
+                &target(),
+                &[],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+        assert_eq!(plan.actions.len(), 1);
+        service.cache().close().await;
+    }
+}
+
+#[tokio::test]
+async fn disabled_dependency_completion_requires_explicit_roots_and_keeps_installed_dependencies()
+ {
+    let mut a = release("root0000", "1", 'a');
+    let b = release("dep00000", "1", 'b');
+    requires(&mut a, &b, ResourceDependencyKind::Required);
+    let (_directory, service) = service(vec![a.clone(), b.clone()]).await;
+    let mut request = draft(
+        vec![selection("a", &a, None)],
+        ResourceOperationIntent::Install,
+    );
+    request.install_dependencies = false;
+    let missing = service
+        .build_operation(
+            request.clone(),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing.plan.actions.len(), 1);
+    assert_eq!(missing.candidates.len(), 1);
+    assert!(
+        missing
+            .plan
+            .nodes
+            .iter()
+            .any(|node| node.state == DependencyNodeState::Missing)
+    );
+    assert!(missing.plan.issues.iter().any(|issue| issue.blocking
+        && issue.code == ResourceIssueCode::MissingDependency));
+    let mut explicit = missing;
+    let candidate = explicit.candidates[0].clone();
+    explicit.plan.active_roots.push(candidate.id.clone());
+    explicit.plan.selections.push(candidate);
+    let explicit = service
+        .build_operation(explicit, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(
+        explicit.plan.issues.is_empty(),
+        "{:?}",
+        explicit.plan.issues
+    );
+    assert_eq!(explicit.plan.actions.len(), 2);
+    let satisfied = service
+        .build_operation(
+            request,
+            &target(),
+            &[installed(&b, "installed", "mods/dep.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        satisfied.plan.issues.is_empty(),
+        "{:?}",
+        satisfied.plan.issues
+    );
+    assert_eq!(satisfied.plan.actions.len(), 1);
+    service.cache().close().await;
+}
 #[async_trait]
 impl ResourceProvider for PlanProvider {
     fn source(&self) -> ResourceSource {
         ResourceSource {
             id: self.source.clone(),
-            types: vec![ResourceType::Mod, ResourceType::DataPack],
+            types: vec![
+                ResourceType::Mod,
+                ResourceType::DataPack,
+                ResourceType::ResourcePack,
+                ResourceType::Shader,
+            ],
             capabilities: vec![
                 SourceCapability::Project,
                 SourceCapability::Releases,
@@ -186,28 +377,39 @@ impl ResourceProvider for PlanProvider {
                     );
                     if let ProviderValue::Project(document) = &mut value {
                         document.metadata.types.push(ResourceType::DataPack);
+                        document.metadata.types.extend([
+                            ResourceType::ResourcePack,
+                            ResourceType::Shader,
+                        ]);
                     }
                     Ok(value)
                 }
-                ProviderQuery::Releases { project_id, .. } => {
-                    Ok(ProviderValue::Releases(SourcePage {
-                        entries: self
-                            .releases
-                            .iter()
-                            .filter(|release| {
-                                &release.reference.project.project_id
-                                    == project_id
-                            })
-                            .cloned()
-                            .collect(),
-                        cursor: None,
-                        total: ipc::ResourceTotal {
-                            value: None,
-                            precision: ipc::TotalPrecision::Unknown,
-                        },
-                        window_exhausted: false,
-                    }))
-                }
+                ProviderQuery::Releases {
+                    project_id, target, ..
+                } => Ok(ProviderValue::Releases(SourcePage {
+                    entries: self
+                        .releases
+                        .iter()
+                        .filter(|release| {
+                            &release.reference.project.project_id == project_id
+                                && (target.loaders.is_empty()
+                                    || release
+                                        .compatibility
+                                        .loaders
+                                        .iter()
+                                        .any(|loader| {
+                                            target.loaders.contains(loader)
+                                        }))
+                        })
+                        .cloned()
+                        .collect(),
+                    cursor: None,
+                    total: ipc::ResourceTotal {
+                        value: None,
+                        precision: ipc::TotalPrecision::Unknown,
+                    },
+                    window_exhausted: false,
+                })),
                 ProviderQuery::Release { release_id, .. } => self
                     .releases
                     .iter()

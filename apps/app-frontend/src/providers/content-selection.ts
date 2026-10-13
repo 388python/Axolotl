@@ -1,5 +1,5 @@
 import type { Labrinth } from '@modrinth/api-client'
-import { type BrowseSelectedProject, useVIntl } from '@modrinth/ui'
+import { type BrowseInstallPreferences, type BrowseSelectedProject, useVIntl } from '@modrinth/ui'
 import { computed, ref, watch } from 'vue'
 
 import type ContentInstallPreviewModal from '@/components/ui/ContentInstallPreviewModal.vue'

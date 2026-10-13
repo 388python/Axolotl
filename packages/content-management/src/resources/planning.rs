@@ -184,14 +184,13 @@ pub fn select_automatic_release(
             .then(a.reference.release_id.cmp(&b.reference.release_id))
     });
     let selected = releases.pop()?;
-    let equivalent = releases.into_iter().find(|release| {
-        release.reference.project.source == *preferred
-            && release.artifacts.iter().any(|a| {
-                selected
-                    .artifacts
-                    .iter()
-                    .any(|b| equal_bytes(&a.integrity, &b.integrity))
-            })
+    let equivalent = releases.into_iter().rev().find(|release| {
+        selected.reference.project.source != *preferred
+            && release.reference.project.source == *preferred
+            && !release_is_known_lower(release, &selected)
+            && unique_primary(release)
+                .zip(unique_primary(&selected))
+                .is_some_and(|(a, b)| equal_bytes(&a.integrity, &b.integrity))
     });
     if let Some(equivalent) = equivalent {
         Some((equivalent, ReleaseSelectionBasis::EquivalentPreferredSource))
@@ -205,6 +204,15 @@ pub fn select_automatic_release(
             },
         ))
     }
+}
+
+fn unique_primary(release: &ResourceRelease) -> Option<&ResourceArtifact> {
+    let mut artifacts = release
+        .artifacts
+        .iter()
+        .filter(|artifact| artifact.role == ArtifactRole::Primary);
+    let primary = artifacts.next()?;
+    artifacts.next().is_none().then_some(primary)
 }
 
 pub fn equal_bytes(
@@ -249,6 +257,126 @@ pub fn active_dependency_nodes(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn release(
+        version: &str,
+        source: SourceId,
+        time: i64,
+        hash: char,
+    ) -> ResourceRelease {
+        let reference = SourceReleaseRef {
+            project: SourceProjectRef {
+                source,
+                project_id: SourceProjectId::new("abcdefgh").unwrap(),
+            },
+            release_id: SourceReleaseId::new(time.to_string()).unwrap(),
+        };
+        ResourceRelease {
+            reference: reference.clone(),
+            version: version.into(),
+            channel: ReleaseChannel::Release,
+            published_at: chrono::DateTime::from_timestamp(time, 0),
+            compatibility: ReleaseCompatibility {
+                game_versions: vec![],
+                loaders: vec![],
+            },
+            artifacts: vec![ResourceArtifact {
+                reference: SourceArtifactRef {
+                    release: reference,
+                    artifact_id: SourceArtifactId::new("primary").unwrap(),
+                },
+                file_name: Some("file.jar".into()),
+                role: ArtifactRole::Primary,
+                available: Some(true),
+                integrity: ArtifactIntegrity {
+                    size: Some(100),
+                    hashes: vec![ContentHash {
+                        algorithm: HashAlgorithm::Sha1,
+                        value: hash.to_string().repeat(40),
+                    }],
+                },
+                acquisition: ArtifactAcquisition::Unavailable,
+                dependencies: vec![],
+            }],
+            equivalent_releases: vec![],
+        }
+    }
+
+    #[test]
+    fn shared_attachments_never_replace_the_selected_primary_release() {
+        let mut old = release("2", SourceId::modrinth(), 1, 'a');
+        let mut new = release("2", SourceId::curseforge(), 2, 'b');
+        let mut attachment = old.artifacts[0].clone();
+        attachment.role = ArtifactRole::Attachment;
+        attachment.reference.artifact_id =
+            SourceArtifactId::new("attachment").unwrap();
+        old.artifacts.push(attachment.clone());
+        attachment.reference.release = new.reference.clone();
+        new.artifacts.push(attachment);
+        assert_eq!(
+            select_automatic_release(
+                vec![old, new.clone()],
+                &SourceId::modrinth()
+            )
+            .unwrap()
+            .0
+            .reference,
+            new.reference
+        );
+    }
+
+    #[test]
+    fn preferred_source_only_replaces_equivalent_unique_primary_artifacts() {
+        let oldest = release("2", SourceId::modrinth(), 1, 'a');
+        let newest = release("2", SourceId::modrinth(), 2, 'a');
+        let selected = release("2", SourceId::curseforge(), 3, 'a');
+        let (result, basis) = select_automatic_release(
+            vec![oldest, newest.clone(), selected.clone()],
+            &SourceId::modrinth(),
+        )
+        .unwrap();
+        assert_eq!(result.reference, newest.reference);
+        assert_eq!(basis, ReleaseSelectionBasis::EquivalentPreferredSource);
+        let lower = release("1", SourceId::modrinth(), 2, 'a');
+        assert_eq!(
+            select_automatic_release(
+                vec![lower, selected.clone()],
+                &SourceId::modrinth()
+            )
+            .unwrap()
+            .0
+            .reference,
+            selected.reference
+        );
+        let mut ambiguous = newest;
+        ambiguous.artifacts.push(ambiguous.artifacts[0].clone());
+        assert_eq!(
+            select_automatic_release(
+                vec![ambiguous, selected.clone()],
+                &SourceId::modrinth()
+            )
+            .unwrap()
+            .0
+            .reference,
+            selected.reference
+        );
+    }
+
+    #[test]
+    fn preferred_source_does_not_replace_itself_with_an_older_release() {
+        let old = release("1", SourceId::modrinth(), 1, 'a');
+        let new = release("2", SourceId::modrinth(), 2, 'a');
+        assert_eq!(
+            select_automatic_release(
+                vec![old, new.clone()],
+                &SourceId::modrinth()
+            )
+            .unwrap()
+            .0
+            .reference,
+            new.reference
+        );
+    }
     #[test]
     fn wildcard_preserves_major_and_minor_boundaries() {
         assert!(matches_game_version("1.20.x", "1.20.4"));

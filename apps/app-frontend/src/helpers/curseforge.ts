@@ -10,7 +10,7 @@ import {
     resourceReleaseDocuments,
     resourceReleases,
     sourceResource,
-} from './resources'
+} from './resources.ts'
 
 export type ContentProvider = 'modrinth' | 'curseforge'
 

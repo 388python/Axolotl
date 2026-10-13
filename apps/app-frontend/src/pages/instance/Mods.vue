@@ -2152,7 +2152,7 @@ async function reviewResourceChanges(entryIds: string[], release: SourceReleaseR
         release,
         installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
     })
-    if (job) downloadManager.trackJob(job, true)
+    if (job) downloadManager.trackJob(job)
     return !!job
 }
 
@@ -2231,7 +2231,7 @@ async function handleRollbackContent(mod: ContentItem) {
                 props.instance.id,
                 mod.instanceEntryId,
             )
-            if (job) downloadManager.trackJob(job, true)
+            if (job) downloadManager.trackJob(job)
         } else {
             await rollback_project(props.instance.id, mod.file_path)
         }

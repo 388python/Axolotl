@@ -391,6 +391,15 @@ impl ResourceService {
                 let mut releases = vec![];
                 let mut failures = Vec::new();
                 let mut catalog_target = target.clone();
+                if matches!(
+                    selection.resource_type,
+                    ResourceType::ResourcePack
+                        | ResourceType::Shader
+                        | ResourceType::DataPack
+                        | ResourceType::World
+                ) {
+                    catalog_target.loaders.clear();
+                }
                 if current.is_none() {
                     catalog_target.channels.clear();
                 }
@@ -617,6 +626,7 @@ impl ResourceService {
         draft.candidates.clear();
         let mut queue: VecDeque<_> = draft.plan.selections.clone().into();
         let mut resolved: HashMap<String, SelectionId> = HashMap::new();
+        let mut incompatible = Vec::new();
         let mut seen = HashSet::new();
         while let Some(mut selection) = queue.pop_front() {
             if cancel.is_cancelled() {
@@ -922,6 +932,9 @@ impl ResourceService {
                         &artifact.integrity,
                     )
             });
+            let needs_confirmation = !draft.install_dependencies
+                && !draft.plan.active_roots.contains(&selection.id)
+                && satisfied.is_none();
             let state = if is_entry_update {
                 if current.is_some_and(|current| {
                     !current.enabled
@@ -944,6 +957,8 @@ impl ResourceService {
                 }
             } else if satisfied.is_some() {
                 DependencyNodeState::Satisfied
+            } else if needs_confirmation {
+                DependencyNodeState::Missing
             } else if draft.plan.active_roots.contains(&selection.id) {
                 DependencyNodeState::SelectedRoot
             } else {
@@ -955,6 +970,21 @@ impl ResourceService {
                 &artifact,
             );
             match path {
+                Ok(_) if needs_confirmation => {
+                    issue(
+                        &mut draft.plan,
+                        ResourceIssueCode::MissingDependency,
+                        &selection.id,
+                        true,
+                        "automatic dependency installation is disabled; explicitly add this required dependency",
+                    );
+                    draft.candidates.push(ResourceSelection {
+                        release: ReleaseSelection::Artifact {
+                            reference: artifact.reference.clone(),
+                        },
+                        ..selection.clone()
+                    });
+                }
                 Ok(_path) if is_entry_update => {
                     if let Some(current) = current {
                         let target_path = current.relative_path.clone();
@@ -1163,24 +1193,10 @@ impl ResourceService {
                             .candidates
                             .push(ResourceSelection { id, ..child });
                     }
-                } else if installed.iter().any(|item| {
-                    !item.missing
-                        && item.enabled
-                        && match &child.resource {
-                            ResourceRef::Resource { id } => {
-                                item.resource_id.as_ref() == Some(id)
-                            }
-                            _ => false,
-                        }
-                }) || resolved.contains_key(&key)
+                } else if dependency.kind
+                    == ResourceDependencyKind::Incompatible
                 {
-                    issue(
-                        &mut draft.plan,
-                        ResourceIssueCode::VersionConflict,
-                        &selection.id,
-                        true,
-                        "incompatible resource is active",
-                    );
+                    incompatible.push((selection.id.clone(), child));
                 }
             }
         }
@@ -1231,11 +1247,17 @@ impl ResourceService {
                     edge.child = id.clone();
                 }
             }
-            if active.is_some() || candidate_ids.contains_key(&key) {
+            if candidate_ids.contains_key(&key) {
                 continue;
             }
             candidate_ids.insert(key, id.clone());
             candidate.id = id;
+            if let Some(active) = active {
+                if active.state == DependencyNodeState::Missing {
+                    candidates.push(candidate);
+                }
+                continue;
+            }
             let satisfied: Vec<_> = installed
                 .iter()
                 .filter(|item| {
@@ -1287,6 +1309,87 @@ impl ResourceService {
             }
         }
         draft.candidates = candidates;
+        for (parent, mut child) in incompatible {
+            if let (Some(store), ResourceRef::Resource { id }) =
+                (self.store(), &mut child.resource)
+            {
+                if let Some(current) = store.resolve(id).await? {
+                    *id = current;
+                }
+            }
+            let active = draft.plan.nodes.iter().find(|node| {
+                node.resource == child.resource
+                    && node.scope == child.scope
+                    && node.artifact.is_some()
+                    && !matches!(
+                        node.state,
+                        DependencyNodeState::Missing
+                            | DependencyNodeState::Disabled
+                    )
+                    && !draft.plan.actions.iter().any(|action| {
+                        action.node_id == node.id
+                            && action
+                                .current
+                                .as_ref()
+                                .is_some_and(|current| !current.enabled)
+                    })
+                    && selection_matches_artifact(
+                        &child.release,
+                        node.artifact.as_ref(),
+                    )
+            });
+            let installed_conflict = installed.iter().any(|item| {
+                !item.missing
+                    && item.enabled
+                    && item.scope == child.scope
+                    && item.resource_type == child.resource_type
+                    && !draft.plan.actions.iter().any(|action| {
+                        action.current.as_ref().is_some_and(|current| {
+                            current.entry_id == item.entry_id
+                        })
+                    })
+                    && match &child.resource {
+                        ResourceRef::Resource { id } => {
+                            item.resource_id.as_ref() == Some(id)
+                        }
+                        ResourceRef::Source { project } => {
+                            item.artifact.as_ref().is_some_and(|artifact| {
+                                artifact.release.project == *project
+                            })
+                        }
+                    }
+                    && match &child.release {
+                        ReleaseSelection::Automatic => true,
+                        ReleaseSelection::Release { reference } => {
+                            item.artifact.as_ref().is_some_and(|artifact| {
+                                artifact.release == *reference
+                            })
+                        }
+                        ReleaseSelection::Artifact { reference } => {
+                            item.artifact.as_ref() == Some(reference)
+                        }
+                    }
+            });
+            if let Some(active) = active {
+                for edge in &mut draft.plan.edges {
+                    if edge.parent == parent
+                        && edge.child == child.id
+                        && edge.kind == ResourceDependencyKind::Incompatible
+                    {
+                        edge.child = active.id.clone();
+                    }
+                }
+            }
+            if active.is_some() || installed_conflict {
+                issue(
+                    &mut draft.plan,
+                    ResourceIssueCode::VersionConflict,
+                    &parent,
+                    true,
+                    "incompatible resource is active",
+                );
+            }
+        }
         Ok(draft)
     }
 }
@@ -1456,27 +1559,50 @@ pub async fn revise(
     {
         return Err(invalid("instance changed; prepare a new plan"));
     }
-    let added_optional = decisions.iter().any(|decision| {
-        matches!(decision, ResourcePlanDecision::AddOptional { .. })
+    let added_dependency = decisions.iter().any(|decision| {
+        matches!(
+            decision,
+            ResourcePlanDecision::AddOptional { .. }
+                | ResourcePlanDecision::AddRequired { .. }
+        )
     });
     let previous_issues = draft.plan.issues.clone();
     for decision in decisions {
         match decision {
-            ResourcePlanDecision::AddOptional { node_id } => {
+            ResourcePlanDecision::AddRequired { ref node_id }
+            | ResourcePlanDecision::AddOptional { ref node_id } => {
+                let expected = if matches!(
+                    decision,
+                    ResourcePlanDecision::AddRequired { .. }
+                ) {
+                    DependencyNodeState::Missing
+                } else {
+                    DependencyNodeState::OptionalCandidate
+                };
+                if !draft
+                    .plan
+                    .nodes
+                    .iter()
+                    .any(|node| &node.id == node_id && node.state == expected)
+                {
+                    return Err(invalid(
+                        "dependency is not an available candidate",
+                    ));
+                }
                 let candidate = draft
                     .candidates
                     .iter()
-                    .find(|selection| selection.id == node_id)
+                    .find(|selection| &selection.id == node_id)
                     .ok_or_else(|| invalid("unknown dependency candidate"))?
                     .clone();
                 if !draft
                     .plan
                     .selections
                     .iter()
-                    .any(|selection| selection.id == node_id)
+                    .any(|selection| &selection.id == node_id)
                 {
                     draft.plan.selections.push(candidate);
-                    draft.plan.active_roots.push(node_id);
+                    draft.plan.active_roots.push(node_id.clone());
                 }
             }
             ResourcePlanDecision::RemoveOptional { node_id }
@@ -1538,7 +1664,7 @@ pub async fn revise(
         .await?
         .build_operation(draft, &target, &installed, cancel)
         .await?;
-    if added_optional
+    if added_dependency
         && draft.plan.issues.iter().any(|issue| {
             issue.blocking
                 && matches!(
@@ -1547,6 +1673,10 @@ pub async fn revise(
                         | ResourceIssueCode::MissingDependency
                 )
                 && !previous_issues.contains(issue)
+                && !draft.plan.nodes.iter().any(|node| {
+                    Some(&node.id) == issue.selection_id.as_ref()
+                        && node.state == DependencyNodeState::Missing
+                })
         })
     {
         let reasons = draft
