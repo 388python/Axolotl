@@ -320,6 +320,7 @@ import {
 } from '@/helpers/content-change-jobs'
 import { mergeContentItemMetadata } from '@/helpers/content-item-metadata'
 import { applyContentItemUpdates, matchesContentItem } from '@/helpers/content-item-state'
+import { contentProjectUrl } from '@/helpers/content-project-links'
 import { lookupContentWikiIds, translateContentItemTitles } from '@/helpers/content-search'
 import { type CurseForgeFile, getCurseForgeImageUrl } from '@/helpers/curseforge'
 import {
@@ -601,6 +602,7 @@ function hasPreloadedContent(contentData: InstanceContentData | null | undefined
 }
 
 const loading = ref(!hasPreloadedContent(props.preloadedContent))
+const contentLoadError = ref<Error | null>(null)
 const contentSnapshot = ref<InstanceContentData['snapshot'] | null>(null)
 const projects = ref<ContentItem[]>([])
 const linkedModpackContentItems = ref<ContentItem[]>([])
@@ -1482,11 +1484,12 @@ async function getUpdaterProjectVersions(
         const snapshot = contentSnapshot.value?.items.find(
             (entry) => entry.entryId === item.instanceEntryId,
         )
-        if (!snapshot?.provider || !snapshot.providerProjectId) return []
-        const project: SourceProjectRef = {
-            source: snapshot.provider,
-            projectId: snapshot.providerProjectId,
-        }
+        const project: SourceProjectRef | null =
+            snapshot?.artifactRef?.release.project ??
+            (snapshot?.provider && snapshot.providerProjectId
+                ? { source: snapshot.provider, projectId: snapshot.providerProjectId }
+                : null)
+        if (!project) return []
         const requestId = activeUpdateRequestId.value
         const releases = []
         let cursor: string | null = null
@@ -1729,12 +1732,12 @@ async function promptToggleDependencies(
 }
 
 async function toggleDisableBatch(items: ContentItem[], enabling: boolean) {
-    if (items.length === 0) return
+    if (items.length === 0) return false
     const related = collectToggleRelated(items, enabling)
     let targets = items
     if (related.length > 0) {
         const choice = await promptToggleDependencies(items, related, enabling)
-        if (choice === 'cancel') return
+        if (choice === 'cancel') return false
         if (choice === 'apply') {
             targets = [...related, ...targets]
         }
@@ -1751,6 +1754,7 @@ async function toggleDisableBatch(items: ContentItem[], enabling: boolean) {
     for (const item of worldTargets) {
         await toggleDisableMod(item, enabling, true)
     }
+    return true
 }
 
 function notifyOrphanedDependencies() {
@@ -2033,6 +2037,7 @@ async function removeMod(mod: ContentItem) {
         })
     } catch (err) {
         handleError(err as Error)
+        throw err
     } finally {
         await refreshContentState('bypass')
         finishContentOperation(mod, operation)
@@ -2185,7 +2190,8 @@ async function reviewResourceChanges(entryIds: string[], release: SourceReleaseR
 }
 
 async function bulkUpdateAllProjects() {
-    if (pendingContentChanges.value.length > 0 || activeContentChangeJobs.value.length > 0) return
+    if (pendingContentChanges.value.length > 0 || activeContentChangeJobs.value.length > 0)
+        return false
     localBulkOperating.value = true
     try {
         const result = await resourceCheckUpdates(props.instance.id)
@@ -2195,9 +2201,10 @@ async function bulkUpdateAllProjects() {
                 (item) => item.entryId === id && item.ownershipKind === 'user_added',
             ),
         )
-        if (ids.length) await reviewResourceChanges(ids)
+        return ids.length ? await reviewResourceChanges(ids) : false
     } catch (err) {
         handleError(err as Error)
+        return false
     } finally {
         localBulkOperating.value = false
     }
@@ -2205,11 +2212,12 @@ async function bulkUpdateAllProjects() {
 
 async function bulkUpdateProjects(items: ContentItem[]) {
     const ids = items.map((item) => item.instanceEntryId).filter((id): id is string => !!id)
-    if (!ids.length || items.some(hasGlobalContentChange)) return
+    if (!ids.length || items.some(hasGlobalContentChange)) return false
     try {
-        await reviewResourceChanges(ids)
+        return await reviewResourceChanges(ids)
     } catch (err) {
         handleError(err as Error)
+        return false
     }
 }
 
@@ -2284,7 +2292,11 @@ async function handleUpdate(item: ContentItem) {
 }
 
 async function handleSwitchVersion(item: ContentItem) {
-    if (!item.project?.id || !item.version?.id) return
+    const exact = contentSnapshot.value?.items.find(
+        (entry) => entry.entryId === item.instanceEntryId,
+    )?.artifactRef
+    const initialVersionId = exact?.release.releaseId ?? item.version?.id
+    if (!initialVersionId || (!exact && !item.project?.id)) return
 
     const requestId = beginUpdateRequest()
     const itemId = getContentItemId(item)
@@ -2297,11 +2309,14 @@ async function handleSwitchVersion(item: ContentItem) {
 
     await nextTick()
 
-    const initialVersionId = item.version.id
     contentUpdaterModal.value?.show(initialVersionId, { switchMode: true })
 
     try {
-        const versions = await getUpdaterProjectVersions(item.project.id, initialVersionId, item)
+        const versions = await getUpdaterProjectVersions(
+            exact?.release.project.projectId ?? item.project!.id,
+            initialVersionId,
+            item,
+        )
         if (isActiveUpdateRequest(requestId) && getContentItemId(updatingProject.value) === itemId)
             updatingProjectVersions.value = versions
     } catch (error) {
@@ -2564,17 +2579,18 @@ async function handleShareItems(
             break
         case 'urls':
             text = source
-                .filter((x) => x.project?.slug)
-                .map((x) => `https://modrinth.com/${x.project_type}/${x.project?.slug}`)
+                .flatMap((item) => {
+                    const url = contentProjectUrl(item)
+                    return url ? [url] : []
+                })
                 .join('\n')
             break
         case 'markdown':
             text = source
                 .map((x) => {
                     const name = x.project?.title ?? x.file_name
-                    if (x.project?.slug) {
-                        return `[${name}](https://modrinth.com/${x.project_type}/${x.project.slug})`
-                    }
+                    const url = contentProjectUrl(x)
+                    if (url) return `[${name}](${url})`
                     return name
                 })
                 .join('\n')
@@ -2635,14 +2651,13 @@ function getOverflowOptions(item: ContentItem): OverflowMenuOption[] {
         }
     }
 
-    if (item.project?.slug && !item.project.id.startsWith('local:')) {
+    const projectUrl = contentProjectUrl(item)
+    if (projectUrl) {
         options.push({
             id: formatMessage(commonMessages.copyLinkButton),
             icon: ClipboardCopyIcon,
             action: async () => {
-                await navigator.clipboard.writeText(
-                    `https://modrinth.com/${item.project_type}/${item.project?.slug}`,
-                )
+                await navigator.clipboard.writeText(projectUrl)
             },
         })
     }
@@ -2697,6 +2712,7 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
     } catch (error) {
         if (isCurrentContentRequest(instanceId, generation)) {
             handleError(error as Error)
+            contentLoadError.value = error instanceof Error ? error : new Error(String(error))
             loading.value = false
         }
         return
@@ -2706,6 +2722,7 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
         return
     }
     if (!isCurrentContentRequest(instanceId, generation)) return
+    contentLoadError.value = null
     try {
         if (applyContentData(contentData)) enrichContentData(contentData, generation)
     } catch (error) {
@@ -2921,7 +2938,7 @@ provideContentManager({
     duplicateItems: duplicateModItems,
     updateDuplicateGroup,
     loading,
-    error: ref(null),
+    error: contentLoadError,
     filterOptionsReady: computed(
         () =>
             !loading.value &&
@@ -3004,7 +3021,7 @@ provideContentManager({
     contentTypeLabel: ref(formatMessage(messages.contentTypeProject)),
     toggleEnabled: toggleDisableDebounced,
     bulkEnableItems: async (items: ContentItem[]) => {
-        await toggleDisableBatch(
+        return await toggleDisableBatch(
             items.filter(
                 (item) => item.enabled === false && item.instanceCapabilities?.canToggle !== false,
             ),
@@ -3012,7 +3029,7 @@ provideContentManager({
         )
     },
     bulkDisableItems: async (items: ContentItem[]) => {
-        await toggleDisableBatch(
+        return await toggleDisableBatch(
             items.filter(
                 (item) => item.enabled === true && item.instanceCapabilities?.canToggle !== false,
             ),
@@ -3069,17 +3086,23 @@ provideContentManager({
                 : undefined
 
         const projectLink =
-            effectiveProvider && item.project?.id && !item.project.id.startsWith('local:')
+            item.instanceResourceId &&
+            ['mcarchive', 'planet_minecraft'].includes(effectiveProvider ?? '')
                 ? {
-                      path:
-                          effectiveProvider === 'curseforge' && curseForgeProjectId
-                              ? `/project/curseforge/${curseForgeProjectId}`
-                              : effectiveProvider === 'curseforge'
-                                ? `/project/curseforge/${item.project.id}`
-                                : `/project/${item.project.id}`,
+                      path: `/resource/${encodeURIComponent(item.instanceResourceId)}`,
                       query: instanceContentProjectQuery.value,
                   }
-                : undefined
+                : effectiveProvider && item.project?.id && !item.project.id.startsWith('local:')
+                  ? {
+                        path:
+                            effectiveProvider === 'curseforge' && curseForgeProjectId
+                                ? `/project/curseforge/${curseForgeProjectId}`
+                                : effectiveProvider === 'curseforge'
+                                  ? `/project/curseforge/${item.project.id}`
+                                  : `/project/${item.project.id}`,
+                        query: instanceContentProjectQuery.value,
+                    }
+                  : undefined
 
         const versionLink =
             effectiveProvider === 'modrinth' &&
@@ -3122,7 +3145,11 @@ provideContentManager({
                     ? 'Modrinth'
                     : item.origin_provider === 'curseforge'
                       ? 'CurseForge'
-                      : formatMessage(commonMessages.unknownLabel),
+                      : item.origin_provider === 'mcarchive'
+                        ? 'MCArchive'
+                        : item.origin_provider === 'planet_minecraft'
+                          ? 'Planet Minecraft'
+                          : formatMessage(commonMessages.unknownLabel),
             duplicateCount: (() => {
                 const key = duplicateModKey(item)
                 return key ? duplicateModCounts.value.get(key) : undefined

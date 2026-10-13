@@ -114,6 +114,8 @@ const messages = defineMessages({
 })
 
 type OperationInput = {
+    importFiles?: Record<string, string>
+    locators?: Record<string, string>
     instanceId: string
     instanceName: string
     entryIds: string[]
@@ -313,6 +315,7 @@ function hide() {
     resolve?.(null)
 }
 function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
+    if (queueing.value) return Promise.resolve(null)
     hide()
     input.value = value
     plan.value = null
@@ -332,6 +335,8 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
                   value.selections,
                   value.installDependencies,
                   signal,
+                  value.importFiles,
+                  value.locators,
               )
             : resourcePrepareEntryOperation(
                   value.instanceId,
@@ -346,19 +351,23 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
 }
 async function apply() {
     if (!plan.value || !canApply.value) return
+    const reviewed = plan.value
+    const current = generation
+    const resolve = resolveShow
     busy.value = true
     queueing.value = true
     error.value = null
     try {
-        const job = await resourceQueuePlan(plan.value.id, plan.value.revision)
-        submittedRoots.value = [...plan.value.activeRoots]
-        const resolve = resolveShow
+        const job = await resourceQueuePlan(reviewed.id, reviewed.revision)
+        if (generation !== current) return
+        submittedRoots.value = [...reviewed.activeRoots]
         resolveShow = null
         queueing.value = false
         await nextTick()
         await modal.value?.hide()
         resolve?.(job)
     } catch (failure) {
+        if (generation !== current) return
         if (resourceOperationError(failure).includes('instance changed after review')) {
             busy.value = false
             queueing.value = false
@@ -387,6 +396,8 @@ async function refresh() {
             current.selections,
             value.installDependencies,
             signal,
+            value.importFiles,
+            value.locators,
         )
         const retainedExceptions = current.exceptions.filter((exception) =>
             prepared.nodes.some(
@@ -421,6 +432,8 @@ function accept(node: ResourceDependencyNode, dimension: 'gameVersion' | 'loader
 }
 onBeforeUnmount(hide)
 function showInstall(value: {
+    importFiles?: Record<string, string>
+    locators?: Record<string, string>
     instanceId: string
     instanceName: string
     selections: ResourceSelection[]

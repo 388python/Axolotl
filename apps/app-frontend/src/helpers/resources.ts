@@ -389,6 +389,8 @@ export function resourcePrepareOperation(
     selections: ResourceSelection[],
     installDependencies = true,
     signal?: AbortSignal,
+    importFiles?: Record<string, string>,
+    locators?: Record<string, string>,
 ) {
     return resourceRequest<ResourceOperationPlan>(
         'resource_prepare_operation',
@@ -397,6 +399,8 @@ export function resourcePrepareOperation(
             intent,
             selections,
             installDependencies,
+            importFiles: importFiles ?? null,
+            locators: locators ?? null,
         },
         signal,
     )

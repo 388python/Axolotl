@@ -344,77 +344,6 @@ export async function import_mcarchive_modloader(
     })
 }
 
-export type McArchiveContentInstallRequest = {
-    projectId: string
-    projectSlug: string
-    versionId: string
-    fileId: string
-    projectType: ContentFileProjectType
-}
-
-export type McArchiveContentInstallResult =
-    | { state: 'installed'; relativePath: string }
-    | {
-          state: 'manual_download'
-          fileName: string
-          pageUrl: string | null
-          expectedSha256: string | null
-      }
-
-export type PlanetMinecraftContentInstallRequest = {
-    projectId: string
-    versionId: string
-    projectType: ContentFileProjectType
-}
-
-export type PlanetMinecraftContentInstallResult =
-    | { state: 'installed'; relativePath: string }
-    | { state: 'manual_download'; pageUrl: string; fileName: string | null }
-
-export async function install_mcarchive_content(
-    instanceId: string,
-    request: McArchiveContentInstallRequest,
-): Promise<McArchiveContentInstallResult> {
-    return await invoke('plugin:instance|instance_install_mcarchive_content', {
-        instanceId,
-        request,
-    })
-}
-
-export async function import_mcarchive_content(
-    instanceId: string,
-    request: McArchiveContentInstallRequest,
-    sourcePath: string,
-): Promise<McArchiveContentInstallResult> {
-    return await invoke('plugin:instance|instance_import_mcarchive_content', {
-        instanceId,
-        request,
-        sourcePath,
-    })
-}
-
-export async function install_planet_minecraft_content(
-    instanceId: string,
-    request: PlanetMinecraftContentInstallRequest,
-): Promise<PlanetMinecraftContentInstallResult> {
-    return await invoke('plugin:instance|instance_install_planet_minecraft_content', {
-        instanceId,
-        request,
-    })
-}
-
-export async function import_planet_minecraft_content(
-    instanceId: string,
-    request: PlanetMinecraftContentInstallRequest,
-    sourcePath: string,
-): Promise<PlanetMinecraftContentInstallResult> {
-    return await invoke('plugin:instance|instance_import_planet_minecraft_content', {
-        instanceId,
-        request,
-        sourcePath,
-    })
-}
-
 export type InstanceInstallTarget = {
     game_version: string
     loader: string
@@ -473,6 +402,7 @@ export type PackMemberMaterializationState = 'present' | 'pending_manual' | 'mis
 export type PackMemberOverrideKind = 'none' | 'disabled' | 'removed' | 'version'
 
 export interface InstanceContentSnapshotItem {
+    artifactRef?: import('./resources').SourceArtifactRef | null
     resourceId?: string | null
     packResourceId?: string | null
     compatibility?: ContentItem['compatibility']

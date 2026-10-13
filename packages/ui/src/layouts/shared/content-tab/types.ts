@@ -151,7 +151,7 @@ export interface ContentItem extends Omit<
               target_file_id: number
           }
         | null
-    origin_provider: 'modrinth' | 'curseforge' | null
+    origin_provider: 'modrinth' | 'curseforge' | 'mcarchive' | 'planet_minecraft' | null
     /** Actual installed artifact source; recognition counterparts do not change it. */
     installedSource?: string | null
     compatibility?: {

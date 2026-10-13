@@ -81,12 +81,15 @@ export async function searchMcArchiveMods(query: string, gameVersion?: string | 
     )
 }
 
-export async function getMcArchiveModBySlug(slug: string): Promise<McArchiveMod> {
+export async function getMcArchiveModBySlug(
+    slug: string,
+    signal?: AbortSignal,
+): Promise<McArchiveMod> {
     const value = await resourceProjectProtocol<
         McArchiveMod & {
             mod_versions: Array<McArchiveModVersion & { game_versions: McArchiveGameVersion[] }>
         }
-    >('mcarchive', slug)
+    >('mcarchive', slug, signal)
     return {
         ...value,
         modVersions: (value.mod_versions ?? value.modVersions ?? []).map((version) => ({

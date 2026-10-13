@@ -384,7 +384,9 @@ it('cancels an in-flight preparation without queueing or allowing an old respons
 it('refreshes a stale reviewed plan before queueing and keeps the selected root draft', async () => {
     ready()
     const wrapper = mount(ResourceOperationPreviewModal)
-    const result = wrapper.vm.show(input)
+    const importFiles = { root: 'C:/Downloads/exact.jar' }
+    const locators = { root: 'project-slug' }
+    const result = wrapper.vm.show({ ...input, importFiles, locators })
     try {
         await flushPromises()
         vi.mocked(resourceQueuePlan).mockRejectedValueOnce({
@@ -403,6 +405,8 @@ it('refreshes a stale reviewed plan before queueing and keeps the selected root 
             [],
             true,
             expect.any(AbortSignal),
+            importFiles,
+            locators,
         )
         vi.mocked(resourceQueuePlan).mockResolvedValueOnce({ job_id: 'refreshed-job' } as Awaited<
             ReturnType<typeof resourceQueuePlan>
@@ -454,6 +458,41 @@ it('returns the submitted root range after a selection revision and modal closur
             activeRoots: ['added-optional'],
         })
         expect(resourceQueuePlan).toHaveBeenLastCalledWith('plan', 2)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('a second install request cannot replace a preview while the first reviewed job is being queued', async () => {
+    ready()
+    let finish!: (job: Awaited<ReturnType<typeof resourceQueuePlan>>) => void
+    vi.mocked(resourceQueuePlan).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve
+            }),
+    )
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+            .trigger('click')
+        const next = wrapper.vm.show({ ...input, instanceId: 'other-instance' })
+        expect(await next).toBeNull()
+        finish({ job_id: 'original-job' } as Awaited<ReturnType<typeof resourceQueuePlan>>)
+        await flushPromises()
+        expect(await result).toEqual({ job_id: 'original-job' })
+        expect(resourcePrepareEntryOperation).not.toHaveBeenCalledWith(
+            'other-instance',
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+            expect.anything(),
+        )
     } finally {
         wrapper.unmount()
     }

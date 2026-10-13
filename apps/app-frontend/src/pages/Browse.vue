@@ -50,7 +50,7 @@ import {
     usesTargetGameVersion,
     useVIntl,
 } from '@modrinth/ui'
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { LocationQuery } from 'vue-router'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
@@ -58,9 +58,9 @@ import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.v
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import InstanceIcon from '@/components/ui/InstanceIcon.vue'
 import { useAppServerBrowse } from '@/composables/browse/use-app-server-browse'
+import { useSearchResultTranslation } from '@/composables/browse/use-search-result-translation'
 import { useContentFavorites } from '@/composables/useContentFavorites'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
-import { useTranslationToggle } from '@/composables/useTranslationToggle'
 import {
     type BrowseFilterMemory,
     getBrowseFilterMemory,
@@ -122,11 +122,7 @@ import {
     update as updateSettings,
 } from '@/helpers/settings.ts'
 import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
-import {
-    autoTranslateHintMessages,
-    noteManualTranslateClick,
-    translateSearchDescriptions,
-} from '@/helpers/translation'
+import { autoTranslateHintMessages, noteManualTranslateClick } from '@/helpers/translation'
 import type { GameInstance } from '@/helpers/types'
 import { get_instance_worlds } from '@/helpers/worlds'
 import i18n from '@/i18n.config'
@@ -2188,103 +2184,17 @@ watch(
 )
 
 /** Translation state for search result titles and descriptions. */
-const originalProjectHits = shallowRef<typeof searchState.projectHits.value>([])
-const originalServerHits = shallowRef<typeof searchState.serverHits.value>([])
-let isUpdatingProjectHitsFromTranslation = false
 const {
     translationActive,
     translationLoading,
-    start: startTranslation,
-    isStale,
-    done: doneTranslation,
-    toggle,
-    cancel: cancelTranslation,
-} = useTranslationToggle()
-
-// Keep a pristine copy when genuine search results arrive (project hits).
-watch(
-    () => searchState.projectHits.value,
-    (hits) => {
-        if (isUpdatingProjectHitsFromTranslation) return
-        if (hits && hits.length > 0) {
-            originalProjectHits.value = hits
-            const version = cancelTranslation()
-            void autoTranslateNewSearchResults(version, false)
-        }
-    },
-    { flush: 'sync' },
-)
-// Keep a pristine copy when genuine search results arrive (server hits).
-watch(
-    () => searchState.serverHits.value,
-    (hits) => {
-        if (isUpdatingProjectHitsFromTranslation) return
-        if (hits && hits.length > 0) {
-            originalServerHits.value = hits
-            const version = cancelTranslation()
-            // Always restart auto-translate since this bumps the version and
-            // cancels the one started by the projectHits watcher.
-            const useServer = originalServerHits.value.length > 0
-            void autoTranslateNewSearchResults(version, useServer)
-        }
-    },
-    { flush: 'sync' },
-)
-
-async function autoTranslateNewSearchResults(version: number, useServer: boolean) {
-    try {
-        const hits = useServer ? originalServerHits.value : originalProjectHits.value
-        if (!hits?.length) return
-
-        const translated = await translateSearchDescriptions(
-            hits,
-            i18n.global.locale.value,
-            false,
-            useServer,
-        )
-
-        if (isStale(version)) return
-
-        if (translated !== hits) {
-            isUpdatingProjectHitsFromTranslation = true
-            if (useServer) searchState.serverHits.value = translated
-            else searchState.projectHits.value = translated
-            translationActive.value = true
-            isUpdatingProjectHitsFromTranslation = false
-        }
-    } catch (error) {
-        debugLog('Automatic search result translation failed', error)
-    }
-}
-
-async function translateCurrentHits() {
-    const version = startTranslation()
-    try {
-        const serverHits = originalServerHits.value
-        const projectHits = originalProjectHits.value
-        const useServer = serverHits.length > 0
-        const hits = useServer ? serverHits : projectHits
-        if (!hits || hits.length === 0) return
-
-        const translated = await translateSearchDescriptions(
-            hits,
-            i18n.global.locale.value,
-            true,
-            useServer,
-        )
-        if (isStale(version)) return // superseded
-
-        if (translated !== hits) {
-            isUpdatingProjectHitsFromTranslation = true
-            if (useServer) searchState.serverHits.value = translated
-            else searchState.projectHits.value = translated
-            translationActive.value = true
-        }
-        isUpdatingProjectHitsFromTranslation = false
-    } finally {
-        doneTranslation(version)
-    }
-}
+    toggle: toggleResultTranslation,
+} = useSearchResultTranslation({
+    projectHits: searchState.projectHits,
+    serverHits: searchState.serverHits,
+    projectType,
+    locale: i18n.global.locale,
+    onError: (error) => debugLog('Search result translation failed', error),
+})
 
 async function maybeHintAutoTranslate() {
     if (!(await noteManualTranslateClick())) return
@@ -2296,18 +2206,8 @@ async function maybeHintAutoTranslate() {
 }
 
 function toggleTranslation() {
-    toggle(
-        () => {
-            isUpdatingProjectHitsFromTranslation = true
-            searchState.projectHits.value = originalProjectHits.value
-            searchState.serverHits.value = originalServerHits.value
-            isUpdatingProjectHitsFromTranslation = false
-        },
-        () => {
-            void maybeHintAutoTranslate()
-            void translateCurrentHits()
-        },
-    )
+    if (!translationActive.value) void maybeHintAutoTranslate()
+    toggleResultTranslation()
 }
 
 watch(contentSource, async (source) => {

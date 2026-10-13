@@ -678,6 +678,7 @@ mod tests {
         file_id: Option<&str>,
     ) -> InstanceContentSnapshotItem {
         InstanceContentSnapshotItem {
+            artifact_ref: None,
             compatibility: None,
             resource_id: None,
             pack_resource_id: None,

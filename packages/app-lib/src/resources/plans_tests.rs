@@ -676,6 +676,7 @@ fn draft(
     intent: ResourceOperationIntent,
 ) -> OperationDraft {
     OperationDraft {
+        import_files: Default::default(),
         naming: Default::default(),
         plan: ResourceOperationPlan {
             schema_version: ResourceContractVersion,
@@ -708,6 +709,48 @@ fn target() -> ipc::ResourceTarget {
         loaders: vec!["fabric".into()],
         channels: vec![ReleaseChannel::Release],
     }
+}
+
+#[tokio::test]
+async fn connector_exact_releases_allow_hash_bound_unknown_sizes_but_require_compatibility_review()
+ {
+    let mut release = release("connector", "1", 'a');
+    let source = SourceId::new("planet_minecraft").unwrap();
+    release.reference.project.source = source.clone();
+    release.artifacts[0].reference.release = release.reference.clone();
+    release.artifacts[0].integrity.size = None;
+    release.compatibility.game_versions.clear();
+    release.compatibility.loaders.clear();
+    let (_directory, cache) = cache().await;
+    let resources = ResourceService::new(
+        cache,
+        vec![Arc::new(PlanProvider {
+            source,
+            releases: vec![release.clone()],
+            requests: Mutex::new(vec![]),
+        })],
+    )
+    .unwrap();
+    let mut selected = selection("root", &release, None);
+    selected.resource = ResourceRef::Source {
+        project: release.reference.project.clone(),
+    };
+    selected.release = ReleaseSelection::Artifact {
+        reference: release.artifacts[0].reference.clone(),
+    };
+    let draft = resources
+        .build_operation(
+            draft(vec![selected], ResourceOperationIntent::Install),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(draft.plan.actions.len(), 1);
+    assert!(draft.plan.issues.iter().any(|issue| issue.blocking
+        && issue.code == ResourceIssueCode::CompatibilityUnknown));
+    assert!(draft.plan.actions[0].target.integrity.size.is_none());
 }
 async fn service(
     releases: Vec<ResourceRelease>,

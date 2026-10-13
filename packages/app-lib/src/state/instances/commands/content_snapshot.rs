@@ -1674,6 +1674,7 @@ fn snapshot_item(
         .is_some_and(|content| !content.provider_refs.is_empty());
 
     InstanceContentSnapshotItem {
+        artifact_ref: None,
         compatibility: None,
         resource_id: None,
         pack_resource_id: None,

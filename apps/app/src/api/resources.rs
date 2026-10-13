@@ -293,17 +293,48 @@ pub async fn resource_prepare_operation(
     intent: ResourceOperationIntent,
     selections: Vec<ResourceSelection>,
     install_dependencies: Option<bool>,
+    import_files: Option<std::collections::HashMap<SelectionId, String>>,
+    locators: Option<std::collections::HashMap<SelectionId, String>>,
     request_id: RequestId,
 ) -> Result<ResourceOperationPlan> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(theseus::resources::plans::prepare(
+    if let Some(locators) = locators {
+        let resources = service().await?;
+        for selection in &selections {
+            let Some(locator) = locators.get(&selection.id) else {
+                continue;
+            };
+            let ResourceRef::Source { project } = &selection.resource else {
+                continue;
+            };
+            let metadata = resources
+                .project_document(project, Some(locator.clone()), &cancel)
+                .await?
+                .metadata;
+            if let Some(store) = resources.store() {
+                store.ensure_project(project, &metadata.types).await?;
+                store.add_alias(project, locator).await?;
+            }
+        }
+    }
+    let plan = theseus::resources::plans::prepare(
         instance_id,
         intent,
         selections,
         install_dependencies.unwrap_or(true),
         &cancel,
     )
-    .await?)
+    .await?;
+    Ok(
+        if let Some(files) = import_files.filter(|files| !files.is_empty()) {
+            theseus::resources::plans::prepare_import_files(
+                plan, files, &cancel,
+            )
+            .await?
+        } else {
+            plan
+        },
+    )
 }
 
 #[tauri::command]

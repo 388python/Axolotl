@@ -2,6 +2,400 @@ use super::*;
 use crate::state::{DirectoryInfo, ModrinthProjectId, ModrinthVersionId};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
+#[tokio::test]
+async fn connector_download_with_hash_and_unknown_size_commits_measured_bytes_and_exact_source()
+ {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let (_temp, state, original, _, root) = fixture().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let data = b"new bytes";
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = vec![0u8; 4096];
+        socket.read(&mut request).await.unwrap();
+        socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnew bytes").await.unwrap();
+    });
+    let mut target = artifact(
+        SourceId::new("planet_minecraft").unwrap(),
+        "opaque-project",
+        "release",
+        data,
+    );
+    target.integrity.size = None;
+    target.acquisition = ArtifactAcquisition::PublicDownload {
+        urls: vec![format!("http://{address}/new.zip")],
+    };
+    let plan =
+        local_plan(&state, original.clone(), target, "unused", None).await;
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM resource_operation_plans WHERE id = ?",
+    )
+    .bind(plan.id.as_str())
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    let mut draft: plans::OperationDraft =
+        serde_json::from_str(&payload).unwrap();
+    draft.local_files.clear();
+    sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ?")
+        .bind(serde_json::to_string(&draft).unwrap())
+        .bind(plan.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    execute("instance", &plan, None, &state).await.unwrap();
+    server.await.unwrap();
+    let current = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        current
+            .artifact
+            .as_ref()
+            .unwrap()
+            .release
+            .project
+            .source
+            .as_str(),
+        "planet_minecraft"
+    );
+    assert_eq!(current.integrity.size, Some(9));
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        data
+    );
+    let histories = history::list_with_state("instance", None, &state)
+        .await
+        .unwrap();
+    assert_eq!(histories[0].target.integrity.size, Some(9));
+    assert!(histories[0].backup_available);
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn verified_manual_import_rejects_changed_bytes_and_preserves_connector_source_and_size()
+ {
+    let (_temp, state, original, _, root) = fixture().await;
+    let source = root.join("download.zip");
+    std::fs::write(&source, b"new bytes").unwrap();
+    let mut artifact = artifact(
+        SourceId::new("planet_minecraft").unwrap(),
+        "opaque-project",
+        "opaque-release",
+        b"new bytes",
+    );
+    artifact.integrity.size = None;
+    artifact.acquisition = ArtifactAcquisition::ManualDownload {
+        page_url: "https://www.planetminecraft.com/project/example".into(),
+    };
+    let plan =
+        local_plan(&state, original.clone(), artifact, "download.zip", None)
+            .await;
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM resource_operation_plans WHERE id = ?",
+    )
+    .bind(plan.id.as_str())
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    let mut draft: plans::OperationDraft =
+        serde_json::from_str(&payload).unwrap();
+    draft.local_files.clear();
+    draft.import_files.insert(
+        draft.plan.actions[0].node_id.clone(),
+        source.to_string_lossy().into_owned(),
+    );
+    draft.plan.issues.push(ResourcePlanIssue {
+        code: ResourceIssueCode::ManualDownloadRequired,
+        selection_id: Some(draft.plan.actions[0].node_id.clone()),
+        entry_id: None,
+        blocking: true,
+        message: "manual".into(),
+    });
+    plans::verify_import_files(&mut draft).await.unwrap();
+    assert!(draft.plan.issues.is_empty());
+    assert_eq!(draft.plan.actions[0].target.integrity.size, Some(9));
+    sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ?")
+        .bind(serde_json::to_string(&draft).unwrap())
+        .bind(plan.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    std::fs::write(&source, b"changed bytes").unwrap();
+    assert!(
+        execute("instance", &draft.plan, None, &state)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    std::fs::write(&source, b"new bytes").unwrap();
+    execute("instance", &draft.plan, None, &state)
+        .await
+        .unwrap();
+    let current = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(
+        current
+            .artifact
+            .as_ref()
+            .unwrap()
+            .release
+            .project
+            .source
+            .as_str(),
+        "planet_minecraft"
+    );
+    assert_eq!(current.integrity.size, Some(9));
+    assert!(
+        matches_file(&root.join(&current.relative_path), &current.integrity)
+            .await
+            .unwrap()
+    );
+    let history = history::list_with_state("instance", None, &state)
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(history.target.integrity.size, Some(9));
+    assert!(
+        sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn update_restart_cache_clear_unlink_rollback_and_cleanup_keep_business_facts()
+ {
+    let (temp, state, original, old, root) = fixture().await;
+    pack_fixture(&state, &original).await;
+    sqlx::query("UPDATE settings SET resource_chinese_filenames = 0, resource_preserve_filenames = 0 WHERE id = 0").execute(&state.pool).await.unwrap();
+    let managed = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    std::fs::write(root.join("new.zip"), b"new bytes").unwrap();
+    let plan = local_plan(
+        &state,
+        managed,
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes"),
+        "new.zip",
+        None,
+    )
+    .await;
+    let plan = change_target_path(
+        &state,
+        plan,
+        "resourcepacks/custom-456.zip.disabled",
+    )
+    .await;
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM resource_operation_plans WHERE id = ?",
+    )
+    .bind(plan.id.as_str())
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    let mut old_payload: serde_json::Value =
+        serde_json::from_str(&payload).unwrap();
+    old_payload.as_object_mut().unwrap().remove("naming");
+    let legacy: plans::OperationDraft =
+        serde_json::from_value(old_payload.clone()).unwrap();
+    assert!(legacy.naming.chinese && legacy.naming.preserve);
+    sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ?")
+        .bind(old_payload.to_string())
+        .bind(plan.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    let request = crate::install::InstallRequest::InstallContentBatch {
+        instance_id: "instance".into(),
+        items: vec![crate::install::InstallContentBatchItem::FrozenResource {
+            plan: plan.clone(),
+        }],
+        display_title: "Reviewed update".into(),
+        display_icon: None,
+    };
+    let job_id = uuid::Uuid::new_v4();
+    crate::install::store::insert(
+        job_id,
+        &crate::install::model::InstallJobState::new(request.clone()),
+        crate::install::InstallJobStatus::Queued,
+        &state,
+    )
+    .await
+    .unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: state.directories.settings_dir.clone(),
+        config_dir: state.directories.config_dir.clone(),
+        app_identifier: state.directories.app_identifier.clone(),
+    };
+    state.pool.close().await;
+    drop(state);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(temp.path().join("state.db"))
+                .foreign_keys(true),
+        )
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    let state = crate::state::test_state(directories, pool).await.unwrap();
+    let cache = super::cache::ResourceCache::open(
+        temp.path().join("resource-cache.db"),
+    )
+    .await;
+    cache.clear().await.unwrap();
+    cache.close().await;
+    let recovered = crate::install::store::get_required(job_id, &state)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(&recovered.state.request).unwrap(),
+        serde_json::to_value(&request).unwrap()
+    );
+    assert_eq!(recovered.status, crate::install::InstallJobStatus::Queued);
+    let settings = crate::state::Settings::get(&state.pool).await.unwrap();
+    assert!(
+        !settings.resource_chinese_filenames
+            && !settings.resource_preserve_filenames
+    );
+    execute("instance", &plan, None, &state).await.unwrap();
+    assert!(
+        plans::frozen_request_completed(&request, &state.pool)
+            .await
+            .unwrap()
+    );
+    sqlx::query("DELETE FROM install_jobs WHERE id = ?")
+        .bind(job_id.to_string())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    let changed = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(changed.entry_id, original.entry_id);
+    assert_eq!(
+        changed.artifact.as_ref().unwrap().release.project.source,
+        SourceId::curseforge()
+    );
+    assert_eq!(
+        changed.relative_path,
+        "resourcepacks/custom-456.zip.disabled"
+    );
+    let before_unlink = history::list_with_state("instance", None, &state)
+        .await
+        .unwrap()
+        .remove(0);
+    crate::state::edit_instance(
+        "instance",
+        crate::state::EditInstance {
+            link: Some(crate::state::InstanceLink::Unmanaged),
+            ..Default::default()
+        },
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    let draft = history::prepare_rollback(
+        "instance".into(),
+        original.entry_id.clone(),
+        before_unlink.id,
+        &state,
+    )
+    .await
+    .unwrap();
+    assert_eq!(draft.plan.actions[0].target.reference, old.reference);
+    sqlx::query("INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES (?, 'instance', 1, ?)").bind(draft.plan.id.as_str()).bind(serde_json::to_string(&draft).unwrap()).execute(&state.pool).await.unwrap();
+    execute("instance", &draft.plan, None, &state)
+        .await
+        .unwrap();
+    let restored = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(restored.entry_id, original.entry_id);
+    assert_eq!(restored.resource_id, original.resource_id);
+    assert_eq!(restored.artifact, original.artifact);
+    assert_eq!(restored.relative_path, original.relative_path);
+    assert_eq!(restored.known_artifacts, original.known_artifacts);
+    assert_eq!(restored.ownership, ResourceOwnership::UserAdded);
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    assert!(!root.join(&changed.relative_path).exists());
+    crate::state::instances::commands::repair_recorded_pack_unlink(
+        "instance",
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM instance_pack_members"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    let backups = super::history_cleanup::scan_with_state("instance", &state)
+        .await
+        .unwrap();
+    let selected: Vec<_> = backups
+        .iter()
+        .filter(|file| file.recognized && file.exists)
+        .map(|file| file.id.clone())
+        .collect();
+    assert!(!selected.is_empty());
+    let cleanup = super::history_cleanup::prepare_with_state(
+        "instance", selected, &state,
+    )
+    .await
+    .unwrap();
+    let result = super::history_cleanup::execute_with_state(
+        cleanup.id,
+        cleanup.revision,
+        &state,
+    )
+    .await
+    .unwrap();
+    assert!(result.failures.is_empty());
+    assert!(!result.removed.is_empty());
+    assert!(
+        history::list_with_state("instance", None, &state)
+            .await
+            .unwrap()
+            .iter()
+            .all(|entry| !entry.backup_available)
+    );
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    assert!(
+        sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    state.pool.close().await;
+}
+
 fn artifact(
     source: SourceId,
     project: &str,
@@ -182,6 +576,7 @@ async fn local_plan(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
+        import_files: Default::default(),
         naming: Default::default(),
         plan: plan.clone(),
         install_dependencies: false,
@@ -231,6 +626,7 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     assert!(!changed.enabled);
     assert_eq!(changed.artifact, Some(target.reference));
     let mut snapshot = vec![crate::state::InstanceContentSnapshotItem {
+        artifact_ref: None,
         compatibility: None,
         resource_id: None,
         pack_resource_id: None,

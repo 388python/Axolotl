@@ -323,6 +323,7 @@ const { selectedIds, selectedItems, clearSelection, removeFromSelection } = useC
         return [...modpackItemsNoUpdate.value, ...ctx.items.value]
     }),
     getItemId,
+    computed(() => [...filteredItems.value, ...filteredModpackItems.value]),
 )
 
 const {
@@ -839,9 +840,9 @@ async function confirmDependencyWarningDelete(disableDependentsAfterDeleting: bo
         pendingDependencyWarningDisableTargets.value = []
     }
 
+    await confirmDelete()
     pendingDependencyWarningItems.value = []
     pendingDependencyWarningDependents.value = []
-    await confirmDelete()
 }
 
 async function disablePendingDependencyWarningDependents() {
@@ -868,7 +869,6 @@ async function disablePendingDependencyWarningDependents() {
 async function confirmDelete() {
     if (ctx.isBusy.value) return
     const itemsToDelete = [...pendingDeletionItems.value]
-    pendingDeletionItems.value = []
     if (itemsToDelete.length === 0) return
 
     if (ctx.bulkDeleteItems && itemsToDelete.length > 1) {
@@ -883,6 +883,7 @@ async function confirmDelete() {
             },
         )
         await disablePendingDependencyWarningDependents()
+        pendingDeletionItems.value = []
         return
     }
 
@@ -894,6 +895,7 @@ async function confirmDelete() {
             await ctx.deleteItem(item)
             removeFromSelection(id)
             await disablePendingDependencyWarningDependents()
+            pendingDeletionItems.value = []
         } finally {
             unmarkChanging(id)
         }
@@ -910,6 +912,7 @@ async function confirmDelete() {
         { onComplete: clearSelection },
     )
     await disablePendingDependencyWarningDependents()
+    pendingDeletionItems.value = []
 }
 
 async function handleToggleEnabledById(id: string, _value: boolean) {
@@ -947,7 +950,7 @@ async function bulkEnable() {
             'enable',
             items.length,
             async () => {
-                await ctx.bulkEnableItems!(items)
+                return await ctx.bulkEnableItems!(items)
             },
             clearSelection,
         )
@@ -969,7 +972,7 @@ async function bulkDisable() {
             'disable',
             items.length,
             async () => {
-                await ctx.bulkDisableItems!(items)
+                return await ctx.bulkDisableItems!(items)
             },
             clearSelection,
         )
@@ -1077,7 +1080,7 @@ async function confirmBulkUpdate() {
                 'update',
                 items.length,
                 async () => {
-                    await ctx.bulkUpdateItems(items)
+                    return await ctx.bulkUpdateItems(items)
                 },
                 () => {
                     clearSelection()
@@ -1089,6 +1092,8 @@ async function confirmBulkUpdate() {
             await runBulk('update', items, ctx.bulkUpdateItem, { onComplete: clearSelection })
         }
     } finally {
+        bulkItemCount.value = 0
+        bulkStatusMessage.value = null
         pendingBulkUpdateItems.value = []
         pendingBulkUpdateAll.value = false
     }
@@ -1359,7 +1364,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
             :action-disabled="ctx.isBusy.value"
             :action-disabled-tooltip="ctx.busyMessage?.value ?? undefined"
             :symlink-target="ctx.symlinkTarget?.value"
-            @delete="confirmDelete"
+            :action="confirmDelete"
         />
         <ContentDependencyWarningModal
             ref="contentDependencyWarningModal"
@@ -1373,7 +1378,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
             :action-disabled="ctx.isBusy.value"
             :action-disabled-tooltip="ctx.busyMessage?.value ?? undefined"
             :symlink-target="ctx.symlinkTarget?.value"
-            @delete="confirmDependencyWarningDelete"
+            :action="confirmDependencyWarningDelete"
         />
         <ConfirmBulkUpdateModal
             v-if="hasBulkUpdateSupport"
@@ -1401,7 +1406,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
             :backup-tip="ctx.modpack.value?.project.title"
             :action-disabled="ctx.isBusy.value"
             :action-disabled-tooltip="ctx.busyMessage?.value ?? undefined"
-            @unlink="ctx.unlinkModpack!()"
+            :action="ctx.unlinkModpack"
         />
 
         <slot name="modals" />

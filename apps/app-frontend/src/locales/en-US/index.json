@@ -13846,5 +13846,8 @@
   },
   "app.resources.changelog.unsupported": {
     "message": "This source does not provide release changelogs."
+  },
+  "app.resources.manual.unverifiable": {
+    "message": "This source provides no file hash. Its artifact cannot be verified; download it from the source page and use the local import workflow."
   }
 }

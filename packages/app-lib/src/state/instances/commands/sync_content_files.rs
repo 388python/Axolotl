@@ -804,7 +804,9 @@ mod tests {
                 base_path: minecraft.path().to_path_buf(),
                 instance_folder: "versions/1.12.2-linked".to_string(),
                 instance_path: None,
-                game_dir_mode: None,
+                game_dir_mode: Some(
+                    crate::launcher::ExternalGameDirMode::Shared,
+                ),
             },
             &state,
         )

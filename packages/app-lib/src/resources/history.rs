@@ -283,6 +283,7 @@ pub(crate) async fn prepare_rollback(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
+        import_files: Default::default(),
         naming: Default::default(),
         plan: plan.clone(),
         install_dependencies: false,

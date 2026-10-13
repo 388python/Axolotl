@@ -147,7 +147,7 @@ pub(crate) async fn matches_file(
         }
     }
     let actual = fetch::compute_file_integrity(path, &check).await?;
-    Ok(expected.size == Some(actual.size)
+    Ok(expected.size.is_none_or(|size| size == actual.size)
         && fetch::verify_computed_integrity(&check, &actual).is_ok())
 }
 
@@ -326,18 +326,34 @@ pub(crate) async fn execute(
                     }
                 });
             project_type(kind)?;
-            provider_ref(&action.target)?;
+            if action.target.reference.release.project.source.as_str()
+                != "planet_minecraft"
+            {
+                provider_ref(&action.target)?;
+            }
             if !valid_artifact(&action.target)
                 || !plans::safe_relative_path(&action.target_relative_path)
             {
                 return Err(input("invalid frozen artifact or destination"));
             }
-            if let Some(relative) = draft.local_files.get(&action.entry_id) {
+            if draft.local_files.contains_key(&action.entry_id)
+                || draft.import_files.contains_key(&action.node_id)
+            {
                 let scope =
                     resolve_content_scope(instance_id, None, state).await?;
                 let root =
                     instance_content_root(&state.directories, &scope.instance)?;
-                let source = checked_path(&root, relative)?;
+                let source = if let Some(path) =
+                    draft.import_files.get(&action.node_id)
+                {
+                    let path = PathBuf::from(path);
+                    if !path.is_absolute() {
+                        return Err(input("invalid local import path"));
+                    }
+                    path
+                } else {
+                    checked_path(&root, &draft.local_files[&action.entry_id])?
+                };
                 if !matches_file(&source, &action.target.integrity).await? {
                     return Err(input(
                         "rollback backup no longer matches reviewed bytes",
@@ -413,7 +429,12 @@ pub(crate) async fn execute(
     for (action, (path, _, size, _, digest)) in
         plan.actions.iter().zip(&mut downloads)
     {
-        if action.target.integrity.size != Some(*size) {
+        if action
+            .target
+            .integrity
+            .size
+            .is_some_and(|expected| expected != *size)
+        {
             return Err(input(
                 "staged file size disagrees with reviewed artifact",
             ));
@@ -704,7 +725,12 @@ async fn persist_plan(
             .rsplit('/')
             .next()
             .unwrap_or_default();
-        if action.target.integrity.size != Some(*size) {
+        if action
+            .target
+            .integrity
+            .size
+            .is_some_and(|expected| expected != *size)
+        {
             return Err(input(
                 "artifact size disagrees with the reviewed snapshot",
             ));
@@ -824,11 +850,15 @@ async fn persist_plan(
             .await?;
         }
         sqlx::query("DELETE FROM instance_content_provider_refs WHERE content_entry_id = ?").bind(id).execute(&mut *tx).await?;
-        let reference = provider_ref(&action.target)?;
-        content_rows::upsert_content_provider_ref_in_transaction(
-            id, &reference, true, &mut tx,
-        )
-        .await?;
+        if action.target.reference.release.project.source.as_str()
+            != "planet_minecraft"
+        {
+            let reference = provider_ref(&action.target)?;
+            content_rows::upsert_content_provider_ref_in_transaction(
+                id, &reference, true, &mut tx,
+            )
+            .await?;
+        }
         if let Some(restore) = &restore {
             let previous_refs: Vec<(ContentProviderRef, bool)> =
                 serde_json::from_value(restore["restoreProviderRefs"].clone())?;
@@ -858,6 +888,7 @@ async fn persist_plan(
             sqlx::query("UPDATE instance_content_entries SET ownership_kind = ?, source_kind = ?, auto_dependency = ?, server_requirement = ?, client_requirement = ? WHERE id = ?").bind(ownership.as_str()).bind(source.as_str()).bind(metadata.auto_dependency as i64).bind(metadata.server_requirement.as_str()).bind(metadata.client_requirement.as_str()).bind(id).execute(&mut *tx).await?;
         }
         let mut verified_artifact = action.target.clone();
+        verified_artifact.integrity.size = Some(*size);
         if !verified_artifact
             .integrity
             .hashes
@@ -890,6 +921,7 @@ async fn persist_plan(
             target.artifact = Some(action.target.reference.clone());
             target.known_artifacts = vec![action.target.reference.clone()];
             target.integrity = action.target.integrity.clone();
+            target.integrity.size = Some(*size);
             if !target
                 .integrity
                 .hashes
@@ -953,7 +985,12 @@ async fn persist_plan(
             if let (Some(child_node), Some(children)) =
                 (child_node, node_entries.get(&edge.child))
             {
-                if let Some(artifact) = &child_node.artifact {
+                if let Some(artifact) = &child_node.artifact
+                    && artifact.reference.release.project.source.as_str()
+                        != "planet_minecraft"
+                    && action.target.reference.release.project.source.as_str()
+                        != "planet_minecraft"
+                {
                     let child_ref = provider_ref(artifact)?;
                     let parent_ref = provider_ref(&action.target)?;
                     for child in children {

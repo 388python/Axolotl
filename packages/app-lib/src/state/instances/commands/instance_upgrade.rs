@@ -443,6 +443,7 @@ async fn read_only_upgrade_source(
             continue;
         };
         snapshot.items.push(InstanceContentSnapshotItem {
+            artifact_ref: None,
             compatibility: None,
             resource_id: None,
             pack_resource_id: None,
@@ -6458,6 +6459,7 @@ mod tests {
             revision: 7,
             pack: None,
             items: vec![InstanceContentSnapshotItem {
+                artifact_ref: None,
                 compatibility: None,
                 resource_id: None,
                 pack_resource_id: None,
@@ -6916,6 +6918,7 @@ mod tests {
         release_id: Option<&str>,
     ) -> InstanceContentSnapshotItem {
         InstanceContentSnapshotItem {
+            artifact_ref: None,
             compatibility: None,
             resource_id: None,
             pack_resource_id: None,

@@ -34,6 +34,37 @@ test('lazy display metadata retains the resource update and history of the stabl
     }
 })
 
+test('lazy metadata never replaces actual path, entry identity or connector origin with stale presentation', () => {
+    const item = {
+        instanceEntryId: 'entry',
+        instanceFileId: 'file',
+        installedSource: 'planet_minecraft',
+        origin_provider: 'planet_minecraft',
+        file_path: 'mods/custom.jar.disabled',
+        file_name: 'custom.jar.disabled',
+        enabled: false,
+        instanceMaterializationState: 'present',
+    } as ContentItem
+    const merged = mergeContentItemMetadata(item, {
+        instanceEntryId: 'other',
+        origin_provider: null,
+        file_path: 'mods/wrong.jar',
+        file_name: 'wrong.jar',
+        enabled: true,
+    } as ContentItem)
+    for (const key of [
+        'instanceEntryId',
+        'instanceFileId',
+        'origin_provider',
+        'installedSource',
+        'file_path',
+        'file_name',
+        'enabled',
+        'instanceMaterializationState',
+    ] as const)
+        assert.equal(merged[key], item[key])
+})
+
 test('update metadata does not enable mutation of a missing or removed file', () => {
     for (const instanceMaterializationState of ['missing', 'removed', 'pending_manual']) {
         const item = {

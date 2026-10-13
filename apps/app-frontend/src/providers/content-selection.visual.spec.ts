@@ -1,12 +1,82 @@
 import { expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
+import { get_version_many } from '@/helpers/cache.js'
 import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { queue_content_batch } from '@/helpers/instance'
 import type { GameInstance } from '@/helpers/types'
 
 import { createContentSelection } from './content-selection'
 import type { ContentSelectionItem } from './content-selection-types'
+
+it('discarding pending additions after target changes or clearing the cart cannot repopulate another instance', async () => {
+    for (const change of ['target', 'clear']) {
+        let finish!: (value: unknown[]) => void
+        vi.mocked(get_version_many).mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    finish = resolve
+                }),
+        )
+        const selection = createContentSelection({
+            addNotification: vi.fn(),
+            handleError: vi.fn(),
+            downloadManager: { jobs: ref([]) } as never,
+        })
+        selection.setTarget(instance)
+        const pending = selection.add({
+            key: 'modrinth:late',
+            provider: 'modrinth',
+            projectId: 'late',
+            providerProjectId: 'late',
+            contentType: 'mod',
+            title: 'Late',
+            versionId: 'release',
+        })
+        if (change === 'target') selection.setTarget({ ...instance, id: 'another' })
+        else selection.clear()
+        finish([])
+        expect(await pending).toBe(false)
+        expect(selection.items.value.size).toBe(0)
+    }
+})
+
+it('cancelling a second mixed-batch review keeps the original world and resource selections', async () => {
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget(instance)
+    selection.setPreviewModal({
+        showBatch: vi.fn().mockResolvedValue({ primaryKeys: [] }),
+    } as never)
+    selection.setResourceInstallPreview({
+        showInstallSelection: vi.fn().mockResolvedValue(null),
+    } as never)
+    await selection.add({
+        key: 'curseforge:world',
+        provider: 'curseforge',
+        projectId: '42',
+        providerProjectId: '42',
+        contentType: 'world',
+        title: 'World',
+    })
+    await selection.add({
+        key: 'modrinth:mod',
+        provider: 'modrinth',
+        projectId: 'mod',
+        providerProjectId: 'mod',
+        contentType: 'mod',
+        title: 'Mod',
+    })
+    vi.mocked(getCurseForgeFiles).mockResolvedValueOnce({
+        files: [{ id: 123, isAvailable: true, hashes: [] }],
+        pagination: {},
+    } as never)
+    expect(await selection.installSelected()).toBe(false)
+    expect([...selection.items.value.keys()]).toEqual(['curseforge:world', 'modrinth:mod'])
+})
 
 vi.mock('@modrinth/ui', () => ({
     createContext: () => [vi.fn(), vi.fn()],

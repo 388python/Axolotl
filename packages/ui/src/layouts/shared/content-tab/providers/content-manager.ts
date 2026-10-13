@@ -66,8 +66,8 @@ export interface ContentManagerContext {
 
     // Bulk actions (optional — when provided, used instead of one-by-one loops)
     bulkDeleteItems?: (items: ContentItem[]) => Promise<void>
-    bulkEnableItems?: (items: ContentItem[]) => Promise<void>
-    bulkDisableItems?: (items: ContentItem[]) => Promise<void>
+    bulkEnableItems?: (items: ContentItem[]) => Promise<void | boolean>
+    bulkDisableItems?: (items: ContentItem[]) => Promise<void | boolean>
     getDeleteDependencyWarning?: (
         items: ContentItem[],
     ) => ContentDependencyWarning | null | Promise<ContentDependencyWarning | null>
@@ -78,17 +78,17 @@ export interface ContentManagerContext {
     updateItem?: (item: ContentItem) => void | Promise<void>
     rollbackItem?: (item: ContentItem) => Promise<void>
     /** Submit a platform-owned update-all operation. Resolves once the operation is observable. */
-    bulkUpdateAll?: () => Promise<void>
+    bulkUpdateAll?: () => Promise<void | boolean>
     bulkUpdateAllLabel?: string
     bulkUpdateAllDescription?: string
     bulkUpdateIncludesModpack?: boolean
     bulkUpdateItem?: (item: ContentItem) => Promise<void>
-    bulkUpdateItems?: (items: ContentItem[]) => Promise<void>
+    bulkUpdateItems?: (items: ContentItem[]) => Promise<void | boolean>
 
     // Modpack actions (optional)
     updateModpack?: () => void
     viewDependencies?: () => void
-    unlinkModpack?: () => void
+    unlinkModpack?: () => void | Promise<void>
     openSettings?: () => void
 
     // Switch version (optional)

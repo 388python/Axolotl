@@ -10,6 +10,23 @@ vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (path: string) => path 
 
 beforeEach(() => vi.resetAllMocks())
 
+it('connector installation source comes from exact durable artifact evidence instead of legacy local ownership', async () => {
+    const value = snapshot()
+    value.items[0].provider = null
+    value.items[0].artifactRef = {
+        release: {
+            project: { source: 'planet_minecraft', projectId: 'opaque' },
+            releaseId: 'version',
+        },
+        artifactId: 'download',
+    }
+    vi.mocked(get_content_snapshot).mockResolvedValue(value)
+    const data = await loadInstanceContentData('instance')
+    expect(data?.contentItems[0].installedSource).toBe('planet_minecraft')
+    expect(data?.contentItems[0].origin_provider).toBe('planet_minecraft')
+    expect(data?.contentItems[0].instanceOwnershipKind).toBe('user_added')
+})
+
 const snapshot = (): InstanceContentSnapshot => ({
     instanceId: 'instance',
     revision: 1,

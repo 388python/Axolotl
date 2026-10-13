@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 
 import { get_project, get_version_many } from '@/helpers/cache.js'
-import { get_install_candidates } from '@/helpers/instance'
+import { get, get_install_candidates } from '@/helpers/instance'
 
 import { createContentInstall } from './content-install'
 
@@ -103,4 +103,42 @@ it('closes the install target after queueing without reporting failure or settli
     expect(navigationCallback).toHaveBeenCalledExactlyOnceWith()
     context.handleCancel()
     expect(navigationCallback).toHaveBeenCalledOnce()
+})
+
+it('direct instance installation settles the caller when resource review is cancelled or the instance vanished', async () => {
+    vi.mocked(get_project).mockResolvedValue({
+        id: 'abcdefgh',
+        title: 'Example',
+        project_type: 'mod',
+        versions: ['release'],
+    })
+    vi.mocked(get_version_many).mockResolvedValue([
+        {
+            id: 'release',
+            date_published: '2026-01-01',
+            game_versions: ['1.20.1'],
+            loaders: ['fabric'],
+        },
+    ] as never)
+    vi.mocked(get).mockResolvedValue({
+        id: 'instance',
+        name: 'Target',
+        loader: 'fabric',
+        game_version: '1.20.1',
+    } as never)
+    const context = createContentInstall({
+        router: { push: vi.fn() } as never,
+        handleError: vi.fn(),
+        addNotification: vi.fn(),
+    })
+    context.setResourceInstallPreview({
+        showInstallSelection: vi.fn().mockResolvedValue(null),
+    } as never)
+    const callback = vi.fn()
+    await context.install('abcdefgh', 'release', 'instance', 'test', callback)
+    expect(callback).toHaveBeenCalledExactlyOnceWith()
+    vi.mocked(get).mockResolvedValue(null)
+    const missing = vi.fn()
+    await context.install('abcdefgh', 'release', 'missing', 'test', missing)
+    expect(missing).toHaveBeenCalledExactlyOnceWith()
 })

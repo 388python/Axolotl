@@ -13858,5 +13858,8 @@
   },
   "app.resources.changelog.unsupported": {
     "message": "此来源不提供发布更新日志。"
+  },
+  "app.resources.manual.unverifiable": {
+    "message": "此来源未提供文件哈希，无法核验对应工件。请从来源页面下载，然后通过本地导入流程添加。"
   }
 }

@@ -5,6 +5,23 @@ export interface RefreshableDownloadJob {
     modified?: string
 }
 
+export async function reconcileAcceptedDownloadJob<T extends { job_id: string }>(
+    accepted: T,
+    read: (id: string) => Promise<T | null>,
+    publish: (job: T) => void,
+    remove: (id: string) => void,
+    onError: (error: unknown) => void,
+) {
+    publish(accepted)
+    try {
+        const current = await read(accepted.job_id)
+        if (current) publish(current)
+        else remove(accepted.job_id)
+    } catch (error) {
+        onError(error)
+    }
+}
+
 /**
  * A queued snapshot can be returned by the command that created a job after a
  * realtime running snapshot has already arrived. The backend timestamps have

@@ -5,6 +5,7 @@ import { setCurseForgeManualDownloads } from '@/helpers/curseforge-manual'
 import {
     isRegressiveActiveJobSnapshot,
     mergeRefreshedDownloadJobs,
+    reconcileAcceptedDownloadJob,
 } from '@/helpers/download-job-refresh'
 import { download_request_listener, install_job_listener, loading_listener } from '@/helpers/events'
 import {
@@ -468,12 +469,15 @@ export function createDownloadManager(handleError: (error: unknown) => void): Do
      * entirely when the job no longer exists.
      */
     async function reconcileJob(job: InstallJobSnapshot) {
-        const freshest = await download_job_get(job.job_id).catch(() => null)
-        if (freshest) {
-            setJob(freshest)
-        } else {
-            jobs.value = jobs.value.filter((candidate) => candidate.job_id !== job.job_id)
-        }
+        await reconcileAcceptedDownloadJob(
+            job,
+            download_job_get,
+            setJob,
+            (id) => {
+                jobs.value = jobs.value.filter((candidate) => candidate.job_id !== id)
+            },
+            handleError,
+        )
     }
 
     async function remove(jobId: string) {

@@ -4,6 +4,7 @@ import test from 'node:test'
 import {
     isRegressiveActiveJobSnapshot,
     mergeRefreshedDownloadJobs,
+    reconcileAcceptedDownloadJob,
 } from './download-job-refresh.ts'
 
 const active = new Set(['queued', 'running', 'canceling', 'waiting_for_user'])
@@ -13,6 +14,33 @@ const job = (job_id: string, status: string, progress: number) => ({
     progress,
     created: '2026-09-12T00:00:00Z',
     modified: '2026-09-12T00:00:00Z',
+})
+
+test('accepted retry and resume snapshots survive a failed supplemental read, while actual absence removes them', async () => {
+    const accepted = job('a', 'running', 10)
+    const published: (typeof accepted)[] = [],
+        removed: string[] = [],
+        errors: unknown[] = []
+    await reconcileAcceptedDownloadJob(
+        accepted,
+        async () => {
+            throw new Error('IPC unavailable')
+        },
+        (job) => published.push(job),
+        (id) => removed.push(id),
+        (error) => errors.push(error),
+    )
+    assert.deepEqual(published, [accepted])
+    assert.deepEqual(removed, [])
+    assert.equal(errors.length, 1)
+    await reconcileAcceptedDownloadJob(
+        accepted,
+        async () => null,
+        (job) => published.push(job),
+        (id) => removed.push(id),
+        (error) => errors.push(error),
+    )
+    assert.deepEqual(removed, ['a'])
 })
 
 test('does not regress an active job to a same-timestamp queued snapshot', () => {

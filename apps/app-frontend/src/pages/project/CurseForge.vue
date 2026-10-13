@@ -877,59 +877,65 @@ async function installSelected(fileId: string | null) {
             return
         }
         const target = contentSelection.targetInstance.value
+        const selectedProject = project.value
+        const selectedKey = cartProjectKey.value
+        const selectedType = projectType.value
+        const requestVersion = projectRequestVersion
         const expectedLoader = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 }[target.loader]
         let resolvedFileId: string | number | null = fileId
-        if (!resolvedFileId && !usesTargetGameVersion(projectType.value)) {
+        if (!resolvedFileId && !usesTargetGameVersion(selectedType)) {
             resolvedFileId = files.value.find((file) => file.isAvailable)?.id ?? null
         } else if (!resolvedFileId) {
             resolvedFileId =
-                project.value.latestFilesIndexes.find(
+                selectedProject.latestFilesIndexes.find(
                     (index) =>
                         index.gameVersion === target.game_version &&
-                        (projectType.value !== 'mod' ||
+                        (selectedType !== 'mod' ||
                             !expectedLoader ||
                             index.modLoader === expectedLoader),
                 )?.fileId ??
                 files.value.find(
                     (file) =>
                         file.gameVersions.includes(target.game_version) &&
-                        (projectType.value !== 'mod' ||
-                            getFilePlatforms(file).includes(target.loader)),
+                        (selectedType !== 'mod' || getFilePlatforms(file).includes(target.loader)),
                 )?.id ??
                 null
             if (!resolvedFileId) {
-                const compatibleFiles = await getCurseForgeFilesPage(project.value.id, {
+                const compatibleFiles = await getCurseForgeFilesPage(selectedProject.id, {
                     gameVersion: target.game_version,
                     modLoaderType:
-                        projectType.value === 'mod'
-                            ? curseForgeLoaderType(target.loader)
-                            : undefined,
+                        selectedType === 'mod' ? curseForgeLoaderType(target.loader) : undefined,
                     index: 0,
                     pageSize: 50,
                 })
                 resolvedFileId = compatibleFiles.files.find((file) => file.isAvailable)?.id ?? null
             }
         }
+        if (
+            requestVersion !== projectRequestVersion ||
+            project.value?.id !== selectedProject.id ||
+            contentSelection.targetInstance.value?.id !== target.id
+        )
+            return
         if (!resolvedFileId) {
             handleError(new Error(formatMessage(messages.noCompatibleVersion)))
             return
         }
         await contentSelection.add({
-            key: cartProjectKey.value,
+            key: selectedKey,
             provider: 'curseforge',
-            projectId: project.value.id.toString(),
-            providerProjectId: project.value.id.toString(),
+            projectId: selectedProject.id.toString(),
+            providerProjectId: selectedProject.id.toString(),
             versionId: resolvedFileId.toString(),
-            contentType: projectType.value as
-                'mod' | 'resourcepack' | 'datapack' | 'shader' | 'world',
-            title: project.value.name,
+            contentType: selectedType as 'mod' | 'resourcepack' | 'datapack' | 'shader' | 'world',
+            title: selectedProject.name,
             iconUrl: getCurseForgeImageUrl(
-                project.value.logo?.url ?? project.value.logo?.thumbnailUrl,
+                selectedProject.logo?.url ?? selectedProject.logo?.thumbnailUrl,
             ),
-            slug: project.value.slug,
+            slug: selectedProject.slug,
             preferences: {
-                gameVersions: usesTargetGameVersion(projectType.value) ? [target.game_version] : [],
-                loaders: projectType.value === 'mod' ? [target.loader] : [],
+                gameVersions: usesTargetGameVersion(selectedType) ? [target.game_version] : [],
+                loaders: selectedType === 'mod' ? [target.loader] : [],
             },
         })
         return

@@ -17,6 +17,8 @@ pub(crate) struct OperationDraft {
     #[serde(default)]
     pub local_files: HashMap<InstalledEntryId, String>,
     #[serde(default)]
+    pub import_files: HashMap<SelectionId, String>,
+    #[serde(default)]
     pub restore_history: Option<HistoryId>,
 }
 
@@ -249,6 +251,13 @@ pub(crate) async fn installed(
         let mut resource_id = links.first().and_then(|row| {
             ResourceId::new(row.get::<String, _>("resource_id")).ok()
         });
+        if let Some(artifact) = &exact {
+            resource_id =
+                crate::state::resources::ResourceStore::new(pool.clone())
+                    .lookup(&artifact.reference.release.project)
+                    .await?
+                    .or(resource_id);
+        }
         if resource_id.is_none() {
             let refs = crate::state::instances::adapters::sqlite::content_rows::get_content_provider_refs(&entry_id, pool).await?;
             let origin = crate::state::instances::adapters::sqlite::content_rows::get_content_origin_provider(&entry_id, pool).await?;
@@ -772,7 +781,11 @@ impl ResourceService {
         .cloned()
         .ok_or_else(|| invalid("select one exact primary artifact"))?;
         if !valid_artifact(&artifact)
-            || artifact.integrity.size.is_none()
+            || (artifact.integrity.size.is_none()
+                && matches!(
+                    artifact.reference.release.project.source.as_str(),
+                    "modrinth" | "curseforge"
+                ))
             || !artifact
                 .integrity
                 .hashes
@@ -1904,8 +1917,72 @@ impl ResourceService {
                 "parent dependency requirement is not satisfied by the selected artifact",
             );
         }
+        verify_import_files(&mut draft).await?;
         Ok(draft)
     }
+}
+
+pub(crate) async fn verify_import_files(
+    draft: &mut OperationDraft,
+) -> ResourceResult<()> {
+    for action in &mut draft.plan.actions {
+        let Some(path) = draft.import_files.get(&action.node_id) else {
+            continue;
+        };
+        let path = std::path::Path::new(path);
+        if !path.is_absolute()
+            || !super::execution::matches_file(path, &action.target.integrity)
+                .await?
+        {
+            return Err(invalid(
+                "selected local file does not match the exact source artifact",
+            ));
+        }
+        action.target.integrity.size = Some(
+            tokio::fs::metadata(path)
+                .await
+                .map_err(|error| invalid(error.to_string()))?
+                .len(),
+        );
+        if let Some(node) = draft
+            .plan
+            .nodes
+            .iter_mut()
+            .find(|node| node.id == action.node_id)
+        {
+            node.artifact = Some(action.target.clone());
+        }
+        draft.plan.issues.retain(|issue| {
+            issue.code != ResourceIssueCode::ManualDownloadRequired
+                || issue.selection_id.as_ref() != Some(&action.node_id)
+        });
+    }
+    Ok(())
+}
+
+pub async fn prepare_import_files(
+    plan: ResourceOperationPlan,
+    files: HashMap<SelectionId, String>,
+    cancel: &CancellationToken,
+) -> ResourceResult<ResourceOperationPlan> {
+    if files
+        .keys()
+        .any(|id| !plan.selections.iter().any(|selection| &selection.id == id))
+    {
+        return Err(invalid("local imports must belong to selected roots"));
+    }
+    let state = crate::State::get().await?;
+    let mut draft = load(&state.pool, &plan.id, plan.revision).await?;
+    draft.import_files = files;
+    verify_import_files(&mut draft).await?;
+    if cancel.is_cancelled() {
+        return Err(ResourceError::Canceled);
+    }
+    let updated = sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ? AND revision = ? AND job_id IS NULL AND queued = 0").bind(serde_json::to_string(&draft)?).bind(plan.id.as_str()).bind(plan.revision).execute(&state.pool).await.map_err(db)?;
+    if updated.rows_affected() != 1 {
+        return Err(invalid("plan was revised or already queued"));
+    }
+    Ok(draft.plan)
 }
 
 pub(crate) fn update_channels(
@@ -1996,6 +2073,7 @@ pub(crate) async fn prepare_with_installed(
         .map(|selection| selection.id.clone())
         .collect();
     let draft = OperationDraft {
+        import_files: Default::default(),
         naming: {
             let settings = crate::state::Settings::get(&state.pool).await?;
             super::naming::NamingPreferences {

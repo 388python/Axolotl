@@ -35,6 +35,41 @@ pub(crate) async fn attach_compatibility(
             continue;
         };
         let item = &mut items[index];
+        if let Some(record) = artifact.as_ref().and_then(|payload| {
+            serde_json::from_str::<InstalledArtifactRecord>(payload).ok()
+        }) {
+            let local = ArtifactIntegrity {
+                size: u64::try_from(size).ok(),
+                hashes: vec![ContentHash {
+                    algorithm: HashAlgorithm::Sha1,
+                    value: sha1.clone(),
+                }],
+            };
+            if super::identity::exact_integrity(
+                &local,
+                &record.artifact.integrity,
+            ) {
+                item.artifact_ref = Some(record.artifact.reference.clone());
+                if !record.artifact.integrity.hashes.is_empty()
+                    && item.content.is_some()
+                    && item.materialization_state
+                        == crate::state::PackMemberMaterializationState::Present
+                {
+                    item.capabilities.can_change_version = true;
+                }
+                if item.resource_id.is_none() {
+                    item.resource_id =
+                        crate::state::resources::ResourceStore::new(
+                            pool.clone(),
+                        )
+                        .lookup(&record.artifact.reference.release.project)
+                        .await
+                        .map_err(|error| {
+                            crate::ErrorKind::OtherError(error.to_string())
+                        })?;
+                }
+            }
+        }
         let kind = match item.project_type {
             crate::state::ProjectType::Mod => ResourceType::Mod,
             crate::state::ProjectType::ResourcePack => {

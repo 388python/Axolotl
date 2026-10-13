@@ -112,12 +112,28 @@ export async function loadInstanceContentData(
             }
             return {
                 ...(item.content ?? fallbackContent),
+                version:
+                    item.content?.version ??
+                    (item.artifactRef
+                        ? {
+                              id: item.artifactRef.release.releaseId,
+                              version_number: item.artifactRef.release.releaseId,
+                              file_name: fileName,
+                          }
+                        : fallbackContent.version),
+                origin_provider:
+                    item.artifactRef?.release.project.source ??
+                    item.content?.origin_provider ??
+                    fallbackContent.origin_provider,
                 instanceFileId: item.fileId ?? undefined,
                 instanceEntryId: item.entryId ?? undefined,
                 instanceResourceId: item.resourceId ?? undefined,
                 instanceMemberId: item.memberId ?? undefined,
                 instanceOwnershipKind: item.ownershipKind,
-                installedSource: item.content?.origin_provider ?? null,
+                installedSource:
+                    item.artifactRef?.release.project.source ??
+                    item.content?.origin_provider ??
+                    null,
                 compatibility: item.compatibility ?? null,
                 instanceCapabilities: item.capabilities,
                 instanceMaterializationState: item.materializationState,

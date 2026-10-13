@@ -674,7 +674,7 @@ export function createContentInstall(opts: {
     ) {
         if (!resourcePreview) throw new Error('Resource install preview is unavailable')
         const projectId =
-            provider === 'curseforge' ? String(currentCurseForgeProject?.id ?? '') : project.id
+            provider === 'curseforge' ? project.id.replace(/^curseforge:/, '') : project.id
         const resourceType = (
             {
                 mod: 'mod',
@@ -1264,7 +1264,10 @@ export function createContentInstall(opts: {
                     Labrinth.Versions.v2.Version[]
                 >,
             ])
-            if (!instanceOrNull) return
+            if (!instanceOrNull) {
+                callback()
+                return
+            }
 
             const instance = instanceOrNull
             const projectVersions = versions.sort(
@@ -1277,7 +1280,10 @@ export function createContentInstall(opts: {
 
             if (isVersionCompatible(version, project, instance)) {
                 const job = await queueResourceVersion(instance, project, version, 'modrinth')
-                if (!job) return
+                if (!job) {
+                    callback()
+                    return
+                }
                 trackEvent('ProjectInstall', {
                     loader: instance.loader,
                     game_version: instance.game_version,
@@ -1400,14 +1406,20 @@ export function createContentInstall(opts: {
 
         if (instanceId) {
             const instance = await get(instanceId)
-            if (!instance) return
+            if (!instance) {
+                callback()
+                return
+            }
             let version = versionId
                 ? versions.find((candidate) => candidate.id === versionId)
                 : findPreferredVersion(versions, project, instance)
             if (!version) version = versions[0]
             if (isVersionCompatible(version, project, instance)) {
                 const job = await queueCurrentCurseForgeVersion(instance, project, version)
-                if (!job) return
+                if (!job) {
+                    callback()
+                    return
+                }
                 trackEvent('ProjectInstall', {
                     loader: instance.loader,
                     game_version: instance.game_version,

@@ -38,6 +38,6 @@ export function searchPlanetMinecraftProjects(query: string, gameVersion?: strin
     )
 }
 
-export function getPlanetMinecraftProject(id: string) {
-    return resourceProjectProtocol<PlanetMinecraftProject>('planet_minecraft', id)
+export function getPlanetMinecraftProject(id: string, signal?: AbortSignal) {
+    return resourceProjectProtocol<PlanetMinecraftProject>('planet_minecraft', id, signal)
 }

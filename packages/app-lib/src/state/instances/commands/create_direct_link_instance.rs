@@ -278,8 +278,8 @@ mod tests {
             instance_rows::get_instance_by_id(&instance.id, &state.pool)
                 .await?
                 .expect("instance row");
-        let canonical_root = minecraft.path().canonicalize()?;
-        let canonical_json = json_path.canonicalize()?;
+        let canonical_root = crate::util::io::canonicalize(minecraft.path())?;
+        let canonical_json = crate::util::io::canonicalize(&json_path)?;
         assert_eq!(stored.linked_launcher.as_deref(), Some("generic"));
         assert_eq!(
             stored.linked_launcher_root.as_deref(),

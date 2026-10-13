@@ -23,6 +23,8 @@ pub struct ContentItemCapabilities {
 #[serde(rename_all = "camelCase")]
 pub struct InstanceContentSnapshotItem {
     #[serde(default)]
+    pub artifact_ref: Option<crate::resources::SourceArtifactRef>,
+    #[serde(default)]
     pub resource_id: Option<crate::resources::ResourceId>,
     #[serde(default)]
     pub pack_resource_id: Option<crate::resources::ResourceId>,

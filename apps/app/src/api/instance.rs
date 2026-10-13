@@ -83,10 +83,6 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_preview_core_jar,
             instance_install_mcarchive_modloader,
             instance_import_mcarchive_modloader,
-            instance_install_mcarchive_content,
-            instance_import_mcarchive_content,
-            instance_install_planet_minecraft_content,
-            instance_import_planet_minecraft_content,
             instance_get_full_path,
             instance_get_mod_full_path,
             instance_check_installed,
@@ -1583,57 +1579,6 @@ pub async fn instance_import_mcarchive_modloader(
     Ok(theseus::instance::import_mcarchive_modloader(
         instance_id,
         game_version,
-        source_path,
-    )
-    .await?)
-}
-
-#[tauri::command]
-pub async fn instance_install_mcarchive_content(
-    instance_id: &str,
-    request: theseus::instance::McArchiveContentInstallRequest,
-) -> Result<theseus::instance::McArchiveContentInstallResult> {
-    Ok(
-        theseus::instance::install_mcarchive_content(instance_id, request)
-            .await?,
-    )
-}
-
-#[tauri::command]
-pub async fn instance_import_mcarchive_content(
-    instance_id: &str,
-    request: theseus::instance::McArchiveContentInstallRequest,
-    source_path: PathBuf,
-) -> Result<theseus::instance::McArchiveContentInstallResult> {
-    Ok(theseus::instance::import_mcarchive_content(
-        instance_id,
-        request,
-        source_path,
-    )
-    .await?)
-}
-
-#[tauri::command]
-pub async fn instance_install_planet_minecraft_content(
-    instance_id: &str,
-    request: theseus::instance::PlanetMinecraftContentInstallRequest,
-) -> Result<theseus::instance::PlanetMinecraftContentInstallResult> {
-    Ok(theseus::instance::install_planet_minecraft_content(
-        instance_id,
-        request,
-    )
-    .await?)
-}
-
-#[tauri::command]
-pub async fn instance_import_planet_minecraft_content(
-    instance_id: &str,
-    request: theseus::instance::PlanetMinecraftContentInstallRequest,
-    source_path: PathBuf,
-) -> Result<theseus::instance::PlanetMinecraftContentInstallResult> {
-    Ok(theseus::instance::import_planet_minecraft_content(
-        instance_id,
-        request,
         source_path,
     )
     .await?)

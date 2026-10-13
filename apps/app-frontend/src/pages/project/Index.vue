@@ -1062,6 +1062,12 @@ function handleAddServerToInstance() {
 
 async function fetchProjectData() {
     const requestedProjectId = String(route.params.id)
+    const requestedInstanceId = route.query.i
+    const requestVersion = projectLoadVersion
+    const isCurrent = () =>
+        requestVersion === projectLoadVersion &&
+        String(route.params.id) === requestedProjectId &&
+        route.query.i === requestedInstanceId
     translationRequestVersion++
     translationActive.value = false
     translationLoading.value = false
@@ -1070,7 +1076,7 @@ async function fetchProjectData() {
         get_project(requestedProjectId, 'must_revalidate').catch(handleError),
         get_project_v3(requestedProjectId, 'must_revalidate').catch(handleError),
     ])
-    if (String(route.params.id) !== requestedProjectId) return
+    if (!isCurrent()) return
     projectV3.value = projectV3Result
 
     if (!project) {
@@ -1081,16 +1087,20 @@ async function fetchProjectData() {
     data.value = project
     mcmodUrl.value = null
     void resolveMcmodUrl(project.slug, 'modrinth').then((url) => {
-        if (String(route.params.id) === requestedProjectId) mcmodUrl.value = url
+        if (isCurrent()) mcmodUrl.value = url
     })
     const relatedData = await Promise.all([
         get_version_many(project.versions, 'must_revalidate').catch(handleError),
         get_team(project.team).catch(handleError),
         get_categories().catch(handleError),
-        route.query.i ? getInstance(route.query.i).catch(handleError) : Promise.resolve(),
-        route.query.i ? getInstanceProjects(route.query.i).catch(handleError) : Promise.resolve(),
+        requestedInstanceId
+            ? getInstance(requestedInstanceId).catch(handleError)
+            : Promise.resolve(),
+        requestedInstanceId
+            ? getInstanceProjects(requestedInstanceId).catch(handleError)
+            : Promise.resolve(),
     ])
-    if (String(route.params.id) !== requestedProjectId) return
+    if (!isCurrent()) return
     ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
         relatedData
 
@@ -1114,7 +1124,7 @@ async function fetchProjectData() {
 
     if (project.organization) {
         const projectOrganization = await get_organization(project.organization).catch(handleError)
-        if (String(route.params.id) !== requestedProjectId) return
+        if (!isCurrent()) return
         organization.value = projectOrganization
     }
 
@@ -1344,7 +1354,7 @@ onUnmounted(() => {
 })
 
 watch(
-    () => route.params.id,
+    () => [route.params.id, route.query.i],
     () => {
         if (route.params.id && route.path.startsWith('/project')) {
             void loadProjectPage()

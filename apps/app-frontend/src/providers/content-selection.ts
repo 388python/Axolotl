@@ -79,6 +79,7 @@ export function createContentSelection({
     const installedIdentitySlugs = ref<Set<string>>(new Set())
     const installedIdentityRequests = new Map<string, Promise<ContentIdentity[]>>()
     let installedIdentityRequestId = 0
+    let selectionGeneration = 0
     let resourcePreview: InstanceType<typeof ResourceOperationPreviewModal> | null = null
     let previewModal: InstanceType<typeof ContentInstallPreviewModal> | null = null
 
@@ -104,6 +105,7 @@ export function createContentSelection({
                 ? current
                 : (available.find((instance) => instance.id === requestedId) ?? null)
         if (selected?.id !== targetInstance.value?.id) {
+            selectionGeneration++
             installedIdentityRequestId += 1
             installedIdentityCache.clear()
             installedIdentityKeys.value = new Set()
@@ -116,6 +118,7 @@ export function createContentSelection({
 
     function setTarget(instance: GameInstance | null) {
         if (instance?.id !== targetInstance.value?.id) {
+            selectionGeneration++
             installedIdentityRequestId += 1
             installedIdentityCache.clear()
             installedIdentityKeys.value = new Set()
@@ -268,7 +271,11 @@ export function createContentSelection({
     }
 
     async function add(item: ContentSelectionItem) {
-        if (!targetInstance.value) throw new Error('No target instance selected')
+        const instance = targetInstance.value
+        if (!instance) throw new Error('No target instance selected')
+        const generation = selectionGeneration
+        const isCurrent = () =>
+            generation === selectionGeneration && targetInstance.value?.id === instance.id
         const versionPending = !item.versionId
         const identity =
             item.identity ??
@@ -282,9 +289,11 @@ export function createContentSelection({
                       fileName: item.fileName,
                   })
                 : await resolveSelectionIdentity(item))
-        const conflicts = await findConflicts({ ...item, identity }, targetInstance.value, {
+        if (!isCurrent()) return false
+        const conflicts = await findConflicts({ ...item, identity }, instance, {
             skipInstalled: versionPending,
         })
+        if (!isCurrent()) return false
         const hardConflict = conflicts.find((conflict) => conflict.match.source !== 'heuristic')
         if (hardConflict) {
             addNotification({
@@ -321,14 +330,14 @@ export function createContentSelection({
                 source: 'heuristic',
                 confidence: heuristicConflict.match.confidence === 'high' ? 'high' : 'possible',
             })
-            if (!confirmed) return false
+            if (!confirmed || !isCurrent()) return false
         }
         const next = new Map(items.value)
         next.set(item.key, {
             ...item,
             identity,
             sha1: identity.sha1,
-            targetInstanceId: targetInstance.value.id,
+            targetInstanceId: instance.id,
             versionPending,
         })
         items.value = next
@@ -339,6 +348,7 @@ export function createContentSelection({
     }
 
     function remove(key: string) {
+        selectionGeneration++
         const next = new Map(items.value)
         next.delete(key)
         items.value = next
@@ -348,6 +358,7 @@ export function createContentSelection({
     }
 
     function clear() {
+        selectionGeneration++
         items.value = new Map()
         errorKeys.value = new Set()
         installedIdentityRequestId += 1
@@ -457,9 +468,6 @@ export function createContentSelection({
                 })
                 if (!review) return false
                 includedWorlds = worlds.filter((item) => review.primaryKeys.includes(item.key))
-                for (const item of worlds) {
-                    if (!includedWorlds.includes(item)) remove(item.key)
-                }
             }
             if (resources.length) {
                 const selections: ResourceSelection[] = resources.map((item) => ({

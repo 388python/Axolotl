@@ -8,9 +8,7 @@ mod groups;
 mod home;
 mod install;
 mod lifecycle;
-mod mcarchive;
 mod paths;
-mod planet_minecraft;
 pub(crate) mod projects;
 mod run;
 mod screenshot_groups;
@@ -79,15 +77,7 @@ pub use self::lifecycle::{
     cache_icon, create_with_direct_link, edit, edit_icon, remove,
     sync_direct_links,
 };
-pub use self::mcarchive::{
-    McArchiveContentInstallRequest, McArchiveContentInstallResult,
-    import_mcarchive_content, install_mcarchive_content,
-};
 pub use self::paths::{get_full_path, get_mod_full_path};
-pub use self::planet_minecraft::{
-    PlanetMinecraftContentInstallRequest, PlanetMinecraftContentInstallResult,
-    import_planet_minecraft_content, install_planet_minecraft_content,
-};
 pub(crate) use self::projects::emit_content_changed;
 pub use self::projects::{
     ContentToggleResult, InstallContentBatchRequest, add_project_from_path,
