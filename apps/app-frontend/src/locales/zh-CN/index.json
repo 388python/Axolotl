@@ -6621,7 +6621,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按实际安装平台或归属筛选。单项、选中项、全部和重复副本更新共用依赖预览。使用 + 激活可选依赖，共享需求和已安装依赖也会展示。兼容例外仅适用于所选发布和维度。已记录的更新可从经过核验的历史备份中恢复。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。更新共用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可在“旧文件与备份”中预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -13756,5 +13756,77 @@
   },
   "app.resources.operation.installed-dependency-unavailable": {
     "message": "已有副本已禁用、缺失或不满足要求的发布。请先检查该副本，再继续。"
+  },
+  "app.instance.mods.manage-backups": {
+    "message": "旧文件与备份"
+  },
+  "app.resources.backups.back": {
+    "message": "返回选择"
+  },
+  "app.resources.backups.close": {
+    "message": "关闭"
+  },
+  "app.resources.backups.confirm": {
+    "message": "删除这些备份"
+  },
+  "app.resources.backups.empty": {
+    "message": "没有找到旧文件或回滚备份。"
+  },
+  "app.resources.backups.failed": {
+    "message": "有 {count, number} 个文件未能删除。请重新扫描以核查状态。"
+  },
+  "app.resources.backups.file-size": {
+    "message": "{size, number} 字节"
+  },
+  "app.resources.backups.invalid": {
+    "message": "已记录的备份无法用于回滚"
+  },
+  "app.resources.backups.loading": {
+    "message": "正在核查旧文件…"
+  },
+  "app.resources.backups.missing": {
+    "message": "文件缺失"
+  },
+  "app.resources.backups.orphan": {
+    "message": "没有可用回滚的旧文件"
+  },
+  "app.resources.backups.removed": {
+    "message": "已删除 {count, number} 个文件。"
+  },
+  "app.resources.backups.review": {
+    "message": "预览选中项清理"
+  },
+  "app.resources.backups.scan": {
+    "message": "重新扫描"
+  },
+  "app.resources.backups.summary": {
+    "message": "已选择 {count, number} 项 · {size, number} 字节"
+  },
+  "app.resources.backups.title": {
+    "message": "旧文件与回滚备份"
+  },
+  "app.resources.backups.unknown": {
+    "message": "未知旧文件，无法清理"
+  },
+  "app.resources.backups.valid": {
+    "message": "已核验的回滚备份"
+  },
+  "app.resources.backups.warning": {
+    "message": "删除这些文件将永久失去 {count, number} 份可用回滚备份。当前安装文件会保留。"
+  },
+  "app.settings.resources.chinese-names": {
+    "message": "下载时附加已知中文名"
+  },
+  "app.settings.resources.chinese-names-description": {
+    "message": "有已知中文项目名时，为新下载资源的文件名添加中文前缀。"
+  },
+  "app.settings.resources.preserve-names": {
+    "message": "更新时保留本地前后缀"
+  },
+  "app.settings.resources.preserve-names-description": {
+    "message": "更新和切换版本时只替换已知的原工件文件名。无法准确匹配的自定义名称会完整保留。"
+  },
+  "app.instance.mods.unconfirmed-unlink-history": {
+    "message": "没有明确的解除记录，因此保留了包成员。本地导入包可以没有在线链接；请使用“解除关联”明确取消包归属。"
   }
 }

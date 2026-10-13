@@ -1,4 +1,4 @@
-use super::sync_content_files::join_content_path;
+use super::sync_content_files::{instance_content_root, join_content_path};
 use crate::api::content_search::{
     chinese_file_title_for_modrinth_slug, localized_content_file_name,
 };
@@ -716,11 +716,15 @@ pub(crate) async fn prepare_modrinth_content_change_action(
             action.content_id
         ))
     })?;
-    action.final_relative_path = Some(preserved_update_relative_path(
-        current_path,
-        current_provider_file_name.as_deref(),
-        &target_provider_file_name,
-    )?);
+    action.final_relative_path = Some(
+        configured_update_relative_path(
+            current_path,
+            current_provider_file_name.as_deref(),
+            &target_provider_file_name,
+            &state.pool,
+        )
+        .await?,
+    );
     action.current_provider_file_name = current_provider_file_name;
     action.target_provider_file_name = Some(target_provider_file_name);
     action.files.clear();
@@ -801,7 +805,9 @@ pub(crate) fn preserved_update_relative_path(
             )
         })?;
     let disabled = current_name.ends_with(".disabled");
-    let current_base = current_name.trim_end_matches(".disabled");
+    let current_base = current_name
+        .strip_suffix(".disabled")
+        .unwrap_or(current_name);
     let replacement = match old_provider_file_name {
         Some(old_name) if current_base == old_name => {
             new_provider_file_name.to_string()
@@ -842,6 +848,28 @@ pub(crate) fn preserved_update_relative_path(
     Ok(relative_path)
 }
 
+async fn configured_update_relative_path(
+    current_path: &str,
+    old_name: Option<&str>,
+    new_name: &str,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<String> {
+    let settings = crate::state::Settings::get(pool).await?;
+    let current_name = current_path.rsplit('/').next().unwrap_or(current_path);
+    let current_name = current_name
+        .strip_suffix(".disabled")
+        .unwrap_or(current_name);
+    preserved_update_relative_path(
+        current_path,
+        if settings.resource_preserve_filenames {
+            old_name
+        } else {
+            Some(current_name)
+        },
+        new_name,
+    )
+}
+
 pub(crate) async fn finalize_updated_project_path(
     instance_id: &str,
     old_path: &str,
@@ -850,11 +878,13 @@ pub(crate) async fn finalize_updated_project_path(
     new_provider_file_name: &str,
     state: &State,
 ) -> crate::Result<String> {
-    let desired_path = preserved_update_relative_path(
+    let desired_path = configured_update_relative_path(
         old_path,
         old_provider_file_name,
         new_provider_file_name,
-    )?;
+        &state.pool,
+    )
+    .await?;
     let mut old_archived = false;
     if desired_path == old_path && installed_path != old_path {
         if archive_project_file(instance_id, old_path, installed_path, state)
@@ -1548,8 +1578,7 @@ pub(crate) async fn prepare_version_download(
 
 /// Chooses the instance-relative path for a content file that is about to be
 /// installed. Paths already recorded for this instance always win, so repeat
-/// installs never duplicate a project across locale switches; otherwise the
-/// `[中文名]` candidate is used when the app language is Simplified Chinese.
+/// installs never duplicate a project across naming preference changes.
 pub(crate) async fn resolve_content_install_relative_path(
     instance_id: &str,
     original_relative_path: String,
@@ -1579,7 +1608,10 @@ pub(crate) async fn resolve_content_install_relative_path(
     {
         return Ok(localized_candidate);
     }
-    if crate::state::Settings::get(pool).await?.locale == "zh-CN" {
+    if crate::state::Settings::get(pool)
+        .await?
+        .resource_chinese_filenames
+    {
         return Ok(localized_candidate);
     }
     Ok(original_relative_path)
@@ -1592,6 +1624,13 @@ async fn modrinth_chinese_file_name_candidate(
     file_name: &str,
     state: &State,
 ) -> Option<String> {
+    if !crate::state::Settings::get(&state.pool)
+        .await
+        .ok()?
+        .resource_chinese_filenames
+    {
+        return None;
+    }
     let project = CachedEntry::get_project(
         &ModrinthProjectId::new(project_id.to_string()).ok()?,
         None,
@@ -3666,26 +3705,15 @@ pub(crate) async fn archive_project_file(
     if !full_old.exists() {
         return Ok(None);
     }
-    let directory = Path::new(old_path)
-        .parent()
-        .map(|parent| base.join(parent))
-        .unwrap_or_else(|| base.clone());
-    let old_base = Path::new(old_path)
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .trim_end_matches(".disabled");
     let full_backup = join_content_path(&base, &backup_relative_path);
     if full_backup.exists() {
-        io::remove_file(&full_backup).await?;
+        return Err(crate::ErrorKind::InputError(
+            "Existing backup must be reviewed before it can be replaced".into(),
+        )
+        .into());
     }
     io::rename_or_move(&full_old, &full_backup).await?;
     touch_file_modified_time(&full_backup);
-    let backup_name = Path::new(&backup_relative_path)
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    remove_stale_backups(&directory, old_base, Some(backup_name)).await;
 
     if let Some(file) = content_rows::get_instance_file_by_relative_path(
         &scope.instance.id,
@@ -3716,10 +3744,12 @@ pub(crate) async fn rollback_project(
     project_path: &str,
     state: &State,
 ) -> crate::Result<String> {
-    let _instance_lock = state.lock_instance_content(instance_id).await;
+    let _writer = state.acquire_install_db_permit().await?;
+    let _instance_lock =
+        state.lock_instance_content_exclusive(instance_id).await;
 
     let scope = resolve_content_scope(instance_id, None, state).await?;
-    let base = instance_full_path(state, &scope.instance);
+    let base = instance_content_root(&state.directories, &scope.instance)?;
     content_rows::get_instance_file_by_relative_path(
         &scope.instance.id,
         project_path,
@@ -3744,7 +3774,7 @@ pub(crate) async fn rollback_project(
     let prefix = format!("{active_base}_");
     let folder = base.join(&active_dir);
     let backups = scan_folder_backups(&folder, &prefix)?;
-    let Some((backup_name, _)) = backups.into_iter().min_by(|left, right| {
+    let Some((backup_name, _)) = backups.into_iter().max_by(|left, right| {
         left.1.cmp(&right.1).then_with(|| left.0.cmp(&right.0))
     }) else {
         return Err(crate::ErrorKind::InputError(format!(
@@ -3768,20 +3798,44 @@ pub(crate) async fn rollback_project(
     }
 
     let disabled = active_name.ends_with(".disabled");
-    let full_active = join_content_path(&base, project_path);
-    let full_backup = folder.join(&backup_name);
+    let full_active =
+        crate::resources::execution::checked_path(&base, project_path)?;
+    let full_backup = crate::resources::execution::checked_path(
+        &base,
+        &format!("{active_dir}/{backup_name}"),
+    )?;
     let restored_name = old_base.to_string();
     let restored_relative_path = format!("{active_dir}/{restored_name}");
-    let full_restored = join_content_path(&base, &restored_relative_path);
+    let full_restored = crate::resources::execution::checked_path(
+        &base,
+        &restored_relative_path,
+    )?;
     let archive_name = format!("{old_base}_{active_base}.old");
-    let full_archive = folder.join(&archive_name);
+    let full_archive = crate::resources::execution::checked_path(
+        &base,
+        &format!("{active_dir}/{archive_name}"),
+    )?;
+    let final_path = if disabled {
+        format!("{restored_relative_path}.disabled")
+    } else {
+        restored_relative_path.clone()
+    };
+    let full_final =
+        crate::resources::execution::checked_path(&base, &final_path)?;
+    if full_restored.exists() || full_final.exists() {
+        return Err(crate::ErrorKind::InputError(
+            "Rollback destination already exists".into(),
+        )
+        .into());
+    }
 
     let (restored_size, restored_sha1) =
         fetch::sha1_file_async(&full_backup).await?;
 
     if full_archive.exists() {
-        io::remove_file(&full_archive).await?;
+        return Err(crate::ErrorKind::InputError("Existing rollback archive must be reviewed before it can be replaced".into()).into());
     }
+    let result: crate::Result<String> = async {
     io::rename_or_move(&full_active, &full_archive).await?;
     touch_file_modified_time(&full_archive);
     io::rename_or_move(&full_backup, &full_restored).await?;
@@ -3802,7 +3856,6 @@ pub(crate) async fn rollback_project(
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
-    remove_stale_backups(&folder, active_base, None).await;
 
     let local_mod_data = if project_type_for_file_path(&final_relative_path)
         == Some(ProjectType::Mod)
@@ -3820,16 +3873,9 @@ pub(crate) async fn rollback_project(
         None
     };
 
-    content_rows::rename_instance_file(
-        &scope.instance.id,
-        project_path,
-        &final_relative_path,
-        &final_name,
-        !disabled,
-        &state.pool,
-    )
-    .await?;
-    content_rows::upsert_instance_file_from_parts(
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("UPDATE instance_files SET relative_path = ?, file_name = ?, enabled = ? WHERE instance_id = ? AND relative_path = ?").bind(&final_relative_path).bind(&final_name).bind(!disabled).bind(&scope.instance.id).bind(project_path).execute(&mut *tx).await?;
+    content_rows::upsert_instance_file_from_parts_in_transaction(
         content_rows::UpsertInstanceFile {
             instance_id: &scope.instance.id,
             relative_path: &final_relative_path,
@@ -3841,11 +3887,10 @@ pub(crate) async fn rollback_project(
             local_mod_data: local_mod_data.as_deref(),
             icon_path: None,
         },
-        &state.pool,
+        &mut tx,
     )
     .await?;
 
-    let mut tx = state.pool.begin().await?;
     let entry_id: Option<String> = sqlx::query_scalar("SELECT entry.id FROM instance_content_entries entry JOIN instance_files file ON file.id = entry.file_id WHERE entry.content_set_id = ? AND file.instance_id = ? AND file.relative_path = ?")
         .bind(&scope.content_set_id).bind(&scope.instance.id).bind(&final_relative_path).fetch_optional(&mut *tx).await?;
     if let Some(entry_id) = entry_id {
@@ -3882,29 +3927,16 @@ pub(crate) async fn rollback_project(
     tx.commit().await?;
 
     Ok(final_relative_path)
-}
-
-async fn remove_stale_backups(folder: &Path, base: &str, keep: Option<&str>) {
-    let prefix = format!("{base}_");
-    let Ok(entries) = std::fs::read_dir(folder) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
+    }.await;
+    if result.is_err() && full_archive.exists() {
+        if full_final.exists() {
+            io::rename_or_move(&full_final, &full_backup).await?;
+        } else if full_restored.exists() {
+            io::rename_or_move(&full_restored, &full_backup).await?;
         }
-        let Some(name) = path.file_name().and_then(|value| value.to_str())
-        else {
-            continue;
-        };
-        if name.starts_with(&prefix)
-            && name.ends_with(".old")
-            && keep.is_none_or(|keep| name != keep)
-        {
-            let _ = io::remove_file(&path).await;
-        }
+        io::rename_or_move(&full_archive, &full_active).await?;
     }
+    result
 }
 
 fn scan_folder_backups(

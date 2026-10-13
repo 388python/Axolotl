@@ -67,6 +67,8 @@ async fn clear_staging(
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct JournalFile {
     path: String,
+    #[serde(default)]
+    previous_path: Option<String>,
     backup: Option<String>,
     old: Option<ArtifactIntegrity>,
     target: ArtifactIntegrity,
@@ -207,7 +209,24 @@ async fn recover_files(
                 {
                     return Err(input("resource file changed during recovery"));
                 }
-                restore_project_materialization(&path, Some(&backup)).await?;
+                let previous = checked_path(
+                    root,
+                    file.previous_path.as_deref().unwrap_or(&file.path),
+                )?;
+                if previous != path {
+                    if previous.exists()
+                        && !matches_file(&previous, old).await?
+                    {
+                        return Err(input(
+                            "original resource path changed during recovery",
+                        ));
+                    }
+                    if path.exists() {
+                        tokio::fs::remove_file(&path).await?;
+                    }
+                }
+                restore_project_materialization(&previous, Some(&backup))
+                    .await?;
             }
         } else if path.exists() {
             if !matches_file(&path, &file.target).await? {
@@ -467,10 +486,12 @@ pub(crate) async fn execute(
     for (index, action) in plan.actions.iter().enumerate() {
         let destination = checked_path(&root, &action.target_relative_path)?;
         if let Some(current) = &action.current {
-            if current.relative_path != action.target_relative_path
-                || !matches_file(&destination, &current.integrity).await?
-            {
+            let previous = checked_path(&root, &current.relative_path)?;
+            if !matches_file(&previous, &current.integrity).await? {
                 return Err(input("installed artifact changed since review"));
+            }
+            if previous != destination && destination.exists() {
+                return Err(input("resource destination already exists"));
             }
             let parent = action
                 .target_relative_path
@@ -484,6 +505,7 @@ pub(crate) async fn execute(
             }
             journal.push(JournalFile {
                 path: action.target_relative_path.clone(),
+                previous_path: Some(current.relative_path.clone()),
                 backup: Some(backup),
                 old: Some(current.integrity.clone()),
                 target: action.target.integrity.clone(),
@@ -494,6 +516,7 @@ pub(crate) async fn execute(
             }
             journal.push(JournalFile {
                 path: action.target_relative_path.clone(),
+                previous_path: None,
                 backup: None,
                 old: None,
                 target: action.target.integrity.clone(),
@@ -533,8 +556,14 @@ pub(crate) async fn execute(
         {
             let destination = checked_path(&root, &file.path)?;
             if let Some(backup) = &file.backup {
-                tokio::fs::rename(&destination, checked_path(&root, backup)?)
-                    .await?;
+                tokio::fs::rename(
+                    checked_path(
+                        &root,
+                        file.previous_path.as_deref().unwrap_or(&file.path),
+                    )?,
+                    checked_path(&root, backup)?,
+                )
+                .await?;
             }
             materialize_verified_project_download_copy(
                 source,
@@ -688,6 +717,10 @@ async fn persist_plan(
         } else {
             None
         };
+        if let Some(current) = &action.current {
+            sqlx::query("UPDATE instance_files SET relative_path = ?, file_name = ? WHERE id = (SELECT file_id FROM instance_content_entries WHERE id = ?) AND instance_id = ? AND relative_path = ?")
+                .bind(&action.target_relative_path).bind(file_name).bind(id).bind(&plan.instance_id).bind(&current.relative_path).execute(&mut *tx).await?;
+        }
         let disk_file =
             content_rows::upsert_instance_file_from_parts_in_transaction(
                 content_rows::UpsertInstanceFile {
@@ -742,7 +775,15 @@ async fn persist_plan(
             .get_entry();
         crate::state::CachedEntry::upsert_many(&[cache], &mut *tx).await?;
         sqlx::query("UPDATE instance_files SET local_mod_data = ?, icon_path = NULL WHERE id = ?").bind(&local_mod_data).bind(&disk_file.id).execute(&mut *tx).await?;
-        let old_digest: Option<String> = sqlx::query_scalar("SELECT digest FROM store_instance_files WHERE instance_id = ? AND relative_path = ?").bind(&plan.instance_id).bind(&action.target_relative_path).fetch_optional(&mut *tx).await?;
+        let old_path = action
+            .current
+            .as_ref()
+            .map(|current| current.relative_path.as_str())
+            .unwrap_or(&action.target_relative_path);
+        let old_digest: Option<String> = sqlx::query_scalar("SELECT digest FROM store_instance_files WHERE instance_id = ? AND relative_path = ?").bind(&plan.instance_id).bind(old_path).fetch_optional(&mut *tx).await?;
+        if old_path != action.target_relative_path {
+            sqlx::query("DELETE FROM store_instance_files WHERE instance_id = ? AND relative_path = ?").bind(&plan.instance_id).bind(old_path).execute(&mut *tx).await?;
+        }
         sqlx::query("INSERT INTO store_instance_files(instance_id, relative_path, digest, created_at, modified_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(instance_id, relative_path) DO UPDATE SET digest = excluded.digest, modified_at = excluded.modified_at").bind(&plan.instance_id).bind(&action.target_relative_path).bind(digest).bind(now.timestamp()).bind(now.timestamp()).execute(&mut *tx).await?;
         if let Some(existing) = existing {
             if existing.file_id.as_deref() != Some(&disk_file.id)
@@ -801,7 +842,20 @@ async fn persist_plan(
             let metadata: crate::state::ContentEntry = serde_json::from_value(
                 restore["restoreEntryMetadata"].clone(),
             )?;
-            sqlx::query("UPDATE instance_content_entries SET ownership_kind = ?, source_kind = ?, auto_dependency = ?, server_requirement = ?, client_requirement = ? WHERE id = ?").bind(metadata.ownership_kind.as_str()).bind(metadata.source_kind.as_str()).bind(metadata.auto_dependency as i64).bind(metadata.server_requirement.as_str()).bind(metadata.client_requirement.as_str()).bind(id).execute(&mut *tx).await?;
+            let unlinked: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM resource_pack_unlinks WHERE instance_id = ? AND content_set_id = ?)").bind(&plan.instance_id).bind(set_id).fetch_one(&mut *tx).await?;
+            let ownership = if unlinked != 0
+                && metadata.ownership_kind == ContentOwnershipKind::PackManaged
+            {
+                ContentOwnershipKind::UserAdded
+            } else {
+                metadata.ownership_kind
+            };
+            let source = if unlinked != 0 {
+                ContentSourceKind::Local
+            } else {
+                metadata.source_kind
+            };
+            sqlx::query("UPDATE instance_content_entries SET ownership_kind = ?, source_kind = ?, auto_dependency = ?, server_requirement = ?, client_requirement = ? WHERE id = ?").bind(ownership.as_str()).bind(source.as_str()).bind(metadata.auto_dependency as i64).bind(metadata.server_requirement.as_str()).bind(metadata.client_requirement.as_str()).bind(id).execute(&mut *tx).await?;
         }
         let mut verified_artifact = action.target.clone();
         if !verified_artifact
@@ -848,6 +902,7 @@ async fn persist_plan(
                 });
             }
             target.original_file_name = action.target.file_name.clone();
+            target.relative_path = action.target_relative_path.clone();
             target.missing = false;
             let mut history = history::history_entry(
                 &plan.instance_id,
@@ -929,8 +984,13 @@ async fn persist_plan(
         {
             let member: crate::state::PackMember =
                 serde_json::from_value(member.clone())?;
-            content_rows::upsert_pack_member_in_transaction(&member, &mut tx)
+            let unlinked: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM resource_pack_unlinks WHERE instance_id = ? AND content_set_id = ?)").bind(&plan.instance_id).bind(set_id).fetch_one(&mut *tx).await?;
+            if unlinked == 0 {
+                content_rows::upsert_pack_member_in_transaction(
+                    &member, &mut tx,
+                )
                 .await?;
+            }
         }
         sqlx::query("UPDATE resource_entry_graphs SET nodes = ?, edges = ? WHERE entry_id = ?").bind(serde_json::to_string(&previous.previous_nodes)?).bind(serde_json::to_string(&previous.previous_dependencies)?).bind(previous.entry_id.as_str()).execute(&mut *tx).await?;
         sqlx::query("UPDATE resource_history SET backup_available = 0, payload = ? WHERE id = ?").bind(payload.to_string()).bind(id.as_str()).execute(&mut *tx).await?;

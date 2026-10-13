@@ -73,6 +73,9 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             resource_revise_plan,
             resource_queue_plan,
             resource_list_history,
+            resource_scan_backups,
+            resource_prepare_history_cleanup,
+            resource_execute_history_cleanup,
             resource_export_scan,
             resource_export_refresh,
             resource_export_refresh_retry,
@@ -348,6 +351,35 @@ pub async fn resource_rollback(
             history_id,
         )
         .await?,
+    )
+}
+
+#[tauri::command]
+pub async fn resource_scan_backups(
+    instance_id: String,
+) -> Result<Vec<ResourceBackupFile>> {
+    Ok(theseus::resources::history_cleanup::scan(instance_id).await?)
+}
+
+#[tauri::command]
+pub async fn resource_prepare_history_cleanup(
+    instance_id: String,
+    history_ids: Vec<HistoryId>,
+) -> Result<ResourceHistoryCleanupPlan> {
+    Ok(
+        theseus::resources::history_cleanup::prepare(instance_id, history_ids)
+            .await?,
+    )
+}
+
+#[tauri::command]
+pub async fn resource_execute_history_cleanup(
+    cleanup_plan_id: PlanId,
+    revision: u32,
+) -> Result<ResourceHistoryCleanupResult> {
+    Ok(
+        theseus::resources::history_cleanup::execute(cleanup_plan_id, revision)
+            .await?,
     )
 }
 

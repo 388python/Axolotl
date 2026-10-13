@@ -153,8 +153,30 @@
             <template #header>{{ formatMessage(messages.contentRefreshWarningTitle) }}</template>
             <div class="border-0 border-t border-solid mods-admonition-body bg-bg-orange p-4">
                 <p class="m-0">{{ formatMessage(messages.contentRefreshWarningBody) }}</p>
+                <p
+                    v-if="
+                        contentWarnings.some(
+                            (warning) => warning.code === 'pack_unlink_history_unconfirmed',
+                        )
+                    "
+                    class="mb-0"
+                >
+                    {{ formatMessage(messages.unconfirmedUnlinkHistory) }}
+                </p>
             </div>
         </CollapsibleAdmonition>
+        <div
+            v-if="
+                !instance.linked_dot_minecraft &&
+                !instance.symlink_target &&
+                !instance.game_dir_override
+            "
+            class="mb-3 flex justify-end"
+        >
+            <Button @click="resourceBackupsModal?.show(instance.id)">{{
+                formatMessage(messages.manageBackups)
+            }}</Button>
+        </div>
         <ContentPageLayout @visible-items="handleVisibleItems">
             <template #modals>
                 <ContentToggleDependenciesModal ref="toggleDependenciesModal" />
@@ -188,6 +210,10 @@
                 />
                 <ResourceOperationPreviewModal ref="resourceOperationPreview" />
                 <ResourceHistoryModal ref="resourceHistoryModal" />
+                <ResourceBackupsModal
+                    ref="resourceBackupsModal"
+                    @cleaned="refreshContentState('bypass')"
+                />
                 <ExportModal v-if="projects.length > 0" ref="exportModal" :instance="instance" />
                 <ContentUpdaterModal
                     v-if="updatingProject || updatingModpack"
@@ -275,6 +301,7 @@ import { useRouter } from 'vue-router'
 import DependencyGraphModal from '@/components/instance/dependencies/DependencyGraphModal.vue'
 import ExportModal from '@/components/ui/ExportModal.vue'
 import ContentToggleDependenciesModal from '@/components/ui/modal/ContentToggleDependenciesModal.vue'
+import ResourceBackupsModal from '@/components/ui/ResourceBackupsModal.vue'
 import ResourceHistoryModal from '@/components/ui/ResourceHistoryModal.vue'
 import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import { postUpgradeNoticeQueryKey, usePostUpgradeNotice } from '@/composables/usePostUpgradeNotice'
@@ -348,6 +375,15 @@ import { injectDownloadManager } from '@/providers/download-manager'
 import { useTheming } from '@/store/state'
 
 const messages = defineMessages({
+    unconfirmedUnlinkHistory: {
+        id: 'app.instance.mods.unconfirmed-unlink-history',
+        defaultMessage:
+            'Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly.',
+    },
+    manageBackups: {
+        id: 'app.instance.mods.manage-backups',
+        defaultMessage: 'Old files and backups',
+    },
     updateDuplicateGroup: {
         id: 'app.resources.update-duplicate-group',
         defaultMessage: 'Review updates for all {count, number} copies',
@@ -1092,6 +1128,7 @@ const resourceOperationPreview = ref<InstanceType<typeof ResourceOperationPrevie
     null,
 )
 const resourceHistoryModal = ref<InstanceType<typeof ResourceHistoryModal> | null>(null)
+const resourceBackupsModal = ref<InstanceType<typeof ResourceBackupsModal> | null>(null)
 const contentUpdaterModal = ref<InstanceType<typeof ContentUpdaterModal> | null>()
 const dependencyGraphModal = ref<InstanceType<typeof DependencyGraphModal> | null>()
 const modpackUpdateConfirmModal = ref<InstanceType<typeof ConfirmModpackUpdateModal> | null>()

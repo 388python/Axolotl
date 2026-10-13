@@ -445,6 +445,38 @@ export function resourceRollback(instanceId: string, entryId: string, historyId:
         historyId,
     })
 }
+export type ResourceBackupFile = {
+    id: string
+    historyId: string | null
+    relativePath: string
+    integrity: ResourceArtifact['integrity']
+    rollbackAvailable: boolean
+    recognized: boolean
+    exists: boolean
+}
+export type ResourceHistoryCleanupPlan = {
+    id: string
+    revision: number
+    instanceId: string
+    files: ResourceBackupFile[]
+}
+export function resourceScanBackups(instanceId: string) {
+    return invoke<ResourceBackupFile[]>('plugin:axolotl-resources|resource_scan_backups', {
+        instanceId,
+    })
+}
+export function resourcePrepareHistoryCleanup(instanceId: string, historyIds: string[]) {
+    return invoke<ResourceHistoryCleanupPlan>(
+        'plugin:axolotl-resources|resource_prepare_history_cleanup',
+        { instanceId, historyIds },
+    )
+}
+export function resourceExecuteHistoryCleanup(cleanupPlanId: string, revision: number) {
+    return invoke<{ removed: string[]; failures: [string, string][] }>(
+        'plugin:axolotl-resources|resource_execute_history_cleanup',
+        { cleanupPlanId, revision },
+    )
+}
 export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {
     return behavior === 'bypass'
         ? 'forceRefresh'

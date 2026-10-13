@@ -178,6 +178,9 @@ pub enum ResourceCommand {
         instance_id: String,
         entry_id: InstalledEntryId,
     },
+    ResourceScanBackups {
+        instance_id: String,
+    },
     ResourcePrepareHistoryCleanup {
         instance_id: String,
         history_ids: Vec<HistoryId>,
@@ -250,8 +253,9 @@ pub enum ResourceResponse {
     ResourceRevisePlan(ResourceOperationPlan),
     ResourceQueuePlan(JobId),
     ResourceListHistory(Vec<ResourceHistoryEntry>),
+    ResourceScanBackups(Vec<ResourceBackupFile>),
     ResourcePrepareHistoryCleanup(ResourceHistoryCleanupPlan),
-    ResourceExecuteHistoryCleanup,
+    ResourceExecuteHistoryCleanup(ResourceHistoryCleanupResult),
     ResourceRollback(JobId),
     ResourceExportScan(ResourceExportScan),
     ResourceExportRefresh(ExportResolutionSession),

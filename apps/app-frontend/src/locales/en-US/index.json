@@ -6663,7 +6663,7 @@
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by its actual installation platform or ownership. Single, selected, all, and duplicate-copy updates share a dependency preview. Use + to activate optional dependencies; shared requirements and installed dependencies remain visible. Compatibility exceptions apply only to the selected release and dimension. Recorded updates can be restored from their verified history backups."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or use Old files and backups to review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -13744,5 +13744,77 @@
   },
   "app.resources.operation.installed-dependency-unavailable": {
     "message": "An installed copy is disabled, missing, or does not satisfy the required release. Review that copy before continuing."
+  },
+  "app.instance.mods.manage-backups": {
+    "message": "Old files and backups"
+  },
+  "app.resources.backups.back": {
+    "message": "Back to selection"
+  },
+  "app.resources.backups.close": {
+    "message": "Close"
+  },
+  "app.resources.backups.confirm": {
+    "message": "Delete these backups"
+  },
+  "app.resources.backups.empty": {
+    "message": "No old files or rollback backups found."
+  },
+  "app.resources.backups.failed": {
+    "message": "{count, number} files could not be deleted. Scan again to check their state."
+  },
+  "app.resources.backups.file-size": {
+    "message": "{size, number} bytes"
+  },
+  "app.resources.backups.invalid": {
+    "message": "Recorded backup unavailable for rollback"
+  },
+  "app.resources.backups.loading": {
+    "message": "Checking old files…"
+  },
+  "app.resources.backups.missing": {
+    "message": "File missing"
+  },
+  "app.resources.backups.orphan": {
+    "message": "Old file without an available rollback"
+  },
+  "app.resources.backups.removed": {
+    "message": "{count, number} files deleted."
+  },
+  "app.resources.backups.review": {
+    "message": "Review selected cleanup"
+  },
+  "app.resources.backups.scan": {
+    "message": "Scan again"
+  },
+  "app.resources.backups.summary": {
+    "message": "{count, number} selected · {size, number} bytes"
+  },
+  "app.resources.backups.title": {
+    "message": "Old files and rollback backups"
+  },
+  "app.resources.backups.unknown": {
+    "message": "Unknown old file — cleanup unavailable"
+  },
+  "app.resources.backups.valid": {
+    "message": "Verified rollback backup"
+  },
+  "app.resources.backups.warning": {
+    "message": "Deleting these files permanently removes {count, number} available rollback backups. Current installed files are kept."
+  },
+  "app.settings.resources.chinese-names": {
+    "message": "Add known Chinese names to downloads"
+  },
+  "app.settings.resources.chinese-names-description": {
+    "message": "Prefix new resource filenames with the known Chinese project name, when available."
+  },
+  "app.settings.resources.preserve-names": {
+    "message": "Preserve local prefixes and suffixes when updating"
+  },
+  "app.settings.resources.preserve-names-description": {
+    "message": "Updates and version changes replace only the known original filename. Custom names that cannot be matched are kept intact."
+  },
+  "app.instance.mods.unconfirmed-unlink-history": {
+    "message": "Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly."
   }
 }

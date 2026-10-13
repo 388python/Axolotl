@@ -160,7 +160,22 @@ pub async fn rollback(
     history_id: HistoryId,
 ) -> ResourceResult<crate::install::InstallJobSnapshot> {
     let state = crate::State::get().await?;
-    let histories = list(instance_id.clone(), Some(entry_id.clone())).await?;
+    let draft =
+        prepare_rollback(instance_id.clone(), entry_id, history_id, &state)
+            .await?;
+    let id = draft.plan.id.clone();
+    sqlx::query("INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES (?, ?, 1, ?)").bind(id.as_str()).bind(&instance_id).bind(serde_json::to_string(&draft)?).execute(&state.pool).await.map_err(db)?;
+    plans::queue(id, 1).await
+}
+
+pub(crate) async fn prepare_rollback(
+    instance_id: String,
+    entry_id: InstalledEntryId,
+    history_id: HistoryId,
+    state: &crate::State,
+) -> ResourceResult<plans::OperationDraft> {
+    let histories =
+        list_with_state(&instance_id, Some(&entry_id), state).await?;
     let history = histories
         .iter()
         .find(|entry| entry.id == history_id && entry.backup_available)
@@ -185,6 +200,16 @@ pub async fn rollback(
             })?,
         )?;
     let artifact = record.artifact;
+    if !identity::exact_integrity(
+        &artifact.integrity,
+        &history.previous.integrity,
+    ) || history.previous.artifact.as_ref() != Some(&artifact.reference)
+        || !plans::safe_relative_path(&history.previous.relative_path)
+    {
+        return Err(ResourceError::InvalidRequest(
+            "rollback metadata disagrees with the verified backup".into(),
+        ));
+    }
     let current = plans::installed(&state.pool, &instance_id)
         .await?
         .into_iter()
@@ -250,7 +275,7 @@ pub async fn rollback(
             node_id,
             kind: ResourceActionKind::Replace,
             target: artifact,
-            target_relative_path: current.relative_path.clone(),
+            target_relative_path: history.previous.relative_path.clone(),
             current: Some(current),
         }],
         issues: vec![],
@@ -258,6 +283,7 @@ pub async fn rollback(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
+        naming: Default::default(),
         plan: plan.clone(),
         install_dependencies: false,
         candidates: vec![],
@@ -267,8 +293,7 @@ pub async fn rollback(
         )]),
         restore_history: Some(history_id),
     };
-    sqlx::query("INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES (?, ?, 1, ?)").bind(id.as_str()).bind(&instance_id).bind(serde_json::to_string(&draft)?).execute(&state.pool).await.map_err(db)?;
-    plans::queue(id, 1).await
+    Ok(draft)
 }
 
 pub(crate) fn history_entry(

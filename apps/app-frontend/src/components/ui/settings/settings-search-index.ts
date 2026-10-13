@@ -615,6 +615,24 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         keywords: [message('app.settings.tabs.resource-management', 'Resource management')],
     },
     {
+        id: 'resources-chinese-names',
+        categoryId: 'content-downloads',
+        targetId: 'settings-target-resources-chinese-names',
+        label: message(
+            'app.settings.resources.chinese-names',
+            'Add known Chinese names to downloads',
+        ),
+    },
+    {
+        id: 'resources-preserve-names',
+        categoryId: 'content-downloads',
+        targetId: 'settings-target-resources-preserve-names',
+        label: message(
+            'app.settings.resources.preserve-names',
+            'Preserve local prefixes and suffixes when updating',
+        ),
+    },
+    {
         id: 'resources-data-storage',
         categoryId: 'storage-backups',
         targetId: 'settings-target-resources-data-storage',

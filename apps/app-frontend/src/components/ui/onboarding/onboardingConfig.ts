@@ -331,7 +331,7 @@ export const onboardingMessages = defineMessages({
     instanceTabsDescription: {
         id: 'app.onboarding.instance-tabs.description',
         defaultMessage:
-            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by its actual installation platform or ownership. Single, selected, all, and duplicate-copy updates share a dependency preview. Use + to activate optional dependencies; shared requirements and installed dependencies remain visible. Compatibility exceptions apply only to the selected release and dimension. Recorded updates can be restored from their verified history backups.',
+            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or use Old files and backups to review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
     },
     labTitle: {
         id: 'app.onboarding.lab.title',

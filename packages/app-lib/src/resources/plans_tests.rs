@@ -63,6 +63,73 @@ async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
 }
 
 #[tokio::test]
+async fn updates_preview_renamed_paths_and_report_collisions_when_name_preservation_is_disabled()
+ {
+    let old = release("root0000", "1", 'a');
+    let new = release("root0000", "2", 'b');
+    let (_directory, service) = service(vec![old.clone(), new.clone()]).await;
+    let entry = installed(
+        &old,
+        "entry",
+        "mods/[用途] root0000-1.jar-copy.jar.disabled",
+    );
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("root", &new, Some("entry"))],
+                ResourceOperationIntent::Update,
+            ),
+            &target(),
+            &[entry.clone()],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert_eq!(
+        plan.actions[0].target_relative_path,
+        "mods/[用途] root0000-2.jar-copy.jar.disabled"
+    );
+    let mut disabled = draft(
+        vec![selection("root", &new, Some("entry"))],
+        ResourceOperationIntent::SwitchVersion,
+    );
+    disabled.naming.preserve = false;
+    let plan = service
+        .build_operation(
+            disabled.clone(),
+            &target(),
+            &[entry.clone()],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert_eq!(
+        plan.actions[0].target_relative_path,
+        "mods/root0000-2.jar.disabled"
+    );
+    let other = installed(&old, "other", "mods/root0000-2.jar.disabled");
+    let plan = service
+        .build_operation(
+            disabled,
+            &target(),
+            &[entry, other],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(
+        plan.issues
+            .iter()
+            .any(|issue| issue.code == ResourceIssueCode::InvalidPath
+                && issue.blocking)
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn newly_verified_cross_source_dependency_merges_nodes_and_retains_both_parents()
  {
     cross_source_dependency_plan(false, false, None).await;
@@ -609,6 +676,7 @@ fn draft(
     intent: ResourceOperationIntent,
 ) -> OperationDraft {
     OperationDraft {
+        naming: Default::default(),
         plan: ResourceOperationPlan {
             schema_version: ResourceContractVersion,
             id: PlanId::new("plan").unwrap(),

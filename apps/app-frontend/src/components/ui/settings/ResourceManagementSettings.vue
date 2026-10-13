@@ -138,6 +138,24 @@ async function testProxy() {
 }
 
 const messages = defineMessages({
+    chineseNames: {
+        id: 'app.settings.resources.chinese-names',
+        defaultMessage: 'Add known Chinese names to downloads',
+    },
+    chineseNamesDescription: {
+        id: 'app.settings.resources.chinese-names-description',
+        defaultMessage:
+            'Prefix new resource filenames with the known Chinese project name, when available.',
+    },
+    preserveNames: {
+        id: 'app.settings.resources.preserve-names',
+        defaultMessage: 'Preserve local prefixes and suffixes when updating',
+    },
+    preserveNamesDescription: {
+        id: 'app.settings.resources.preserve-names-description',
+        defaultMessage:
+            'Updates and version changes replace only the known original filename. Custom names that cannot be matched are kept intact.',
+    },
     preferredResourceSource: {
         id: 'app.resources.preferred-source',
         defaultMessage: 'Preferred resource source',
@@ -917,6 +935,36 @@ function validateMinecraftDirectory(_value) {
                         v-model="resourceSourceChoice"
                         :options="resourceSourceOptions"
                         :disabled="savingResourceSource"
+                /></template>
+            </SettingsRow>
+            <SettingsRow>
+                <template #label
+                    ><span id="settings-target-resources-chinese-names" tabindex="-1">{{
+                        formatMessage(messages.chineseNames)
+                    }}</span></template
+                >
+                <template #description>{{
+                    formatMessage(messages.chineseNamesDescription)
+                }}</template>
+                <template #control
+                    ><Toggle
+                        id="resource-chinese-filenames"
+                        v-model="settings.resource_chinese_filenames"
+                /></template>
+            </SettingsRow>
+            <SettingsRow>
+                <template #label
+                    ><span id="settings-target-resources-preserve-names" tabindex="-1">{{
+                        formatMessage(messages.preserveNames)
+                    }}</span></template
+                >
+                <template #description>{{
+                    formatMessage(messages.preserveNamesDescription)
+                }}</template>
+                <template #control
+                    ><Toggle
+                        id="resource-preserve-filenames"
+                        v-model="settings.resource_preserve_filenames"
                 /></template>
             </SettingsRow>
             <template #header>

@@ -4,13 +4,15 @@ pub use content_management::resources::*;
 
 pub mod cache;
 pub mod catalog;
-mod execution;
+pub(crate) mod execution;
 pub mod export;
 pub mod favorites;
 pub mod history;
+pub mod history_cleanup;
 pub mod identity;
 pub mod installed;
 pub(crate) mod legacy_catalog;
+mod naming;
 pub(crate) mod packs;
 pub mod plans;
 pub(crate) mod protocol;

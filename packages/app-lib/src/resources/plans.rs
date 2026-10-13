@@ -9,6 +9,8 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct OperationDraft {
+    #[serde(default)]
+    pub naming: super::naming::NamingPreferences,
     pub plan: ResourceOperationPlan,
     pub install_dependencies: bool,
     pub candidates: Vec<ResourceSelection>,
@@ -1355,7 +1357,43 @@ impl ResourceService {
                 }
                 Ok(_path) if is_entry_update => {
                     if let Some(current) = current {
-                        let target_path = current.relative_path.clone();
+                        let target_path = super::naming::replacement_path(
+                            current,
+                            artifact.file_name.as_deref().ok_or_else(|| {
+                                invalid("artifact has no filename")
+                            })?,
+                            draft.naming.preserve,
+                        )?;
+                        let target_path = if draft.naming.preserve {
+                            target_path
+                        } else {
+                            self.named_path(
+                                target_path,
+                                &artifact,
+                                &draft.naming,
+                            )
+                            .await?
+                        };
+                        if installed.iter().any(|item| {
+                            item.entry_id != current.entry_id
+                                && item
+                                    .relative_path
+                                    .eq_ignore_ascii_case(&target_path)
+                                && !item.missing
+                        }) || draft.plan.actions.iter().any(|action| {
+                            action
+                                .target_relative_path
+                                .eq_ignore_ascii_case(&target_path)
+                        }) {
+                            issue(
+                                &mut draft.plan,
+                                ResourceIssueCode::InvalidPath,
+                                &selection.id,
+                                true,
+                                format!("target already exists: {target_path}"),
+                            );
+                            continue;
+                        }
                         if (draft.plan.intent
                             == ResourceOperationIntent::SwitchVersion
                             && current.artifact.as_ref()
@@ -1377,6 +1415,8 @@ impl ResourceService {
                     }
                 }
                 Ok(path) if satisfied.is_none() => {
+                    let path =
+                        self.named_path(path, &artifact, &draft.naming).await?;
                     if installed.iter().any(|item| {
                         item.relative_path.eq_ignore_ascii_case(&path)
                             && !item.missing
@@ -1956,6 +1996,13 @@ pub(crate) async fn prepare_with_installed(
         .map(|selection| selection.id.clone())
         .collect();
     let draft = OperationDraft {
+        naming: {
+            let settings = crate::state::Settings::get(&state.pool).await?;
+            super::naming::NamingPreferences {
+                chinese: settings.resource_chinese_filenames,
+                preserve: settings.resource_preserve_filenames,
+            }
+        },
         install_dependencies,
         candidates: vec![],
         local_files: HashMap::new(),

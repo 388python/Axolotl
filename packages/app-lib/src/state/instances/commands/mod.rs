@@ -16,7 +16,7 @@ pub use self::edit_instance::{
     AppliedContentSetPatch, EditInstance, InstanceLaunchOverridesPatch,
 };
 pub(crate) use self::edit_instance::{
-    edit_instance, restore_instance_metadata,
+    edit_instance, repair_recorded_pack_unlink, restore_instance_metadata,
 };
 
 mod get_instance;

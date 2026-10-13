@@ -42,6 +42,7 @@ function hide() {
 function show(instanceId: string, entryId: string): Promise<InstallJobSnapshot | null> {
     hide()
     const current = generation
+    queueing.value = false
     entries.value = []
     error.value = null
     busy.value = true
@@ -68,8 +69,10 @@ async function rollback(entry: ResourceHistoryEntry) {
     if (queueing.value) return
     queueing.value = true
     error.value = null
+    const current = generation
     try {
         const job = await resourceRollback(entry.instanceId, entry.entryId, entry.id)
+        if (current !== generation) return
         const resolve = resolveShow
         resolveShow = null
         queueing.value = false
@@ -77,9 +80,9 @@ async function rollback(entry: ResourceHistoryEntry) {
         await modal.value?.hide()
         resolve?.(job)
     } catch (failure) {
-        error.value = resourceOperationError(failure)
+        if (current === generation) error.value = resourceOperationError(failure)
     } finally {
-        queueing.value = false
+        if (current === generation) queueing.value = false
     }
 }
 onBeforeUnmount(hide)

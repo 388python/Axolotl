@@ -295,4 +295,25 @@ pub struct ResourceHistoryCleanupPlan {
     pub instance_revision: u64,
     pub entries: Vec<ResourceHistoryEntry>,
     pub issues: Vec<ResourcePlanIssue>,
+    #[serde(default)]
+    pub files: Vec<ResourceBackupFile>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceBackupFile {
+    pub id: HistoryId,
+    pub history_id: Option<HistoryId>,
+    pub relative_path: String,
+    pub integrity: ArtifactIntegrity,
+    pub rollback_available: bool,
+    pub recognized: bool,
+    pub exists: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceHistoryCleanupResult {
+    pub removed: Vec<HistoryId>,
+    pub failures: Vec<(HistoryId, String)>,
 }
