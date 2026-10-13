@@ -1,7 +1,10 @@
 import type { ContentItem } from '@modrinth/ui'
+import { confirmedContentGroupKey } from '@modrinth/ui'
 
 import type { InstallJobSnapshot } from './install'
 import type { SourceReleaseRef } from './resources'
+
+export { confirmedContentGroupKey } from '@modrinth/ui'
 
 export interface ResourceEntryReview {
     instanceId: string
@@ -27,14 +30,6 @@ export async function reviewResourceEntryChanges(
     if (!job) return false
     track(job)
     return true
-}
-
-export function confirmedContentGroupKey(item: ContentItem): string | null {
-    if (!item.instanceResourceId) return null
-    const path = item.file_path?.replaceAll('\\', '/') ?? ''
-    const world = path.match(/^saves\/[^/]+\/datapacks\//)?.[0]
-    if (item.project_type === 'datapack' && !world) return null
-    return JSON.stringify([item.instanceResourceId, item.project_type, world ?? 'instance'])
 }
 
 export function duplicateGroupUpdateEntries(items: ContentItem[], anchor: ContentItem): string[] {

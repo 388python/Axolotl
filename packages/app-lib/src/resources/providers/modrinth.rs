@@ -433,6 +433,9 @@ impl ModrinthProvider {
                     "/project/{}/version",
                     urlencoding::encode(project_id.as_str())
                 ));
+                request
+                    .query
+                    .push(("include_changelog".into(), "false".into()));
                 if !target.game_versions.is_empty() {
                     request.query.push((
                         "game_versions".into(),

@@ -192,25 +192,27 @@
                         <div class="h-px bg-divider" />
 
                         <div class="flex-1 min-h-0 bg-bg p-4 overflow-y-auto">
-                            <div
-                                v-if="loadingChangelog"
-                                class="flex flex-col items-center justify-center h-full gap-2"
-                            >
-                                <SpinnerIcon
-                                    class="h-6 w-6 animate-spin text-[var(--color-text-tertiary)]"
+                            <slot name="changelog" :version="selectedVersion">
+                                <div
+                                    v-if="loadingChangelog"
+                                    class="flex flex-col items-center justify-center h-full gap-2"
+                                >
+                                    <SpinnerIcon
+                                        class="h-6 w-6 animate-spin text-[var(--color-text-tertiary)]"
+                                    />
+                                    <span class="text-sm text-[var(--color-text-tertiary)]">{{
+                                        formatMessage(messages.loadingChangelog)
+                                    }}</span>
+                                </div>
+                                <div
+                                    v-else-if="selectedVersion.changelog"
+                                    class="markdown [&_img]:max-w-full [&_img]:h-auto"
+                                    v-html="renderHighlightedString(selectedVersion.changelog)"
                                 />
-                                <span class="text-sm text-[var(--color-text-tertiary)]">{{
-                                    formatMessage(messages.loadingChangelog)
-                                }}</span>
-                            </div>
-                            <div
-                                v-else-if="selectedVersion.changelog"
-                                class="markdown [&_img]:max-w-full [&_img]:h-auto"
-                                v-html="renderHighlightedString(selectedVersion.changelog)"
-                            />
-                            <div v-else class="text-[var(--color-text-tertiary)] italic">
-                                {{ formatMessage(messages.noChangelog) }}
-                            </div>
+                                <div v-else class="text-[var(--color-text-tertiary)] italic">
+                                    {{ formatMessage(messages.noChangelog) }}
+                                </div>
+                            </slot>
                         </div>
 
                         <div

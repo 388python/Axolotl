@@ -240,14 +240,18 @@
                             : (updatingProject?.project?.title ?? updatingProject?.file_name)
                     "
                     :loading="loadingVersions"
-                    :loading-changelog="loadingChangelog"
                     :action-loading="contentUpdateSubmitting"
                     :hide-on-update="false"
                     @update="handleModalUpdate"
                     @cancel="resetUpdateState"
-                    @version-select="handleVersionSelect"
-                    @version-hover="handleVersionHover"
-                />
+                >
+                    <template #changelog="{ version }">
+                        <ResourceReleaseChangelog
+                            v-if="updaterChangelogRef(version)"
+                            :release="updaterChangelogRef(version)!"
+                        />
+                    </template>
+                </ContentUpdaterModal>
             </template>
         </ContentPageLayout>
     </ReadyTransition>
@@ -258,7 +262,6 @@ import type { Labrinth } from '@modrinth/api-client'
 import {
     BookOpenIcon,
     ClipboardCopyIcon,
-    DownloadIcon,
     ExternalIcon,
     FileIcon,
     FolderOpenIcon,
@@ -304,6 +307,7 @@ import ContentToggleDependenciesModal from '@/components/ui/modal/ContentToggleD
 import ResourceBackupsModal from '@/components/ui/ResourceBackupsModal.vue'
 import ResourceHistoryModal from '@/components/ui/ResourceHistoryModal.vue'
 import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
+import ResourceReleaseChangelog from '@/components/ui/ResourceReleaseChangelog.vue'
 import { postUpgradeNoticeQueryKey, usePostUpgradeNotice } from '@/composables/usePostUpgradeNotice'
 import { useWorldDatapacks } from '@/composables/useWorldDatapacks'
 import { trackEvent } from '@/helpers/analytics'
@@ -317,11 +321,7 @@ import {
 import { mergeContentItemMetadata } from '@/helpers/content-item-metadata'
 import { applyContentItemUpdates, matchesContentItem } from '@/helpers/content-item-state'
 import { lookupContentWikiIds, translateContentItemTitles } from '@/helpers/content-search'
-import {
-    type CurseForgeFile,
-    getCurseForgeChangelog,
-    getCurseForgeImageUrl,
-} from '@/helpers/curseforge'
+import { type CurseForgeFile, getCurseForgeImageUrl } from '@/helpers/curseforge'
 import {
     type CurseForgeManualDownloadItem,
     getCurseForgeManualDownloadUrl,
@@ -359,7 +359,6 @@ import {
     reviewResourceEntryChanges,
 } from '@/helpers/resource-update-selection'
 import {
-    resourceChangelog,
     resourceCheckUpdates,
     resourceListHistory,
     resourceReleaseDocuments,
@@ -383,10 +382,6 @@ const messages = defineMessages({
     manageBackups: {
         id: 'app.instance.mods.manage-backups',
         defaultMessage: 'Old files and backups',
-    },
-    updateDuplicateGroup: {
-        id: 'app.resources.update-duplicate-group',
-        defaultMessage: 'Review updates for all {count, number} copies',
     },
     shareTitle: {
         id: 'app.instance.mods.share-title',
@@ -952,28 +947,7 @@ const displayedLinkedModpackContentItems = computed(() => [
 ])
 
 function duplicateModKey(item: ContentItem): string | null {
-    const projectId = item.project?.id
-    if (!projectId) return null
-    // Datapacks under saves/<world>/ are independent installations. Include
-    // the world scope so the same project can be used by multiple worlds
-    // without showing a cross-world duplicate warning.
-    const normalizedPath = item.file_path?.replaceAll('\\', '/')
-    const worldPath =
-        item.project_type === 'datapack'
-            ? normalizedPath?.match(/^saves\/([^/]+)\/datapacks\//)?.[1]
-            : undefined
-    const scope = worldPath ? `:world:${worldPath}` : ''
-    if (projectId.startsWith('local:')) {
-        return item.project?.slug ? `local:${item.project.slug}${scope}` : null
-    }
-
-    const provider = item.origin_provider ?? item.provider_refs[0]?.provider
-    if (!provider) return null
-    const normalizedProjectId =
-        provider === 'curseforge' && projectId.startsWith('curseforge:')
-            ? projectId.slice('curseforge:'.length)
-            : projectId
-    return `${provider}:${normalizedProjectId}${scope}`
+    return confirmedContentGroupKey(item)
 }
 
 const duplicateModCounts = computed(() => {
@@ -1160,7 +1134,6 @@ const updatingProject = ref<ContentItem | null>(null)
 const updatingProjectVersions = ref<Labrinth.Versions.v2.Version[]>([])
 const updaterReleaseRefs = new Map<string, SourceReleaseRef>()
 const loadingVersions = ref(false)
-const loadingChangelog = ref(false)
 const contentUpdateSubmitting = ref(false)
 const CONTENT_OPERATION_TIMEOUT_MS = 30_000
 
@@ -2321,7 +2294,6 @@ async function handleSwitchVersion(item: ContentItem) {
     updatingProject.value = item
     updatingProjectVersions.value = []
     loadingVersions.value = true
-    loadingChangelog.value = false
 
     await nextTick()
 
@@ -2366,7 +2338,6 @@ async function handleModpackUpdate() {
     updatingProject.value = null
     updatingProjectVersions.value = []
     loadingVersions.value = true
-    loadingChangelog.value = false
 
     await nextTick()
 
@@ -2445,102 +2416,23 @@ async function handleModpackUpdate() {
     updatingProjectVersions.value = versions
 }
 
-async function fetchAndSpliceVersion(
-    versionId: string,
-    cacheBehaviour?: Parameters<typeof get_version>[1],
-    onError?: (err: unknown) => void,
-    requestId = activeUpdateRequestId.value,
-) {
-    const fullVersion = (await get_version(versionId, cacheBehaviour).catch(
-        onError ?? (() => null),
-    )) as Labrinth.Versions.v2.Version | null
-    if (!isActiveUpdateRequest(requestId)) return
-    if (!fullVersion) return
-    updatingProjectVersions.value = mergeVersionIntoList(updatingProjectVersions.value, fullVersion)
-}
-
-function isCurseForgeUpdaterRequest() {
-    if (updatingModpack.value) {
-        return props.instance?.link?.type === 'curseforge_modpack'
-    }
+function updaterChangelogRef(version: Labrinth.Versions.v2.Version): SourceReleaseRef | null {
+    const exact = updaterReleaseRefs.get(version.id)
+    if (exact) return exact
     const item = updatingProject.value
-    return item?.origin_provider === 'curseforge' || !!item?.project?.id.startsWith('curseforge:')
-}
-
-async function fetchAndSpliceCurseForgeVersion(
-    versionId: string,
-    requestId = activeUpdateRequestId.value,
-) {
-    const projectId = updatingProject.value
-        ? getCurseForgeProjectIdForItem(updatingProject.value)
-        : updatingModpack.value
-          ? parseCurseForgeProjectId(props.instance?.link?.project_id ?? '')
+    const link = updatingModpack.value ? props.instance.link : null
+    const cfProject = item
+        ? getCurseForgeProjectIdForItem(item)
+        : link?.type === 'curseforge_modpack'
+          ? parseCurseForgeProjectId(link.project_id)
           : null
-    const fileId = Number(versionId)
-    if (projectId == null || !Number.isFinite(fileId)) return
-
-    const changelog = await getCurseForgeChangelog(projectId, fileId).catch((err) => {
-        handleError(err as Error)
-        return null
-    })
-    if (!isActiveUpdateRequest(requestId)) return
-    const version = updatingProjectVersions.value.find((candidate) => candidate.id === versionId)
-    if (version) {
-        updatingProjectVersions.value = mergeVersionIntoList(updatingProjectVersions.value, {
-            ...version,
-            changelog: changelog ?? '',
-        })
-    }
-}
-
-async function fetchResourceChangelog(version: Labrinth.Versions.v2.Version, requestId: number) {
-    const reference = updaterReleaseRefs.get(version.id)
-    if (!reference) return
-    try {
-        const text = await resourceChangelog(reference)
-        if (isActiveUpdateRequest(requestId)) {
-            updatingProjectVersions.value = mergeVersionIntoList(updatingProjectVersions.value, {
-                ...version,
-                changelog: text.body,
-            })
+    if (cfProject != null)
+        return {
+            project: { source: 'curseforge', projectId: String(cfProject) },
+            releaseId: version.id,
         }
-    } catch (error) {
-        if (isActiveUpdateRequest(requestId)) handleError(error as Error)
-    }
-}
-
-async function handleVersionSelect(version: Labrinth.Versions.v2.Version) {
-    if (version.changelog != null) return
-    const requestId = activeUpdateRequestId.value
-    loadingChangelog.value = true
-    if (updaterReleaseRefs.has(version.id)) {
-        await fetchResourceChangelog(version, requestId)
-    } else if (isCurseForgeUpdaterRequest()) {
-        await fetchAndSpliceCurseForgeVersion(version.id, requestId)
-    } else {
-        await fetchAndSpliceVersion(
-            version.id,
-            'bypass',
-            handleError as (err: unknown) => void,
-            requestId,
-        )
-    }
-    if (isActiveUpdateRequest(requestId)) {
-        loadingChangelog.value = false
-    }
-}
-
-async function handleVersionHover(version: Labrinth.Versions.v2.Version) {
-    if (version.changelog != null) return
-    if (updaterReleaseRefs.has(version.id)) {
-        await fetchResourceChangelog(version, activeUpdateRequestId.value)
-        return
-    }
-    if (isCurseForgeUpdaterRequest()) {
-        await fetchAndSpliceCurseForgeVersion(version.id, activeUpdateRequestId.value)
-        return
-    }
-    await fetchAndSpliceVersion(version.id, undefined, undefined, activeUpdateRequestId.value)
+    const projectId = version.project_id || item?.project?.id || link?.project_id
+    return projectId ? { project: { source: 'modrinth', projectId }, releaseId: version.id } : null
 }
 
 function resetUpdateState() {
@@ -2550,7 +2442,6 @@ function resetUpdateState() {
     updatingProject.value = null
     updatingProjectVersions.value = []
     loadingVersions.value = false
-    loadingChangelog.value = false
 }
 
 async function handleModpackUpdateRequest(selectedVersion: Labrinth.Versions.v2.Version) {
@@ -2692,28 +2583,20 @@ async function handleShareItems(
     await shareModal.value?.show(text)
 }
 
+async function updateDuplicateGroup(item: ContentItem) {
+    const all = [...mergedProjects.value, ...displayedLinkedModpackContentItems.value]
+    const key = confirmedContentGroupKey(item)
+    const copies = all.filter((candidate) => confirmedContentGroupKey(candidate) === key)
+    if (!key || copies.some(hasGlobalContentChange)) return
+    try {
+        await reviewResourceChanges(duplicateGroupUpdateEntries(all, item))
+    } catch (error) {
+        handleError(error as Error)
+    }
+}
+
 function getOverflowOptions(item: ContentItem): OverflowMenuOption[] {
     const options: OverflowMenuOption[] = []
-    const all = [...mergedProjects.value, ...displayedLinkedModpackContentItems.value]
-    const group = confirmedContentGroupKey(item)
-    const copies = group
-        ? all.filter((candidate) => confirmedContentGroupKey(candidate) === group)
-        : []
-    const groupEntries = duplicateGroupUpdateEntries(all, item)
-    if (copies.length > 1 && groupEntries.length) {
-        options.push({
-            id: formatMessage(messages.updateDuplicateGroup, { count: copies.length }),
-            icon: DownloadIcon,
-            action: async () => {
-                if (copies.some(hasGlobalContentChange)) return
-                try {
-                    await reviewResourceChanges(groupEntries)
-                } catch (error) {
-                    handleError(error as Error)
-                }
-            },
-        })
-    }
 
     if (item.instanceMaterializationState === 'present' && item.file_path) {
         options.push({
@@ -3036,6 +2919,7 @@ function dismissContentHint() {
 provideContentManager({
     items: mergedProjects,
     duplicateItems: duplicateModItems,
+    updateDuplicateGroup,
     loading,
     error: ref(null),
     filterOptionsReady: computed(
@@ -3232,6 +3116,13 @@ provideContentManager({
 
         return {
             id: getContentItemId(item),
+            localPath: item.file_path ?? item.file_name,
+            installationSource:
+                item.origin_provider === 'modrinth'
+                    ? 'Modrinth'
+                    : item.origin_provider === 'curseforge'
+                      ? 'CurseForge'
+                      : formatMessage(commonMessages.unknownLabel),
             duplicateCount: (() => {
                 const key = duplicateModKey(item)
                 return key ? duplicateModCounts.value.get(key) : undefined

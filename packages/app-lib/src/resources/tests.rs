@@ -19,6 +19,154 @@ mod protocol_tests;
 mod search_tests;
 
 #[tokio::test]
+async fn changelog_catalog_pages_omit_bodies_and_reject_foreign_releases() {
+    let release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+    let project = release["project_id"].as_str().unwrap().to_string();
+    let transport = FixtureTransport::new(move |_, request| {
+        assert!(
+            request
+                .query
+                .contains(&("include_changelog".into(), "false".into()))
+        );
+        let mut second = release.clone();
+        second["id"] = json!("next1234");
+        Ok(json!([release, second]))
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(ModrinthProvider::new(transport))],
+    )
+    .unwrap();
+    let target = ipc::ResourceTarget {
+        game_versions: vec![],
+        loaders: vec![],
+        channels: vec![],
+    };
+    let reference = ResourceRef::Source {
+        project: SourceProjectRef {
+            source: SourceId::modrinth(),
+            project_id: SourceProjectId::new(&project).unwrap(),
+        },
+    };
+    let page = service
+        .releases(
+            &reference,
+            target.clone(),
+            None,
+            RequestId::new("logs-page").unwrap(),
+            None,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 2);
+    assert!(!page.has_more);
+    assert!(matches!(
+        service
+            .releases(
+                &ResourceRef::Source {
+                    project: SourceProjectRef {
+                        source: SourceId::modrinth(),
+                        project_id: SourceProjectId::new("wrong123").unwrap()
+                    }
+                },
+                target,
+                None,
+                RequestId::new("wrong-page").unwrap(),
+                None,
+                &CancellationToken::new()
+            )
+            .await,
+        Err(ResourceError::InvalidResponse(_))
+    ));
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn changelog_modrinth_uses_exact_release_notes_and_rejects_other_projects()
+ {
+    for body in ["## Changes\nFixed **this release**", ""] {
+        let mut release: Value =
+            serde_json::from_str(fixtures::MR_IRIS).unwrap();
+        let project = release["project_id"].as_str().unwrap().to_string();
+        let id = release["id"].as_str().unwrap().to_string();
+        release["changelog"] = json!(body);
+        let expected_id = id.clone();
+        let transport = FixtureTransport::new(move |_, request| {
+            assert_eq!(request.path, format!("/version/{expected_id}"));
+            Ok(release.clone())
+        });
+        let provider = ModrinthProvider::new(transport);
+        let query = ProviderQuery::Changelog {
+            project_id: SourceProjectId::new(project).unwrap(),
+            release_id: SourceReleaseId::new(&id).unwrap(),
+            slug: None,
+        };
+        let results = provider.fetch_many(&[query]).await;
+        let ProviderValue::Changelog(text) = results[0].as_ref().unwrap()
+        else {
+            panic!("wrong changelog");
+        };
+        assert_eq!(text.source, SourceId::modrinth());
+        assert_eq!(text.format, TextFormat::Markdown);
+        assert_eq!(text.body, body);
+        let wrong = ProviderQuery::Changelog {
+            project_id: SourceProjectId::new("wrong123").unwrap(),
+            release_id: SourceReleaseId::new(id).unwrap(),
+            slug: None,
+        };
+        assert!(matches!(
+            provider.fetch_many(&[wrong]).await[0],
+            Err(ResourceError::InvalidResponse(_))
+        ));
+    }
+}
+
+#[tokio::test]
+async fn changelog_curseforge_uses_release_html_and_rejects_other_projects() {
+    for body in ["<p>Fixed <strong>this file</strong></p>", ""] {
+        let file: Value = serde_json::from_str(fixtures::CF_IRIS).unwrap();
+        let project = file["modId"].as_u64().unwrap().to_string();
+        let id = file["id"].as_u64().unwrap().to_string();
+        let path = format!("/v1/mods/{project}/files/{id}");
+        let transport = FixtureTransport::new(move |_, request| {
+            if request.path.ends_with("/changelog") {
+                assert_eq!(request.path, format!("{path}/changelog"));
+                Ok(json!({"data": body}))
+            } else {
+                Ok(json!({"data": file}))
+            }
+        });
+        let provider = CurseForgeProvider::new(transport.clone());
+        let query = ProviderQuery::Changelog {
+            project_id: SourceProjectId::new(project).unwrap(),
+            release_id: SourceReleaseId::new(&id).unwrap(),
+            slug: None,
+        };
+        let results = provider.fetch_many(&[query]).await;
+        let ProviderValue::Changelog(text) = results[0].as_ref().unwrap()
+        else {
+            panic!("wrong changelog");
+        };
+        assert_eq!(text.source, SourceId::curseforge());
+        assert_eq!(text.format, TextFormat::Html);
+        assert_eq!(text.body, body);
+        let count = transport.requests.lock().unwrap().len();
+        let wrong = ProviderQuery::Changelog {
+            project_id: SourceProjectId::new("99999").unwrap(),
+            release_id: SourceReleaseId::new(id).unwrap(),
+            slug: None,
+        };
+        assert!(matches!(
+            provider.fetch_many(&[wrong]).await[0],
+            Err(ResourceError::InvalidResponse(_))
+        ));
+        assert_eq!(transport.requests.lock().unwrap().len(), count + 1);
+    }
+}
+
+#[tokio::test]
 async fn legacy_cache_import_is_offline_resumable_conservative_and_clear_safe()
 {
     let main = sqlx::sqlite::SqlitePoolOptions::new()

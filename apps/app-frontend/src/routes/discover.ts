@@ -67,6 +67,13 @@ export const discoverRoutes: RouteRecordRaw[] = [
         },
     },
     {
+        path: '/project/curseforge/:id/changelog',
+        name: 'CurseForgeProjectChangelog',
+        component: () => import('@/pages/project/CurseForge.vue'),
+        props: true,
+        meta: { useContext: true, pageTransitionGroup: 'curseforge-project' },
+    },
+    {
         path: '/project/curseforge/:id/gallery',
         name: 'CurseForgeProjectGallery',
         component: () => import('@/pages/project/CurseForge.vue'),
@@ -149,6 +156,12 @@ export const discoverRoutes: RouteRecordRaw[] = [
                         { name: '?Version' },
                     ],
                 },
+            },
+            {
+                path: 'changelog',
+                name: 'Changelog',
+                component: () => import('@/pages/project/Changelog.vue'),
+                meta: { useContext: true },
             },
             {
                 path: 'gallery',

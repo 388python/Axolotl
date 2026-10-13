@@ -337,6 +337,11 @@
                             shown: projectV3?.minecraft_server == null,
                         },
                         {
+                            label: formatMessage(commonMessages.changelogLabel),
+                            href: projectChangelogHref,
+                            shown: projectV3?.minecraft_server == null,
+                        },
+                        {
                             label: formatMessage(commonProjectSettingsMessages.gallery),
                             href: projectGalleryHref,
                             shown: data.gallery.length > 0,
@@ -811,6 +816,9 @@ function buildBrowseHref(path) {
 const projectDescriptionHref = computed(() => buildProjectHref(`/project/${route.params.id}`))
 const versionsHref = computed(() =>
     buildProjectHref(`/project/${route.params.id}/versions`, instanceFilters.value),
+)
+const projectChangelogHref = computed(() =>
+    buildProjectHref(`/project/${route.params.id}/changelog`),
 )
 const projectGalleryHref = computed(() => buildProjectHref(`/project/${route.params.id}/gallery`))
 

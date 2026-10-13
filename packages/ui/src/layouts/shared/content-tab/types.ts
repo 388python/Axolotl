@@ -63,6 +63,10 @@ export interface ContentCardTableItem {
     pendingManualDownload?: boolean
     /** Number of installed copies of this online project, when more than one is present. */
     duplicateCount?: number
+    localPath?: string
+    installationSource?: string
+    groupStatus?: string
+    updateLabel?: string
     instanceFileId?: string
     instanceEntryId?: string
     instanceResourceId?: string
@@ -104,7 +108,7 @@ export interface ContentCardTableItem {
     groupSwitchVersion?: () => void
     groupChildIds?: string[]
     isGroupChild?: boolean
-    groupKind?: 'folder' | 'world'
+    groupKind?: 'folder' | 'world' | 'duplicate'
     groupMeta?: ContentWorldGroupMeta
     downloads?: number | null
     followers?: number | null

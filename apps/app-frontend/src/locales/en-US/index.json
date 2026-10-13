@@ -6663,7 +6663,7 @@
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or use Old files and backups to review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file, or review updates for every updatable copy together. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or use Old files and backups to review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -13736,9 +13736,6 @@
   "app.resources.operation.accept-dimension": {
     "message": "{dimension, select, gameVersion {Accept Minecraft compatibility exception} other {Accept loader compatibility exception}}"
   },
-  "app.resources.update-duplicate-group": {
-    "message": "Review updates for all {count, number} copies"
-  },
   "app.resources.operation.disabled-dependency": {
     "message": "This installed dependency is disabled. Enable it or review its version before continuing."
   },
@@ -13816,5 +13813,38 @@
   },
   "app.instance.mods.unconfirmed-unlink-history": {
     "message": "Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly."
+  },
+  "app.resources.changelog.empty": {
+    "message": "No changelog was provided for this release."
+  },
+  "app.resources.changelog.failed": {
+    "message": "The changelog could not be loaded."
+  },
+  "app.resources.changelog.translate": {
+    "message": "Translate changelog"
+  },
+  "app.resources.changelog.original": {
+    "message": "Show original"
+  },
+  "app.resources.changelog.translation-failed": {
+    "message": "Translation failed. The original changelog is still available."
+  },
+  "app.resources.changelog.title": {
+    "message": "Changelog"
+  },
+  "app.resources.changelog.no-releases": {
+    "message": "No releases are available."
+  },
+  "app.resources.changelog.list-failed": {
+    "message": "Releases could not be loaded."
+  },
+  "app.resources.changelog.more": {
+    "message": "Load more releases"
+  },
+  "app.resources.changelog.exhausted": {
+    "message": "This source’s release pagination limit has been reached."
+  },
+  "app.resources.changelog.unsupported": {
+    "message": "This source does not provide release changelogs."
   }
 }

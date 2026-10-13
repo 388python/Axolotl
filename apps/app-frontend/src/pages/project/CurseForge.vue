@@ -193,6 +193,10 @@
                         href: projectVersionsHref,
                     },
                     {
+                        label: formatMessage(commonMessages.changelogLabel),
+                        href: projectChangelogHref,
+                    },
+                    {
                         label: formatMessage(messages.gallery),
                         href: projectGalleryHref,
                         shown: data.gallery.length > 0,
@@ -200,8 +204,9 @@
                 ]"
             />
 
+            <Changelog v-if="activeTab === 'changelog'" :project="data" source="curseforge" />
             <Gallery
-                v-if="activeTab === 'gallery'"
+                v-else-if="activeTab === 'gallery'"
                 :project="data"
                 :translation-active="translationActive"
                 :translations="translations"
@@ -337,6 +342,7 @@ import { injectContentSelection, makeContentSelectionKey } from '@/providers/con
 import { useBreadcrumbs } from '@/store/breadcrumbs'
 import { useTheming } from '@/store/state.js'
 
+import Changelog from './Changelog.vue'
 import Gallery from './Gallery.vue'
 import UpgradeProjectReturnBar from './UpgradeProjectReturnBar.vue'
 
@@ -716,6 +722,7 @@ const versions = computed(() =>
 )
 
 const activeTab = computed(() => {
+    if (route.path.endsWith('/changelog')) return 'changelog'
     if (route.path.endsWith('/versions')) return 'versions'
     if (route.path.endsWith('/gallery')) return 'gallery'
     return 'description'
@@ -739,6 +746,9 @@ const projectDescriptionHref = computed(() =>
 )
 const projectVersionsHref = computed(() =>
     buildProjectHref(`/project/curseforge/${route.params.id}/versions`),
+)
+const projectChangelogHref = computed(() =>
+    buildProjectHref(`/project/curseforge/${route.params.id}/changelog`),
 )
 const projectGalleryHref = computed(() =>
     buildProjectHref(`/project/curseforge/${route.params.id}/gallery`),

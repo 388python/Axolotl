@@ -372,7 +372,7 @@ impl ResourceService {
             .query(
                 &project.source,
                 ProviderQuery::Releases {
-                    project_id: project.project_id,
+                    project_id: project.project_id.clone(),
                     slug,
                     target,
                     cursor,
@@ -384,19 +384,30 @@ impl ResourceService {
             .await?
             .value
         {
-            ProviderValue::Releases(page) => Ok(ResourcePage {
-                request_id,
-                has_more: page.cursor.is_some(),
-                cursor: page.cursor,
-                entries: page.entries,
-                total: page.total,
-                source_failures: vec![],
-                exhausted_sources: if page.window_exhausted {
-                    vec![project.source]
-                } else {
-                    vec![]
-                },
-            }),
+            ProviderValue::Releases(page) => {
+                if page
+                    .entries
+                    .iter()
+                    .any(|release| release.reference.project != project)
+                {
+                    return Err(ResourceError::InvalidResponse(
+                        "release page contains another project".into(),
+                    ));
+                }
+                Ok(ResourcePage {
+                    request_id,
+                    has_more: page.cursor.is_some(),
+                    cursor: page.cursor,
+                    entries: page.entries,
+                    total: page.total,
+                    source_failures: vec![],
+                    exhausted_sources: if page.window_exhausted {
+                        vec![project.source]
+                    } else {
+                        vec![]
+                    },
+                })
+            }
             _ => Err(ResourceError::InvalidResponse(
                 "expected release page".into(),
             )),

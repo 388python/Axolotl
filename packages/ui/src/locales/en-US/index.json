@@ -4798,5 +4798,11 @@
   },
   "project-card.date.first-release.tooltip": {
     "defaultMessage": "First release published {date}"
+  },
+  "content.page-layout.duplicate-status": {
+    "defaultMessage": "{visible} matching · All copies: {updates} updates · {disabled} disabled · {missing} missing · {installing} in progress"
+  },
+  "content.page-layout.update-duplicate-group": {
+    "defaultMessage": "Review updates for all {count, number} copies"
   }
 }

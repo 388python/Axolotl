@@ -38,6 +38,7 @@ export interface ContentManagerContext {
     items: Ref<ContentItem[]> | ComputedRef<ContentItem[]>
     /** Items detected as duplicate content; rendered in a dedicated group when present. */
     duplicateItems?: Ref<ContentItem[]> | ComputedRef<ContentItem[]>
+    updateDuplicateGroup?: (item: ContentItem) => void | Promise<void>
     loading: Ref<boolean>
     error: Ref<Error | null>
     filterOptionsReady?: Ref<boolean> | ComputedRef<boolean>

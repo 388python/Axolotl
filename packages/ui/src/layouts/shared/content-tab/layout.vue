@@ -47,6 +47,11 @@ import {
     useContentPipeline,
     useContentSelection,
 } from './composables'
+import {
+    duplicateContentGroups,
+    duplicateContentRows,
+    visibleDuplicateGroups,
+} from './composables/content-duplicates'
 import { injectContentManager } from './providers/content-manager'
 import type { ContentCardTableItem, ContentItem, ContentWorldGroupMeta } from './types'
 
@@ -67,13 +72,27 @@ const emit = defineEmits<{
 
 function handleVisibleTableItems(visibleTableItems: ContentCardTableItem[]) {
     const visibleContentItems = visibleTableItems
-        .map((item) => findContentItem(item.id))
+        .flatMap((item) =>
+            item.isGroupHeader && item.groupKind === 'duplicate'
+                ? (item.groupChildIds ?? [])
+                : [item.id],
+        )
+        .map((id) => findContentItem(id))
         .filter((item): item is ContentItem => item !== undefined)
 
     emit('visibleItems', visibleContentItems)
 }
 
 const messages = defineMessages({
+    updateDuplicateGroup: {
+        id: 'content.page-layout.update-duplicate-group',
+        defaultMessage: 'Review updates for all {count, number} copies',
+    },
+    duplicateStatus: {
+        id: 'content.page-layout.duplicate-status',
+        defaultMessage:
+            '{visible} matching · All copies: {updates} updates · {disabled} disabled · {missing} missing · {installing} in progress',
+    },
     failedToLoad: {
         id: 'content.page-layout.failed-to-load',
         defaultMessage: 'Failed to load content',
@@ -553,9 +572,26 @@ function datapackTreePath(item: ContentItem): string {
     return path
 }
 
+const allDuplicates = computed(() =>
+    duplicateContentGroups([...ctx.items.value, ...(ctx.modpackItems?.value ?? [])], getItemId),
+)
+const duplicates = computed(() =>
+    visibleDuplicateGroups(
+        allDuplicates.value,
+        [...filteredItems.value, ...filteredModpackItems.value],
+        getItemId,
+    ),
+)
+const duplicateIds = computed(
+    () => new Set([...duplicates.value.values()].flatMap((children) => children.map(getItemId))),
+)
+const nonDuplicateItems = computed(() =>
+    filteredItems.value.filter((item) => !duplicateIds.value.has(getItemId(item))),
+)
+
 const { folderRows: schematicFolderRows, regularItems: schematicGroupRegularItems } =
     useContentFolderGroups({
-        filteredItems,
+        filteredItems: nonDuplicateItems,
         modpackChildIdSet,
         searchQuery,
         expandedGroups,
@@ -614,13 +650,15 @@ const folderRows = computed<ContentCardTableItem[]>(() =>
 const tableItems = computed<ContentCardTableItem[]>(() => {
     const items: ContentCardTableItem[] = []
 
-    const modpackItems = filteredModpackItems.value
+    const modpackItems = filteredModpackItems.value.filter(
+        (item) => !duplicateIds.value.has(getItemId(item)),
+    )
     const modpack = ctx.modpack.value
 
-    if (modpack && modpack.project && modpackItems.length > 0) {
+    if (modpack && modpack.project && filteredModpackItems.value.length > 0) {
         const groupItems: ContentCardTableItem[] = []
-        const childIds = modpackItems.map((item) => getItemId(item))
-        const presentChildren = modpackItems.filter(isPresentContentItem)
+        const childIds = filteredModpackItems.value.map((item) => getItemId(item))
+        const presentChildren = filteredModpackItems.value.filter(isPresentContentItem)
         const allChildrenDisabled =
             presentChildren.length > 0 && presentChildren.every(isDisabledContentItem)
         if (expandedGroups.value.has('modpack')) {
@@ -633,7 +671,7 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
             id: '__modpack_group__',
             isGroupHeader: true,
             group: 'modpack',
-            groupItemCount: modpackItems.length,
+            groupItemCount: filteredModpackItems.value.length,
             groupChildIds: childIds,
             groupSwitchVersion: ctx.updateModpack,
             project: {
@@ -669,6 +707,23 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
 
         items.push(...groupItems)
     }
+
+    items.push(
+        ...duplicateContentRows({
+            groups: allDuplicates.value,
+            visibleGroups: duplicates.value,
+            expanded: expandedGroups.value,
+            getId: getItemId,
+            mapItem: mapToTableItem,
+            summary: (status, visible) =>
+                formatMessage(messages.duplicateStatus, { ...status, visible }),
+            updateLabel: (count) => formatMessage(messages.updateDuplicateGroup, { count }),
+            canUpdate: !!ctx.updateDuplicateGroup,
+            isBusy: (children) =>
+                ctx.isBusy.value ||
+                children.some((item) => isChanging(getItemId(item)) || item.installing === true),
+        }),
+    )
 
     items.push(...folderRows.value)
     for (const item of schematicGroupRegularItems.value) {
@@ -928,6 +983,13 @@ async function bulkDisable() {
 function handleUpdateById(id: string) {
     if (id === '__modpack_group__') {
         ctx.updateModpack?.()
+        return
+    }
+    const duplicate = tableItems.value.find((row) => row.id === id && row.groupKind === 'duplicate')
+    if (duplicate) {
+        if (duplicate.disabled) return
+        const anchor = findContentItem(duplicate.groupChildIds?.[0] ?? '')
+        if (anchor) void ctx.updateDuplicateGroup?.(anchor)
         return
     }
     const item = findContentItem(id)

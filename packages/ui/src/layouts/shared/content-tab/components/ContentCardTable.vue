@@ -83,6 +83,7 @@ const hasAnyActions = computed(() => {
         (item) =>
             (item.overflowOptions && item.overflowOptions.length > 0) ||
             (item.inlineActions && item.inlineActions.length > 0) ||
+            item.isGroupHeader ||
             item.hasUpdate ||
             item.enabled !== undefined,
     )
@@ -276,6 +277,10 @@ function handleItemUpdate(id: string) {
                     :installing="item.installing"
                     :pending-manual-download="item.pendingManualDownload"
                     :duplicate-count="item.duplicateCount"
+                    :local-path="item.localPath"
+                    :installation-source="item.installationSource"
+                    :group-status="item.groupStatus"
+                    :update-label="item.updateLabel"
                     :has-update="item.hasUpdate"
                     :rollback-file-name="item.rollbackFileName"
                     :hide-switch-version="item.hideSwitchVersion"
@@ -380,8 +385,13 @@ function handleItemUpdate(id: string) {
                 :installing="item.installing"
                 :pending-manual-download="item.pendingManualDownload"
                 :duplicate-count="item.duplicateCount"
+                :local-path="item.localPath"
+                :installation-source="item.installationSource"
+                :group-status="item.groupStatus"
+                :update-label="item.updateLabel"
                 :has-update="item.hasUpdate"
                 :rollback-file-name="item.rollbackFileName"
+                :hide-switch-version="item.hideSwitchVersion"
                 :overflow-options="item.overflowOptions"
                 :disabled="item.disabled"
                 :disabled-tooltip="item.disabledTooltip"

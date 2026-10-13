@@ -88,6 +88,10 @@ interface Props {
     installing?: boolean
     pendingManualDownload?: boolean
     duplicateCount?: number
+    localPath?: string
+    installationSource?: string
+    groupStatus?: string
+    updateLabel?: string
     hasUpdate?: boolean
     rollbackFileName?: string
     hideSwitchVersion?: boolean
@@ -113,7 +117,7 @@ interface Props {
     groupExpanded?: boolean
     groupSwitchVersion?: () => void
     isGroupChild?: boolean
-    groupKind?: 'folder' | 'world'
+    groupKind?: 'folder' | 'world' | 'duplicate'
     groupMeta?: ContentWorldGroupMeta
     groupCheckboxIndeterminate?: boolean
     downloads?: number | null
@@ -300,7 +304,13 @@ const deleteHovered = ref(false)
                         </span>
                     </div>
                     <div class="flex min-w-0 items-center gap-1">
-                        <template v-if="groupKind === 'world'">
+                        <span
+                            v-if="groupKind === 'duplicate'"
+                            :title="groupStatus"
+                            class="line-clamp-2 text-sm text-[var(--color-text-tertiary)]"
+                            >{{ groupStatus }}</span
+                        >
+                        <template v-else-if="groupKind === 'world'">
                             <template v-if="groupMeta?.last_played">
                                 <ClockIcon
                                     class="size-4 shrink-0 text-[var(--color-text-tertiary)]"
@@ -454,9 +464,9 @@ const deleteHovered = ref(false)
                     v-tooltip="
                         isDisabled && disabledTooltip
                             ? disabledTooltip
-                            : formatMessage(commonMessages.updateAvailableLabel)
+                            : (updateLabel ?? formatMessage(commonMessages.updateAvailableLabel))
                     "
-                    :label="formatMessage(commonMessages.updateAvailableLabel)"
+                    :label="updateLabel ?? formatMessage(commonMessages.updateAvailableLabel)"
                     type="quiet"
                     color="green"
                     interaction="filled"
@@ -555,6 +565,12 @@ const deleteHovered = ref(false)
                     </div>
                 </div>
                 <div class="flex min-w-0 flex-col gap-0.5">
+                    <span
+                        v-if="groupKind === 'duplicate'"
+                        :title="localPath"
+                        class="truncate text-sm text-[var(--color-text-tertiary)]"
+                        >{{ installationSource }} · {{ localPath }}</span
+                    >
                     <div class="flex min-w-0 items-center gap-1">
                         <AutoLink
                             :target="

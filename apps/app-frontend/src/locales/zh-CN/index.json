@@ -6621,7 +6621,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。更新共用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可在“旧文件与备份”中预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。更新共用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可在“旧文件与备份”中预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。 重复资源默认折叠；展开可查看每个实际文件，组级更新会一起预览全部可更新副本。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -13748,9 +13748,6 @@
   "app.resources.operation.accept-dimension": {
     "message": "{dimension, select, gameVersion {接受 Minecraft 兼容例外} other {接受加载器兼容例外}}"
   },
-  "app.resources.update-duplicate-group": {
-    "message": "预览全部 {count, number} 份副本的更新"
-  },
   "app.resources.operation.disabled-dependency": {
     "message": "此已安装依赖已禁用。请先启用或检查其版本，再继续。"
   },
@@ -13828,5 +13825,38 @@
   },
   "app.instance.mods.unconfirmed-unlink-history": {
     "message": "没有明确的解除记录，因此保留了包成员。本地导入包可以没有在线链接；请使用“解除关联”明确取消包归属。"
+  },
+  "app.resources.changelog.empty": {
+    "message": "此发布没有提供更新日志。"
+  },
+  "app.resources.changelog.failed": {
+    "message": "无法加载更新日志。"
+  },
+  "app.resources.changelog.translate": {
+    "message": "翻译更新日志"
+  },
+  "app.resources.changelog.original": {
+    "message": "显示原文"
+  },
+  "app.resources.changelog.translation-failed": {
+    "message": "翻译失败，仍可查看原始更新日志。"
+  },
+  "app.resources.changelog.title": {
+    "message": "更新日志"
+  },
+  "app.resources.changelog.no-releases": {
+    "message": "暂无可用发布。"
+  },
+  "app.resources.changelog.list-failed": {
+    "message": "无法加载发布列表。"
+  },
+  "app.resources.changelog.more": {
+    "message": "加载更多发布"
+  },
+  "app.resources.changelog.exhausted": {
+    "message": "已达到此来源的发布分页上限。"
+  },
+  "app.resources.changelog.unsupported": {
+    "message": "此来源不提供发布更新日志。"
   }
 }

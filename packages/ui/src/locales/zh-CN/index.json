@@ -4798,5 +4798,11 @@
   },
   "project-card.date.first-release.tooltip": {
     "defaultMessage": "首次发布于 {date}"
+  },
+  "content.page-layout.duplicate-status": {
+    "defaultMessage": "{visible} 项匹配 · 全部副本：{updates} 项可更新 · {disabled} 项已禁用 · {missing} 项缺失 · {installing} 项处理中"
+  },
+  "content.page-layout.update-duplicate-group": {
+    "defaultMessage": "预览全部 {count, number} 个副本的更新"
   }
 }
