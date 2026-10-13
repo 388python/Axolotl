@@ -1918,7 +1918,7 @@ impl CachedEntry {
                 .await
                 .map_err(crate::resources::protocol::error)?;
             return crate::resources::protocol::many(
-                &service,
+                service,
                 type_,
                 keys,
                 cache_behaviour,

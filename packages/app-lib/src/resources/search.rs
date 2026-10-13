@@ -95,7 +95,7 @@ impl ResourceService {
             let state = self
                 .searches
                 .get(&cursor)
-                .ok_or_else(|| ResourceError::CursorExpired)?
+                .ok_or(ResourceError::CursorExpired)?
                 .clone();
             if state.query != query {
                 return Err(ResourceError::InvalidRequest(
@@ -483,15 +483,14 @@ impl ResourceService {
             {
                 self.searches.remove(key);
             }
-            if self.searches.len() >= 128 {
-                if let Some(key) = self
+            if self.searches.len() >= 128
+                && let Some(key) = self
                     .searches
                     .iter()
                     .min_by_key(|cursor| cursor.created_at)
                     .map(|cursor| cursor.key().clone())
-                {
-                    self.searches.remove(&key);
-                }
+            {
+                self.searches.remove(&key);
             }
             state.created_at = Utc::now().timestamp_micros();
             state.expires_at = now + 600;

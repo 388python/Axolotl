@@ -228,13 +228,11 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
             }
             if resource_committed
                 && let Some(instance_id) = instance_id.as_ref()
-            {
-                if let Err(error) =
+                && let Err(error) =
                     crate::api::instance::emit_content_changed(instance_id)
                         .await
-                {
-                    tracing::warn!(%error, instance_id, "Could not emit committed resource content change");
-                }
+            {
+                tracing::warn!(%error, instance_id, "Could not emit committed resource content change");
             }
             if let Err(error) =
                 recovery::discard_content_rollback(&mut job_state, &state).await

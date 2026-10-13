@@ -292,7 +292,7 @@ pub(crate) async fn execute(
                 _ = cancel.cancelled() => return Err(input("resource operation canceled")),
                 permit = concurrency.acquire_owned() => permit.map_err(|error| input(error.to_string()))?,
             };
-            canceled(&cancel)?;
+            canceled(cancel)?;
             let node = plan
                 .nodes
                 .iter()
@@ -984,18 +984,16 @@ async fn persist_plan(
                 plan.nodes.iter().find(|node| node.id == edge.child);
             if let (Some(child_node), Some(children)) =
                 (child_node, node_entries.get(&edge.child))
+                && let Some(artifact) = &child_node.artifact
+                && artifact.reference.release.project.source.as_str()
+                    != "planet_minecraft"
+                && action.target.reference.release.project.source.as_str()
+                    != "planet_minecraft"
             {
-                if let Some(artifact) = &child_node.artifact
-                    && artifact.reference.release.project.source.as_str()
-                        != "planet_minecraft"
-                    && action.target.reference.release.project.source.as_str()
-                        != "planet_minecraft"
-                {
-                    let child_ref = provider_ref(artifact)?;
-                    let parent_ref = provider_ref(&action.target)?;
-                    for child in children {
-                        edges.push(crate::state::ContentDependencyEdge { id: uuid::Uuid::new_v4().to_string(), content_set_id: set_id.into(), parent_entry_id: action.entry_id.as_str().into(), child_entry_id: child.as_str().into(), evidence_provider: parent_ref.provider(), parent_provider: parent_ref.provider(), child_provider: child_ref.provider(), dependency_kind: crate::state::instances::ContentDependencyKind::Required, parent_project_id: parent_ref.database_project_id(), parent_release_id: parent_ref.database_release_id().unwrap_or_default(), child_project_id: child_ref.database_project_id(), child_release_id: child_ref.database_release_id().unwrap_or_default(), created_at: now, modified_at: now });
-                    }
+                let child_ref = provider_ref(artifact)?;
+                let parent_ref = provider_ref(&action.target)?;
+                for child in children {
+                    edges.push(crate::state::ContentDependencyEdge { id: uuid::Uuid::new_v4().to_string(), content_set_id: set_id.into(), parent_entry_id: action.entry_id.as_str().into(), child_entry_id: child.as_str().into(), evidence_provider: parent_ref.provider(), parent_provider: parent_ref.provider(), child_provider: child_ref.provider(), dependency_kind: crate::state::instances::ContentDependencyKind::Required, parent_project_id: parent_ref.database_project_id(), parent_release_id: parent_ref.database_release_id().unwrap_or_default(), child_project_id: child_ref.database_project_id(), child_release_id: child_ref.database_release_id().unwrap_or_default(), created_at: now, modified_at: now });
                 }
             }
         }

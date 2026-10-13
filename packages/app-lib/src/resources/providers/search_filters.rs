@@ -29,11 +29,11 @@ pub(crate) fn for_source(
             let selected: Vec<_> = values
                 .iter()
                 .filter_map(|value| {
-                    if field == "category" {
-                        if let Some((owner, value)) = value.split_once(':') {
-                            return (owner == source.as_str())
-                                .then(|| value.to_string());
-                        }
+                    if field == "category"
+                        && let Some((owner, value)) = value.split_once(':')
+                    {
+                        return (owner == source.as_str())
+                            .then(|| value.to_string());
                     }
                     Some(value.clone())
                 })

@@ -64,14 +64,14 @@ pub fn validate_choices(
             return Err(invalid("export analysis is incomplete"));
         }
         for resolution in &file.resolutions {
-            if let ExportSourceResolution::Failed { source, .. } = resolution {
-                if !choices.iter().any(|choice| {
+            if let ExportSourceResolution::Failed { source, .. } = resolution
+                && !choices.iter().any(|choice| {
                     choice.snapshot == file.snapshot && &choice.source == source
-                }) {
-                    return Err(invalid(
-                        "failed source lookup requires retry or an explicit embedding choice",
-                    ));
-                }
+                })
+            {
+                return Err(invalid(
+                    "failed source lookup requires retry or an explicit embedding choice",
+                ));
             }
         }
     }

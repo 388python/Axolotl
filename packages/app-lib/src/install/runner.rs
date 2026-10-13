@@ -576,13 +576,11 @@ pub async fn repair_cache_and_retry_job(
     if cache_types
         .iter()
         .any(|kind| crate::resources::protocol::owns(*kind))
-    {
-        if let Err(error) =
+        && let Err(error) =
             async { state.resources().await?.cache().clear().await }.await
-        {
-            operation.cache_repair_started = false;
-            return Err(crate::resources::protocol::error(error));
-        }
+    {
+        operation.cache_repair_started = false;
+        return Err(crate::resources::protocol::error(error));
     }
 
     if let Err(error) =

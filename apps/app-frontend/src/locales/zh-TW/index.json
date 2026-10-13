@@ -968,26 +968,14 @@
   "app.content-selection.conflict-unavailable": {
     "message": "無法確認該內容是否與另一個來源重複。"
   },
-  "app.content-selection.dependency-conflict": {
-    "message": "{dependency} 在當前選擇中解析出了衝突版本。"
-  },
   "app.content-selection.duplicate-content": {
     "message": "{project} 已從另一個來源安裝或選中。"
   },
   "app.content-selection.preview-failed": {
     "message": "部分所選內容無法準備安裝。請移除後重試。"
   },
-  "app.content-selection.queue-failed": {
-    "message": "部分內容未能加入安裝佇列，仍保留在已選列表中。"
-  },
   "app.content-selection.target-changed": {
     "message": "所選內容屬於另一個例項。請切換回該例項或先清空選擇。"
-  },
-  "app.content-selection.unknown-dependency": {
-    "message": "前置 {id}"
-  },
-  "app.content-selection.unknown-reason": {
-    "message": "無法解析"
   },
   "app.content.add-from-file": {
     "message": "從檔案新增"
@@ -1805,9 +1793,6 @@
   "app.error.try-sign-in-again": {
     "message": "再次嘗試登入"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "輸入模組包描述……"
-  },
   "app.export-modal.export-button": {
     "message": "匯出"
   },
@@ -1817,20 +1802,11 @@
   "app.export-modal.export-complete-description": {
     "message": "{name} 已成功匯出。"
   },
-  "app.export-modal.header": {
-    "message": "匯出模組包"
-  },
   "app.export-modal.modpack-name-label": {
-    "message": "模組包名稱"
-  },
-  "app.export-modal.modpack-name-placeholder": {
     "message": "模組包名稱"
   },
   "app.export-modal.version-number-label": {
     "message": "版本號碼"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.gc-notice.fallback": {
     "message": "Java 不接受 {preferred}，已改用 {chosen}。"

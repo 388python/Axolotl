@@ -241,14 +241,14 @@ pub async fn resource_export_cancel(
 ) -> Result<()> {
     if let Ok(id) = uuid::Uuid::parse_str(&request_id_or_job_id) {
         let state = theseus::State::get().await?;
-        if let Some(job) = theseus::install::store::get(id, &state).await? {
-            if matches!(
+        if let Some(job) = theseus::install::store::get(id, &state).await?
+            && matches!(
                 job.state.request,
                 theseus::install::InstallRequest::ExportResource { .. }
-            ) {
-                theseus::install::runner::cancel_job(id).await?;
-                return Ok(());
-            }
+            )
+        {
+            theseus::install::runner::cancel_job(id).await?;
+            return Ok(());
         }
     }
     resource_cancel(

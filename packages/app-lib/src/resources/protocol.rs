@@ -358,31 +358,29 @@ async fn updates(
         }
         if let Some((release, _)) =
             select_automatic_release(releases, &SourceId::modrinth())
-        {
-            if release.reference != current.reference
-                && release_is_newer(&release, current)
-                && !release.artifacts.iter().any(|artifact| {
-                    artifact.integrity.hashes.iter().any(|candidate| {
-                        candidate.algorithm == HashAlgorithm::Sha1
-                            && candidate.value.eq_ignore_ascii_case(hash)
-                    })
+            && release.reference != current.reference
+            && release_is_newer(&release, current)
+            && !release.artifacts.iter().any(|artifact| {
+                artifact.integrity.hashes.iter().any(|candidate| {
+                    candidate.algorithm == HashAlgorithm::Sha1
+                        && candidate.value.eq_ignore_ascii_case(hash)
                 })
-            {
-                entries.push(
-                    CacheValue::FileUpdate(crate::state::CachedFileUpdate {
-                        hash: hash.into(),
-                        game_version: game_version.into(),
-                        loaders: target.loaders,
-                        channel_policy: channel.into(),
-                        update_version_id: release
-                            .reference
-                            .release_id
-                            .as_str()
-                            .into(),
-                    })
-                    .get_entry(),
-                );
-            }
+            })
+        {
+            entries.push(
+                CacheValue::FileUpdate(crate::state::CachedFileUpdate {
+                    hash: hash.into(),
+                    game_version: game_version.into(),
+                    loaders: target.loaders,
+                    channel_policy: channel.into(),
+                    update_version_id: release
+                        .reference
+                        .release_id
+                        .as_str()
+                        .into(),
+                })
+                .get_entry(),
+            );
         }
     }
     Ok(entries)

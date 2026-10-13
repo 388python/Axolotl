@@ -42,7 +42,7 @@ pub(super) async fn resolve(
             updates.send_replace(Some(value));
         };
         let resolving = crate::resources::export::job::resolve(
-            &service,
+            service,
             &mut draft,
             plan,
             &root,
@@ -155,13 +155,14 @@ async fn validate(
             .then(|| current.applied_content_set.loader.as_str().to_string())
             != plan.requirements.loader
     {
-        return Err(invalid("game requirements changed after export analysis; reopen the export window").into());
+        return Err(invalid(
+            "game requirements changed after export analysis; reopen the export window",
+        ));
     }
     if current.instance.is_direct_linked() {
         return Err(invalid(
             "directly associated instances cannot be exported",
-        )
-        .into());
+        ));
     }
     Ok(())
 }

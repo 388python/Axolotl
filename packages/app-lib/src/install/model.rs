@@ -2826,8 +2826,7 @@ pub struct InstallJobSnapshot {
 impl InstallJobState {
     pub fn content_change(&self) -> Option<ContentChangeSnapshot> {
         if let InstallRequest::InstallContentBatch { items, .. } = &self.request
-        {
-            if let Some(plan) = items.iter().find_map(|item| match item { InstallContentBatchItem::FrozenResource { plan } if plan.intent != crate::resources::ResourceOperationIntent::Install => Some(plan), _ => None }) {
+            && let Some(plan) = items.iter().find_map(|item| match item { InstallContentBatchItem::FrozenResource { plan } if plan.intent != crate::resources::ResourceOperationIntent::Install => Some(plan), _ => None }) {
                 let targets: Vec<_> = plan.actions.iter().filter(|action| action.current.is_some()).map(|action| ContentChangeTarget { content_id: action.entry_id.as_str().into(), target_release_id: action.target.reference.release.release_id.as_str().into() }).collect();
                 let status = if self.events.iter().any(|event| matches!(event.kind, InstallJobEventKind::JobSucceeded { .. })) { ContentChangeActionStatus::Completed } else if self.error.is_some() { ContentChangeActionStatus::Failed } else { ContentChangeActionStatus::Prepared };
                 return Some(ContentChangeSnapshot {
@@ -2837,7 +2836,6 @@ impl InstallJobState {
                     actions: plan.actions.iter().map(|action| ContentChangeActionSnapshot { content_id: action.entry_id.as_str().into(), operation: if plan.intent == crate::resources::ResourceOperationIntent::SwitchVersion { ContentChangeOperation::SwitchVersion } else { ContentChangeOperation::Update }, target_release_id: action.target.reference.release.release_id.as_str().into(), final_relative_path: Some(action.target_relative_path.clone()), status, error: self.error.as_ref().map(|error| error.message.clone()) }).collect(),
                 });
             }
-        }
         let InstallRequest::ChangeContent { intent, .. } = &self.request else {
             return None;
         };

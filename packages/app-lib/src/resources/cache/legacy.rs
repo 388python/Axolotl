@@ -184,12 +184,11 @@ fn project_values(
                 for file in
                     payload["latestFiles"].as_array().into_iter().flatten()
                 {
-                    if let Ok(release) = legacy::curseforge_file(file.clone()) {
-                        if release.release.reference.project.project_id.as_str()
+                    if let Ok(release) = legacy::curseforge_file(file.clone())
+                        && release.release.reference.project.project_id.as_str()
                             == id
-                        {
-                            output.extend(release_values(namespace, release));
-                        }
+                    {
+                        output.extend(release_values(namespace, release));
                     }
                 }
             }

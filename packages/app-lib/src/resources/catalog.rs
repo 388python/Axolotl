@@ -159,10 +159,10 @@ impl ResourceService {
         } else {
             vec![]
         };
-        if let ResourceRef::Source { project } = reference {
-            if !projects.contains(project) {
-                projects.push(project.clone());
-            }
+        if let ResourceRef::Source { project } = reference
+            && !projects.contains(project)
+        {
+            projects.push(project.clone());
         }
         if projects.is_empty() {
             return Err(ResourceError::InvalidRequest(

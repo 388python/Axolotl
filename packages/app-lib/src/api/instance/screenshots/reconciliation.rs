@@ -102,7 +102,7 @@ pub(crate) async fn reconcile_screenshots_with_state(
         return Ok(());
     };
 
-    list_source_screenshots(&state, source).await?;
+    list_source_screenshots(state, source).await?;
     Ok(())
 }
 

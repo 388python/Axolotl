@@ -535,27 +535,25 @@ async fn get_content_snapshot_inner(
         {
             let previous: Option<String> = sqlx::query_scalar("SELECT payload FROM resource_history WHERE instance_id = ? AND entry_id = ? AND backup_available = 1 ORDER BY recorded_at DESC LIMIT 1")
                 .bind(instance_id).bind(entry_id).fetch_optional(&state.pool).await?;
-            if let Some(payload) = previous {
-                if let Ok(history) = serde_json::from_str::<
+            if let Some(payload) = previous
+                && let Ok(history) = serde_json::from_str::<
                     crate::resources::ResourceHistoryEntry,
                 >(&payload)
-                {
-                    content.rollback =
-                        Some(crate::state::ContentItemRollback {
-                            file_name: history
+            {
+                content.rollback = Some(crate::state::ContentItemRollback {
+                    file_name: history
+                        .previous
+                        .original_file_name
+                        .unwrap_or_else(|| {
+                            history
                                 .previous
-                                .original_file_name
-                                .unwrap_or_else(|| {
-                                    history
-                                        .previous
-                                        .relative_path
-                                        .rsplit('/')
-                                        .next()
-                                        .unwrap_or_default()
-                                        .into()
-                                }),
-                        });
-                }
+                                .relative_path
+                                .rsplit('/')
+                                .next()
+                                .unwrap_or_default()
+                                .into()
+                        }),
+                });
             }
         }
     }

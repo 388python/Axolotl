@@ -67,12 +67,12 @@ struct Subscription(Arc<Flight>);
 
 impl Drop for Subscription {
     fn drop(&mut self) {
-        if self.0.subscribers.fetch_sub(1, Ordering::AcqRel) == 1 {
-            if let Some(owner) = self.0.owner.upgrade() {
-                owner.flights.remove_if(&self.0.key, |_, current| {
-                    Arc::ptr_eq(current, &self.0)
-                });
-            }
+        if self.0.subscribers.fetch_sub(1, Ordering::AcqRel) == 1
+            && let Some(owner) = self.0.owner.upgrade()
+        {
+            owner.flights.remove_if(&self.0.key, |_, current| {
+                Arc::ptr_eq(current, &self.0)
+            });
         }
         self.0.changed.notify_waiters();
     }
@@ -257,13 +257,13 @@ impl ResourceService {
                 subscriptions.push(Err(error));
                 continue;
             }
-            if let ProviderQuery::Search { query, .. } = &query {
-                if !capabilities.supported_search_sorts.contains(&query.sort) {
-                    subscriptions.push(Err(ResourceError::Unsupported(
-                        "source sort semantics unavailable".into(),
-                    )));
-                    continue;
-                }
+            if let ProviderQuery::Search { query, .. } = &query
+                && !capabilities.supported_search_sorts.contains(&query.sort)
+            {
+                subscriptions.push(Err(ResourceError::Unsupported(
+                    "source sort semantics unavailable".into(),
+                )));
+                continue;
             }
             if !capabilities.capabilities.contains(&query.capability())
                 && !matches!(query, ProviderQuery::Identify { .. } | ProviderQuery::IdentifyExport { .. } if capabilities.capabilities.contains(&SourceCapability::IdentifyFingerprint))
@@ -290,14 +290,14 @@ impl ResourceService {
                 } else {
                     self.cache.get(&cache_key).await
                 };
-                if let Some(value) = value {
-                    if validate_value(source, &query, &value).is_ok() {
-                        subscriptions.push(Ok(Ok(QueryOutcome {
-                            value,
-                            from_cache: true,
-                        })));
-                        continue;
-                    }
+                if let Some(value) = value
+                    && validate_value(source, &query, &value).is_ok()
+                {
+                    subscriptions.push(Ok(Ok(QueryOutcome {
+                        value,
+                        from_cache: true,
+                    })));
+                    continue;
                 }
             }
             if policy == CachePolicy::OnlyCached {
@@ -417,69 +417,20 @@ impl ResourceService {
                     )?;
                     Ok(value)
                 });
-                if let Ok(value) = &result {
-                    if flight.subscribers.load(Ordering::Acquire) > 0 {
-                        self.cache
-                            .put(
-                                &flight.key.cache,
-                                value,
-                                flight.query.ttl(value),
-                                flight.key.generation,
-                                flight.started_at,
-                            )
-                            .await;
-                        if let ProviderValue::Identified(documents) = value {
-                            for document in documents {
-                                for project_id in [
-                                    None,
-                                    Some(
-                                        document
-                                            .release
-                                            .reference
-                                            .project
-                                            .project_id
-                                            .clone(),
-                                    ),
-                                ] {
-                                    let query = ProviderQuery::Release {
-                                        project_id,
-                                        release_id: document
-                                            .release
-                                            .reference
-                                            .release_id
-                                            .clone(),
-                                        slug: None,
-                                    };
-                                    let value = ProviderValue::Release(
-                                        document.clone(),
-                                    );
-                                    if validate_value(
-                                        &flight.key.cache.source,
-                                        &query,
-                                        &value,
-                                    )
-                                    .is_ok()
-                                    {
-                                        if let Ok(key) = CacheKey::new(
-                                            provider.namespace(),
-                                            flight.key.cache.source.clone(),
-                                            &query,
-                                        ) {
-                                            self.cache
-                                                .put(
-                                                    &key,
-                                                    &value,
-                                                    query.ttl(&value),
-                                                    flight.key.generation,
-                                                    flight.started_at,
-                                                )
-                                                .await;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if let ProviderValue::Release(document) = value {
+                if let Ok(value) = &result
+                    && flight.subscribers.load(Ordering::Acquire) > 0
+                {
+                    self.cache
+                        .put(
+                            &flight.key.cache,
+                            value,
+                            flight.query.ttl(value),
+                            flight.key.generation,
+                            flight.started_at,
+                        )
+                        .await;
+                    if let ProviderValue::Identified(documents) = value {
+                        for document in documents {
                             for project_id in [
                                 None,
                                 Some(
@@ -500,21 +451,68 @@ impl ResourceService {
                                         .clone(),
                                     slug: None,
                                 };
-                                if let Ok(key) = CacheKey::new(
-                                    provider.namespace(),
-                                    flight.key.cache.source.clone(),
+                                let value =
+                                    ProviderValue::Release(document.clone());
+                                if validate_value(
+                                    &flight.key.cache.source,
                                     &query,
-                                ) {
+                                    &value,
+                                )
+                                .is_ok()
+                                    && let Ok(key) = CacheKey::new(
+                                        provider.namespace(),
+                                        flight.key.cache.source.clone(),
+                                        &query,
+                                    )
+                                {
                                     self.cache
                                         .put(
                                             &key,
-                                            value,
-                                            query.ttl(value),
+                                            &value,
+                                            query.ttl(&value),
                                             flight.key.generation,
                                             flight.started_at,
                                         )
                                         .await;
                                 }
+                            }
+                        }
+                    }
+                    if let ProviderValue::Release(document) = value {
+                        for project_id in [
+                            None,
+                            Some(
+                                document
+                                    .release
+                                    .reference
+                                    .project
+                                    .project_id
+                                    .clone(),
+                            ),
+                        ] {
+                            let query = ProviderQuery::Release {
+                                project_id,
+                                release_id: document
+                                    .release
+                                    .reference
+                                    .release_id
+                                    .clone(),
+                                slug: None,
+                            };
+                            if let Ok(key) = CacheKey::new(
+                                provider.namespace(),
+                                flight.key.cache.source.clone(),
+                                &query,
+                            ) {
+                                self.cache
+                                    .put(
+                                        &key,
+                                        value,
+                                        query.ttl(value),
+                                        flight.key.generation,
+                                        flight.started_at,
+                                    )
+                                    .await;
                             }
                         }
                     }

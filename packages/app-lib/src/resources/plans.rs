@@ -445,10 +445,10 @@ impl ResourceService {
     ) -> ResourceResult<()> {
         if let Some(store) = self.store() {
             for node in &mut draft.plan.nodes {
-                if let ResourceRef::Resource { id } = &mut node.resource {
-                    if let Some(current) = store.resolve(id).await? {
-                        *id = current;
-                    }
+                if let ResourceRef::Resource { id } = &mut node.resource
+                    && let Some(current) = store.resolve(id).await?
+                {
+                    *id = current;
                 }
             }
         }
@@ -947,13 +947,12 @@ impl ResourceService {
             };
             if selection.id.as_str().starts_with("dependency:")
                 && matches!(selection.release, ReleaseSelection::Automatic)
-            {
-                if let Some(fixed) = queue.iter().find(|other| {
+                && let Some(fixed) = queue.iter().find(|other| {
                     other.id == selection.id
                         && !matches!(other.release, ReleaseSelection::Automatic)
-                }) {
-                    selection.release = fixed.release.clone();
-                }
+                })
+            {
+                selection.release = fixed.release.clone();
             }
             let previous_release = if draft.plan.intent
                 == ResourceOperationIntent::Update
@@ -1088,19 +1087,19 @@ impl ResourceService {
             if let Some(store) = self.store() {
                 let mut refreshed = HashMap::new();
                 for (mut key, id) in std::mem::take(&mut resolved) {
-                    if let ResourceRef::Resource { id } = &mut key.resource {
-                        if let Some(current) = store.resolve(id).await? {
-                            *id = current;
-                        }
+                    if let ResourceRef::Resource { id } = &mut key.resource
+                        && let Some(current) = store.resolve(id).await?
+                    {
+                        *id = current;
                     }
                     refreshed.entry(key).or_insert(id);
                 }
                 resolved = refreshed;
                 for node in &mut draft.plan.nodes {
-                    if let ResourceRef::Resource { id } = &mut node.resource {
-                        if let Some(current) = store.resolve(id).await? {
-                            *id = current;
-                        }
+                    if let ResourceRef::Resource { id } = &mut node.resource
+                        && let Some(current) = store.resolve(id).await?
+                    {
+                        *id = current;
                     }
                 }
             }
@@ -1186,7 +1185,7 @@ impl ResourceService {
                         },
                         &selection.id,
                         true,
-                        format!("{:?}: {:?}", dimension, value),
+                        format!("{dimension:?}: {value:?}"),
                     );
                 }
             }
@@ -1565,33 +1564,31 @@ impl ResourceService {
                     .unwrap_or_else(|| child.id.clone());
                 if let Some(existing) = resolved.get(&key).and_then(|id| {
                     draft.plan.nodes.iter().find(|node| &node.id == id)
-                }) {
-                    if dependency.kind == ResourceDependencyKind::Required
-                        && !selection_matches_artifact(
-                            &child.release,
-                            existing.artifact.as_ref(),
+                }) && dependency.kind == ResourceDependencyKind::Required
+                    && !selection_matches_artifact(
+                        &child.release,
+                        existing.artifact.as_ref(),
+                    )
+                {
+                    let existing = existing.artifact.clone();
+                    let (_, expected, _) = self
+                        .selected_release_for_current(
+                            &child, target, &preferred, cancel, None,
                         )
-                    {
-                        let existing = existing.artifact.clone();
-                        let (_, expected, _) = self
-                            .selected_release_for_current(
-                                &child, target, &preferred, cancel, None,
-                            )
-                            .await?;
-                        if !existing.as_ref().is_some_and(|existing| {
-                            identity::exact_integrity(
-                                &existing.integrity,
-                                &expected.integrity,
-                            )
-                        }) {
-                            issue(
-                                &mut draft.plan,
-                                ResourceIssueCode::VersionConflict,
-                                &selection.id,
-                                true,
-                                "required dependency conflicts with an active root release or artifact",
-                            );
-                        }
+                        .await?;
+                    if !existing.as_ref().is_some_and(|existing| {
+                        identity::exact_integrity(
+                            &existing.integrity,
+                            &expected.integrity,
+                        )
+                    }) {
+                        issue(
+                            &mut draft.plan,
+                            ResourceIssueCode::VersionConflict,
+                            &selection.id,
+                            true,
+                            "required dependency conflicts with an active root release or artifact",
+                        );
                     }
                 }
                 draft.plan.edges.push(ResourceDependencyEdge {
@@ -1629,10 +1626,10 @@ impl ResourceService {
         let mut installed = installed.to_vec();
         if let Some(store) = self.store() {
             for node in &mut draft.plan.nodes {
-                if let ResourceRef::Resource { id } = &mut node.resource {
-                    if let Some(current) = store.resolve(id).await? {
-                        *id = current;
-                    }
+                if let ResourceRef::Resource { id } = &mut node.resource
+                    && let Some(current) = store.resolve(id).await?
+                {
+                    *id = current;
                 }
             }
             for item in &mut installed {
@@ -1757,10 +1754,9 @@ impl ResourceService {
         for (parent, mut child) in incompatible {
             if let (Some(store), ResourceRef::Resource { id }) =
                 (self.store(), &mut child.resource)
+                && let Some(current) = store.resolve(id).await?
             {
-                if let Some(current) = store.resolve(id).await? {
-                    *id = current;
-                }
+                *id = current;
             }
             let active = draft.plan.nodes.iter().find(|node| {
                 node.resource == child.resource
@@ -1862,33 +1858,32 @@ impl ResourceService {
                     true
                 };
             let mut selection_matches = true;
-            if let Some(selection) = &edge.release_selection {
-                if !selection_matches_artifact(selection, Some(artifact)) {
-                    let release_ref = match selection {
-                        ReleaseSelection::Release { reference } => reference,
+            if let Some(selection) = &edge.release_selection
+                && !selection_matches_artifact(selection, Some(artifact))
+            {
+                let release_ref = match selection {
+                    ReleaseSelection::Release { reference } => reference,
+                    ReleaseSelection::Artifact { reference } => {
+                        &reference.release
+                    }
+                    ReleaseSelection::Automatic => unreachable!(),
+                };
+                let release = self.release(release_ref, None, cancel).await?;
+                selection_matches = release
+                    .artifacts
+                    .iter()
+                    .filter(|other| match selection {
                         ReleaseSelection::Artifact { reference } => {
-                            &reference.release
+                            &other.reference == reference
                         }
-                        ReleaseSelection::Automatic => unreachable!(),
-                    };
-                    let release =
-                        self.release(release_ref, None, cancel).await?;
-                    selection_matches = release
-                        .artifacts
-                        .iter()
-                        .filter(|other| match selection {
-                            ReleaseSelection::Artifact { reference } => {
-                                &other.reference == reference
-                            }
-                            _ => other.role == ArtifactRole::Primary,
-                        })
-                        .any(|other| {
-                            identity::exact_integrity(
-                                &other.integrity,
-                                &artifact.integrity,
-                            )
-                        });
-                }
+                        _ => other.role == ArtifactRole::Primary,
+                    })
+                    .any(|other| {
+                        identity::exact_integrity(
+                            &other.integrity,
+                            &artifact.integrity,
+                        )
+                    });
             }
             let enabled_requirement = edge.kind
                 != ResourceDependencyKind::Required

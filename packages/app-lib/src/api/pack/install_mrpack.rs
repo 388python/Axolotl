@@ -1034,11 +1034,8 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     };
 
     let num_files = pack.files.len();
-    let content_total_bytes = pack
-        .files
-        .iter()
-        .map(|file| file.file_size as u64)
-        .sum::<u64>();
+    let content_total_bytes =
+        pack.files.iter().map(|file| file.file_size).sum::<u64>();
     let mut cached_pack_hashes = pack
         .files
         .iter()
@@ -1145,7 +1142,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     queued_events.extend(pack.files.iter().map(|file| {
         InstallJobEventKind::ContentFileQueued {
             path: content_context.resolve_install_path(file),
-            bytes_total: (file.file_size > 0).then_some(file.file_size as u64),
+            bytes_total: (file.file_size > 0).then_some(file.file_size),
             max_attempts: estimated_file_max_attempts(file) as u32,
         }
     }));
@@ -1189,7 +1186,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                         item_id: target_path.clone(),
                         manifest_path: file.path.as_str().to_string(),
                         target_path,
-                        expected_size: file.file_size as u64,
+                        expected_size: file.file_size,
                         sha1: file.hashes.get(&PackFileHash::Sha1).cloned(),
                         sha512: file
                             .hashes
@@ -1520,7 +1517,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             let finalize_semaphore = finalize_semaphore.clone();
             let verification_tx = verification_tx.clone();
              async move {
-                let project_size = project.file_size as u64;
+                let project_size = project.file_size;
                 let project_path =
                     content_context.resolve_install_path(&project);
                 let target_path =

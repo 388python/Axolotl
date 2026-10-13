@@ -257,13 +257,12 @@ pub(crate) async fn hydrate_with_failures(
         let refs = crate::state::instances::adapters::sqlite::content_rows::get_content_provider_refs(entry.entry_id.as_str(), &state.pool).await?;
         let origin = crate::state::instances::adapters::sqlite::content_rows::get_content_origin_provider(entry.entry_id.as_str(), &state.pool).await?;
         let mut matches = recognition.matches;
-        if let Some(artifact) = verified.remove(&index) {
-            if !matches
+        if let Some(artifact) = verified.remove(&index)
+            && !matches
                 .iter()
                 .any(|other| other.reference == artifact.reference)
-            {
-                matches.push(artifact);
-            }
+        {
+            matches.push(artifact);
         }
         // Exact legacy release references can corroborate files absent from a
         // hash index. They must agree with current local bytes.

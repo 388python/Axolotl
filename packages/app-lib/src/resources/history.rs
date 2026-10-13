@@ -31,22 +31,22 @@ async fn read_history(
 ) -> ResourceResult<Vec<ResourceHistoryEntry>> {
     let rows = if let Some(entry_id) = entry_id {
         sqlx::query("SELECT payload, backup_available FROM resource_history WHERE instance_id = ? AND entry_id = ? ORDER BY recorded_at DESC, rowid DESC")
-            .bind(&instance_id)
+            .bind(instance_id)
             .bind(entry_id.as_str())
             .fetch_all(&state.pool)
             .await
             .map_err(db)?
     } else {
         sqlx::query("SELECT payload, backup_available FROM resource_history WHERE instance_id = ? ORDER BY recorded_at DESC, rowid DESC")
-            .bind(&instance_id)
+            .bind(instance_id)
             .fetch_all(&state.pool)
             .await
             .map_err(db)?
     };
     let scope = crate::state::instances::commands::resolve_content_scope(
-        &instance_id,
+        instance_id,
         None,
-        &state,
+        state,
     )
     .await?;
     let root = crate::state::instances::commands::instance_content_root(
@@ -285,7 +285,7 @@ pub(crate) async fn prepare_rollback(
     let draft = plans::OperationDraft {
         import_files: Default::default(),
         naming: Default::default(),
-        plan: plan.clone(),
+        plan: plan,
         install_dependencies: false,
         candidates: vec![],
         local_files: std::collections::HashMap::from([(

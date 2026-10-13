@@ -92,11 +92,7 @@ pub(crate) async fn artifacts(
 
 fn index_key(release: &str) -> ResourceResult<cache::CacheKey> {
     SourceReleaseId::new(release)?;
-    Ok(cache::CacheKey::new(
-        "pack-index".into(),
-        SourceId::modrinth(),
-        &release,
-    )?)
+    cache::CacheKey::new("pack-index".into(), SourceId::modrinth(), &release)
 }
 
 pub(crate) fn valid_index(index: &crate::state::CachedModpackFiles) -> bool {

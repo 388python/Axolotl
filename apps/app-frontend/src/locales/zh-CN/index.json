@@ -1205,26 +1205,14 @@
   "app.content-selection.conflict-unavailable": {
     "message": "无法确认该内容是否与另一个来源重复。"
   },
-  "app.content-selection.dependency-conflict": {
-    "message": "{dependency} 在当前选择中解析出了冲突版本。"
-  },
   "app.content-selection.duplicate-content": {
     "message": "{project} 已从另一个来源安装或选中。"
   },
   "app.content-selection.preview-failed": {
     "message": "部分所选内容无法准备安装。请移除后重试。"
   },
-  "app.content-selection.queue-failed": {
-    "message": "部分内容未能加入安装队列，仍保留在已选列表中。"
-  },
   "app.content-selection.target-changed": {
     "message": "所选内容属于另一个实例。请切换回该实例或先清空选择。"
-  },
-  "app.content-selection.unknown-dependency": {
-    "message": "前置 {id}"
-  },
-  "app.content-selection.unknown-reason": {
-    "message": "无法解析"
   },
   "app.content.add-from-file": {
     "message": "从文件添加"

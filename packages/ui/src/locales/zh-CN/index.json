@@ -4736,9 +4736,6 @@
   "image-viewer.previous": {
     "message": "上一张图片"
   },
-  "browse.search.refreshing": {
-    "defaultMessage": "正在刷新结果…"
-  },
   "files.layout.no-matches": {
     "defaultMessage": "此视图中没有匹配的文件"
   },

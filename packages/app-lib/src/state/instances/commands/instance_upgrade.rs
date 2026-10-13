@@ -1481,8 +1481,7 @@ async fn load_modrinth_candidates(
             .iter()
             .find(|version| version.id == current_release_id)
             .cloned()
-            .or(planner_version(&(current_release_id.to_string()), state)
-                .await?);
+            .or(planner_version(current_release_id, state).await?);
         if let Some(current) = current {
             selected.push(current);
         }
@@ -1534,14 +1533,12 @@ async fn load_modrinth_candidates(
             let project_id = match dependency.project_id.clone() {
                 Some(project_id) => project_id,
                 None => match dependency.version_id.as_deref() {
-                    Some(version_id) => {
-                        planner_version(&(version_id.to_string()), state)
-                            .await?
-                            .map(|version| version.project_id)
-                            .unwrap_or_else(|| {
-                                format!("missing-version:{version_id}")
-                            })
-                    }
+                    Some(version_id) => planner_version(version_id, state)
+                        .await?
+                        .map(|version| version.project_id)
+                        .unwrap_or_else(|| {
+                            format!("missing-version:{version_id}")
+                        }),
                     None => continue,
                 },
             };

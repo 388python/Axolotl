@@ -94,17 +94,17 @@ impl ModrinthProvider {
                                     let mut authors =
                                         HashMap::<String, Vec<String>>::new();
                                     for member in groups.into_iter().flatten() {
-                                        if member["accepted"] == true {
-                                            if let (Some(team), Some(name)) = (
+                                        if member["accepted"] == true
+                                            && let (Some(team), Some(name)) = (
                                                 member["team_id"].as_str(),
                                                 member["user"]["username"]
                                                     .as_str(),
-                                            ) {
-                                                authors
-                                                    .entry(team.into())
-                                                    .or_default()
-                                                    .push(name.into());
-                                            }
+                                            )
+                                        {
+                                            authors
+                                                .entry(team.into())
+                                                .or_default()
+                                                .push(name.into());
                                         }
                                     }
                                     authors
