@@ -114,6 +114,7 @@ export async function loadInstanceContentData(
                 ...(item.content ?? fallbackContent),
                 instanceFileId: item.fileId ?? undefined,
                 instanceEntryId: item.entryId ?? undefined,
+                instanceResourceId: item.resourceId ?? undefined,
                 instanceMemberId: item.memberId ?? undefined,
                 instanceOwnershipKind: item.ownershipKind,
                 installedSource: item.content?.origin_provider ?? null,

@@ -459,7 +459,7 @@ it('returns the submitted root range after a selection revision and modal closur
     }
 })
 
-it('hides satisfied entries, labels activated optionals, and phrases blocking issues in place', async () => {
+it('shows satisfied entries, labels activated optionals, and phrases blocking issues in place', async () => {
     ready()
     const installed = node('installed', 'satisfied', { reference, fileName: 'Installed.jar' })
     const dependency = node('dependency', 'install', { reference, fileName: 'Dependency.jar' })
@@ -490,12 +490,79 @@ it('hides satisfied entries, labels activated optionals, and phrases blocking is
     const result = wrapper.vm.show(input)
     try {
         await flushPromises()
-        expect(wrapper.text()).not.toContain('Already satisfied')
+        expect(wrapper.text()).toContain('Already satisfied')
         expect(wrapper.text()).not.toContain('source requires an exact manual download')
         expect(wrapper.text()).not.toContain('target already exists')
         expect(wrapper.text()).toContain('requires a manual download')
         expect(wrapper.text()).toContain('mods/conflict.jar is already used by another file')
         expect(wrapper.text()).toContain('Optional dependency of dependency')
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await result).toBeNull()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('ignores repeated optional activation and late revisions after cancellation', async () => {
+    ready()
+    let finish!: (value: ResourceOperationPlan) => void
+    vi.mocked(resourceRevisePlan).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve
+            }),
+    )
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        const plus = wrapper.findAll('button').find((button) => button.text() === '＋')!
+        await plus.trigger('click')
+        await plus.trigger('click')
+        expect(resourceRevisePlan).toHaveBeenCalledTimes(1)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await result).toBeNull()
+        finish(plan(2))
+        await flushPromises()
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('removes one explicit choice from a shared node without removing another choice', async () => {
+    ready()
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue({
+        ...plan(),
+        activeRoots: ['first', 'second'],
+        nodes: [{ ...root, rootSelectionIds: ['first', 'second'] }],
+    } as ResourceOperationPlan)
+    vi.mocked(resourceRevisePlan).mockResolvedValue({
+        ...plan(2),
+        activeRoots: ['first'],
+        nodes: [{ ...root, rootSelectionIds: ['first'] }],
+    } as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        const removals = wrapper.findAll('button').filter((button) => button.text() === '×')
+        expect(removals).toHaveLength(2)
+        await removals[1].trigger('click')
+        await flushPromises()
+        expect(resourceRevisePlan).toHaveBeenCalledWith(
+            'plan',
+            1,
+            [{ kind: 'removeRoot', selectionId: 'second' }],
+            expect.any(AbortSignal),
+        )
+        expect(wrapper.findAll('button').filter((button) => button.text() === '×')).toHaveLength(1)
         await wrapper
             .findAll('button')
             .find((button) => button.text() === 'Cancel')!

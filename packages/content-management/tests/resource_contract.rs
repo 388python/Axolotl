@@ -192,6 +192,7 @@ fn duplicate_entries_and_world_scopes_survive_a_frozen_plan() {
 fn active_dependency_edges_preserve_every_parent_and_optional_decisions() {
     let child = SelectionId::new("shared").unwrap();
     let edge = |parent: &str, kind| ResourceDependencyEdge {
+        release_selection: None,
         parent: SelectionId::new(parent).unwrap(),
         child: child.clone(),
         declared_by: artifact(SourceId::modrinth(), parent),
@@ -341,6 +342,8 @@ fn history_is_self_contained_and_keeps_the_original_source_and_path() {
     target.artifact = Some(resource_artifact().reference);
     target.relative_path = "mods/中文-new.jar.disabled".into();
     let dependency = ResourceDependencyNode {
+        resource_type: None,
+        root_selection_ids: vec![],
         declared_compatibility: None,
         id: SelectionId::new("dependency").unwrap(),
         resource: ResourceRef::Source {
@@ -359,12 +362,34 @@ fn history_is_self_contained_and_keeps_the_original_source_and_path() {
         },
     };
     let edge = ResourceDependencyEdge {
+        release_selection: None,
         parent: SelectionId::new("root").unwrap(),
         child: dependency.id.clone(),
         declared_by: previous.artifact.clone().unwrap(),
         kind: ResourceDependencyKind::Required,
         version_constraint: Some(">=1.0".into()),
     };
+    let mut historical_node = serde_json::to_value(&dependency).unwrap();
+    historical_node
+        .as_object_mut()
+        .unwrap()
+        .remove("rootSelectionIds");
+    historical_node
+        .as_object_mut()
+        .unwrap()
+        .remove("resourceType");
+    let decoded: ResourceDependencyNode =
+        serde_json::from_value(historical_node).unwrap();
+    assert!(decoded.root_selection_ids.is_empty());
+    assert!(decoded.resource_type.is_none());
+    let mut historical_edge = serde_json::to_value(&edge).unwrap();
+    historical_edge
+        .as_object_mut()
+        .unwrap()
+        .remove("releaseSelection");
+    let decoded: ResourceDependencyEdge =
+        serde_json::from_value(historical_edge).unwrap();
+    assert!(decoded.release_selection.is_none());
     let mut root = dependency.clone();
     root.id = edge.parent.clone();
     root.resource = ResourceRef::Resource {

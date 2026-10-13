@@ -232,6 +232,7 @@ import type { Labrinth } from '@modrinth/api-client'
 import {
     BookOpenIcon,
     ClipboardCopyIcon,
+    DownloadIcon,
     ExternalIcon,
     FileIcon,
     FolderOpenIcon,
@@ -326,6 +327,11 @@ import {
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
+    confirmedContentGroupKey,
+    duplicateGroupUpdateEntries,
+    reviewResourceEntryChanges,
+} from '@/helpers/resource-update-selection'
+import {
     resourceChangelog,
     resourceCheckUpdates,
     resourceListHistory,
@@ -342,6 +348,10 @@ import { injectDownloadManager } from '@/providers/download-manager'
 import { useTheming } from '@/store/state'
 
 const messages = defineMessages({
+    updateDuplicateGroup: {
+        id: 'app.resources.update-duplicate-group',
+        defaultMessage: 'Review updates for all {count, number} copies',
+    },
     shareTitle: {
         id: 'app.instance.mods.share-title',
         defaultMessage: 'Sharing modpack content',
@@ -2149,16 +2159,19 @@ async function getDeleteDependencyWarning(items: ContentItem[]) {
 }
 
 async function reviewResourceChanges(entryIds: string[], release: SourceReleaseRef | null = null) {
-    const job = await resourceOperationPreview.value?.show({
-        instanceId: props.instance.id,
-        instanceName: props.instance.name,
-        entryIds,
-        intent: release ? 'switchVersion' : 'update',
-        release,
-        installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
-    })
-    if (job) downloadManager.trackJob(job)
-    return !!job
+    const preview = resourceOperationPreview.value
+    if (!preview) return false
+    return reviewResourceEntryChanges(
+        {
+            instanceId: props.instance.id,
+            instanceName: props.instance.name,
+            entryIds,
+            release,
+            installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
+        },
+        (input) => preview.show(input),
+        (job) => downloadManager.trackJob(job),
+    )
 }
 
 async function bulkUpdateAllProjects() {
@@ -2644,6 +2657,26 @@ async function handleShareItems(
 
 function getOverflowOptions(item: ContentItem): OverflowMenuOption[] {
     const options: OverflowMenuOption[] = []
+    const all = [...mergedProjects.value, ...displayedLinkedModpackContentItems.value]
+    const group = confirmedContentGroupKey(item)
+    const copies = group
+        ? all.filter((candidate) => confirmedContentGroupKey(candidate) === group)
+        : []
+    const groupEntries = duplicateGroupUpdateEntries(all, item)
+    if (copies.length > 1 && groupEntries.length) {
+        options.push({
+            id: formatMessage(messages.updateDuplicateGroup, { count: copies.length }),
+            icon: DownloadIcon,
+            action: async () => {
+                if (copies.some(hasGlobalContentChange)) return
+                try {
+                    await reviewResourceChanges(groupEntries)
+                } catch (error) {
+                    handleError(error as Error)
+                }
+            },
+        })
+    }
 
     if (item.instanceMaterializationState === 'present' && item.file_path) {
         options.push({

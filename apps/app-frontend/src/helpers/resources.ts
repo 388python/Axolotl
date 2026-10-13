@@ -301,6 +301,8 @@ export type InstalledResource = {
 }
 export type ResourceDependencyNode = {
     id: string
+    rootSelectionIds?: string[]
+    resourceType?: ResourceType | null
     resource: ResourceRef
     scope: ResourceSelection['scope']
     state: string
@@ -355,6 +357,7 @@ export type ResourceOperationPlan = {
         kind: string
         declaredBy: ResourceArtifact['reference']
         versionConstraint: string | null
+        releaseSelection?: ResourceSelection['release'] | null
     }[]
     actions: {
         entryId: string

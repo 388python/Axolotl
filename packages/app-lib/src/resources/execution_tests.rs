@@ -151,6 +151,8 @@ async fn local_plan(
         active_roots: vec![node_id.clone()],
         nodes: vec![ResourceDependencyNode {
             id: node_id.clone(),
+            root_selection_ids: vec![node_id.clone()],
+            resource_type: Some(ResourceType::ResourcePack),
             resource: reference,
             scope: current.scope.clone(),
             state: DependencyNodeState::Update,

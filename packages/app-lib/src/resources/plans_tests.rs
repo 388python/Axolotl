@@ -2,6 +2,9 @@ use super::*;
 use crate::resources::plans::OperationDraft;
 use std::collections::HashMap;
 
+#[path = "plans_graph_tests.rs"]
+mod graph_tests;
+
 #[tokio::test]
 async fn the_same_datapack_in_two_worlds_produces_two_scoped_actions() {
     let mut old = release("pack0000", "1", 'a');
@@ -56,6 +59,33 @@ async fn the_same_datapack_in_two_worlds_produces_two_scoped_actions() {
 #[tokio::test]
 async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
 {
+    cross_source_dependency_plan(true, false, None).await;
+}
+
+#[tokio::test]
+async fn newly_verified_cross_source_dependency_merges_nodes_and_retains_both_parents()
+ {
+    cross_source_dependency_plan(false, false, None).await;
+}
+
+#[tokio::test]
+async fn confirmed_cross_source_dependency_with_different_required_bytes_is_a_conflict()
+ {
+    cross_source_dependency_plan(true, true, None).await;
+}
+
+#[tokio::test]
+async fn curseforge_requirement_reuses_the_confirmed_modrinth_installed_file_and_rejects_disabled_copy()
+ {
+    cross_source_dependency_plan(true, false, Some(true)).await;
+    cross_source_dependency_plan(true, false, Some(false)).await;
+}
+
+async fn cross_source_dependency_plan(
+    preconfirmed: bool,
+    conflict: bool,
+    installed_enabled: Option<bool>,
+) {
     let mut a = release("root0000", "1", 'a');
     let mut mr_dep = release("dep00000", "1", 'c');
     let mut cf_dep = release("123", "1", 'c');
@@ -74,8 +104,6 @@ async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
     }
     mr_dep.reference.release_id = SourceReleaseId::new("depver01").unwrap();
     mr_dep.artifacts[0].reference.release = mr_dep.reference.clone();
-    requires(&mut a, &mr_dep, ResourceDependencyKind::Required);
-    requires(&mut cf_root, &cf_dep, ResourceDependencyKind::Required);
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
         .connect("sqlite::memory:")
@@ -93,15 +121,31 @@ async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
     else {
         panic!()
     };
-    store
-        .confirm_projects(
-            &left.metadata,
-            &right.metadata,
-            &mr_dep.artifacts[0],
-            &cf_dep.artifacts[0],
-        )
-        .await
-        .unwrap();
+    if preconfirmed {
+        store
+            .confirm_projects(
+                &left.metadata,
+                &right.metadata,
+                &mr_dep.artifacts[0],
+                &cf_dep.artifacts[0],
+            )
+            .await
+            .unwrap();
+    }
+    if conflict {
+        cf_dep.artifacts[0].integrity.hashes[0].value = "e".repeat(40);
+    }
+    requires(&mut a, &mr_dep, ResourceDependencyKind::Required);
+    requires(&mut cf_root, &cf_dep, ResourceDependencyKind::Required);
+    let mut entries = vec![];
+    if let Some(enabled) = installed_enabled {
+        let mut entry =
+            installed(&mr_dep, "already-installed", "mods/dependency.jar");
+        entry.resource_id =
+            store.lookup(&mr_dep.reference.project).await.unwrap();
+        entry.enabled = enabled;
+        entries.push(entry);
+    }
     let (directory, cache) = cache().await;
     let service = ResourceService::with_store(
         cache.clone(),
@@ -130,14 +174,26 @@ async fn confirmed_cross_source_dependency_preserves_both_parent_requirements()
                 ResourceOperationIntent::Install,
             ),
             &target(),
-            &[],
+            &entries,
             &CancellationToken::new(),
         )
         .await
         .unwrap()
         .plan;
-    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
-    assert_eq!(plan.actions.len(), 3);
+    if conflict || installed_enabled == Some(false) {
+        assert!(
+            plan.issues
+                .iter()
+                .any(|issue| issue.code == ResourceIssueCode::VersionConflict
+                    && issue.blocking)
+        );
+    } else {
+        assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    }
+    assert_eq!(
+        plan.actions.len(),
+        if installed_enabled.is_some() { 2 } else { 3 }
+    );
     assert_eq!(plan.edges.len(), 2);
     assert_eq!(plan.edges[0].child, plan.edges[1].child);
     cache.close().await;
@@ -350,6 +406,7 @@ impl ResourceProvider for PlanProvider {
             capabilities: vec![
                 SourceCapability::Project,
                 SourceCapability::Releases,
+                SourceCapability::IdentifyHash,
             ],
             available: true,
             supported_search_sorts: vec![],
@@ -423,6 +480,21 @@ impl ResourceProvider for PlanProvider {
                         })
                     })
                     .ok_or(ResourceError::Unavailable),
+                ProviderQuery::Identify { integrity, .. } => {
+                    Ok(ProviderValue::Matches(
+                        self.releases
+                            .iter()
+                            .flat_map(|release| &release.artifacts)
+                            .filter(|artifact| {
+                                identity::exact_integrity(
+                                    integrity,
+                                    &artifact.integrity,
+                                )
+                            })
+                            .cloned()
+                            .collect(),
+                    ))
+                }
                 _ => Err(ResourceError::Unsupported("fixture query".into())),
             })
             .collect()
@@ -1160,5 +1232,254 @@ async fn compatibility_exceptions_cannot_authorize_an_unsafe_artifact_path() {
             | ResourceIssueCode::SourceUnavailable
             | ResourceIssueCode::MissingDependency
     ) && issue.blocking));
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn optional_activity_preserves_shared_independent_and_installed_requirements()
+ {
+    let mut a = release("root0000", "1", 'a');
+    let mut b = release("option00", "1", 'b');
+    let c = release("shared00", "1", 'c');
+    let mut d = release("parent00", "1", 'd');
+    let mut e = release("nested00", "1", 'e');
+    let f = release("leaf0000", "1", 'f');
+    requires(&mut a, &b, ResourceDependencyKind::Optional);
+    requires(&mut b, &c, ResourceDependencyKind::Required);
+    requires(&mut b, &e, ResourceDependencyKind::Optional);
+    requires(&mut d, &c, ResourceDependencyKind::Required);
+    requires(&mut e, &f, ResourceDependencyKind::Required);
+    let (_directory, service) = service(vec![
+        a.clone(),
+        b.clone(),
+        c.clone(),
+        d.clone(),
+        e.clone(),
+        f,
+    ])
+    .await;
+    let initial = service
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None), selection("d", &d, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(initial.plan.actions.len(), 3);
+    assert!(!initial.plan.nodes.iter().any(|node| {
+        node.artifact.as_ref().is_some_and(|artifact| {
+            artifact.reference.release.project == e.reference.project
+        })
+    }));
+    let mut activated = initial;
+    let optional = activated.candidates[0].clone();
+    activated.plan.active_roots.push(optional.id.clone());
+    activated.plan.selections.push(optional);
+    let activated = service
+        .build_operation(activated, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap();
+    assert_eq!(activated.plan.actions.len(), 4);
+    let shared = activated
+        .plan
+        .nodes
+        .iter()
+        .find(|node| {
+            node.artifact.as_ref().is_some_and(|artifact| {
+                artifact.reference.release.project == c.reference.project
+            })
+        })
+        .unwrap();
+    assert_eq!(
+        activated
+            .plan
+            .edges
+            .iter()
+            .filter(|edge| edge.child == shared.id
+                && edge.kind == ResourceDependencyKind::Required)
+            .count(),
+        2
+    );
+    assert!(
+        activated
+            .plan
+            .nodes
+            .iter()
+            .any(|node| node.state == DependencyNodeState::OptionalCandidate)
+    );
+    let mut removed = activated;
+    removed.plan.selections.retain(|selection| {
+        selection.id.as_str() == "a" || selection.id.as_str() == "d"
+    });
+    removed.plan.active_roots = vec![
+        SelectionId::new("a").unwrap(),
+        SelectionId::new("d").unwrap(),
+    ];
+    let removed = service
+        .build_operation(
+            removed,
+            &target(),
+            &[installed(&c, "existing", "mods/custom.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(removed.plan.actions.len(), 2);
+    assert!(
+        removed
+            .plan
+            .nodes
+            .iter()
+            .any(|node| node.state == DependencyNodeState::Satisfied)
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn unpinned_required_dependency_reuses_an_installed_compatible_release() {
+    let mut a = release("root0000", "1", 'a');
+    let old = release("depend00", "1", 'b');
+    let newer = release("depend00", "2", 'c');
+    a.artifacts[0].dependencies.push(ArtifactDependency {
+        target: DependencyTarget::Resource {
+            reference: ResourceRef::Source {
+                project: old.reference.project.clone(),
+            },
+        },
+        kind: ResourceDependencyKind::Required,
+        version_constraint: None,
+    });
+    let (_directory, service) =
+        service(vec![a.clone(), old.clone(), newer]).await;
+    let mut request = draft(
+        vec![selection("a", &a, None)],
+        ResourceOperationIntent::Install,
+    );
+    request.install_dependencies = false;
+    let plan = service
+        .build_operation(
+            request,
+            &target(),
+            &[installed(&old, "present", "mods/custom.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(plan.actions.len(), 1);
+    let dependency = plan
+        .nodes
+        .iter()
+        .find(|node| node.state == DependencyNodeState::Satisfied)
+        .unwrap();
+    assert_eq!(
+        dependency.artifact.as_ref().unwrap().reference,
+        old.artifacts[0].reference
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn optional_installed_status_requires_the_declared_release_enabled_file_and_scope()
+ {
+    let mut a = release("root0000", "1", 'a');
+    let old = release("option00", "1", 'b');
+    let current = release("option00", "2", 'c');
+    requires(&mut a, &current, ResourceDependencyKind::Optional);
+    let (_directory, service) =
+        service(vec![a.clone(), old.clone(), current.clone()]).await;
+    let mut disabled =
+        installed(&current, "disabled", "mods/current.jar.disabled");
+    disabled.enabled = false;
+    let mut missing = installed(&current, "missing", "mods/current.jar");
+    missing.missing = true;
+    let mut wrong_scope =
+        installed(&current, "world", "saves/a/datapacks/current.zip");
+    wrong_scope.scope = InstallScope::World {
+        relative_path: "saves/a".into(),
+    };
+    for entries in [
+        vec![installed(&old, "old", "mods/old.jar")],
+        vec![disabled],
+        vec![missing],
+        vec![wrong_scope],
+        vec![installed(&current, "valid", "mods/current.jar")],
+    ] {
+        let valid = entries[0].entry_id.as_str() == "valid";
+        let result = service
+            .build_operation(
+                draft(
+                    vec![selection("a", &a, None)],
+                    ResourceOperationIntent::Install,
+                ),
+                &target(),
+                &entries,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.plan.actions.len(), 1);
+        assert_eq!(result.candidates.is_empty(), valid);
+        assert!(result.plan.nodes.iter().any(|node| node.state
+            == if valid {
+                DependencyNodeState::Satisfied
+            } else {
+                DependencyNodeState::OptionalCandidate
+            }));
+    }
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn merged_explicit_roots_preserve_both_selection_ids_and_frozen_artifacts()
+ {
+    let a = release("root0000", "1", 'a');
+    let (_directory, service) = service(vec![a.clone()]).await;
+    let result = service
+        .build_operation(
+            draft(
+                vec![
+                    selection("first", &a, None),
+                    selection("second", &a, None),
+                ],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.plan.nodes.len(), 1);
+    assert_eq!(result.plan.actions.len(), 1);
+    assert_eq!(result.plan.active_roots.len(), 2);
+    assert_eq!(result.plan.nodes[0].root_selection_ids.len(), 2);
+    assert!(result.plan.selections.iter().all(|selection| matches!(
+        selection.release,
+        ReleaseSelection::Artifact { .. }
+    )));
+    let revised = service
+        .revise_operation(
+            result,
+            vec![ResourcePlanDecision::RemoveRoot {
+                selection_id: SelectionId::new("second").unwrap(),
+            }],
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(revised.plan.actions.len(), 1);
+    assert_eq!(
+        revised.plan.active_roots,
+        vec![SelectionId::new("first").unwrap()]
+    );
     service.cache().close().await;
 }

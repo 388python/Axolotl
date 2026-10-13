@@ -6663,7 +6663,7 @@
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by its actual installation platform or ownership. Updates and version changes show a dependency preview; compatibility exceptions apply only to the selected release and dimension. Recorded updates can be restored from their verified history backups."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by its actual installation platform or ownership. Single, selected, all, and duplicate-copy updates share a dependency preview. Use + to activate optional dependencies; shared requirements and installed dependencies remain visible. Compatibility exceptions apply only to the selected release and dimension. Recorded updates can be restored from their verified history backups."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -13735,5 +13735,14 @@
   },
   "app.resources.operation.accept-dimension": {
     "message": "{dimension, select, gameVersion {Accept Minecraft compatibility exception} other {Accept loader compatibility exception}}"
+  },
+  "app.resources.update-duplicate-group": {
+    "message": "Review updates for all {count, number} copies"
+  },
+  "app.resources.operation.disabled-dependency": {
+    "message": "This installed dependency is disabled. Enable it or review its version before continuing."
+  },
+  "app.resources.operation.installed-dependency-unavailable": {
+    "message": "An installed copy is disabled, missing, or does not satisfy the required release. Review that copy before continuing."
   }
 }

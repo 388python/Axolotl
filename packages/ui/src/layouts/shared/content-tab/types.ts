@@ -65,6 +65,7 @@ export interface ContentCardTableItem {
     duplicateCount?: number
     instanceFileId?: string
     instanceEntryId?: string
+    instanceResourceId?: string
     instanceMemberId?: string
     instanceOwnershipKind?: 'pack_managed' | 'user_added' | 'local_discovered'
     instanceMaterializationState?: 'present' | 'pending_manual' | 'missing' | 'removed'

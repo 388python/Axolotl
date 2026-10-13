@@ -230,6 +230,8 @@ pub async fn rollback(
         active_roots: vec![node_id.clone()],
         nodes: vec![ResourceDependencyNode {
             id: node_id.clone(),
+            root_selection_ids: vec![node_id.clone()],
+            resource_type: Some(current.resource_type),
             resource: reference,
             scope: current.scope.clone(),
             state: DependencyNodeState::Update,

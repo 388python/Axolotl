@@ -127,6 +127,11 @@ pub enum DependencyNodeState {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceDependencyNode {
     pub id: SelectionId,
+    /// Preserve each explicit choice when several roots share one resource node.
+    #[serde(default)]
+    pub root_selection_ids: Vec<SelectionId>,
+    #[serde(default)]
+    pub resource_type: Option<ResourceType>,
     pub resource: ResourceRef,
     pub scope: InstallScope,
     pub state: DependencyNodeState,
@@ -145,6 +150,8 @@ pub struct ResourceDependencyEdge {
     pub child: SelectionId,
     pub declared_by: SourceArtifactRef,
     pub kind: ResourceDependencyKind,
+    #[serde(default)]
+    pub release_selection: Option<ReleaseSelection>,
     pub version_constraint: Option<String>,
 }
 
@@ -199,6 +206,7 @@ pub struct ResourcePlanIssue {
 #[serde(rename_all = "camelCase")]
 pub enum ReleaseSelectionBasis {
     FixedByUser,
+    InstalledCompatible,
     ComparableVersion,
     PublishedAt,
     EquivalentPreferredSource,

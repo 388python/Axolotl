@@ -6,6 +6,7 @@ export function mergeContentItemMetadata(item: ContentItem, metadata: ContentIte
         merged.installedSource = item.installedSource
         merged.compatibility = item.compatibility
         merged.instanceOwnershipKind = item.instanceOwnershipKind
+        merged.instanceResourceId = item.instanceResourceId
         merged.update = null
         merged.resourceUpdate = item.resourceUpdate ?? null
         merged.rollback = item.rollback

@@ -34,6 +34,16 @@ const messages = defineMessages({
     required: { id: 'app.resources.operation.required', defaultMessage: 'Required dependencies' },
     optional: { id: 'app.resources.operation.optional', defaultMessage: 'Available dependencies' },
     satisfied: { id: 'app.resources.operation.satisfied', defaultMessage: 'Already satisfied' },
+    disabledDependency: {
+        id: 'app.resources.operation.disabled-dependency',
+        defaultMessage:
+            'This installed dependency is disabled. Enable it or review its version before continuing.',
+    },
+    installedDependencyUnavailable: {
+        id: 'app.resources.operation.installed-dependency-unavailable',
+        defaultMessage:
+            'An installed copy is disabled, missing, or does not satisfy the required release. Review that copy before continuing.',
+    },
     changes: {
         id: 'app.resources.operation.changes',
         defaultMessage:
@@ -127,15 +137,7 @@ const submittedRoots = ref<string[]>([])
 let retryAction: (() => Promise<void>) | null = null
 
 const active = computed(() => {
-    const issues = plan.value?.issues ?? []
-    return (
-        plan.value?.nodes.filter(
-            (node) =>
-                node.state !== 'optionalCandidate' &&
-                (node.state !== 'satisfied' ||
-                    issues.some((issue) => issue.selectionId === node.id)),
-        ) ?? []
-    )
+    return plan.value?.nodes.filter((node) => node.state !== 'optionalCandidate') ?? []
 })
 const candidates = computed(
     () => plan.value?.nodes.filter((node) => node.state === 'optionalCandidate') ?? [],
@@ -165,6 +167,11 @@ function issueNotice(issue: PlanIssue): Notice | null {
                 if (node?.state === 'missing') return formatMessage(messages.unselectedDependency)
                 return `${formatMessage(messages.missingDependency)} ${issue.message}`
             case 'versionConflict':
+                if (
+                    issue.message ===
+                    'installed dependency is disabled, missing or does not satisfy this release; review the installed entry'
+                )
+                    return formatMessage(messages.installedDependencyUnavailable)
                 return issue.blocking
                     ? formatMessage(messages.versionConflict)
                     : formatMessage(messages.unresolvedOptional)
@@ -212,6 +219,13 @@ function name(node: ResourceDependencyNode) {
         node.artifact?.fileName ??
         (node.resource.kind === 'source' ? node.resource.project.projectId : node.resource.id)
     )
+}
+function explicitRoots(node: ResourceDependencyNode): string[] {
+    return node.rootSelectionIds?.length
+        ? node.rootSelectionIds
+        : plan.value?.activeRoots.includes(node.id)
+          ? [node.id]
+          : []
 }
 function requiredBy(id: string, kind = 'required') {
     return [
@@ -476,11 +490,12 @@ defineExpose({ show, showInstall, showInstallSelection })
                     />
                     <span class="grow font-semibold">{{ name(node) }}</span>
                     <Button
-                        v-if="plan?.activeRoots.includes(node.id)"
+                        v-for="rootId in explicitRoots(node)"
+                        :key="rootId"
                         size="sm"
                         :disabled="busy"
                         :aria-label="formatMessage(messages.remove, { name: name(node) })"
-                        @click="revise({ kind: 'removeRoot', selectionId: node.id })"
+                        @click="revise({ kind: 'removeRoot', selectionId: rootId })"
                         >×</Button
                     >
                 </div>
@@ -504,6 +519,9 @@ defineExpose({ show, showInstall, showInstallSelection })
                 </p>
                 <p v-if="node.state === 'satisfied'" class="m-0 text-sm">
                     {{ formatMessage(messages.satisfied) }}
+                </p>
+                <p v-if="node.state === 'disabled'" class="m-0 text-sm">
+                    {{ formatMessage(messages.disabledDependency) }}
                 </p>
                 <Button
                     v-if="node.state === 'missing'"
