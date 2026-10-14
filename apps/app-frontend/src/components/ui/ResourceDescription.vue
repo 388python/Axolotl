@@ -18,6 +18,7 @@ const { formatMessage } = useVIntl()
 const resource = ref<Resource | null>(null)
 const text = ref<ResourceText | null>(null)
 const selected = ref<SourceId>(props.source)
+const attemptedSource = ref<SourceId>(props.source)
 const busy = ref(false)
 const pendingSource = ref<SourceId | null>(null)
 const error = ref(false)
@@ -52,6 +53,7 @@ async function load(source?: SourceId) {
     controller = request
     busy.value = true
     pendingSource.value = source ?? props.source
+    attemptedSource.value = source ?? props.source
     error.value = false
     try {
         const reference = sourceResource(props.source, props.projectId)
@@ -60,6 +62,7 @@ async function load(source?: SourceId) {
             (await resourceGet(reference, undefined, props.locator, request.signal))
         const readingSource = source ?? current.defaultProject.source
         pendingSource.value = readingSource
+        attemptedSource.value = readingSource
         const description =
             readingSource === props.source && slots.default
                 ? null
@@ -108,7 +111,7 @@ onScopeDispose(() => controller?.abort())
         </div>
         <div v-if="error" class="flex items-center gap-2">
             <span>{{ formatMessage(messages.failed) }}</span>
-            <Button @click="load(selected)">{{ formatMessage(messages.retry) }}</Button>
+            <Button @click="load(attemptedSource)">{{ formatMessage(messages.retry) }}</Button>
         </div>
         <slot v-if="selected === source && $slots.default" />
         <template v-else-if="!text" />

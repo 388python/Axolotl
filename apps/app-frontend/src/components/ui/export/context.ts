@@ -193,13 +193,13 @@ export function createExportContext(
         ...(snapshot.value?.directories.map((directory) => ({
             path: directory.relativePath,
             type: 'directory' as const,
-            modified: directory.modifiedAt == null ? undefined : directory.modifiedAt / 1000,
+            modified: directory.modifiedAt === null ? undefined : directory.modifiedAt / 1000,
         })) ?? []),
         ...files.value.map((file) => ({
             path: file.relativePath,
             type: 'file' as const,
             size: file.integrity.size ?? undefined,
-            modified: file.modifiedAt == null ? undefined : file.modifiedAt / 1000,
+            modified: file.modifiedAt === null ? undefined : file.modifiedAt / 1000,
         })),
     ])
 
@@ -292,7 +292,7 @@ export function createExportContext(
                     { name: formatMessage(exportMessages[format.value]), extensions: [extension] },
                 ],
             })
-            if (!output) return
+            if (!output || generation !== activeGeneration || !snapshot.value) return
             cancelRefresh()
             const selected = new Set(selection.value)
             await resourceExportQueue(

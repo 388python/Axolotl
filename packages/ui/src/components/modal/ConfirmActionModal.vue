@@ -1,5 +1,11 @@
 <template>
-    <NewModal ref="modal" :header="header" :fade="fade" :max-width="maxWidth" :disable-close="busy">
+    <NewModal
+        ref="modal"
+        :header="header"
+        :fade="fade"
+        :max-width="maxWidth"
+        :disable-close="busy && !closing"
+    >
         <div class="flex flex-col gap-6">
             <slot name="warning" />
             <slot />
@@ -72,9 +78,11 @@ const messages = defineMessages({
 })
 const modal = ref<InstanceType<typeof NewModal>>()
 const busy = ref(false)
+const closing = ref(false)
 const error = ref<string | null>(null)
 
 function show() {
+    if (busy.value) return
     error.value = null
     modal.value?.show()
 }
@@ -86,13 +94,14 @@ async function onConfirm() {
     try {
         if (props.confirmAction) await props.confirmAction()
         else emit('confirm')
-        busy.value = false
+        closing.value = true
         await nextTick()
         await modal.value?.hide()
     } catch (failure) {
         console.error('Confirmation action failed', failure)
         error.value = formatMessage(messages.failed)
     } finally {
+        closing.value = false
         busy.value = false
     }
 }

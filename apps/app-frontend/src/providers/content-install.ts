@@ -613,9 +613,9 @@ export function createContentInstall(opts: {
         instance: InstallTargetInstance,
         project: Labrinth.Projects.v2.Project,
         version: Labrinth.Versions.v2.Version,
+        curseForgeProject = currentCurseForgeProject,
+        file = currentCurseForgeFiles.get(version.id),
     ) {
-        const curseForgeProject = currentCurseForgeProject
-        const file = currentCurseForgeFiles.get(version.id)
         if (!curseForgeProject || !file) {
             throw new Error(
                 formatMessage(contentInstallMessages.errorMessages.missingCurseForgeFile),
@@ -1024,6 +1024,7 @@ export function createContentInstall(opts: {
         incompatibilityWarningInstalled = false
     }
 
+    let creatingSession: number | null = null
     async function handleCreateAndInstall(data: {
         name: string
         iconPath: string | null
@@ -1031,6 +1032,11 @@ export function createContentInstall(opts: {
         loader: string
         gameVersion: string
     }) {
+        const sessionId = currentSessionId()
+        if (creatingSession === sessionId) return
+        const project = currentProject
+        const provider = currentProvider
+        const curseForgeProject = currentCurseForgeProject
         const loaderCandidates =
             data.loader === 'vanilla' ? ['vanilla', 'datapack', 'minecraft'] : [data.loader]
         const version =
@@ -1039,15 +1045,30 @@ export function createContentInstall(opts: {
                     v.game_versions.includes(data.gameVersion) &&
                     loaderCandidates.some((l) => v.loaders.includes(l)),
             ) ?? currentVersions[0]
-
+        if (!project || !version) {
+            handleContentInstallError(
+                formatMessage(contentInstallMessages.errorMessages.missingVersion),
+            )
+            return
+        }
+        const file = currentCurseForgeFiles.get(version.id)
+        const isCurrent = () => sessionId === currentSessionId()
+        creatingSession = sessionId
+        hideContentInstallModal()
         let createdInstanceId: string | null = null
-        debugState('handleCreateAndInstall', {
-            provider: currentProvider,
-            projectType: currentProject?.project_type,
-            projectTitle: currentProject?.title,
-            isCurseforgeModpack:
-                currentProvider === 'curseforge' && currentProject?.project_type === 'modpack',
-        })
+        const retainInstance = async () => {
+            opts.addNotification({
+                title: formatMessage(contentInstallMessages.retainedInstanceMessages.title),
+                text: formatMessage(contentInstallMessages.retainedInstanceMessages.description, {
+                    name: data.name,
+                }),
+                type: 'info',
+            })
+            if (isCurrent() && createdInstanceId) {
+                settleInstallSession(sessionId)
+                await opts.router.push(`/instance/${encodeURIComponent(createdInstanceId)}`)
+            }
+        }
         try {
             const job = await install_create_instance({
                 name: data.name,
@@ -1057,119 +1078,76 @@ export function createContentInstall(opts: {
                 iconPath: data.iconPath,
             })
             const id = installJobInstanceId(job)
-            if (!id) return
+            if (!id) {
+                settleInstallSession(sessionId)
+                return
+            }
             createdInstanceId = id
+            if (!isCurrent()) {
+                await retainInstance()
+                return
+            }
             await wait_for_install_job(job.job_id)
-
-            if (currentProvider === 'modrinth') {
-                const contentJob = await queueResourceVersion(
-                    {
-                        id,
-                        name: data.name,
-                        game_version: data.gameVersion,
-                        loader: data.loader as InstanceLoader,
-                    },
-                    currentProject!,
-                    version,
-                    'modrinth',
-                )
-                if (!contentJob) return
-                trackEvent('InstanceCreate', { source: 'ProjectInstallModal' })
-                trackEvent('ProjectInstall', {
-                    loader: data.loader,
-                    game_version: data.gameVersion,
-                    id: currentProject!.id,
-                    version_id: version.id,
-                    project_type: currentProject!.project_type,
-                    title: currentProject!.title,
-                    source: 'ProjectInstallModal',
-                })
-                settleCurrentCallback(contentJob.versionId, contentJob.installedProjectIds)
-                hideContentInstallModal()
+            if (!isCurrent()) {
+                await retainInstance()
                 return
             }
-
-            if (currentProvider === 'curseforge' && currentProject!.project_type !== 'modpack') {
-                const job = await queueCurrentCurseForgeVersion(
-                    {
-                        id,
-                        name: data.name,
-                        icon_path: data.iconPath ?? undefined,
-                        game_version: data.gameVersion,
-                        loader: data.loader as InstanceLoader,
-                    },
-                    currentProject!,
-                    version,
-                )
-                if (!job) return
-                trackEvent('InstanceCreate', { source: 'ProjectInstallModal' })
-                trackEvent('ProjectInstall', {
-                    loader: data.loader,
-                    game_version: data.gameVersion,
-                    id: currentProject!.id,
-                    version_id: version.id,
-                    project_type: currentProject!.project_type,
-                    title: currentProject!.title,
-                    source: 'ProjectInstallModal',
-                })
-                settleCurrentCallback(job.versionId, job.installedProjectIds)
-                hideContentInstallModal()
-                return
+            const target = {
+                id,
+                name: data.name,
+                icon_path: data.iconPath ?? undefined,
+                game_version: data.gameVersion,
+                loader: data.loader as InstanceLoader,
             }
-
-            addInstallingItem(id, currentProject!, version)
-
             let installedProjectIds: string[]
-            if (currentProvider === 'curseforge') {
-                debugState('handleCreateAndInstall: CF path start', {
-                    instanceId: id,
-                    projectId: currentProject?.id,
-                })
-                const result = await installCurrentCurseForgeVersion(
-                    {
-                        id,
-                        name: data.name,
-                        icon_path: data.iconPath ?? undefined,
-                        game_version: data.gameVersion,
-                        loader: data.loader as InstanceLoader,
-                    },
-                    currentProject!,
-                    version,
-                )
-                installedProjectIds = result.installedProjectIds
-                removeInstallingItems(id, [currentProject!.id])
+            let installedVersionId: string | undefined
+            if (provider === 'modrinth' || project.project_type !== 'modpack') {
+                const contentJob = await queueResourceVersion(target, project, version, provider)
+                if (!contentJob) {
+                    await retainInstance()
+                    return
+                }
+                if (!isCurrent()) return
+                installedProjectIds = contentJob.installedProjectIds
+                installedVersionId = contentJob.versionId
             } else {
-                throw new Error(
-                    formatMessage(contentInstallMessages.errorMessages.unsupportedProvider),
+                addInstallingItem(id, project, version)
+                const result = await installCurrentCurseForgeVersion(
+                    target,
+                    project,
+                    version,
+                    curseForgeProject,
+                    file,
                 )
+                removeInstallingItems(id, [project.id])
+                if (!isCurrent()) return
+                installedProjectIds = result.installedProjectIds
+                installedVersionId = version.id
+                await opts.router.push('/downloads')
+                if (!isCurrent()) return
             }
-            await opts.router.push(
-                currentProvider === 'curseforge' && currentProject?.project_type === 'modpack'
-                    ? '/downloads'
-                    : `/instance/${encodeURIComponent(id)}`,
-            )
-
-            trackEvent('InstanceCreate', {
-                source: 'ProjectInstallModal',
-            })
+            trackEvent('InstanceCreate', { source: 'ProjectInstallModal' })
             trackEvent('ProjectInstall', {
                 loader: data.loader,
                 game_version: data.gameVersion,
-                id: currentProject!.id,
+                id: project.id,
                 version_id: version.id,
-                project_type: currentProject!.project_type,
-                title: currentProject!.title,
+                project_type: project.project_type,
+                title: project.title,
                 source: 'ProjectInstallModal',
             })
-
-            settleCurrentCallback(version.id, installedProjectIds)
-            modalRef?.hide()
+            settleInstallSession(sessionId, installedVersionId, installedProjectIds)
         } catch (err) {
-            if (createdInstanceId && currentProject) {
-                removeInstallingItems(createdInstanceId, [currentProject.id])
+            if (createdInstanceId) {
+                removeInstallingItems(createdInstanceId, [project.id])
                 markInstanceContentInstallFailed(createdInstanceId)
             }
-            handleContentInstallError(err)
+            if (isCurrent()) {
+                settleInstallSession(sessionId)
+                handleContentInstallError(err)
+            }
+        } finally {
+            if (creatingSession === sessionId) creatingSession = null
         }
     }
 

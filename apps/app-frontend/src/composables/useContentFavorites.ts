@@ -35,6 +35,7 @@ function sameFavorites(left: ContentFavorite[], right: ContentFavorite[]) {
                 favorite.content_type === right[index]?.content_type &&
                 favorite.saved_at === right[index]?.saved_at &&
                 favorite.resource_id === right[index]?.resource_id &&
+                favorite.locator === right[index]?.locator &&
                 JSON.stringify(favorite.projects) === JSON.stringify(right[index]?.projects),
         )
     )

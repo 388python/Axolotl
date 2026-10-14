@@ -597,7 +597,7 @@ async function toggleProjectSelection(project: FavoriteProject) {
 
 async function removeFavorite(project: FavoriteProject) {
     try {
-        await contentFavorites.remove(project.provider, project.projectId)
+        await contentFavorites.remove(project.favorite.provider, project.favorite.project_id)
     } catch (error) {
         handleError(error)
     }

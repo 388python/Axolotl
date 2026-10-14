@@ -1,4 +1,10 @@
 {
+  "app.content-install.retained-instance.title": {
+    "message": "Created instance retained"
+  },
+  "app.content-install.retained-instance.description": {
+    "message": "{name} was created. The content installation was cancelled; you can manage or remove the instance from your library."
+  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },

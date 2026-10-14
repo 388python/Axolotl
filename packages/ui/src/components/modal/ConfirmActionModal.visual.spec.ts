@@ -12,7 +12,7 @@ vi.mock('./NewModal.vue', () => ({
         setup: (props, { expose, slots }) => {
             expose({
                 hide: () => {
-                    if (!props.disableClose) hide()
+                    if (!props.disableClose) return hide()
                 },
                 show,
             })
@@ -69,6 +69,35 @@ it('unlink confirmation stays open through the request, preserves errors and clo
         await flushPromises()
         expect(hide).toHaveBeenCalledOnce()
         expect(wrapper.find('[data-locked="false"]').exists()).toBe(true)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('keeps the action locked until the close animation completes', async () => {
+    let finish!: () => void
+    hide.mockImplementationOnce(
+        () =>
+            new Promise<void>((resolve) => {
+                finish = resolve
+            }),
+    )
+    const action = vi.fn().mockResolvedValue(undefined)
+    const wrapper = mount(ConfirmActionModal, {
+        props: { header: 'Delete', confirmLabel: 'Delete', confirmAction: action },
+        global: { directives: { tooltip: {} } },
+    })
+    try {
+        await wrapper.findAll('button')[1].trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[data-locked="false"]').exists()).toBe(true)
+        expect(wrapper.findAll('button')[1].attributes('disabled')).toBeDefined()
+        await wrapper.findAll('button')[1].trigger('click')
+        wrapper.vm.show()
+        expect(action).toHaveBeenCalledOnce()
+        finish()
+        await flushPromises()
+        expect(wrapper.findAll('button')[1].attributes('disabled')).toBeUndefined()
     } finally {
         wrapper.unmount()
     }

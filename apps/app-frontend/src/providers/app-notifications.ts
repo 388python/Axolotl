@@ -100,7 +100,7 @@ export class AppNotificationManager extends AbstractWebNotificationManager {
 
     public override handleError(error: unknown): void {
         const text = this.errorTextFormatter?.(error)
-        if (text == null) {
+        if (text === null || text === undefined) {
             super.handleError(error)
             return
         }

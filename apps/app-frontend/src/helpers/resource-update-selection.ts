@@ -78,7 +78,8 @@ export function duplicateGroupUpdateEntries(items: ContentItem[], anchor: Conten
                         confirmedContentGroupKey(item) === group &&
                         item.instanceMaterializationState === 'present' &&
                         item.instanceCapabilities?.canUpdate !== false &&
-                        (item.resourceUpdate != null || item.update != null),
+                        ((item.resourceUpdate !== null && item.resourceUpdate !== undefined) ||
+                            (item.update !== null && item.update !== undefined)),
                 )
                 .flatMap((item) => (item.instanceEntryId ? [item.instanceEntryId] : [])),
         ),

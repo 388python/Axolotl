@@ -31,7 +31,9 @@ fn request(id: &RequestId) -> Result<(RequestGuard, CancellationToken)> {
         ),
         dashmap::mapref::entry::Entry::Vacant(entry) => {
             entry.insert(token.clone());
-            if EARLY_CANCELLATIONS.remove(id).is_some() {
+            if EARLY_CANCELLATIONS.remove(id).is_some_and(|(_, time)| {
+                time.elapsed() < std::time::Duration::from_secs(30)
+            }) {
                 token.cancel();
             }
             Ok((RequestGuard(id.clone()), token))
@@ -854,4 +856,28 @@ pub async fn resource_cache_info() -> Result<ResourceCacheInfo> {
 pub async fn resource_cache_clear() -> Result<()> {
     service().await?.cache().clear().await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn early_cancellations_expire_before_request_ids_are_reused() {
+        let recent = RequestId::new("recent-cancellation-test").unwrap();
+        resource_cancel(recent.clone());
+        let (guard, token) = request(&recent).unwrap();
+        assert!(token.is_cancelled());
+        drop(guard);
+
+        let expired = RequestId::new("expired-cancellation-test").unwrap();
+        EARLY_CANCELLATIONS.insert(
+            expired.clone(),
+            std::time::Instant::now() - std::time::Duration::from_secs(31),
+        );
+        let (guard, token) = request(&expired).unwrap();
+        assert!(!token.is_cancelled());
+        assert!(!EARLY_CANCELLATIONS.contains_key(&expired));
+        drop(guard);
+    }
 }

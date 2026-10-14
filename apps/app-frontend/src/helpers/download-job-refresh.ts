@@ -11,10 +11,13 @@ export async function reconcileAcceptedDownloadJob<T extends { job_id: string }>
     publish: (job: T) => void,
     remove: (id: string) => void,
     onError: (error: unknown) => void,
+    revision?: { atDispatch: number; current: () => number },
 ) {
-    publish(accepted)
+    if (!revision || revision.current() === revision.atDispatch) publish(accepted)
+    const atRead = revision?.current()
     try {
         const current = await read(accepted.job_id)
+        if (revision && revision.current() !== atRead) return
         if (current) publish(current)
         else remove(accepted.job_id)
     } catch (error) {

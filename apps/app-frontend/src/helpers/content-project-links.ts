@@ -1,5 +1,7 @@
 import type { ContentItem } from '@modrinth/ui'
 
+import { sourceProjectUrl } from './source-project-links.ts'
+
 export function contentProjectUrl(item: ContentItem): string | null {
     const source = item.origin_provider ?? item.provider_refs?.[0]?.provider
     const project = item.project
@@ -8,13 +10,13 @@ export function contentProjectUrl(item: ContentItem): string | null {
         const id = item.provider_refs?.find(
             (reference) => reference.provider === 'modrinth',
         )?.project_id
-        return id ? `https://modrinth.com/project/${encodeURIComponent(String(id))}` : null
+        return id ? sourceProjectUrl('modrinth', String(id)) : null
     }
     if (source === 'curseforge') {
         const id = item.provider_refs?.find(
             (reference) => reference.provider === 'curseforge',
         )?.project_id
-        return id ? `https://www.curseforge.com/projects/${encodeURIComponent(String(id))}` : null
+        return id ? sourceProjectUrl('curseforge', String(id)) : null
     }
     return null
 }

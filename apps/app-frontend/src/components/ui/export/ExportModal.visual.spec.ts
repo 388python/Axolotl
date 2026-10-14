@@ -122,6 +122,29 @@ const exportButton = () =>
         (button) => button.textContent?.trim() === 'Export',
     )!
 
+it('does not queue an export after unmount while the native save dialog is open', async () => {
+    vi.mocked(resourceExportScan).mockResolvedValue(snapshot())
+    let finish!: (path: string) => void
+    vi.mocked(save).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve
+            }),
+    )
+    const wrapper = await mountExport()
+    wrapper.vm.show()
+    await flushPromises()
+    wrapper.findComponent(MultiStageModal).vm.setStage('package')
+    await flushPromises()
+    exportButton().click()
+    await flushPromises()
+    wrapper.unmount()
+    finish('abandoned.mrpack')
+    await flushPromises()
+    expect(resourceExportQueue).not.toHaveBeenCalled()
+    expect(resourceExportClose).toHaveBeenCalledWith('fresh')
+})
+
 it('releases a cancelled scan session even when its result arrives after another window session starts', async () => {
     let finish!: (value: ResourceExportScan) => void
     vi.mocked(resourceExportScan)

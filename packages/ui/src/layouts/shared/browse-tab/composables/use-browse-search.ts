@@ -25,6 +25,7 @@ export interface UseBrowseSearchOptions {
     environmentOverride?: ComputedRef<EnvironmentSearchOverride | undefined>
     installContextLoader?: ComputedRef<string | undefined>
     search: (params: string, signal: AbortSignal) => Promise<BrowseSearchResponse>
+    invalidateSearch?: () => void
     syncQueryParams?: boolean
     persistentQueryParams: string[]
     getExtraQueryParams?: () => Record<string, string | undefined>
@@ -245,12 +246,13 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
         searchDebounceTimer = setTimeout(() => {
             searchDebounceTimer = null
-            refreshSearch()
+            refreshSearch(true)
         }, 200)
     })
 
-    async function refreshSearch() {
+    async function refreshSearch(reuseCache = false) {
         searchAbortController?.abort()
+        if (!reuseCache) options.invalidateSearch?.()
         const abortController = new AbortController()
         searchAbortController = abortController
         const version = ++searchVersion

@@ -49,7 +49,12 @@ const minecraftDirectories = ref(loadMinecraftDirectories())
 const minecraftDirectoryError = ref(null)
 const purgeCacheConfirmModal = ref(null)
 const { formatMessage } = useVIntl()
-const preferredResourceSource = ref(await resourcePreferredSource())
+const preferredResourceSource = ref('modrinth')
+try {
+    preferredResourceSource.value = await resourcePreferredSource()
+} catch (error) {
+    handleError(error)
+}
 const savingResourceSource = ref(false)
 const resourceSourceOptions = [
     { value: 'modrinth', label: 'Modrinth' },
@@ -709,28 +714,32 @@ watch(
 )
 
 async function purgeCache() {
-    await invoke('plugin:axolotl-resources|resource_cache_clear')
-    await purge_cache_types([
-        'project',
-        'project_v3',
-        'curseforge_project',
-        'version',
-        'user',
-        'team',
-        'organization',
-        'file',
-        'loader_manifest',
-        'minecraft_manifest',
-        'categories',
-        'report_types',
-        'loaders',
-        'game_versions',
-        'donation_platforms',
-        'file_hash',
-        'file_update',
-        'search_results',
-        'search_results_v3',
-    ]).catch(handleError)
+    try {
+        await invoke('plugin:axolotl-resources|resource_cache_clear')
+        await purge_cache_types([
+            'project',
+            'project_v3',
+            'curseforge_project',
+            'version',
+            'user',
+            'team',
+            'organization',
+            'file',
+            'loader_manifest',
+            'minecraft_manifest',
+            'categories',
+            'report_types',
+            'loaders',
+            'game_versions',
+            'donation_platforms',
+            'file_hash',
+            'file_update',
+            'search_results',
+            'search_results_v3',
+        ])
+    } catch (error) {
+        handleError(error)
+    }
 }
 
 function handlePurgeCacheClick() {

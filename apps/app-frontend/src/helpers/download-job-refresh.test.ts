@@ -49,6 +49,47 @@ test('does not regress an active job to a same-timestamp queued snapshot', () =>
     assert.equal(isRegressiveActiveJobSnapshot(running, queued, active), true)
 })
 
+test('preserves same-second terminal events received before an accepted retry response when the read fails', async () => {
+    const terminal = job('a', 'succeeded', 100)
+    let current = terminal
+    const errors: unknown[] = []
+    await reconcileAcceptedDownloadJob(
+        job('a', 'queued', 0),
+        async () => {
+            throw new Error('read failed')
+        },
+        (value) => {
+            current = value
+        },
+        () => assert.fail('must not remove the live job'),
+        (error) => errors.push(error),
+        { atDispatch: 1, current: () => 2 },
+    )
+    assert.equal(current, terminal)
+    assert.equal(errors.length, 1)
+})
+
+test('a supplemental read cannot replace events received while it was in flight', async () => {
+    let revision = 1
+    let current = job('a', 'queued', 0)
+    await reconcileAcceptedDownloadJob(
+        current,
+        async () => {
+            current = job('a', 'succeeded', 100)
+            revision++
+            return job('a', 'running', 20)
+        },
+        (value) => {
+            current = value
+            revision++
+        },
+        () => assert.fail('must not remove the live job'),
+        () => assert.fail('read succeeded'),
+        { atDispatch: 1, current: () => revision },
+    )
+    assert.equal(current.status, 'succeeded')
+})
+
 test('allows a queued snapshot when the job is not already active', () => {
     const succeeded = job('a', 'succeeded', 100)
     const queued = job('a', 'queued', 0)

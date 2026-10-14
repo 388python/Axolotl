@@ -4,6 +4,41 @@ import { defineComponent, h, ref } from 'vue'
 
 import { useSearchResultTranslation } from './use-search-result-translation'
 
+it('switching to the original language restores the original snapshot and the translation toggle', async () => {
+    const original = [{ title: 'Original project' }]
+    const projects = ref(original),
+        servers = ref<typeof original>([])
+    const locale = ref('zh-CN')
+    let control!: ReturnType<typeof useSearchResultTranslation>
+    const wrapper = mount(
+        defineComponent({
+            setup: () => {
+                control = useSearchResultTranslation({
+                    projectHits: projects,
+                    serverHits: servers,
+                    projectType: ref('mod'),
+                    locale,
+                    onError: vi.fn(),
+                    translate: (async (snapshot: typeof original, language: string) =>
+                        language === 'en-US' ? snapshot : [{ title: '中文译文' }]) as never,
+                })
+                return () => h('div')
+            },
+        }),
+    )
+    try {
+        await flushPromises()
+        expect(projects.value[0].title).toBe('中文译文')
+        expect(control.translationActive.value).toBe(true)
+        locale.value = 'en-US'
+        await flushPromises()
+        expect(projects.value).toEqual(original)
+        expect(control.translationActive.value).toBe(false)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('empty search snapshots cancel older translations without restoring old results or the wrong resource type', async () => {
     const projects = ref([{ title: 'Old project' }]),
         servers = ref([{ title: 'Old server' }])

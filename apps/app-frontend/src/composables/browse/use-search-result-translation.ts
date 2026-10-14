@@ -31,14 +31,12 @@ export function useSearchResultTranslation<
         if (!snapshot.length) return
         const translated = await execute(snapshot, options.locale.value, force, server)
         if (control.isStale(version)) return
-        if (translated !== snapshot) {
-            applying = true
-            try {
-                hits.value = translated
-                control.translationActive.value = true
-            } finally {
-                applying = false
-            }
+        applying = true
+        try {
+            hits.value = translated
+            control.translationActive.value = translated !== snapshot
+        } finally {
+            applying = false
         }
     }
 

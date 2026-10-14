@@ -124,3 +124,29 @@ test('permanent source capability notices do not restart successful cursor pages
     await pager.get(query(), 1, signal)
     assert.equal(calls, 2)
 })
+
+test('explicit retry invalidates permanent failures and refreshing a deep page retains earlier cursors', async () => {
+    const cursors: (string | null)[] = []
+    const pager = new ResourceSearchPages(async (_query, cursor) => {
+        cursors.push(cursor)
+        return {
+            ...page(cursors.length),
+            sourceFailures: [
+                {
+                    source: 'modrinth',
+                    code: 'sourceUnavailable',
+                    message: 'failed',
+                    retryable: false,
+                },
+            ],
+        }
+    })
+    const signal = new AbortController().signal
+    const first = await pager.get(query(), 0, signal)
+    pager.invalidate()
+    assert.notEqual(await pager.get(query(), 0, signal), first)
+    await pager.get(query(), 2, signal)
+    pager.invalidate(2)
+    await pager.get(query(), 2, signal)
+    assert.deepEqual(cursors, [null, null, 'cursor-2', 'cursor-3', 'cursor-3'])
+})

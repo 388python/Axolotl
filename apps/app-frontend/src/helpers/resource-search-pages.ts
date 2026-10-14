@@ -20,6 +20,11 @@ export class ResourceSearchPages {
         return this.pages.indexOf(page)
     }
 
+    invalidate(index = 0) {
+        this.generation++
+        this.pages.splice(index)
+    }
+
     async get(
         query: ResourceSearchQuery,
         index: number,

@@ -29,15 +29,13 @@
                     {{ summary }}
                 </p>
             </div>
-            <div class="project-card--compact__provider flex flex-wrap gap-1">
-                <span
-                    v-for="label in providerLabels"
-                    :key="label"
-                    class="rounded-full bg-surface-5 px-2 py-0.5 text-xs font-semibold text-[var(--color-text-tertiary)]"
-                >
-                    {{ label }}
-                </span>
-            </div>
+            <AutoLink
+                v-tooltip="providerLabels.join(', ')"
+                :to="link"
+                class="project-card--compact__provider smart-clickable:allow-pointer-events min-w-0 truncate text-xs font-semibold text-[var(--color-text-tertiary)]"
+            >
+                {{ providerLabels.join(', ') }}
+            </AutoLink>
             <div
                 class="project-card--compact__tags flex min-w-0 items-center gap-1 overflow-hidden"
             >

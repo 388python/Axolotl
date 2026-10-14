@@ -607,17 +607,33 @@ async function fetchInstance() {
     const read = instanceReads.begin(requestedId)
     const isCurrent = () =>
         !instancePageClosed && instanceGeneration === generation && props.id === requestedId
-    isServerInstance.value = false
-    linkedProjectV3.value = undefined
-    resetServerStatus()
+    if (activeInstanceId.value !== requestedId) {
+        isServerInstance.value = false
+        linkedProjectV3.value = undefined
+        resetServerStatus()
+    }
 
     const nextInstance = await get(requestedId).catch((error) => {
-        if (isCurrent() && instanceReads.isCurrent(read, props.id)) handleError(error)
+        if (isCurrent() && instanceReads.isCurrent(read, props.id)) {
+            if (String(error).includes('not managed')) void router.push({ path: '/' })
+            else handleError(error)
+        }
     })
     if (!isCurrent() || !instanceReads.isCurrent(read, props.id)) return
+    if (!nextInstance) return
+    const linkChanged =
+        instance.value?.id !== nextInstance?.id ||
+        instance.value?.link?.type !== nextInstance?.link?.type ||
+        instance.value?.link?.project_id !== nextInstance?.link?.project_id
+    if (linkChanged) {
+        linkedProjectV3.value = undefined
+        resetServerStatus()
+    }
     instance.value = nextInstance ?? undefined
     activeInstanceId.value = nextInstance?.id
-    isServerInstance.value = nextInstance?.link?.type === 'server_project_modpack'
+    isServerInstance.value =
+        nextInstance?.link?.type === 'server_project_modpack' ||
+        linkedProjectV3.value?.minecraft_server != null
 
     if (nextInstance?.symlink_target) {
         void allow_symlink_target(nextInstance.symlink_target).catch(() => {})
@@ -625,6 +641,7 @@ async function fetchInstance() {
 
     if (
         !offline.value &&
+        !linkedProjectV3.value &&
         nextInstance?.link?.project_id &&
         ['modrinth_modpack', 'server_project_modpack'].includes(nextInstance.link.type)
     ) {
@@ -984,37 +1001,7 @@ const unlistenInstances = await instance_listener(
             return
         }
         const requestedId = props.id
-        const generation = instanceGeneration
-        const read = instanceReads.begin(requestedId)
-        const next = await get(requestedId).catch((err) => {
-            if (
-                instancePageClosed ||
-                !instanceReads.isCurrent(read, props.id) ||
-                instanceGeneration !== generation
-            )
-                return
-            if (String(err).includes('not managed')) {
-                router.push({ path: '/' })
-                return undefined
-            }
-            return handleError(err)
-        })
-        if (
-            instancePageClosed ||
-            !instanceReads.isCurrent(read, props.id) ||
-            instanceGeneration !== generation
-        )
-            return
-        const oldLink = instance.value?.link
-        instance.value = next
-        if (
-            !next?.link?.project_id ||
-            oldLink?.type !== next.link.type ||
-            oldLink?.project_id !== next.link.project_id
-        ) {
-            linkedProjectV3.value = undefined
-            isServerInstance.value = false
-        }
+        await fetchInstance()
         void queryClient.invalidateQueries({ queryKey: postUpgradeNoticeQueryKey(requestedId) })
     },
 )

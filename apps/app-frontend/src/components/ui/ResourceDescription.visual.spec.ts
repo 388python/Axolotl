@@ -75,6 +75,37 @@ it('reads the preferred description while keeping the original installation refe
     }
 })
 
+it('retries the failed source while preserving the last successful description', async () => {
+    ready()
+    const wrapper = mount(ResourceDescription, {
+        props: { source: 'modrinth', projectId: 'abcdefgh' },
+    })
+    try {
+        await flushPromises()
+        vi.mocked(resourceDescription).mockRejectedValueOnce(new Error('unavailable'))
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Modrinth')!
+            .trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).toContain('curseforge description')
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Retry description')!
+            .trigger('click')
+        await flushPromises()
+        expect(resourceDescription).toHaveBeenLastCalledWith(
+            expect.any(Object),
+            'modrinth',
+            undefined,
+            expect.any(AbortSignal),
+        )
+        expect(wrapper.text()).toContain('modrinth description')
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('keeps a completed description on failure and aborts old subscriptions on source change', async () => {
     ready()
     const wrapper = mount(ResourceDescription, {

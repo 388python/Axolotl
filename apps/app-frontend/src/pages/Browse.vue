@@ -1891,14 +1891,6 @@ async function search(requestParams: string, signal: AbortSignal) {
               )
             : null
     signal.throwIfAborted()
-    const nonLoaderCategories = categories.filter((value) => !loaders.includes(value))
-    const cfCategories = classId
-        ? resolveCurseForgeCategoryIdsFromFilterValues(
-              nonLoaderCategories,
-              curseForgeCategoriesByClass.value[classId] ?? [],
-              new Set(loaders),
-          )
-        : []
     const query: ResourceSearchQuery = {
         filter: parseResourceSearchFilter(
             filters,
@@ -1916,16 +1908,11 @@ async function search(requestParams: string, signal: AbortSignal) {
         types: [typeMap[projectType.value]],
         sources: contentSource.value === 'all' ? [] : [contentSource.value],
         target: {
-            gameVersions: getSearchFilterValues(filters, 'game_versions'),
-            loaders,
+            gameVersions: [],
+            loaders: [],
             channels: [],
         },
-        categories: [
-            ...nonLoaderCategories
-                .filter((value) => !value.startsWith('cf:'))
-                .map((value) => `modrinth:${value}`),
-            ...cfCategories.map((value) => `curseforge:${value}`),
-        ],
+        categories: [],
         sort: sortMap[params.get('index') ?? 'relevance'] ?? 'relevance',
         pageSize: limit,
     }
@@ -2083,6 +2070,7 @@ function setDisplayMode(mode: BrowseDisplayMode) {
 }
 
 const searchState = useBrowseSearch({
+    invalidateSearch: () => resourceSearchPages.invalidate(searchState.currentPage.value - 1),
     formatError: (error) =>
         isResourceOperationError(error)
             ? resourceOperationError(error, formatMessage)

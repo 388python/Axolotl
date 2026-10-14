@@ -16,6 +16,8 @@ import { get_instance_worlds } from '@/helpers/worlds'
 
 import ResourceOperationPreviewModal from './ResourceOperationPreviewModal.vue'
 
+const closeTransition = vi.fn().mockResolvedValue(undefined)
+
 vi.mock('@/helpers/resources', () => ({
     resourceGet: vi.fn(),
     resourcePrepareEntryOperation: vi.fn(),
@@ -64,10 +66,11 @@ vi.mock('@modrinth/ui', () => ({
                 show: () => {
                     visible.value = true
                 },
-                hide: () => {
+                hide: async () => {
                     if (props.disableClose) return
-                    visible.value = false
                     props.onHide?.()
+                    await closeTransition()
+                    visible.value = false
                 },
             })
             return () =>
@@ -122,6 +125,7 @@ function plan(revision = 1): ResourceOperationPlan {
 }
 function ready() {
     vi.clearAllMocks()
+    closeTransition.mockReset().mockResolvedValue(undefined)
     vi.mocked(resourcePrepareEntryOperation).mockResolvedValue(plan())
     vi.mocked(resourceGet).mockImplementation(
         async (reference) =>
@@ -142,6 +146,81 @@ function ready() {
             }) as Awaited<ReturnType<typeof resourceGet>>,
     )
 }
+
+it('keeps submission and reopening locked through the closing animation', async () => {
+    ready()
+    vi.mocked(resourceQueuePlan).mockResolvedValue({ job_id: 'queued' } as never)
+    let finish!: () => void
+    closeTransition.mockImplementationOnce(
+        () =>
+            new Promise<void>((resolve) => {
+                finish = resolve
+            }),
+    )
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show({
+        instanceId: 'instance',
+        intent: 'update',
+        entryIds: ['entry'],
+        installDependencies: true,
+    })
+    try {
+        await flushPromises()
+        const button = wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+        await button.trigger('click')
+        await flushPromises()
+        expect(button.attributes('disabled')).toBeDefined()
+        await button.trigger('click')
+        expect(
+            await wrapper.vm.show({
+                instanceId: 'other',
+                intent: 'update',
+                entryIds: ['entry'],
+                installDependencies: true,
+            }),
+        ).toBeNull()
+        expect(resourceQueuePlan).toHaveBeenCalledOnce()
+        finish()
+        await flushPromises()
+        expect((await result)?.job_id).toBe('queued')
+        expect(wrapper.find('section').exists()).toBe(false)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('cancelling a context aborts parsing and ignores its late plan', async () => {
+    ready()
+    let complete!: (plan: ResourceOperationPlan) => void
+    vi.mocked(resourcePrepareEntryOperation).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                complete = resolve
+            }),
+    )
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show({
+        instanceId: 'instance',
+        intent: 'update',
+        entryIds: ['entry'],
+        installDependencies: true,
+    })
+    try {
+        await flushPromises()
+        const signal = vi.mocked(resourcePrepareEntryOperation).mock.calls[0][5]!
+        await wrapper.vm.cancel()
+        expect(signal.aborted).toBe(true)
+        complete(plan())
+        await flushPromises()
+        expect(await result).toBeNull()
+        expect(wrapper.find('section').exists()).toBe(false)
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+    } finally {
+        wrapper.unmount()
+    }
+})
 const input = {
     instanceId: 'instance',
     instanceName: 'Example',

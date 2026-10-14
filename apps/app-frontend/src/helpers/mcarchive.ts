@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import { resourceProjectProtocol } from './resources'
+import { sourceProjectUrl } from './source-project-links'
 
 export type McArchiveGameVersion = {
     id: number
@@ -92,6 +93,7 @@ export async function getMcArchiveModBySlug(
     >('mcarchive', slug, signal)
     return {
         ...value,
+        pageUrl: value.pageUrl ?? sourceProjectUrl('mcarchive', value.slug || slug),
         modVersions: (value.mod_versions ?? value.modVersions ?? []).map((version) => ({
             ...version,
             gameVersions: version.game_versions ?? version.gameVersions,

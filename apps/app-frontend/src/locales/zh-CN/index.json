@@ -1,4 +1,10 @@
 {
+  "app.content-install.retained-instance.title": {
+    "message": "已保留创建的实例"
+  },
+  "app.content-install.retained-instance.description": {
+    "message": "已创建 {name}。内容安装已取消，你可以在实例库中管理或删除此实例。"
+  },
   "app.screenshots.selection.select-group": {
     "message": "选择“{group}”中的所有截图"
   },

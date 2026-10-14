@@ -2,6 +2,11 @@ import { expect, it, vi } from 'vitest'
 
 import { get_project, get_version_many } from '@/helpers/cache.js'
 import { getCurseForgeFile, getCurseForgeFiles, getCurseForgeProject } from '@/helpers/curseforge'
+import {
+    install_create_instance,
+    installJobInstanceId,
+    wait_for_install_job,
+} from '@/helpers/install'
 import { get, get_install_candidates } from '@/helpers/instance'
 
 import { createContentInstall } from './content-install'
@@ -131,6 +136,103 @@ it('late project versions cannot overwrite a newer install session', async () =>
     expect(oldCallback).toHaveBeenCalledOnce()
     expect(newCallback).not.toHaveBeenCalled()
 })
+
+it('creation waiting for Minecraft cannot install or settle a newer project session', async () => {
+    vi.clearAllMocks()
+    vi.mocked(get_project).mockImplementation(async (id) => project(id))
+    vi.mocked(get_version_many).mockImplementation(async (ids) => [
+        release(ids[0].replace('-release', '')),
+    ])
+    vi.mocked(get_install_candidates).mockResolvedValue([])
+    vi.mocked(install_create_instance).mockResolvedValue({ job_id: 'creation' } as never)
+    vi.mocked(installJobInstanceId).mockReturnValue('created')
+    let finish!: () => void
+    vi.mocked(wait_for_install_job).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = () => resolve({} as never)
+            }),
+    )
+    const { context, modal } = installationContext()
+    const oldCallback = vi.fn(),
+        newCallback = vi.fn()
+    const preview = vi.fn()
+    context.setResourceInstallPreview({ showInstallSelection: preview } as never)
+    await context.install('old', null, null, 'test', oldCallback)
+    const creation = context.handleCreateAndInstall({
+        name: 'Created',
+        iconPath: null,
+        iconPreviewUrl: null,
+        loader: 'fabric',
+        gameVersion: '1.20.1',
+    })
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(oldCallback).not.toHaveBeenCalled()
+    await context.install('new', null, null, 'test', newCallback)
+    const hideCount = modal.hide.mock.calls.length
+    finish()
+    await creation
+    expect(preview).not.toHaveBeenCalled()
+    expect(oldCallback).toHaveBeenCalledOnce()
+    expect(newCallback).not.toHaveBeenCalled()
+    expect(modal.hide).toHaveBeenCalledTimes(hideCount)
+})
+
+it.each(['modrinth', 'curseforge'] as const)(
+    'cancelled %s content review opens and explains the retained created instance',
+    async (source) => {
+        vi.clearAllMocks()
+        vi.mocked(get_project).mockResolvedValue(project('example'))
+        vi.mocked(get_version_many).mockResolvedValue([release('example')])
+        vi.mocked(getCurseForgeProject).mockResolvedValue({
+            id: 42,
+            name: 'Example',
+            classId: 6,
+            slug: 'example',
+            authors: [],
+        } as never)
+        vi.mocked(getCurseForgeFile).mockResolvedValue({
+            id: 7,
+            displayName: 'Release',
+            fileName: 'example.jar',
+            fileDate: '2025-01-01',
+            gameVersions: ['1.20.1', 'Fabric'],
+            isAvailable: true,
+            hashes: [],
+        } as never)
+        vi.mocked(get_install_candidates).mockResolvedValue([])
+        vi.mocked(install_create_instance).mockResolvedValue({ job_id: 'creation' } as never)
+        vi.mocked(installJobInstanceId).mockReturnValue('created')
+        vi.mocked(wait_for_install_job).mockResolvedValue({} as never)
+        const push = vi.fn(),
+            notify = vi.fn(),
+            callback = vi.fn()
+        const context = createContentInstall({
+            router: { push } as never,
+            handleError: vi.fn(),
+            addNotification: notify,
+        })
+        context.setContentInstallModal({ show: vi.fn(), hide: () => context.handleCancel() })
+        context.setResourceInstallPreview({
+            showInstallSelection: vi.fn().mockResolvedValue(null),
+        } as never)
+        if (source === 'curseforge')
+            await context.installCurseForge('42', '7', null, 'test', callback)
+        else await context.install('example', null, null, 'test', callback)
+        await context.handleCreateAndInstall({
+            name: 'Created',
+            iconPath: null,
+            iconPreviewUrl: null,
+            loader: 'fabric',
+            gameVersion: '1.20.1',
+        })
+        expect(push).toHaveBeenCalledWith('/instance/created')
+        expect(notify).toHaveBeenCalledWith(
+            expect.objectContaining({ title: 'Created instance retained' }),
+        )
+        expect(callback).toHaveBeenCalledOnce()
+    },
+)
 
 it('cancelled version requests cannot repopulate the install target', async () => {
     vi.clearAllMocks()

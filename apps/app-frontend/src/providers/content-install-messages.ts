@@ -1,5 +1,17 @@
 import { defineMessage, defineMessages } from '@modrinth/ui'
 
+export const retainedInstanceMessages = defineMessages({
+    title: {
+        id: 'app.content-install.retained-instance.title',
+        defaultMessage: 'Created instance retained',
+    },
+    description: {
+        id: 'app.content-install.retained-instance.description',
+        defaultMessage:
+            '{name} was created. The content installation was cancelled; you can manage or remove the instance from your library.',
+    },
+})
+
 export const errorMessages = defineMessages({
     installFailed: {
         id: 'app.content-install.error.failed',

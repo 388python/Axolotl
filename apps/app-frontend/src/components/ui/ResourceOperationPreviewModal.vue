@@ -164,6 +164,7 @@ const needsWorld = computed(
         ) ?? false,
 )
 const queueing = ref(false)
+const closing = ref(false)
 const queueFailed = ref(false)
 const error = ref<string | null>(null)
 const names = ref<Record<string, { title: string; iconUrl: string | null; summary?: string }>>({})
@@ -251,6 +252,7 @@ function noticeClass(notice: Notice) {
 const canApply = computed(
     () =>
         !busy.value &&
+        !queueing.value &&
         (plan.value?.actions.length ?? 0) > 0 &&
         !plan.value?.issues.some((issue) => issue.blocking),
 )
@@ -508,8 +510,7 @@ async function apply() {
         if (generation !== current) return
         submittedRoots.value = [...reviewed.activeRoots]
         resolveShow = null
-        queueing.value = false
-        busy.value = false
+        closing.value = true
         await nextTick()
         await modal.value?.hide()
         resolve?.(job)
@@ -525,8 +526,11 @@ async function apply() {
         retryAction = apply
         queueFailed.value = true
     } finally {
-        busy.value = false
-        queueing.value = false
+        if (generation === current || (closing.value && generation === current + 1)) {
+            busy.value = false
+            queueing.value = false
+            closing.value = false
+        }
     }
 }
 async function refresh() {
@@ -594,7 +598,19 @@ async function showInstallSelection(value: Parameters<typeof showInstall>[0]) {
     const job = await showInstall(value)
     return job ? { job, activeRoots: [...submittedRoots.value] } : null
 }
-defineExpose({ show, showInstall, showInstallSelection })
+async function cancel() {
+    if (queueing.value) return
+    hide()
+    const current = generation
+    busy.value = false
+    plan.value = null
+    input.value = null
+    progressNodes.value = new Map()
+    await nextTick()
+    if (generation !== current) return
+    await modal.value?.hide()
+}
+defineExpose({ show, showInstall, showInstallSelection, cancel })
 </script>
 
 <template>
@@ -602,7 +618,7 @@ defineExpose({ show, showInstall, showInstallSelection })
         ref="modal"
         :header="formatMessage(messages.header)"
         :on-hide="hide"
-        :disable-close="busy"
+        :disable-close="busy && !closing"
         scrollable
         width="min(42rem, 90vw)"
     >

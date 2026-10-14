@@ -329,15 +329,25 @@ const emit = defineEmits<{
     (e: 'navigate' | 'update:currentPath', path: string): void
 }>()
 
-const currentPath = computed({
-    get: () => props.currentPath,
-    set: (value) => emit('update:currentPath', value),
+const localPath = ref(props.currentPath)
+watch(
+    () => props.currentPath,
+    (value) => {
+        localPath.value = value
+    },
+)
+const activePath = computed({
+    get: () => localPath.value,
+    set: (value) => {
+        localPath.value = value
+        emit('update:currentPath', value)
+    },
 })
 const searching = computed(() => props.searchQuery.trim().length > 0)
 const sortField = ref<FileTreeSelectSortField>('name')
 const sortDesc = ref(false)
-const isHomePath = computed(() => searching.value || currentPath.value === '')
-const parentPath = computed(() => currentPath.value.split('/').slice(0, -1).join('/'))
+const isHomePath = computed(() => searching.value || activePath.value === '')
+const parentPath = computed(() => activePath.value.split('/').slice(0, -1).join('/'))
 const initialMinimumRowCount = ref(0)
 
 const normalizedItems = computed(() => {
@@ -391,7 +401,7 @@ const folderPaths = computed(() => {
 const entries = computed<FileTreeSelectEntry[]>(() => {
     const directories = new Map<string, FileTreeSelectEntry>()
     const files: FileTreeSelectEntry[] = []
-    const currentSegments = currentPath.value ? currentPath.value.split('/') : []
+    const currentSegments = activePath.value ? activePath.value.split('/') : []
 
     for (const item of normalizedItems.value) {
         if (searching.value) {
@@ -452,7 +462,7 @@ const bottomSpacerHeight = computed(() =>
         : 0,
 )
 watch(
-    [currentPath, () => props.searchQuery, () => props.selectedOnly, sortField, sortDesc],
+    [activePath, () => props.searchQuery, () => props.selectedOnly, sortField, sortDesc],
     async () => {
         await nextTick()
         findScrollableAncestor(listContainer.value).scrollTo({ top: 0 })
@@ -491,8 +501,8 @@ const fillerRowCount = computed(() =>
 watch(
     normalizedItems,
     () => {
-        if (currentPath.value && !folderPaths.value.has(currentPath.value)) {
-            currentPath.value = ''
+        if (activePath.value && !folderPaths.value.has(activePath.value)) {
+            activePath.value = ''
         }
     },
     { immediate: true },
@@ -633,7 +643,7 @@ function buildFileEntry(item: NormalizedFileTreeSelectItem): FileTreeSelectEntry
 }
 
 function navigateTo(path: string) {
-    currentPath.value = path
+    activePath.value = path
     emit('navigate', path)
 }
 

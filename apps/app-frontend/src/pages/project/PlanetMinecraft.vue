@@ -100,6 +100,7 @@ watch(
     () => selectedInstance.value?.id,
     () => {
         operationGeneration++
+        void preview.value?.cancel()
         manualDownload.value = null
         busyVersionId.value = null
     },
@@ -215,6 +216,7 @@ watch(
         const request = new AbortController()
         projectRequest = request
         operationGeneration++
+        void preview.value?.cancel()
         busyVersionId.value = null
         project.value = null
         manualDownload.value = null

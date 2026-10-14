@@ -443,23 +443,27 @@ export function createDownloadManager(handleError: (error: unknown) => void): Do
             jobs.value = jobs.value.filter((job) => job.job_id !== jobId)
             return
         }
+        const revision = jobRevisions.get(jobId) ?? 0
         const job = await download_job_cancel(jobId)
-        await reconcileJob(job)
+        await reconcileJob(job, revision)
     }
 
     async function retry(jobId: string) {
+        const revision = jobRevisions.get(jobId) ?? 0
         const job = await download_job_retry(jobId)
-        await reconcileJob(job)
+        await reconcileJob(job, revision)
     }
 
     async function resume(jobId: string) {
+        const revision = jobRevisions.get(jobId) ?? 0
         const job = await download_job_resume(jobId)
-        await reconcileJob(job)
+        await reconcileJob(job, revision)
     }
 
     async function skipMissingContent(jobId: string) {
+        const revision = jobRevisions.get(jobId) ?? 0
         const job = await install_job_skip_missing_content(jobId)
-        await reconcileJob(job)
+        await reconcileJob(job, revision)
     }
 
     /**
@@ -468,7 +472,7 @@ export function createDownloadManager(handleError: (error: unknown) => void): Do
      * the UI never shows a stale queued/running spinner, and drop the row
      * entirely when the job no longer exists.
      */
-    async function reconcileJob(job: InstallJobSnapshot) {
+    async function reconcileJob(job: InstallJobSnapshot, revision: number) {
         await reconcileAcceptedDownloadJob(
             job,
             download_job_get,
@@ -477,6 +481,7 @@ export function createDownloadManager(handleError: (error: unknown) => void): Do
                 jobs.value = jobs.value.filter((candidate) => candidate.job_id !== id)
             },
             handleError,
+            { atDispatch: revision, current: () => jobRevisions.get(job.job_id) ?? 0 },
         )
     }
 

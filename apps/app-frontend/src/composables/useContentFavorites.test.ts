@@ -55,6 +55,19 @@ test('content favorites load, add, remove, and keep provider-qualified identitie
     assert.equal(store.isFavorite('curseforge', 'same-id'), true)
 })
 
+test('refreshing a favorite replaces its updated locator even when its identity is unchanged', async () => {
+    let saved = { ...favorite('modrinth', 'same-id', 'mod', 1), locator: 'old-slug' }
+    const store = createContentFavoritesStore({
+        list: async () => [saved],
+        add: async () => saved,
+        remove: async () => {},
+    })
+    await store.load()
+    saved = { ...saved, locator: 'new-slug' }
+    await store.load(true)
+    assert.equal(store.favorites.value[0].locator, 'new-slug')
+})
+
 test('content favorite writes roll back busy state when persistence fails', async () => {
     const store = createContentFavoritesStore({
         async list() {
