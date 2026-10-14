@@ -86,20 +86,21 @@ export function createExportContext(
             0,
         )
     })
+    const selectedPathSet = computed(() => new Set(selection.value))
     const canExport = computed(
         () =>
             !!snapshot.value &&
             !scanning.value &&
             !exporting.value &&
             !resolution.value?.files.some(
-                (file) => selection.value.includes(file.snapshot.relativePath) && file.localError,
+                (file) => selectedPathSet.value.has(file.snapshot.relativePath) && file.localError,
             ),
     )
     const failedFiles = computed(
         () =>
             resolution.value?.files.filter(
                 (file) =>
-                    selection.value.includes(file.snapshot.relativePath) &&
+                    selectedPathSet.value.has(file.snapshot.relativePath) &&
                     (file.localError || file.resolutions.some((r) => r.kind === 'failed')),
             ) ?? [],
     )
@@ -240,7 +241,10 @@ export function createExportContext(
         error.value = ''
         try {
             const result = await resourceExportScan(instance().id, activeController.signal)
-            if (generation !== request) return
+            if (generation !== request) {
+                await resourceExportClose(result.sessionId).catch(() => {})
+                return
+            }
             snapshot.value = result
             draft.value = {
                 categories: defaultCategories(result.categories),

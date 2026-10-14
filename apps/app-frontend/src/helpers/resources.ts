@@ -153,6 +153,10 @@ export async function resourceRequest<T>(
             ...args,
             requestId,
         })
+        if (signal?.aborted && command === 'resource_export_scan') {
+            const sessionId = (result as { sessionId?: string })?.sessionId
+            if (sessionId) await resourceExportClose(sessionId).catch(() => {})
+        }
         signal?.throwIfAborted()
         return result
     } finally {

@@ -244,6 +244,9 @@ impl ResourceService {
             return vec![Err(ResourceError::Unavailable); queries.len()];
         }
         let namespace = runtime.provider.namespace();
+        let original_queries = queries.clone();
+        let local_release_pagination =
+            runtime.provider.local_release_pagination();
         let generation = self.cache.generation().await;
         let mut subscriptions = Vec::with_capacity(queries.len());
         let mut fresh = Vec::new();
@@ -253,6 +256,15 @@ impl ResourceService {
                 continue;
             }
             query.normalize();
+            if local_release_pagination {
+                if let ProviderQuery::Releases {
+                    cursor, page_size, ..
+                } = &mut query
+                {
+                    *cursor = None;
+                    *page_size = 0;
+                }
+            }
             if let Err(error) = runtime.provider.validate_query(&query) {
                 subscriptions.push(Err(error));
                 continue;
@@ -378,6 +390,34 @@ impl ResourceService {
             vec![Err(ResourceError::Canceled); results.len()]
         } else {
             results
+                .into_iter()
+                .zip(original_queries)
+                .map(|(result, query)| {
+                    if local_release_pagination {
+                        if let ProviderQuery::Releases {
+                            cursor,
+                            page_size,
+                            ..
+                        } = query
+                        {
+                            return result.and_then(|mut outcome| {
+                                if let ProviderValue::Releases(page) =
+                                    outcome.value
+                                {
+                                    outcome.value =
+                                        ProviderValue::Releases(slice_page(
+                                            page.entries,
+                                            offset(&cursor)?,
+                                            page_size,
+                                        )?);
+                                }
+                                Ok(outcome)
+                            });
+                        }
+                    }
+                    result
+                })
+                .collect()
         }
     }
 
@@ -429,6 +469,42 @@ impl ResourceService {
                             flight.started_at,
                         )
                         .await;
+                    if let ProviderValue::Project(document) = value {
+                        if !matches!(
+                            flight.query,
+                            ProviderQuery::ProjectProtocol { .. }
+                        ) && matches!(
+                            flight.key.cache.source.as_str(),
+                            "modrinth" | "mcarchive" | "planet_minecraft"
+                        ) {
+                            let query = ProviderQuery::Description {
+                                id: document
+                                    .metadata
+                                    .project
+                                    .project_id
+                                    .clone(),
+                                slug: None,
+                            };
+                            let description = ProviderValue::Description(
+                                document.description.clone(),
+                            );
+                            if let Ok(key) = CacheKey::new(
+                                provider.namespace(),
+                                flight.key.cache.source.clone(),
+                                &query,
+                            ) {
+                                self.cache
+                                    .put(
+                                        &key,
+                                        &description,
+                                        query.ttl(&description),
+                                        flight.key.generation,
+                                        flight.started_at,
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
                     if let ProviderValue::Identified(documents) = value {
                         for document in documents {
                             for project_id in [

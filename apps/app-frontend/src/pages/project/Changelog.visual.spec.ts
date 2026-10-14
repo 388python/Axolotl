@@ -38,7 +38,8 @@ vi.mock('@/helpers/resources', () => ({
 }))
 vi.mock('@/components/ui/ResourceReleaseChangelog.vue', () => ({
     default: defineComponent({
-        props: ['release'],
+        name: 'ResourceReleaseChangelog',
+        props: { release: { type: Object, required: true }, lazy: Boolean },
         setup: (props) => () => h('p', `Body ${props.release.releaseId}`),
     }),
 }))
@@ -65,9 +66,10 @@ it('lists releases without eagerly loading bodies, preserves pages on failure an
     try {
         await flushPromises()
         expect(wrapper.text()).toContain('CurseForge · 2026-10-13')
-        expect(wrapper.text()).not.toContain('Body')
-        await wrapper.find('article button').trigger('click')
         expect(wrapper.text()).toContain('Body 100')
+        const bodies = wrapper.findAllComponents({ name: 'ResourceReleaseChangelog' })
+        expect(bodies).toHaveLength(1)
+        expect(bodies.every((component) => component.props('lazy'))).toBe(true)
         await wrapper
             .findAll('button')
             .find((button) => button.text() === 'Load more releases')!
@@ -79,7 +81,7 @@ it('lists releases without eagerly loading bodies, preserves pages on failure an
             .find((button) => button.text() === 'Retry')!
             .trigger('click')
         await flushPromises()
-        expect(wrapper.findAll('article')).toHaveLength(2)
+        expect(wrapper.findAll('article article')).toHaveLength(2)
         expect(resourceReleases).toHaveBeenLastCalledWith(
             { kind: 'source', project: { source: 'curseforge', projectId: '42' } },
             undefined,

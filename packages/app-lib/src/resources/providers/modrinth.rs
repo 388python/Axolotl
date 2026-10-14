@@ -463,6 +463,17 @@ impl ModrinthProvider {
                             || target.channels.contains(&release.channel)
                     })
                     .collect();
+                if *page_size == 0 {
+                    return Ok(ProviderValue::Releases(SourcePage {
+                        entries: releases,
+                        cursor: None,
+                        total: ResourceTotal {
+                            value: None,
+                            precision: TotalPrecision::Unknown,
+                        },
+                        window_exhausted: false,
+                    }));
+                }
                 Ok(ProviderValue::Releases(slice_page(
                     releases,
                     offset(cursor)?,
@@ -641,6 +652,9 @@ impl ModrinthProvider {
 
 #[async_trait]
 impl ResourceProvider for ModrinthProvider {
+    fn local_release_pagination(&self) -> bool {
+        true
+    }
     fn source(&self) -> ResourceSource {
         ResourceSource {
             id: SourceId::modrinth(),

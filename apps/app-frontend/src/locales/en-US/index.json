@@ -7338,7 +7338,7 @@
     "message": "Rollback backup unavailable"
   },
   "app.resources.installed.compatibility": {
-    "message": "Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {unknown}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {unknown}}. Installation does not change the declared compatibility."
+    "message": "Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {no supported version declaration}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {no loader declaration}}."
   },
   "app.resources.manual.unverifiable": {
     "message": "This source provides no file hash. Its artifact cannot be verified; download it from the source page and use the local import workflow."
@@ -7391,6 +7391,9 @@
   "app.resources.operation.missing-dependency": {
     "message": "A required dependency could not be resolved."
   },
+  "app.resources.operation.no-worlds": {
+    "message": "Create a singleplayer world in this instance before installing data packs."
+  },
   "app.resources.operation.optional": {
     "message": "Available dependencies"
   },
@@ -7429,6 +7432,9 @@
   },
   "app.resources.operation.version-conflict": {
     "message": "A version conflict prevents installing this item."
+  },
+  "app.resources.operation.world": {
+    "message": "Target world for data packs"
   },
   "app.resources.preferred-source": {
     "message": "Preferred resource source"

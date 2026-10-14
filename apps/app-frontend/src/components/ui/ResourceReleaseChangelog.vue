@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button, commonMessages, defineMessages, useVIntl } from '@modrinth/ui'
+import { useElementVisibility } from '@vueuse/core'
 import { computed, onScopeDispose, ref, watch } from 'vue'
 
 import { changelogTranslationRequest } from '@/helpers/resource-changelog'
@@ -16,7 +17,15 @@ import {
 
 import TranslatedProjectDescription from './TranslatedProjectDescription.vue'
 
-const props = defineProps<{ release: SourceReleaseRef }>()
+const props = withDefaults(defineProps<{ release: SourceReleaseRef; lazy?: boolean }>(), {
+    lazy: false,
+})
+const container = ref<HTMLElement | null>(null)
+const visible = useElementVisibility(container)
+const activated = ref(!props.lazy)
+watch(visible, (value) => {
+    if (value) activated.value = true
+})
 const { formatMessage, locale } = useVIntl()
 const text = ref<ResourceText | null>(null)
 const loading = ref(false)
@@ -132,8 +141,15 @@ async function load() {
 }
 
 watch(
-    () => [props.release.project.source, props.release.project.projectId, props.release.releaseId],
-    () => void load(),
+    () => [
+        props.release.project.source,
+        props.release.project.projectId,
+        props.release.releaseId,
+        activated.value,
+    ],
+    () => {
+        if (activated.value) void load()
+    },
     { immediate: true },
 )
 watch(locale, () => {
@@ -147,14 +163,15 @@ onScopeDispose(() => {
 </script>
 
 <template>
-    <div class="flex min-w-0 flex-col gap-3" :aria-busy="loading">
+    <div ref="container" class="flex min-w-0 flex-col gap-3" :aria-busy="loading">
+        <div v-if="!activated" class="h-12 rounded bg-surface-3" />
         <p v-if="!supported" class="m-0">{{ formatMessage(messages.unsupported) }}</p>
         <p v-else-if="loading" class="m-0">{{ formatMessage(commonMessages.loadingLabel) }}</p>
         <div v-else-if="failed" class="flex flex-wrap items-center gap-2">
             <span>{{ formatMessage(messages.failed) }}</span>
             <Button @click="load">{{ formatMessage(commonMessages.retryButton) }}</Button>
         </div>
-        <p v-else-if="empty" class="m-0 text-[var(--color-text-tertiary)]">
+        <p v-else-if="activated && empty" class="m-0 text-[var(--color-text-tertiary)]">
             {{ formatMessage(messages.empty) }}
         </p>
         <template v-else-if="text">

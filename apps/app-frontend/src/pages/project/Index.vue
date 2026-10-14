@@ -857,8 +857,9 @@ const cartProjectSelected = computed(
 )
 
 async function syncContentSelectionTarget() {
-    if (!fromBrowse.value) return
+    if (!fromBrowse.value && !route.query.i) return
     await contentSelection.refreshInstances(instance.value?.id ?? null)
+    await contentSelection.refreshInstalledIdentities()
 }
 
 const projectInstallContext = computed(() => {
@@ -955,7 +956,12 @@ const installButtonValidating = computed(
         !serverInstallContent.isInstallingQueuedServerInstalls.value,
 )
 const installButtonInstalled = computed(() =>
-    serverProjectInstallContext.value ? serverProjectInstalled.value : installed.value,
+    serverProjectInstallContext.value
+        ? serverProjectInstalled.value
+        : installed.value ||
+          (!!data.value &&
+              (!route.query.i || cartTarget.value?.id === route.query.i) &&
+              contentSelection.isInstalledIdentity('modrinth', data.value.id, data.value.slug)),
 )
 const installButtonDisabled = computed(
     () => installButtonInstalled.value || installButtonLoading.value,
@@ -1116,12 +1122,11 @@ async function fetchProjectData() {
                     String(reference.project_id) === data.value.id,
             ),
         )
-        if (installedFile?.origin_provider === 'modrinth') {
+        if (installedFile) {
             installed.value = true
             installedVersion.value = installedFile.modrinth?.version_id ?? null
         }
     }
-
     if (project.organization) {
         const projectOrganization = await get_organization(project.organization).catch(handleError)
         if (!isCurrent()) return

@@ -543,7 +543,7 @@ const messages = defineMessages({
     compatibilityWarning: {
         id: 'app.resources.installed.compatibility',
         defaultMessage:
-            'Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {unknown}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {unknown}}. Installation does not change the declared compatibility.',
+            'Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {no supported version declaration}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {no loader declaration}}.',
     },
     openInMcmod: {
         id: 'app.project.open-in-mcmod',
@@ -2039,9 +2039,8 @@ async function removeMod(mod: ContentItem) {
         handleError(err as Error)
         throw err
     } finally {
-        await refreshContentState('bypass')
         finishContentOperation(mod, operation)
-        notifyOrphanedDependencies()
+        void refreshContentState().then(notifyOrphanedDependencies).catch(handleError)
     }
 }
 

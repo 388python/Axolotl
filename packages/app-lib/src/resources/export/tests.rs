@@ -18,6 +18,41 @@ struct Provider {
 }
 
 #[tokio::test]
+async fn explicit_refresh_rehashes_bytes_even_when_file_size_and_mtime_are_preserved()
+ {
+    let (root, service, _, _) = setup(false).await;
+    let path = root.path().join("file.jar");
+    std::fs::write(&path, b"old bytes").unwrap();
+    let mut draft = draft(vec![file("file.jar")]);
+    run(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["file.jar".into()],
+        1,
+    )
+    .await;
+    let old = draft.results["file.jar"].snapshot.integrity.clone();
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, b"new bytes").unwrap();
+    let handle = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    handle
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    drop(handle);
+    run(
+        &service,
+        &mut draft,
+        root.path(),
+        vec!["file.jar".into()],
+        2,
+    )
+    .await;
+    assert_ne!(draft.results["file.jar"].snapshot.integrity, old);
+    assert_eq!(draft.results["file.jar"].snapshot.revision, 2);
+}
+
+#[tokio::test]
 async fn export_reference_reads_are_local_and_do_not_create_business_identity()
 {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()

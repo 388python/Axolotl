@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ProgressBar } from '@modrinth/ui'
 import { computed } from 'vue'
 
 import { injectExportContext } from './context'
@@ -46,21 +47,42 @@ const label = computed(() => {
 <template>
     <div
         v-if="label"
-        class="flex min-w-0 flex-col gap-1 text-sm font-normal"
+        class="flex min-w-0 flex-col gap-1.5 text-sm font-normal"
         role="status"
         data-export-progress
     >
-        <span>{{ label }}</span>
-        <progress
+        <div class="flex items-center justify-between gap-3">
+            <span>{{ label }}</span>
+            <span
+                v-if="active && refreshProgress"
+                class="shrink-0 tabular-nums text-xs text-[var(--color-text-tertiary)]"
+            >
+                {{
+                    Math.round(
+                        (((refreshProgress.overallCompleted ?? refreshProgress.completed) +
+                            (refreshProgress.currentFileFraction ?? 0)) /
+                            Math.max(
+                                1,
+                                refreshProgress.overallTotal ?? refreshProgress.total ?? 1,
+                            )) *
+                            100,
+                    )
+                }}%
+            </span>
+        </div>
+        <ProgressBar
             v-if="active"
+            full-width
+            :gradient-border="false"
             :max="Math.max(1, refreshProgress?.overallTotal ?? refreshProgress?.total ?? 1)"
-            :value="
+            :progress="
                 !scanning && refreshProgress
                     ? (refreshProgress.overallCompleted ?? refreshProgress.completed) +
                       (refreshProgress.currentFileFraction ?? 0)
-                    : undefined
+                    : 0
             "
-            class="h-1 w-full"
+            :waiting="scanning || !refreshProgress"
+            class="cursor-default"
             :aria-label="label"
         />
     </div>

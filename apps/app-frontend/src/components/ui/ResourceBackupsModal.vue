@@ -240,21 +240,23 @@ defineExpose({ show })
             </template>
         </div>
         <template #actions>
-            <Button :disabled="cleaning" @click="modal?.hide()">{{
-                formatMessage(messages.close)
-            }}</Button>
-            <Button v-if="plan" :disabled="busy" @click="plan = null">{{
-                formatMessage(messages.back)
-            }}</Button>
-            <Button v-else :disabled="busy" @click="scan()">{{
-                formatMessage(messages.scan)
-            }}</Button>
-            <Button v-if="plan" color="red" :disabled="busy" @click="cleanup()">{{
-                formatMessage(messages.confirm)
-            }}</Button>
-            <Button v-else :disabled="busy || !selected.length" @click="review()">{{
-                formatMessage(messages.review)
-            }}</Button>
+            <div class="flex w-full flex-wrap justify-end gap-2">
+                <Button :disabled="cleaning" @click="modal?.hide()">{{
+                    formatMessage(messages.close)
+                }}</Button>
+                <Button v-if="plan" :disabled="busy" @click="plan = null">{{
+                    formatMessage(messages.back)
+                }}</Button>
+                <Button v-else :disabled="busy" @click="scan()">{{
+                    formatMessage(messages.scan)
+                }}</Button>
+                <Button v-if="plan" color="red" :disabled="busy" @click="cleanup()">{{
+                    formatMessage(messages.confirm)
+                }}</Button>
+                <Button v-else :disabled="busy || !selected.length" @click="review()">{{
+                    formatMessage(messages.review)
+                }}</Button>
+            </div>
         </template>
     </NewModal>
 </template>

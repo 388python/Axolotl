@@ -28,6 +28,27 @@ impl ResourceService {
         let mut results = self
             .query_many(source, queries.clone(), policy, cancel)
             .await;
+        if policy == CachePolicy::UseFresh && !cancel.is_cancelled() {
+            let failed: Vec<_> = results.iter().enumerate().filter_map(|(index, result)| matches!(result, Err(error) if !matches!(error, ResourceError::Canceled)).then_some(index)).collect();
+            let cached = self
+                .query_many(
+                    source,
+                    failed
+                        .iter()
+                        .map(|index| queries[*index].clone())
+                        .collect(),
+                    CachePolicy::OnlyCached,
+                    cancel,
+                )
+                .await;
+            for (index, cached) in failed.into_iter().zip(cached) {
+                if let Ok(cached) = cached
+                    && !matches!(cached.value, ProviderValue::NotFound)
+                {
+                    results[index] = Ok(cached);
+                }
+            }
+        }
         if policy == CachePolicy::OnlyCached {
             return results;
         }
@@ -64,20 +85,11 @@ impl ResourceService {
         query: ProviderQuery,
         cancel: &CancellationToken,
     ) -> ResourceResult<QueryOutcome> {
-        let result = self
-            .query(source, query.clone(), CachePolicy::UseFresh, cancel)
-            .await?;
-        let incomplete = match &result.value {
-            ProviderValue::Project(document) => document.protocol.is_none(),
-            ProviderValue::Release(document) => document.protocol.is_none(),
-            _ => false,
-        };
-        if result.from_cache && incomplete {
-            self.query(source, query, CachePolicy::ForceRefresh, cancel)
-                .await
-        } else {
-            Ok(result)
-        }
+        self.presentation_many(source, vec![query], cancel)
+            .await
+            .into_iter()
+            .next()
+            .ok_or(ResourceError::Unavailable)?
     }
     pub async fn locate(
         self: &Arc<Self>,
@@ -189,19 +201,29 @@ impl ResourceService {
         } else {
             None
         };
-        match self
+        let query = ProviderQuery::Project {
+            id: project.project_id.clone(),
+            slug,
+        };
+        let result = match self
             .query(
                 &project.source,
-                ProviderQuery::Project {
-                    id: project.project_id.clone(),
-                    slug,
-                },
+                query.clone(),
                 CachePolicy::UseFresh,
                 cancel,
             )
-            .await?
-            .value
+            .await
         {
+            Err(ResourceError::Canceled) => {
+                return Err(ResourceError::Canceled);
+            }
+            Err(error) => self
+                .query(&project.source, query, CachePolicy::OnlyCached, cancel)
+                .await
+                .map_err(|_| error)?,
+            Ok(result) => result,
+        };
+        match result.value {
             ProviderValue::Project(document) => {
                 if &document.metadata.project != project {
                     return Err(ResourceError::InvalidResponse(
@@ -420,6 +442,26 @@ impl ResourceService {
         locator: Option<String>,
         cancel: &CancellationToken,
     ) -> ResourceResult<ResourceText> {
+        if let Ok(QueryOutcome {
+            value: ProviderValue::Release(document),
+            ..
+        }) = self
+            .query(
+                &reference.project.source,
+                ProviderQuery::Release {
+                    project_id: Some(reference.project.project_id.clone()),
+                    release_id: reference.release_id.clone(),
+                    slug: locator.clone(),
+                },
+                CachePolicy::OnlyCached,
+                cancel,
+            )
+            .await
+        {
+            if let Some(text) = document.changelog {
+                return Ok(text);
+            }
+        }
         let slug = if locator.is_some() {
             locator
         } else if let Some(store) = self.store() {

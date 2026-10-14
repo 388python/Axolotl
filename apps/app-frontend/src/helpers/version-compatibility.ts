@@ -143,6 +143,33 @@ export function assessVersionRange(
     instanceVersion: string,
     modRange: string,
 ): VersionCompatibility {
+    if (['*', 'x', 'X'].includes(modRange.trim()) && parseVersion(instanceVersion))
+        return 'compatible'
+    if (modRange.includes('||')) {
+        const results = modRange
+            .split('||')
+            .map((range) => assessVersionRange(instanceVersion, range.trim()))
+        return results.includes('compatible')
+            ? 'compatible'
+            : results.includes('unknown')
+              ? 'unknown'
+              : 'incompatible'
+    }
+    const bounds = modRange.trim().match(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){1,2}/g)
+    if (
+        bounds &&
+        bounds.length > 1 &&
+        modRange.replace(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){1,2}/g, '').trim() === ''
+    ) {
+        const results = bounds.map((range) =>
+            assessVersionRange(instanceVersion, range.replace(/\s/g, '').replace(/^=/, '')),
+        )
+        return results.includes('incompatible')
+            ? 'incompatible'
+            : results.includes('unknown')
+              ? 'unknown'
+              : 'compatible'
+    }
     const parsed = parseVersion(instanceVersion)
     const range = parseVersionRange(modRange)
     if (!parsed)

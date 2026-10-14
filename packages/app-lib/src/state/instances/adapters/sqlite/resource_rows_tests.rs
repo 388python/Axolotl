@@ -384,6 +384,16 @@ async fn confirmed_merges_keep_old_ids_alias_ambiguity_favorites_and_cache_indep
             .is_err()
     );
     let winner = store.confirm_projects(&left, &right, &a, &b).await.unwrap();
+    store.confirm_projects(&left, &right, &a, &b).await.unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM resource_identity_evidence"
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap(),
+        1
+    );
     assert_eq!(store.resolve(&left_id).await.unwrap(), Some(winner.clone()));
     assert_eq!(
         store.resolve(&right_id).await.unwrap(),

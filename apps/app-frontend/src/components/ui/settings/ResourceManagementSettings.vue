@@ -51,10 +51,15 @@ const purgeCacheConfirmModal = ref(null)
 const { formatMessage } = useVIntl()
 const preferredResourceSource = ref(await resourcePreferredSource())
 const savingResourceSource = ref(false)
-const resourceSourceOptions = ['Modrinth', 'CurseForge', 'MCArchive', 'Planet Minecraft']
+const resourceSourceOptions = [
+    { value: 'modrinth', label: 'Modrinth' },
+    { value: 'curseforge', label: 'CurseForge' },
+    { value: 'mcarchive', label: 'MCArchive' },
+    { value: 'planet_minecraft', label: 'Planet Minecraft' },
+]
 const resourceSourceIds = ['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft']
 const resourceSourceChoice = computed({
-    get: () => resourceSourceOptions[resourceSourceIds.indexOf(preferredResourceSource.value)],
+    get: () => preferredResourceSource.value,
     set: (value) => {
         void saveResourceSource(value)
     },
@@ -62,7 +67,7 @@ const resourceSourceChoice = computed({
 async function saveResourceSource(value) {
     savingResourceSource.value = true
     try {
-        const source = resourceSourceIds[resourceSourceOptions.indexOf(value)]
+        const source = resourceSourceIds.includes(value) ? value : resourceSourceIds[0]
         await resourceSetPreferredSource(source)
         preferredResourceSource.value = source
     } catch (error) {

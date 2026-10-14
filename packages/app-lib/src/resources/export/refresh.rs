@@ -17,10 +17,12 @@ use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::sync::CancellationToken;
 
 pub struct ExportDraft {
+    pub reuse_frozen: bool,
     pub accepted_failures: Vec<ExportEmbeddedFailureChoice>,
     pub queued: Option<super::job::QueuedExport>,
     pub scan: ResourceExportScan,
     pub results: HashMap<String, ExportResolvedFile>,
+    pub fingerprints: HashMap<String, u32>,
     pub releases: HashMap<SourceReleaseRef, ReleaseDocument>,
     pub projects: HashMap<SourceProjectRef, ProjectDocument>,
     pub selection_revision: u32,
@@ -31,10 +33,12 @@ pub struct ExportDraft {
 impl ExportDraft {
     pub fn new(scan: ResourceExportScan) -> Self {
         Self {
+            reuse_frozen: false,
             accepted_failures: vec![],
             queued: None,
             scan,
             results: HashMap::new(),
+            fingerprints: HashMap::new(),
             releases: HashMap::new(),
             projects: HashMap::new(),
             selection_revision: 0,
@@ -741,10 +745,40 @@ pub async fn refresh_local(
                 current_file_fraction: cumulative.fract(),
             });
         };
-        match freeze_with_progress(root, &original, cancel, &on_file_progress)
-            .await
+        let previous = draft.results.get(path);
+        let unchanged = if let Some(previous) =
+            previous.filter(|previous| previous.local_error.is_none())
         {
+            let metadata = tokio::fs::metadata(root.join(path)).await.ok();
+            metadata.is_some_and(|metadata| {
+                metadata.is_file()
+                    && Some(metadata.len()) == previous.snapshot.integrity.size
+                    && metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                        .map(|time| time.as_millis() as u64)
+                        == previous.snapshot.modified_at
+            })
+        } else {
+            false
+        };
+        let frozen = if draft.reuse_frozen
+            && unchanged
+            && (!previous.unwrap().snapshot.identifiable
+                || draft.fingerprints.contains_key(path))
+        {
+            Ok((
+                previous.unwrap().snapshot.clone(),
+                *draft.fingerprints.get(path).unwrap_or(&0),
+            ))
+        } else {
+            freeze_with_progress(root, &original, cancel, &on_file_progress)
+                .await
+        };
+        match frozen {
             Ok((mut snapshot, fingerprint)) => {
+                draft.fingerprints.insert(path.clone(), fingerprint);
                 let previous = draft.results.get(path);
                 let same = previous.is_some_and(|p| {
                     p.local_error.is_none()

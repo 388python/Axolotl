@@ -272,11 +272,7 @@ void contentSelection
                 {{ selectedInstance?.name ?? formatMessage(messages.chooseInstance) }}
             </Button>
         </section>
-        <Card
-            ><ResourceDescription source="planet_minecraft" :project-id="project.id"
-                ><p class="m-0">{{ project.summary }}</p></ResourceDescription
-            ></Card
-        >
+        <Card><ResourceDescription source="planet_minecraft" :project-id="project.id" /></Card>
         <Card v-if="manualDownload" class="flex flex-wrap items-center justify-between gap-3">
             <div class="min-w-0">
                 <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">

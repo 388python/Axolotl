@@ -8,6 +8,11 @@ import { getTranslationSettings, translate } from '@/helpers/translation'
 import ResourceReleaseChangelog from './ResourceReleaseChangelog.vue'
 
 const locale = ref('zh-CN')
+const visible = ref(false)
+vi.mock('@vueuse/core', async (original) => ({
+    ...(await original<object>()),
+    useElementVisibility: () => visible,
+}))
 vi.mock('@modrinth/ui', () => ({
     Button: defineComponent({
         setup:
@@ -34,6 +39,7 @@ vi.mock('@/helpers/translation', async (original) => ({
 }))
 const release = { project: { source: 'curseforge' as const, projectId: '42' }, releaseId: '100' }
 beforeEach(() => {
+    visible.value = false
     vi.mocked(resourceChangelog).mockReset()
     vi.mocked(translate).mockReset()
     locale.value = 'zh-CN'
@@ -43,6 +49,35 @@ beforeEach(() => {
         mode: 'bilingual',
         style: 'weakened',
     } as Awaited<ReturnType<typeof getTranslationSettings>>)
+})
+
+it('timeline bodies request once when visible and unvisited bodies never request', async () => {
+    vi.mocked(resourceChangelog).mockResolvedValue({
+        source: 'curseforge',
+        format: 'plain',
+        body: 'Changes',
+    })
+    const wrapper = mount(ResourceReleaseChangelog, { props: { release, lazy: true } })
+    try {
+        await flushPromises()
+        expect(resourceChangelog).not.toHaveBeenCalled()
+        visible.value = true
+        await flushPromises()
+        expect(resourceChangelog).toHaveBeenCalledOnce()
+        visible.value = false
+        await flushPromises()
+        visible.value = true
+        await flushPromises()
+        expect(resourceChangelog).toHaveBeenCalledOnce()
+    } finally {
+        wrapper.unmount()
+    }
+    vi.mocked(resourceChangelog).mockClear()
+    visible.value = false
+    const hidden = mount(ResourceReleaseChangelog, { props: { release, lazy: true } })
+    hidden.unmount()
+    await flushPromises()
+    expect(resourceChangelog).not.toHaveBeenCalled()
 })
 const click = async (wrapper: ReturnType<typeof mount>, text: string) => {
     await wrapper

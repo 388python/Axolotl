@@ -28,7 +28,6 @@ const hasMore = ref(false)
 const exhausted = ref(false)
 const loading = ref(false)
 const failed = ref(false)
-const selected = ref<string | null>(null)
 let controller: AbortController | null = null
 const messages = defineMessages({
     title: { id: 'app.resources.changelog.title', defaultMessage: 'Changelog' },
@@ -59,7 +58,6 @@ async function load(reset = false) {
         cursor.value = null
         hasMore.value = false
         exhausted.value = false
-        selected.value = null
     }
     try {
         const page = await resourceReleases(
@@ -94,32 +92,33 @@ onScopeDispose(() => controller?.abort())
 <template>
     <div class="flex min-w-0 flex-col gap-3">
         <h2 class="m-0 text-lg font-semibold">{{ formatMessage(messages.title) }}</h2>
-        <Card v-for="release in releases" :key="release.reference.releaseId">
-            <Button
-                type="quiet"
-                class="w-full justify-between"
-                :aria-expanded="selected === release.reference.releaseId"
-                @click="
-                    selected =
-                        selected === release.reference.releaseId
-                            ? null
-                            : release.reference.releaseId
-                "
-            >
-                <span class="min-w-0 truncate">{{ release.version }}</span>
-                <span class="shrink-0 text-sm text-[var(--color-text-tertiary)]"
-                    >{{ source === 'curseforge' ? 'CurseForge' : 'Modrinth'
-                    }}<template v-if="release.publishedAt">
-                        · {{ formatDate(new Date(release.publishedAt)) }}</template
-                    ></span
-                >
-            </Button>
-            <ResourceReleaseChangelog
-                v-if="selected === release.reference.releaseId"
+        <Card class="!p-0">
+            <article
+                v-for="release in releases"
                 :key="release.reference.releaseId"
-                class="mt-3"
-                :release="release.reference"
-            />
+                class="border-b border-surface-4 p-5 last:border-b-0"
+            >
+                <div class="flex min-w-0 items-start gap-3">
+                    <span class="mt-2 h-3 w-3 shrink-0 rounded-full bg-brand" />
+                    <span class="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <span class="min-w-0 break-words text-lg font-semibold">{{
+                            release.version
+                        }}</span>
+                        <span class="text-sm font-normal text-[var(--color-text-tertiary)]"
+                            >{{ source === 'curseforge' ? 'CurseForge' : 'Modrinth'
+                            }}<template v-if="release.publishedAt">
+                                · {{ formatDate(new Date(release.publishedAt)) }}</template
+                            ></span
+                        >
+                    </span>
+                </div>
+                <ResourceReleaseChangelog
+                    :key="release.reference.releaseId"
+                    lazy
+                    class="ml-1 mt-3 border-l-2 border-surface-4 pl-6"
+                    :release="release.reference"
+                />
+            </article>
         </Card>
         <p v-if="loading" class="m-0">{{ formatMessage(commonMessages.loadingLabel) }}</p>
         <div v-else-if="failed" class="flex flex-wrap items-center gap-2">

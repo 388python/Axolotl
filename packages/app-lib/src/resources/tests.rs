@@ -8,6 +8,101 @@ use std::sync::{
 use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
+#[tokio::test]
+async fn modrinth_catalog_pages_share_one_complete_response() {
+    let transport = FixtureTransport::new(|_, request| {
+        assert_eq!(request.path, "/project/YL57xq9U/version");
+        let release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+        Ok(Value::Array(
+            (0..120)
+                .map(|index| {
+                    let mut value = release.clone();
+                    value["id"] = json!(format!("v{index:07}"));
+                    value
+                })
+                .collect(),
+        ))
+    });
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(ModrinthProvider::new(transport.clone()))],
+    )
+    .unwrap();
+    let reference = ResourceRef::Source {
+        project: source_project(SourceId::modrinth(), "YL57xq9U").unwrap(),
+    };
+    let cancel = CancellationToken::new();
+    let mut cursor = None;
+    let mut ids = std::collections::HashSet::new();
+    loop {
+        let page = service
+            .releases(
+                &reference,
+                target(),
+                cursor,
+                RequestId::new("page").unwrap(),
+                None,
+                &cancel,
+            )
+            .await
+            .unwrap();
+        for release in page.entries {
+            assert!(ids.insert(release.reference.release_id));
+        }
+        if !page.has_more {
+            break;
+        }
+        cursor = page.cursor;
+    }
+    assert_eq!(ids.len(), 120);
+    assert_eq!(transport.requests.lock().unwrap().len(), 1);
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn presentation_failure_uses_expired_metadata_without_masking_force_refresh()
+ {
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, None);
+    let query = project_query("abcdefgh");
+    let key =
+        CacheKey::new("mock-v1".into(), SourceId::modrinth(), &query).unwrap();
+    cache
+        .put(
+            &key,
+            &project_value(SourceId::modrinth(), "abcdefgh", "Saved"),
+            -1,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    provider.fail.store(true, Ordering::Relaxed);
+    let service = ResourceService::new(cache.clone(), vec![provider]).unwrap();
+    let project = source_project(SourceId::modrinth(), "abcdefgh").unwrap();
+    assert_eq!(
+        service
+            .project_document(&project, None, &CancellationToken::new())
+            .await
+            .unwrap()
+            .metadata
+            .title,
+        "Saved"
+    );
+    assert!(
+        service
+            .query(
+                &project.source,
+                query,
+                CachePolicy::ForceRefresh,
+                &CancellationToken::new()
+            )
+            .await
+            .is_err()
+    );
+    cache.close().await;
+}
+
 #[path = "../../../content-management/tests/fixtures/mod.rs"]
 mod fixtures;
 

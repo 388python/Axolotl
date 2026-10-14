@@ -3,22 +3,82 @@ import { invoke } from '@tauri-apps/api/core'
 import {
     resourceGet,
     resourceLocate,
+    resourceProjectDocuments,
     type ResourceType,
+    type SourceProjectMetadata,
     type SourceProjectRef,
 } from './resources.ts'
 
-export async function resolveContentFavorite(favorite: ContentFavorite) {
+export async function resolveContentFavorite(favorite: ContentFavorite, signal?: AbortSignal) {
     if (!favorite.resource_id) {
-        return (await resourceLocate(favorite.provider, favorite.locator ?? favorite.project_id))
-            .metadata
+        try {
+            return (
+                await resourceLocate(
+                    favorite.provider,
+                    favorite.locator ?? favorite.project_id,
+                    signal,
+                )
+            ).metadata
+        } catch {
+            signal?.throwIfAborted()
+            return (
+                await resourceLocate(
+                    favorite.provider,
+                    favorite.locator ?? favorite.project_id,
+                    signal,
+                    'onlyCached',
+                )
+            ).metadata
+        }
     }
-    const resource = await resourceGet({ kind: 'resource', id: favorite.resource_id })
+    const resource = await resourceGet(
+        { kind: 'resource', id: favorite.resource_id },
+        undefined,
+        undefined,
+        signal,
+    )
     const metadata = resource.projects.find(
         (project) =>
             project.project.source === resource.defaultProject.source &&
             project.project.projectId === resource.defaultProject.projectId,
     )
     if (!metadata) throw new Error('Favorite resource presentation is unavailable')
+    return metadata
+}
+
+export async function prefetchContentFavorites(favorites: ContentFavorite[], signal?: AbortSignal) {
+    const metadata = new Map<string, SourceProjectMetadata>()
+    const projects = favorites.flatMap(
+        (favorite) =>
+            favorite.projects ?? [{ source: favorite.provider, projectId: favorite.project_id }],
+    )
+    const sources = [...new Set(projects.map((project) => project.source))]
+    await Promise.allSettled(
+        sources
+            .filter((source) => source === 'modrinth' || source === 'curseforge')
+            .map(async (source) => {
+                const ids = [
+                    ...new Set(
+                        projects
+                            .filter((project) => project.source === source)
+                            .map((project) => project.projectId),
+                    ),
+                ]
+                let documents
+                try {
+                    documents = await resourceProjectDocuments(source, ids, signal)
+                } catch {
+                    signal?.throwIfAborted()
+                    documents = await resourceProjectDocuments(source, ids, signal, 'onlyCached')
+                }
+                for (const document of documents)
+                    metadata.set(
+                        `${source}:${document.metadata.project.projectId}`,
+                        document.metadata,
+                    )
+            }),
+    )
+    signal?.throwIfAborted()
     return metadata
 }
 

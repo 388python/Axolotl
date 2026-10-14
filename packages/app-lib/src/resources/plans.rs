@@ -193,6 +193,15 @@ pub(crate) async fn installed(
 ) -> ResourceResult<Vec<InstalledResource>> {
     let rows = sqlx::query("SELECT entry.id, entry.project_type, entry.ownership_kind, (SELECT member.id FROM instance_pack_members member WHERE member.content_entry_id = entry.id LIMIT 1) AS member_id, file.relative_path, file.enabled, file.missing, file.sha1, file.size, exact.artifact, exact.scope FROM instance_content_entries entry JOIN instance_content_sets content ON content.id = entry.content_set_id JOIN instance_files file ON file.id = entry.file_id LEFT JOIN resource_installed_artifacts exact ON exact.entry_id = entry.id WHERE entry.instance_id = ? AND content.id = (SELECT applied_content_set_id FROM instances WHERE id = entry.instance_id)").bind(instance_id).fetch_all(pool).await.map_err(db)?;
     let mut result = vec![];
+    let all_links = sqlx::query("SELECT link.* FROM resource_entry_links link JOIN instance_content_entries entry ON entry.id = link.entry_id WHERE entry.instance_id = ? ORDER BY link.is_origin DESC").bind(instance_id).fetch_all(pool).await.map_err(db)?;
+    let mut links_by_entry: HashMap<String, Vec<sqlx::sqlite::SqliteRow>> =
+        HashMap::new();
+    for link in all_links {
+        links_by_entry
+            .entry(link.get("entry_id"))
+            .or_default()
+            .push(link);
+    }
     for row in rows {
         let entry_id: String = row.get("id");
         let kind: String = row.get("project_type");
@@ -247,7 +256,7 @@ pub(crate) async fn installed(
                     InstallScope::Instance
                 }
             });
-        let links = sqlx::query("SELECT resource_id, source, project_id, release_id, artifact_id, is_origin FROM resource_entry_links WHERE entry_id = ? ORDER BY is_origin DESC").bind(&entry_id).fetch_all(pool).await.map_err(db)?;
+        let links = links_by_entry.remove(&entry_id).unwrap_or_default();
         let mut resource_id = links.first().and_then(|row| {
             ResourceId::new(row.get::<String, _>("resource_id")).ok()
         });
@@ -891,8 +900,10 @@ impl ResourceService {
             if cancel.is_cancelled() {
                 return Err(ResourceError::Canceled);
             }
-            if seen.len() >= 512 {
-                return Err(invalid("dependency graph exceeded 512 resources"));
+            if seen.len() >= 8192 {
+                return Err(invalid(
+                    "dependency graph exceeded 8192 resources",
+                ));
             }
             if !seen.insert(selection.id.clone()) {
                 if let Some(previous) =
@@ -2043,7 +2054,7 @@ pub(crate) async fn prepare_with_installed(
         _ => {}
     }
     if selections.is_empty()
-        || selections.len() > 100
+        || selections.len() > 4096
         || selections
             .iter()
             .map(|selection| &selection.id)
@@ -2051,7 +2062,7 @@ pub(crate) async fn prepare_with_installed(
             .len()
             != selections.len()
     {
-        return Err(invalid("select between one and 100 distinct roots"));
+        return Err(invalid("select between one and 4096 distinct roots"));
     }
     let state = crate::State::get().await?;
     let instance = crate::state::get_instance(&instance_id, &state.pool)
@@ -2299,12 +2310,7 @@ pub async fn revise(
         loaders: vec![instance.applied_content_set.loader.as_str().into()],
         channels: update_channels(instance.instance.update_channel),
     };
-    let installed = if draft.plan.intent == ResourceOperationIntent::Install {
-        installed(&state.pool, &draft.plan.instance_id).await?
-    } else {
-        super::installed::hydrate(&state, &draft.plan.instance_id, cancel)
-            .await?
-    };
+    let installed = installed(&state.pool, &draft.plan.instance_id).await?;
     let draft = state
         .resources()
         .await?

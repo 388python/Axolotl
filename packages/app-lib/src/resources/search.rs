@@ -272,6 +272,9 @@ impl ResourceService {
                         source.exhausted = page.window_exhausted;
                         source.total = page.total;
                         for entry in page.entries {
+                            if excluded_entry(&source.query.filter, &entry) {
+                                continue;
+                            }
                             if !state.seen.contains(&entry.project)
                                 && !source.entries.iter().any(|current| {
                                     current.project == entry.project
@@ -510,6 +513,60 @@ impl ResourceService {
             exhausted_sources,
         })
     }
+}
+
+fn excluded_entry(
+    filter: &Option<ResourceSearchExpression>,
+    entry: &SourceProjectMetadata,
+) -> bool {
+    fn visit(
+        expression: &ResourceSearchExpression,
+        entry: &SourceProjectMetadata,
+    ) -> bool {
+        match expression {
+            ResourceSearchExpression::All { terms } => {
+                terms.iter().any(|term| visit(term, entry))
+            }
+            ResourceSearchExpression::Any { terms } => {
+                terms.iter().all(|term| visit(term, entry))
+            }
+            ResourceSearchExpression::Predicate {
+                field,
+                values,
+                excluded,
+            } => {
+                let project = &entry.project;
+                if *excluded && matches!(field.as_str(), "allTypes" | "type") {
+                    return entry.types.iter().any(|kind| {
+                        serde_json::to_value(kind)
+                            .ok()
+                            .and_then(|value| {
+                                value.as_str().map(str::to_lowercase)
+                            })
+                            .is_some_and(|kind| {
+                                values
+                                    .iter()
+                                    .any(|value| value.to_lowercase() == kind)
+                            })
+                    });
+                }
+                *excluded
+                    && field == "projectId"
+                    && values.iter().any(|value| {
+                        value == project.project_id.as_str()
+                            || value.split_once(':').is_some_and(
+                                |(owner, value)| {
+                                    owner == project.source.as_str()
+                                        && value == project.project_id.as_str()
+                                },
+                            )
+                    })
+            }
+        }
+    }
+    filter
+        .as_ref()
+        .is_some_and(|expression| visit(expression, entry))
 }
 
 pub(crate) fn source_failure(

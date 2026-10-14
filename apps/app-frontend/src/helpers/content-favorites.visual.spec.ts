@@ -1,9 +1,50 @@
 import { expect, it, vi } from 'vitest'
 
-import { resolveContentFavorite } from './content-favorites'
-import { resourceGet, resourceLocate } from './resources'
+import { prefetchContentFavorites, resolveContentFavorite } from './content-favorites'
+import { resourceGet, resourceLocate, resourceProjectDocuments } from './resources'
 
-vi.mock('./resources', () => ({ resourceGet: vi.fn(), resourceLocate: vi.fn() }))
+vi.mock('./resources', () => ({
+    resourceGet: vi.fn(),
+    resourceLocate: vi.fn(),
+    resourceProjectDocuments: vi.fn(),
+}))
+
+it('prefetches each source as one batch and keeps expired metadata when the network fails', async () => {
+    vi.clearAllMocks()
+    const metadata = {
+        project: { source: 'modrinth', projectId: 'abcdefgh' },
+        title: 'Saved project',
+    }
+    vi.mocked(resourceProjectDocuments)
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce([{ metadata }] as Awaited<
+            ReturnType<typeof resourceProjectDocuments>
+        >)
+    const favorites = [
+        {
+            provider: 'modrinth' as const,
+            project_id: 'abcdefgh',
+            content_type: 'mod' as const,
+            saved_at: 1,
+        },
+        {
+            provider: 'modrinth' as const,
+            project_id: 'ijklmnop',
+            content_type: 'mod' as const,
+            saved_at: 2,
+        },
+    ]
+    const cached = await prefetchContentFavorites(favorites)
+    expect(resourceProjectDocuments).toHaveBeenCalledTimes(2)
+    expect(resourceProjectDocuments).toHaveBeenLastCalledWith(
+        'modrinth',
+        ['abcdefgh', 'ijklmnop'],
+        undefined,
+        'onlyCached',
+    )
+    expect(cached.get('modrinth:abcdefgh')).toEqual(metadata)
+    expect(resourceGet).not.toHaveBeenCalled()
+})
 
 it('uses the available confirmed source while preserving the saved favorite identity', async () => {
     vi.clearAllMocks()
@@ -23,7 +64,12 @@ it('uses the available confirmed source while preserving the saved favorite iden
         saved_at: 10,
     }
     expect(await resolveContentFavorite(favorite)).toEqual(metadata)
-    expect(resourceGet).toHaveBeenCalledExactlyOnceWith({ kind: 'resource', id: 'resource' })
+    expect(resourceGet).toHaveBeenCalledExactlyOnceWith(
+        { kind: 'resource', id: 'resource' },
+        undefined,
+        undefined,
+        undefined,
+    )
     expect(resourceLocate).not.toHaveBeenCalled()
     expect(favorite.provider).toBe('modrinth')
 })
@@ -45,7 +91,7 @@ it('retains a source-only historical locator and reports failure when the resour
         saved_at: 10,
     }
     expect(await resolveContentFavorite(favorite)).toEqual(metadata)
-    expect(resourceLocate).toHaveBeenCalledExactlyOnceWith('mcarchive', 'original-slug')
+    expect(resourceLocate).toHaveBeenCalledExactlyOnceWith('mcarchive', 'original-slug', undefined)
     vi.mocked(resourceGet).mockRejectedValue(new Error('all sources unavailable'))
     await expect(resolveContentFavorite({ ...favorite, resource_id: 'resource' })).rejects.toThrow(
         'all sources unavailable',

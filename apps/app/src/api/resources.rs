@@ -97,7 +97,14 @@ pub async fn resource_export_scan(
     let (_guard, cancel) = request(&request_id)?;
     let scan =
         theseus::resources::export::scan::scan(instance_id, &cancel).await?;
+    if cancel.is_cancelled() {
+        return Err(ResourceError::Canceled.into());
+    }
     service().await?.register_export(scan.clone())?;
+    if cancel.is_cancelled() {
+        service().await?.close_export(&scan.session_id);
+        return Err(ResourceError::Canceled.into());
+    }
     Ok(scan)
 }
 
@@ -677,13 +684,29 @@ pub async fn resource_get_changelog(
 ) -> Result<ResourceChangelog> {
     let (_guard, cancel) = request(&request_id)?;
     let service = service().await?;
-    let release = service
-        .release(&release_ref, locator.clone(), &cancel)
-        .await?;
     let text = service.changelog(&release_ref, locator, &cancel).await?;
+    let published_at = match service
+        .query(
+            &release_ref.project.source,
+            ProviderQuery::Release {
+                project_id: Some(release_ref.project.project_id.clone()),
+                release_id: release_ref.release_id.clone(),
+                slug: None,
+            },
+            CachePolicy::OnlyCached,
+            &cancel,
+        )
+        .await
+    {
+        Ok(QueryOutcome {
+            value: ProviderValue::Release(document),
+            ..
+        }) => document.release.published_at,
+        _ => None,
+    };
     Ok(ResourceChangelog {
         release: release_ref,
-        published_at: release.published_at,
+        published_at,
         text,
     })
 }

@@ -121,6 +121,39 @@ const exportButton = () =>
         (button) => button.textContent?.trim() === 'Export',
     )!
 
+it('releases a cancelled scan session even when its result arrives after another window session starts', async () => {
+    let finish!: (value: ResourceExportScan) => void
+    vi.mocked(resourceExportScan)
+        .mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    finish = resolve
+                }),
+        )
+        .mockResolvedValueOnce(snapshot('current'))
+    const wrapper = await mountExport()
+    try {
+        wrapper.vm.show()
+        await flushPromises()
+        wrapper.vm.show()
+        await flushPromises()
+        finish(snapshot('abandoned'))
+        await flushPromises()
+        expect(resourceExportClose).toHaveBeenCalledWith('abandoned')
+        expect(resourceExportRefresh).toHaveBeenCalledTimes(1)
+        expect(resourceExportRefresh).toHaveBeenCalledWith(
+            'instance',
+            'current',
+            expect.any(Array),
+            expect.any(Number),
+            expect.any(Function),
+            expect.any(AbortSignal),
+        )
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('starts verification when opened and keeps its progress in the fixed header across stages', async () => {
     vi.mocked(resourceExportScan).mockResolvedValue(snapshot())
     vi.mocked(resourceExportRefresh).mockImplementation(() => new Promise(() => {}))
@@ -172,11 +205,11 @@ it('shows cumulative verification progress across local and source checks', asyn
             currentFileFraction: 0.5,
         })
         await flushPromises()
-        const progress = document.querySelector<HTMLProgressElement>(
-            '[data-export-progress] progress',
+        const progress = document.querySelector<HTMLElement>(
+            '[data-export-progress] [role="progressbar"]',
         )!
-        expect(progress.max).toBe(6)
-        expect(progress.value).toBe(1.5)
+        expect(progress.getAttribute('aria-valuenow')).toBe('25')
+        expect(document.querySelector('[data-export-progress]')?.textContent).toContain('25%')
         update({
             sessionId: 'fresh',
             requestId: 'request',
@@ -188,7 +221,7 @@ it('shows cumulative verification progress across local and source checks', asyn
             overallTotal: 6,
         })
         await flushPromises()
-        expect(progress.value).toBe(4)
+        expect(progress.getAttribute('aria-valuenow')).toBe('67')
         expect(document.querySelector('[data-export-progress]')?.textContent).toContain('Modrinth')
         update({
             sessionId: 'fresh',

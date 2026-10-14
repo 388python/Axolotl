@@ -3,6 +3,28 @@ use crate::state::{DirectoryInfo, ModrinthProjectId, ModrinthVersionId};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 #[tokio::test]
+async fn entry_graph_stores_only_the_entry_dependency_closure() {
+    let (_temp, state, original, _, _) = fixture().await;
+    let mut plan = local_plan(
+        &state,
+        original,
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes"),
+        "unused",
+        None,
+    )
+    .await;
+    let root = plan.nodes[0].id.clone();
+    let mut unrelated = plan.nodes[0].clone();
+    unrelated.id = SelectionId::new("unrelated").unwrap();
+    plan.nodes.push(unrelated);
+    let (nodes, edges) = entry_graph(&plan, &root);
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].id, root);
+    assert!(edges.is_empty());
+    state.pool.close().await;
+}
+
+#[tokio::test]
 async fn connector_download_with_hash_and_unknown_size_commits_measured_bytes_and_exact_source()
  {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -803,6 +825,14 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
         Some(history.id),
     )
     .await;
+    let backup = root.join(history.backup_relative_path.as_ref().unwrap());
+    let backup_bytes = std::fs::read(&backup).unwrap();
+    std::fs::remove_file(&backup).unwrap();
+    history::attach_to_snapshot("instance", &mut snapshot, &state)
+        .await
+        .unwrap();
+    assert!(snapshot[0].content.as_ref().unwrap().rollback.is_none());
+    std::fs::write(&backup, backup_bytes).unwrap();
     execute("instance", &rollback, None, &state).await.unwrap();
     assert_eq!(
         std::fs::read(root.join(&original.relative_path)).unwrap(),

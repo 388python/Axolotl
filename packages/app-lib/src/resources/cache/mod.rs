@@ -44,6 +44,7 @@ pub struct ResourceCache {
     pool: Option<SqlitePool>,
     file_lock: Mutex<Option<tokio::fs::File>>,
     gate: RwLock<()>,
+    last_maintenance: std::sync::atomic::AtomicI64,
 }
 
 impl ResourceCache {
@@ -56,6 +57,7 @@ impl ResourceCache {
                 pool: Some(pool),
                 file_lock: Mutex::new(Some(lock)),
                 gate: RwLock::new(()),
+                last_maintenance: std::sync::atomic::AtomicI64::new(0),
             },
             Err(error) => {
                 tracing::warn!(error = %error, "Resource cache disabled; live source queries remain available");
@@ -64,6 +66,7 @@ impl ResourceCache {
                     pool: None,
                     file_lock: Mutex::new(None),
                     gate: RwLock::new(()),
+                    last_maintenance: std::sync::atomic::AtomicI64::new(0),
                 }
             }
         }
@@ -198,6 +201,22 @@ impl ResourceCache {
             return;
         };
         let now = Utc::now().timestamp();
+        let previous = self
+            .last_maintenance
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if now.saturating_sub(previous) >= 300
+            && self
+                .last_maintenance
+                .compare_exchange(
+                    previous,
+                    now,
+                    std::sync::atomic::Ordering::Relaxed,
+                    std::sync::atomic::Ordering::Relaxed,
+                )
+                .is_ok()
+        {
+            let _ = sqlx::query("DELETE FROM resource_cache_entries WHERE rowid IN (SELECT rowid FROM resource_cache_entries WHERE expires_at < ? LIMIT 1000)").bind(now - 30 * 24 * 60 * 60).execute(pool).await;
+        }
         let result = sqlx::query("INSERT INTO resource_cache_entries (namespace, source, query_key, value_version, payload, retrieved_at, expires_at)
             SELECT ?, ?, ?, ?, ?, ?, ? FROM resource_cache_state WHERE id = 1 AND generation = ?
             ON CONFLICT(namespace, source, query_key) DO UPDATE SET value_version = excluded.value_version, payload = excluded.payload, retrieved_at = excluded.retrieved_at, expires_at = excluded.expires_at WHERE excluded.retrieved_at >= resource_cache_entries.retrieved_at")
@@ -239,6 +258,12 @@ impl ResourceCache {
             .pool
             .as_ref()
             .ok_or_else(|| ResourceError::Cache("pool disabled".into()))?;
+        let _ = sqlx::query(
+            "DELETE FROM resource_cache_entries WHERE expires_at <= ?",
+        )
+        .bind(Utc::now().timestamp() - 30 * 24 * 60 * 60)
+        .execute(pool)
+        .await;
         let count: i64 = sqlx::query_scalar("SELECT (SELECT COUNT(*) FROM resource_cache_entries) + (SELECT COUNT(*) FROM resource_artifact_evidence)").fetch_one(pool).await.map_err(cache_error)?;
         let mut size_bytes = 0u64;
         for path in [

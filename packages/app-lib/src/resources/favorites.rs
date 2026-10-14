@@ -86,7 +86,7 @@ impl ResourceService {
         &self,
         pool: &sqlx::SqlitePool,
     ) -> ResourceResult<Vec<ResourceFavorite>> {
-        let store = self.store().ok_or_else(|| {
+        self.store().ok_or_else(|| {
             ResourceError::Database("resource store unavailable".into())
         })?;
         let preferred = self.preferred_source().await?;
@@ -98,6 +98,30 @@ impl ResourceService {
             .fetch_all(pool).await.map_err(db)?;
         let mut favorites: Vec<ResourceFavorite> = Vec::new();
         let mut groups = HashMap::new();
+        let links = sqlx::query("SELECT project.resource_id, project.source, project.project_id, (SELECT alias FROM resource_aliases alias WHERE alias.source = project.source AND alias.project_id = project.project_id ORDER BY rowid DESC LIMIT 1) AS alias FROM resource_source_projects project WHERE project.resource_id IN (SELECT project.resource_id FROM resource_source_projects project JOIN resource_favorites favorite ON favorite.source = project.source AND favorite.project_id = project.project_id UNION SELECT project.resource_id FROM resource_source_projects project JOIN content_favorites favorite ON favorite.provider = project.source AND favorite.project_id = project.project_id) ORDER BY project.source, project.project_id").fetch_all(pool).await.map_err(db)?;
+        let mut projects_by_resource: HashMap<
+            ResourceId,
+            Vec<SourceProjectRef>,
+        > = HashMap::new();
+        let mut aliases = HashMap::new();
+        for link in links {
+            let project = SourceProjectRef {
+                source: SourceId::new(
+                    link.try_get::<String, _>("source").map_err(db)?,
+                )?,
+                project_id: SourceProjectId::new(
+                    link.try_get::<String, _>("project_id").map_err(db)?,
+                )?,
+            };
+            let id = ResourceId::new(
+                link.try_get::<String, _>("resource_id").map_err(db)?,
+            )?;
+            aliases.insert(
+                project.clone(),
+                link.try_get::<Option<String>, _>("alias").map_err(db)?,
+            );
+            projects_by_resource.entry(id).or_default().push(project);
+        }
         for row in rows {
             let project = SourceProjectRef {
                 source: SourceId::new(
@@ -134,13 +158,13 @@ impl ResourceService {
                 }
             } else {
                 let projects = if let Some(id) = &id {
-                    store.projects(id).await?
+                    projects_by_resource.get(id).cloned().unwrap_or_default()
                 } else {
                     vec![project.clone()]
                 };
                 groups.insert(key, favorites.len());
                 favorites.push(ResourceFavorite {
-                    locator: store.project_alias(&project).await?,
+                    locator: aliases.get(&project).cloned().flatten(),
                     resource_id: id,
                     project,
                     projects,
@@ -156,7 +180,7 @@ impl ResourceService {
                 .find(|project| project.source == preferred)
             {
                 favorite.project = project.clone();
-                favorite.locator = store.project_alias(project).await?;
+                favorite.locator = aliases.get(project).cloned().flatten();
             }
         }
         Ok(favorites)

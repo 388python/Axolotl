@@ -12,6 +12,24 @@ const items = [
     { path: 'options.txt', type: 'file' as const, size: 30 },
 ]
 
+it('indexes many sibling directories without losing descendants during selection', async () => {
+    const items = Array.from({ length: 1000 }, (_, index) => ({
+        path: `folder-${index}/nested/file.txt`,
+        type: 'file' as const,
+    }))
+    const wrapper = await mountThemed(FileTreeSelect, { items, modelValue: [] }, 'dark')
+    try {
+        await wrapper
+            .find('[role="checkbox"][aria-label="Select all files in this view"]')
+            .trigger('click')
+        const next = wrapper.emitted('update:modelValue')!.at(-1)![0] as string[]
+        expect(next).toHaveLength(1000)
+        expect(new Set(next).size).toBe(1000)
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('renders a bounded window while selecting the complete matching snapshot', async () => {
     const files = Array.from({ length: 2000 }, (_, index) => ({
         path: `screen-${index}.png`,

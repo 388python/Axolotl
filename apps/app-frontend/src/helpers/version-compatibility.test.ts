@@ -42,6 +42,9 @@ test('exact versions and open or closed bounds compare whole versions', () => {
 })
 
 test('unsupported declarations remain unknown without substring matching', () => {
+    assert.equal(assessVersionRange('1.20.4', '>=1.20 <1.21'), 'compatible')
+    assert.equal(assessVersionRange('1.21', '>=1.20 <1.21'), 'incompatible')
+    assert.equal(assessVersionRange('1.21', '1.20.x || 1.21'), 'compatible')
     for (const range of ['1.2', '1.20.x.1', 'supports 1.20.4', '>=unknown', '[1.21,1.20]']) {
         if (range === '1.2') assert.equal(assessVersionRange('1.20.4', range), 'incompatible')
         else assert.equal(assessVersionRange('1.20.4', range), 'unknown')

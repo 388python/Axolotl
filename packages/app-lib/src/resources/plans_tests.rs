@@ -6,6 +6,53 @@ use std::collections::HashMap;
 mod graph_tests;
 
 #[tokio::test]
+async fn complete_updates_keep_more_than_one_hundred_entry_actions() {
+    let old = release("root0000", "1", 'a');
+    let new = release("root0000", "2", 'b');
+    let (_directory, service) = service(vec![old.clone(), new.clone()]).await;
+    let entries: Vec<_> = (0..101)
+        .map(|index| {
+            installed(
+                &old,
+                &format!("copy-{index}"),
+                &format!("mods/copy-{index}.jar"),
+            )
+        })
+        .collect();
+    let selections = entries
+        .iter()
+        .map(|entry| {
+            selection(
+                entry.entry_id.as_str(),
+                &new,
+                Some(entry.entry_id.as_str()),
+            )
+        })
+        .collect();
+    let plan = service
+        .build_operation(
+            draft(selections, ResourceOperationIntent::Update),
+            &target(),
+            &entries,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(plan.actions.len(), 101);
+    assert_eq!(
+        plan.actions
+            .iter()
+            .map(|action| &action.entry_id)
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        101
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn the_same_datapack_in_two_worlds_produces_two_scoped_actions() {
     let mut old = release("pack0000", "1", 'a');
     let mut new = release("pack0000", "2", 'b');

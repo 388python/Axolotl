@@ -92,7 +92,11 @@ pub(crate) async fn attach_to_snapshot(
     items: &mut [crate::state::InstanceContentSnapshotItem],
     state: &crate::State,
 ) -> ResourceResult<()> {
-    let histories = read_history(instance_id, None, state, false).await?;
+    let payloads: Vec<String> = sqlx::query_scalar("SELECT payload FROM (SELECT payload, ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY recorded_at DESC, rowid DESC) AS rank FROM resource_history WHERE instance_id = ?) WHERE rank = 1").bind(instance_id).fetch_all(&state.pool).await.map_err(db)?;
+    let histories: Vec<ResourceHistoryEntry> = payloads
+        .into_iter()
+        .filter_map(|payload| serde_json::from_str(&payload).ok())
+        .collect();
     if histories.is_empty() {
         return Ok(());
     }
@@ -108,25 +112,40 @@ pub(crate) async fn attach_to_snapshot(
     )
     .map_err(|error| ResourceError::InvalidRequest(error.to_string()))?;
     let installed = plans::installed(&state.pool, instance_id).await?;
+    let installed: std::collections::HashMap<_, _> = installed
+        .into_iter()
+        .map(|entry| (entry.entry_id.clone(), entry))
+        .collect();
+    let histories: std::collections::HashMap<_, _> = histories
+        .into_iter()
+        .map(|history| (history.entry_id.clone(), history))
+        .collect();
     for item in items {
-        let Some(current) = installed.iter().find(|entry| {
-            Some(entry.entry_id.as_str()) == item.entry_id.as_deref()
-        }) else {
+        let Some(current) = item
+            .entry_id
+            .as_ref()
+            .and_then(|id| InstalledEntryId::new(id).ok())
+            .and_then(|id| installed.get(&id))
+        else {
             continue;
         };
         let Some(content) = item.content.as_mut() else {
             continue;
         };
-        if let Some(history) = histories.iter().find(|history| {
-            history.entry_id == current.entry_id
-                && history.backup_available
-                && current.artifact == history.target.artifact
-                && current.relative_path == history.target.relative_path
-                && identity::exact_integrity(
-                    &current.integrity,
-                    &history.target.integrity,
-                )
-        }) {
+        if histories.contains_key(&current.entry_id) {
+            content.rollback = None;
+        }
+        if let Some(history) =
+            histories.get(&current.entry_id).filter(|history| {
+                history.backup_available
+                    && current.artifact == history.target.artifact
+                    && current.relative_path == history.target.relative_path
+                    && identity::exact_integrity(
+                        &current.integrity,
+                        &history.target.integrity,
+                    )
+            })
+        {
             let (Some(backup), Some(integrity)) =
                 (&history.backup_relative_path, &history.backup_integrity)
             else {
@@ -304,6 +323,14 @@ pub(crate) fn history_entry(
     plan: &ResourceOperationPlan,
     backup_relative_path: Option<String>,
 ) -> ResourceHistoryEntry {
+    let node_id = plan
+        .actions
+        .iter()
+        .find(|action| action.entry_id == current.entry_id)
+        .map(|action| &action.node_id);
+    let (nodes, edges) = node_id
+        .map(|id| super::execution::entry_graph(plan, id))
+        .unwrap_or_default();
     ResourceHistoryEntry {
         id: HistoryId::new(uuid::Uuid::new_v4().to_string())
             .expect("UUID is a valid history ID"),
@@ -312,10 +339,10 @@ pub(crate) fn history_entry(
         recorded_at: Utc::now(),
         previous: current.clone(),
         target,
-        previous_nodes: plan.nodes.clone(),
-        target_nodes: plan.nodes.clone(),
-        previous_dependencies: plan.edges.clone(),
-        target_dependencies: plan.edges.clone(),
+        previous_nodes: nodes.clone(),
+        target_nodes: nodes,
+        previous_dependencies: edges.clone(),
+        target_dependencies: edges,
         backup_integrity: Some(current.integrity.clone()),
         backup_available: backup_relative_path.is_some(),
         backup_relative_path,

@@ -237,8 +237,18 @@ impl ResourceStore {
             sqlx::query("UPDATE resource_identity_evidence SET resource_id = ? WHERE resource_id = ?")
                 .bind(winner).bind(loser).execute(&mut *transaction).await.map_err(database_error)?;
         }
-        sqlx::query("INSERT INTO resource_identity_evidence(evidence_id, resource_id, payload, confirmed_at) VALUES (?, ?, ?, ?)")
-            .bind(uuid::Uuid::new_v4().to_string()).bind(winner).bind(payload).bind(chrono::Utc::now().timestamp())
+        use sha2::{Digest, Sha256};
+        let mut references = [
+            serde_json::to_string(&left_artifact.reference)?,
+            serde_json::to_string(&right_artifact.reference)?,
+        ];
+        references.sort();
+        let evidence_id = format!(
+            "artifact-pair:{:x}",
+            Sha256::digest(serde_json::to_vec(&references)?)
+        );
+        sqlx::query("INSERT INTO resource_identity_evidence(evidence_id, resource_id, payload, confirmed_at) VALUES (?, ?, ?, ?) ON CONFLICT(evidence_id) DO UPDATE SET resource_id = excluded.resource_id, payload = excluded.payload, confirmed_at = excluded.confirmed_at WHERE resource_identity_evidence.resource_id <> excluded.resource_id OR resource_identity_evidence.payload <> excluded.payload")
+            .bind(evidence_id).bind(winner).bind(payload).bind(chrono::Utc::now().timestamp())
             .execute(&mut *transaction).await.map_err(database_error)?;
         let id = ResourceId::new(winner.clone())?;
         transaction.commit().await.map_err(database_error)?;

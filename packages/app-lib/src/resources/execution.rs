@@ -31,6 +31,35 @@ fn canceled(cancel: &CancellationToken) -> crate::Result<()> {
     }
 }
 
+pub(crate) fn entry_graph(
+    plan: &ResourceOperationPlan,
+    root: &SelectionId,
+) -> (Vec<ResourceDependencyNode>, Vec<ResourceDependencyEdge>) {
+    let mut ids = std::collections::HashSet::from([root.clone()]);
+    let mut pending = vec![root.clone()];
+    while let Some(id) = pending.pop() {
+        for edge in plan.edges.iter().filter(|edge| edge.parent == id) {
+            if ids.insert(edge.child.clone()) {
+                pending.push(edge.child.clone());
+            }
+        }
+    }
+    (
+        plan.nodes
+            .iter()
+            .filter(|node| ids.contains(&node.id))
+            .cloned()
+            .collect(),
+        plan.edges
+            .iter()
+            .filter(|edge| {
+                ids.contains(&edge.parent) && ids.contains(&edge.child)
+            })
+            .cloned()
+            .collect(),
+    )
+}
+
 fn staging_prefix(plan: &ResourceOperationPlan) -> crate::Result<String> {
     let id = uuid::Uuid::parse_str(plan.id.as_str())?;
     Ok(format!("resource-{id}-"))
@@ -972,7 +1001,8 @@ async fn persist_plan(
             )?;
             sqlx::query("INSERT INTO resource_history(id, instance_id, entry_id, recorded_at, payload, backup_relative_path, backup_size, backup_sha1, backup_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)").bind(history.id.as_str()).bind(&plan.instance_id).bind(id).bind(now.timestamp()).bind(payload.to_string()).bind(&file.backup).bind(current.integrity.size.map(|size| size as i64)).bind(current.integrity.hashes.iter().find(|hash| hash.algorithm == HashAlgorithm::Sha1).map(|hash| &hash.value)).execute(&mut *tx).await?;
         }
-        sqlx::query("INSERT INTO resource_entry_graphs(entry_id, nodes, edges) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET nodes = excluded.nodes, edges = excluded.edges").bind(id).bind(serde_json::to_string(&plan.nodes)?).bind(serde_json::to_string(&plan.edges)?).execute(&mut *tx).await?;
+        let (nodes, edges) = entry_graph(plan, &action.node_id);
+        sqlx::query("INSERT INTO resource_entry_graphs(entry_id, nodes, edges) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET nodes = excluded.nodes, edges = excluded.edges").bind(id).bind(serde_json::to_string(&nodes)?).bind(serde_json::to_string(&edges)?).execute(&mut *tx).await?;
     }
     for action in &plan.actions {
         let mut edges = Vec::new();

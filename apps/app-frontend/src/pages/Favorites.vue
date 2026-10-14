@@ -33,7 +33,7 @@ import {
     useStickyObserver,
     useVIntl,
 } from '@modrinth/ui'
-import { computed, nextTick, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import BrowseInstanceSelector from '@/components/browse/BrowseInstanceSelector.vue'
@@ -46,6 +46,7 @@ import {
     contentFavoriteKey,
     type FavoriteContentType,
     type FavoriteProvider,
+    prefetchContentFavorites,
     resolveContentFavorite,
 } from '@/helpers/content-favorites'
 import { getCurseForgeFiles } from '@/helpers/curseforge'
@@ -111,6 +112,7 @@ const { isStuck: isInstallHeaderStuck } = useStickyObserver(
     'FavoritesInstallHeader',
 )
 const projects = shallowRef<FavoriteProject[]>([])
+let projectsController: AbortController | null = null
 const loadingProjects = ref(false)
 const installingKeys = ref(new Set<string>())
 const displayMode = ref<FavoriteDisplayMode>(getLastBrowseContentDisplayMode())
@@ -368,14 +370,25 @@ function toUnavailable(favorite: ContentFavorite): FavoriteProject {
 
 async function refreshProjects() {
     const requestId = ++projectRequestId
+    projectsController?.abort()
+    projectsController = new AbortController()
+    const signal = projectsController.signal
     loadingProjects.value = true
     try {
         await contentFavorites.load(true)
         const favorites = [...contentFavorites.favorites.value]
+        const cached = await prefetchContentFavorites(favorites, signal)
         const resolved = await Promise.all(
             favorites.map(async (favorite): Promise<FavoriteProject> => {
                 try {
-                    const metadata = await resolveContentFavorite(favorite)
+                    const candidates = [
+                        { source: favorite.provider, projectId: favorite.project_id },
+                        ...(favorite.projects ?? []),
+                    ]
+                    const metadata =
+                        candidates
+                            .map((project) => cached.get(`${project.source}:${project.projectId}`))
+                            .find(Boolean) ?? (await resolveContentFavorite(favorite, signal))
                     return {
                         favorite,
                         provider: metadata.project.source,
@@ -396,13 +409,15 @@ async function refreshProjects() {
                 }
             }),
         )
-        if (requestId === projectRequestId) projects.value = resolved
+        if (requestId === projectRequestId && !signal.aborted) projects.value = resolved
     } catch (error) {
-        handleError(error)
+        if (!signal.aborted) handleError(error)
     } finally {
         if (requestId === projectRequestId) loadingProjects.value = false
     }
 }
+
+onBeforeUnmount(() => projectsController?.abort())
 
 const activeFavoriteKeys = computed(
     () =>
@@ -637,7 +652,15 @@ onBeforeRouteLeave((to) => {
 watch(
     () =>
         contentFavorites.favorites.value
-            .map((favorite) => `${favorite.provider}:${favorite.project_id}`)
+            .map((favorite) =>
+                JSON.stringify([
+                    favorite.provider,
+                    favorite.project_id,
+                    favorite.resource_id,
+                    favorite.locator,
+                    favorite.projects,
+                ]),
+            )
             .join('|'),
     () => void refreshProjects(),
 )

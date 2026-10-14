@@ -79,7 +79,6 @@ it('keeps a completed description on failure and aborts old subscriptions on sou
     ready()
     const wrapper = mount(ResourceDescription, {
         props: { source: 'modrinth', projectId: 'abcdefgh' },
-        slots: { default: '<p>Original</p>' },
     })
     try {
         await flushPromises()

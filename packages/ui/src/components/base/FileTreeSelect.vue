@@ -356,6 +356,23 @@ const normalizedItems = computed(() => {
 })
 
 const selectedPaths = computed(() => new Set(props.modelValue.map((path) => normalizePath(path))))
+const folderIndex = computed(() => {
+    const descendants = new Map<string, NormalizedFileTreeSelectItem[]>()
+    const children = new Map<string, Set<string>>()
+    for (const item of normalizedItems.value) {
+        const segments = item.normalizedPath.split('/')
+        for (let depth = 1; depth < segments.length; depth++) {
+            const path = segments.slice(0, depth).join('/')
+            const entries = descendants.get(path) ?? []
+            entries.push(item)
+            descendants.set(path, entries)
+            const names = children.get(path) ?? new Set<string>()
+            names.add(segments[depth])
+            children.set(path, names)
+        }
+    }
+    return { descendants, children }
+})
 
 const folderPaths = computed(() => {
     const paths = new Set<string>()
@@ -555,22 +572,11 @@ function getModifiedSortValue(entry: FileTreeSelectEntry) {
 }
 
 function getFolderDescendants(path: string) {
-    return normalizedItems.value.filter((item) => item.normalizedPath.startsWith(`${path}/`))
+    return folderIndex.value.descendants.get(path) ?? []
 }
 
 function getFolderChildCount(path: string) {
-    const children = new Set<string>()
-    const prefix = `${path}/`
-    for (const item of normalizedItems.value) {
-        if (!item.normalizedPath.startsWith(prefix)) continue
-
-        const relativePath = item.normalizedPath.slice(prefix.length)
-        const [childName] = relativePath.split('/')
-        if (childName) {
-            children.add(childName)
-        }
-    }
-    return children.size
+    return folderIndex.value.children.get(path)?.size ?? 0
 }
 
 function getLatestModified(items: NormalizedFileTreeSelectItem[]) {

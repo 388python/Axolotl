@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Avatar, Button, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
+import { Avatar, Button, Combobox, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
@@ -19,9 +19,16 @@ import {
     type ResourceSelection,
     type SourceReleaseRef,
 } from '@/helpers/resources'
+import { get_instance_worlds } from '@/helpers/worlds'
 
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
+    world: { id: 'app.resources.operation.world', defaultMessage: 'Target world for data packs' },
+    noWorlds: {
+        id: 'app.resources.operation.no-worlds',
+        defaultMessage:
+            'Create a singleplayer world in this instance before installing data packs.',
+    },
     header: { id: 'app.resources.operation.header', defaultMessage: 'Review content changes' },
     loading: {
         id: 'app.resources.operation.loading',
@@ -128,6 +135,15 @@ const modal = ref<InstanceType<typeof NewModal> | null>(null)
 const plan = ref<ResourceOperationPlan | null>(null)
 const input = ref<OperationInput | null>(null)
 const busy = ref(false)
+const worldOptions = ref<{ value: string; label: string }[]>([])
+const targetWorld = ref<string | null>(null)
+const needsWorld = computed(
+    () =>
+        input.value?.selections?.some(
+            (selection) =>
+                selection.resourceType === 'dataPack' && selection.scope.kind === 'instance',
+        ) ?? false,
+)
 const queueing = ref(false)
 const queueFailed = ref(false)
 const error = ref<string | null>(null)
@@ -241,6 +257,32 @@ function requiredBy(id: string, kind = 'required') {
     ].join(', ')
 }
 async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current: number) {
+    const refs = value.nodes
+        .filter((node) => node.state !== 'satisfied')
+        .flatMap((node) => {
+            const project =
+                node.artifact?.reference.release.project ??
+                (node.resource.kind === 'source' ? node.resource.project : null)
+            return project ? [project] : []
+        })
+    await Promise.allSettled(
+        [...new Set(refs.map((project) => project.source))]
+            .filter((source) => source === 'modrinth' || source === 'curseforge')
+            .map((source) =>
+                resourceProjectDocuments(
+                    source,
+                    [
+                        ...new Set(
+                            refs
+                                .filter((project) => project.source === source)
+                                .map((project) => project.projectId),
+                        ),
+                    ],
+                    signal,
+                ),
+            ),
+    )
+    if (current !== generation || signal.aborted) return
     await Promise.allSettled(
         value.nodes.map(async (node) => {
             const cachedRef =
@@ -323,11 +365,49 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
     names.value = {}
     error.value = null
     queueFailed.value = false
+    retryAction = null
+    worldOptions.value = []
+    targetWorld.value = null
     modal.value?.show()
     const result = new Promise<InstallJobSnapshot | null>((resolve) => {
         resolveShow = resolve
     })
-    void run((signal) =>
+    if (needsWorld.value) {
+        const current = generation
+        busy.value = true
+        const loadWorlds = async () => {
+            busy.value = true
+            error.value = null
+            await get_instance_worlds(value.instanceId)
+                .then((worlds) => {
+                    if (current !== generation) return
+                    worldOptions.value = worlds.flatMap((world) =>
+                        world.type === 'singleplayer'
+                            ? [
+                                  {
+                                      value: `saves/${world.path.replace(/^saves\//, '')}`,
+                                      label: world.name,
+                                  },
+                              ]
+                            : [],
+                    )
+                })
+                .catch((failure) => {
+                    if (current === generation) error.value = resourceOperationError(failure)
+                })
+                .finally(() => {
+                    if (current === generation) busy.value = false
+                })
+        }
+        retryAction = loadWorlds
+        void loadWorlds()
+        return result
+    }
+    void prepareInput(value)
+    return result
+}
+async function prepareInput(value: OperationInput) {
+    await run((signal) =>
         value.selections
             ? resourcePrepareOperation(
                   value.instanceId,
@@ -347,7 +427,20 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
                   signal,
               ),
     )
-    return result
+}
+function selectWorld(path: string) {
+    if (!input.value || busy.value) return
+    targetWorld.value = path
+    plan.value = null
+    const value = {
+        ...input.value,
+        selections: input.value.selections?.map((selection) =>
+            selection.resourceType === 'dataPack'
+                ? { ...selection, scope: { kind: 'world' as const, relativePath: path } }
+                : selection,
+        ),
+    }
+    void prepareInput(value)
 }
 async function apply() {
     if (!plan.value || !canApply.value) return
@@ -458,6 +551,18 @@ defineExpose({ show, showInstall, showInstallSelection })
         width="min(42rem, 90vw)"
     >
         <div class="flex flex-col gap-3">
+            <div v-if="needsWorld" class="flex flex-col gap-2">
+                <label>{{ formatMessage(messages.world) }}</label>
+                <Combobox
+                    :model-value="targetWorld"
+                    :options="worldOptions"
+                    :disabled="busy"
+                    @update:model-value="selectWorld"
+                />
+                <p v-if="!busy && !worldOptions.length" class="m-0">
+                    {{ formatMessage(messages.noWorlds) }}
+                </p>
+            </div>
             <div v-if="busy && !plan" class="flex flex-col gap-3" role="status">
                 <span class="sr-only">{{ formatMessage(messages.loading) }}</span>
                 <div
@@ -513,12 +618,12 @@ defineExpose({ show, showInstall, showInstallSelection })
                     >
                 </div>
                 <p
-                    v-if="names[node.id]?.summary"
+                    v-if="node.state !== 'satisfied' && names[node.id]?.summary"
                     class="m-0 text-sm text-[var(--color-text-tertiary)]"
                 >
                     {{ names[node.id].summary }}
                 </p>
-                <p v-if="node.artifact" class="m-0 break-all text-sm">
+                <p v-if="node.state !== 'satisfied' && node.artifact" class="m-0 break-all text-sm">
                     {{
                         formatMessage(messages.artifact, {
                             source: node.artifact.reference.release.project.source,

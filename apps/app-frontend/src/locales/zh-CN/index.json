@@ -13731,7 +13731,7 @@
     "message": "{file} 声明支持 {modVersion}（{modLoader}）；实例为 {instVersion}（{instLoader}）。Minecraft：{gameState, select, compatible {兼容} incompatible {不兼容} other {未知}}；加载器：{loaderState, select, compatible {兼容} incompatible {不兼容} other {未知}}。确认后将按这些兼容例外导入此文件。"
   },
   "app.resources.installed.compatibility": {
-    "message": "Minecraft：{game, select, compatible {兼容} incompatible {不兼容} other {未知}}；加载器：{loader, select, compatible {兼容} incompatible {不兼容} other {未知}}。安装不会改变工件声明的兼容性。"
+    "message": "Minecraft：{game, select, compatible {兼容} incompatible {不兼容} other {未提供可识别的版本声明}}；加载器：{loader, select, compatible {兼容} incompatible {不兼容} other {未提供加载器声明}}。"
   },
   "app.resources.operation.accept-dimension": {
     "message": "{dimension, select, gameVersion {接受 Minecraft 兼容例外} other {接受加载器兼容例外}}"
@@ -13849,5 +13849,11 @@
   },
   "app.resources.manual.unverifiable": {
     "message": "此来源未提供文件哈希，无法核验对应工件。请从来源页面下载，然后通过本地导入流程添加。"
+  },
+  "app.resources.operation.world": {
+    "message": "数据包的目标存档"
+  },
+  "app.resources.operation.no-worlds": {
+    "message": "安装数据包前，请先在此实例中创建一个单人存档。"
   }
 }

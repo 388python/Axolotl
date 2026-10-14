@@ -134,6 +134,15 @@ pub(crate) async fn hydrate_with_failures(
     instance_id: &str,
     cancel: &CancellationToken,
 ) -> ResourceResult<HydratedInstalled> {
+    hydrate_selected(state, instance_id, cancel, None).await
+}
+
+async fn hydrate_selected(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+    selected: Option<&[InstalledEntryId]>,
+) -> ResourceResult<HydratedInstalled> {
     let service = state.resources().await?;
     let revision = plans::instance_revision(&state.pool, instance_id).await?;
     let scope = crate::state::instances::commands::resolve_content_scope(
@@ -153,18 +162,34 @@ pub(crate) async fn hydrate_with_failures(
     let mut failures = Vec::new();
     let mut persisted = Vec::new();
     let mut verified = std::collections::HashMap::new();
-    for (index, entry) in entries
-        .iter()
-        .enumerate()
-        .filter(|(_, entry)| !entry.missing)
-    {
+    let saved_records: std::collections::HashMap<String, String> = sqlx::query_as::<_, (String, String)>("SELECT exact.entry_id, exact.artifact FROM resource_installed_artifacts exact JOIN instance_content_entries entry ON entry.id = exact.entry_id WHERE entry.instance_id = ?")
+        .bind(instance_id).fetch_all(&state.pool).await.map_err(plans::db)?.into_iter().collect();
+    for (index, entry) in entries.iter().enumerate().filter(|(_, entry)| {
+        !entry.missing
+            && selected.is_none_or(|ids| ids.contains(&entry.entry_id))
+    }) {
         if cancel.is_cancelled() {
             return Err(ResourceError::Canceled);
         }
+        if saved_records
+            .get(entry.entry_id.as_str())
+            .and_then(|payload| {
+                serde_json::from_str::<ResourceArtifact>(payload).ok()
+            })
+            .is_some_and(|artifact| {
+                super::valid_artifact(&artifact)
+                    && identity::exact_integrity(
+                        &entry.integrity,
+                        &artifact.integrity,
+                    )
+                    && entry.artifact.as_ref() == Some(&artifact.reference)
+            })
+        {
+            continue;
+        }
         let bytes =
             match super::execution::checked_path(&root, &entry.relative_path) {
-                Ok(path) => tokio::fs::read(path)
-                    .await
+                Ok(path) => tokio::select! { biased; _ = cancel.cancelled() => return Err(ResourceError::Canceled), bytes = tokio::fs::read(path) => bytes }
                     .map(bytes::Bytes::from)
                     .map_err(|error| error.to_string()),
                 Err(error) => Err(error.to_string()),
@@ -179,17 +204,42 @@ pub(crate) async fn hydrate_with_failures(
                 continue;
             }
         };
-        let mut hashes = Vec::new();
-        use sha2::Digest;
-        hashes.push(ContentHash {
-            algorithm: HashAlgorithm::Sha512,
-            value: format!("{:x}", sha2::Sha512::digest(&bytes)),
-        });
-        hashes.push(ContentHash {
-            algorithm: HashAlgorithm::Sha256,
-            value: format!("{:x}", sha2::Sha256::digest(&bytes)),
-        });
-        let sha1 = crate::util::fetch::sha1_async(bytes.clone()).await?;
+        let hash_bytes = bytes.clone();
+        let hash_cancel = cancel.clone();
+        let (mut hashes, sha1, fingerprint) =
+            tokio::task::spawn_blocking(move || {
+                use sha2::Digest;
+                let mut sha512 = sha2::Sha512::new();
+                let mut sha256 = sha2::Sha256::new();
+                let mut sha1 = sha1_smol::Sha1::new();
+                for part in hash_bytes.chunks(256 * 1024) {
+                    if hash_cancel.is_cancelled() {
+                        return Err(ResourceError::Canceled);
+                    }
+                    sha512.update(part);
+                    sha256.update(part);
+                    sha1.update(part);
+                }
+                let hashes = vec![
+                    ContentHash {
+                        algorithm: HashAlgorithm::Sha512,
+                        value: format!("{:x}", sha512.finalize()),
+                    },
+                    ContentHash {
+                        algorithm: HashAlgorithm::Sha256,
+                        value: format!("{:x}", sha256.finalize()),
+                    },
+                ];
+                Ok((
+                    hashes,
+                    sha1.digest().to_string(),
+                    crate::api::curseforge::compute_fingerprint(&hash_bytes),
+                ))
+            })
+            .await
+            .map_err(|error| {
+                ResourceError::InvalidRequest(error.to_string())
+            })??;
         if entry.integrity.size != Some(bytes.len() as u64)
             || !entry.integrity.hashes.iter().any(|hash| {
                 hash.algorithm == HashAlgorithm::Sha1
@@ -209,7 +259,7 @@ pub(crate) async fn hydrate_with_failures(
             algorithm: HashAlgorithm::Sha1,
             value: sha1,
         });
-        let saved: Option<String> = sqlx::query_scalar("SELECT artifact FROM resource_installed_artifacts WHERE entry_id = ?").bind(entry.entry_id.as_str()).fetch_optional(&state.pool).await.map_err(plans::db)?;
+        let saved = saved_records.get(entry.entry_id.as_str()).cloned();
         if let Some(artifact) = saved
             .and_then(|value| {
                 serde_json::from_str::<ResourceArtifact>(&value).ok()
@@ -232,9 +282,7 @@ pub(crate) async fn hydrate_with_failures(
                 size: Some(bytes.len() as u64),
                 hashes,
             },
-            fingerprint: Some(crate::api::curseforge::compute_fingerprint(
-                &bytes,
-            )),
+            fingerprint: Some(fingerprint),
         });
         indices.push(index);
     }
@@ -250,6 +298,33 @@ pub(crate) async fn hydrate_with_failures(
     let recognized = service
         .identify_many(&sources, &identities, CachePolicy::UseFresh, cancel)
         .await;
+    let mut projects: std::collections::HashSet<_> = recognized
+        .iter()
+        .flat_map(|recognition| {
+            recognition
+                .matches
+                .iter()
+                .map(|artifact| artifact.reference.release.project.clone())
+        })
+        .collect();
+    projects.extend(
+        verified
+            .values()
+            .map(|artifact| artifact.reference.release.project.clone()),
+    );
+    for source in &sources {
+        let queries = projects
+            .iter()
+            .filter(|project| &project.source == source)
+            .map(|project| super::providers::ProviderQuery::Project {
+                id: project.project_id.clone(),
+                slug: None,
+            })
+            .collect();
+        service
+            .query_many(source, queries, CachePolicy::UseFresh, cancel)
+            .await;
+    }
     for ((index, local), recognition) in
         indices.into_iter().zip(identities).zip(recognized)
     {
@@ -393,7 +468,10 @@ pub(crate) async fn hydrate_with_failures(
                 .await?;
             entry.resource_id = Some(id);
             for matched in matches.iter().filter(|_| !recognition.ambiguous) {
-                if matched.reference.release.project != metadata.project {
+                if matched.reference.release.project != metadata.project
+                    && store.lookup(&matched.reference.release.project).await?
+                        != entry.resource_id
+                {
                     let other = match service
                         .project_document(
                             &matched.reference.release.project,
@@ -493,7 +571,9 @@ pub async fn prepare_entries(
         ));
     }
     let state = crate::State::get().await?;
-    let hydrated = hydrate_with_failures(&state, &instance_id, cancel).await?;
+    let hydrated =
+        hydrate_selected(&state, &instance_id, cancel, Some(&entry_ids))
+            .await?;
     if let Some((_, error)) = hydrated
         .failures
         .iter()

@@ -227,6 +227,9 @@ pub enum ProviderValue {
 
 #[async_trait]
 pub trait ResourceProvider: Send + Sync {
+    fn local_release_pagination(&self) -> bool {
+        false
+    }
     fn source(&self) -> ResourceSource;
     fn namespace(&self) -> String;
     fn batch_limit(&self, query: &ProviderQuery) -> usize;

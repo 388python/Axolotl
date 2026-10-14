@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, defineMessages, useVIntl } from '@modrinth/ui'
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, useSlots, watch } from 'vue'
 
 import TranslatedProjectDescription from '@/components/ui/TranslatedProjectDescription.vue'
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/helpers/resources'
 
 const props = defineProps<{ source: SourceId; projectId: string; locator?: string }>()
+const slots = useSlots()
 const { formatMessage } = useVIntl()
 const resource = ref<Resource | null>(null)
 const text = ref<ResourceText | null>(null)
@@ -59,12 +60,10 @@ async function load(source?: SourceId) {
             (await resourceGet(reference, undefined, props.locator, request.signal))
         const readingSource = source ?? current.defaultProject.source
         pendingSource.value = readingSource
-        const description = await resourceDescription(
-            reference,
-            readingSource,
-            props.locator,
-            request.signal,
-        )
+        const description =
+            readingSource === props.source && slots.default
+                ? null
+                : await resourceDescription(reference, readingSource, props.locator, request.signal)
         request.signal.throwIfAborted()
         resource.value = current
         selected.value = readingSource
@@ -111,7 +110,8 @@ onScopeDispose(() => controller?.abort())
             <span>{{ formatMessage(messages.failed) }}</span>
             <Button @click="load(selected)">{{ formatMessage(messages.retry) }}</Button>
         </div>
-        <slot v-if="selected === source || !text" />
+        <slot v-if="selected === source && $slots.default" />
+        <template v-else-if="!text" />
         <p v-else-if="text.format === 'plain'" class="m-0 whitespace-pre-wrap">{{ text.body }}</p>
         <TranslatedProjectDescription
             v-else

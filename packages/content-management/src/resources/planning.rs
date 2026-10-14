@@ -128,6 +128,9 @@ pub fn matches_game_version(pattern: &str, version: &str) -> bool {
 }
 
 pub fn matches_release_constraint(pattern: &str, version: &str) -> bool {
+    if pattern.contains("||") {
+        return false;
+    }
     if pattern.trim() == version {
         return true;
     }
@@ -255,6 +258,37 @@ pub fn assess_game_version(pattern: &str, version: &str) -> CompatibilityState {
         Some(actual == numeric(pattern)?)
     }
     let pattern = pattern.trim();
+    if matches!(pattern, "*" | "x" | "X") && numeric(version).is_some() {
+        return CompatibilityState::Compatible;
+    }
+    if pattern.contains("||") {
+        let states: Vec<_> = pattern
+            .split("||")
+            .map(|part| assess_game_version(part.trim(), version))
+            .collect();
+        return if states.contains(&CompatibilityState::Compatible) {
+            CompatibilityState::Compatible
+        } else if states.contains(&CompatibilityState::Unknown) {
+            CompatibilityState::Unknown
+        } else {
+            CompatibilityState::Incompatible
+        };
+    }
+    let parts: Vec<_> = pattern.split_whitespace().collect();
+    if parts.len() > 1 && parts.iter().all(|part| part.starts_with(['<', '>']))
+    {
+        let states: Vec<_> = parts
+            .iter()
+            .map(|part| assess_game_version(part, version))
+            .collect();
+        return if states.contains(&CompatibilityState::Incompatible) {
+            CompatibilityState::Incompatible
+        } else if states.contains(&CompatibilityState::Unknown) {
+            CompatibilityState::Unknown
+        } else {
+            CompatibilityState::Compatible
+        };
+    }
     if let Some(actual) = numeric(version) {
         match evaluate(pattern, actual) {
             Some(true) => CompatibilityState::Compatible,
@@ -573,6 +607,22 @@ mod tests {
 
     #[test]
     fn game_ranges_preserve_open_bounds_and_unknown_syntax() {
+        assert_eq!(
+            assess_game_version(">=1.20 <1.21", "1.20.4"),
+            CompatibilityState::Compatible
+        );
+        assert_eq!(
+            assess_game_version(">=1.20 <1.21", "1.21"),
+            CompatibilityState::Incompatible
+        );
+        assert_eq!(
+            assess_game_version("1.20.x || 1.21", "1.21"),
+            CompatibilityState::Compatible
+        );
+        assert_eq!(
+            assess_game_version("*", "1.21"),
+            CompatibilityState::Compatible
+        );
         for (range, version, expected) in [
             ("1.20", "1.20.0", true),
             ("<1.20", "1.19.4", true),

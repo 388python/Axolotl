@@ -12,6 +12,8 @@ use std::{collections::HashSet, path::PathBuf, sync::Arc};
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportResolutionCheckpoint {
+    #[serde(default)]
+    pub fingerprints: std::collections::HashMap<String, u32>,
     pub scan: ResourceExportScan,
     pub results: Vec<ExportResolvedFile>,
     pub projects: Vec<ProjectDocument>,
@@ -29,6 +31,7 @@ pub struct QueuedExport {
 impl ExportResolutionCheckpoint {
     pub fn capture(draft: &ExportDraft, preferred_source: SourceId) -> Self {
         Self {
+            fingerprints: draft.fingerprints.clone(),
             scan: draft.scan.clone(),
             results: draft.results.values().cloned().collect(),
             projects: draft.projects.values().cloned().collect(),
@@ -40,6 +43,7 @@ impl ExportResolutionCheckpoint {
 
     pub fn restore(&self) -> ExportDraft {
         let mut draft = ExportDraft::new(self.scan.clone());
+        draft.fingerprints = self.fingerprints.clone();
         draft.results = self
             .results
             .iter()
@@ -105,16 +109,18 @@ pub async fn queue(
     }
     let mut unique = HashSet::new();
     let mut files = vec![];
+    let originals: std::collections::HashMap<_, _> = draft
+        .scan
+        .files
+        .iter()
+        .map(|file| (file.relative_path.as_str(), file))
+        .collect();
     for path in selected {
         if !unique.insert(path.clone()) {
             return Err(invalid("duplicate export file"));
         }
-        let original = draft
-            .scan
-            .files
-            .iter()
-            .find(|file| file.relative_path == path)
-            .ok_or_else(|| {
+        let original =
+            originals.get(path.as_str()).copied().ok_or_else(|| {
                 invalid("selected file is not part of the export snapshot")
             })?;
         files.push(ExportFileAction::Embed {
@@ -177,6 +183,7 @@ pub async fn resolve(
     cancel: &tokio_util::sync::CancellationToken,
     progress: &(dyn Fn(ExportRefreshProgress) + Send + Sync),
 ) -> ResourceResult<ResourceExportPlan> {
+    draft.reuse_frozen = true;
     draft.accepted_failures = plan.embedded_failure_choices.clone();
     draft.selected = plan
         .files

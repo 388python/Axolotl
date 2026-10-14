@@ -11,6 +11,7 @@ import {
     resourceQueuePlan,
     resourceRevisePlan,
 } from '@/helpers/resources'
+import { get_instance_worlds } from '@/helpers/worlds'
 
 import ResourceOperationPreviewModal from './ResourceOperationPreviewModal.vue'
 
@@ -23,8 +24,31 @@ vi.mock('@/helpers/resources', () => ({
     resourceRevisePlan: vi.fn(),
 }))
 vi.mock('@/helpers/instance', () => ({ refresh_content: vi.fn() }))
+vi.mock('@/helpers/worlds', () => ({ get_instance_worlds: vi.fn().mockResolvedValue([]) }))
 vi.mock('@modrinth/ui', () => ({
     Avatar: defineComponent({ setup: () => () => h('span') }),
+    Combobox: defineComponent({
+        props: ['modelValue', 'options', 'disabled'],
+        emits: ['update:modelValue'],
+        setup:
+            (props, { emit }) =>
+            () =>
+                h(
+                    'select',
+                    {
+                        value: props.modelValue,
+                        disabled: props.disabled,
+                        onChange: (event: Event) =>
+                            emit('update:modelValue', (event.target as HTMLSelectElement).value),
+                    },
+                    [
+                        h('option', { value: '' }, 'Choose world'),
+                        ...props.options.map((option: { value: string; label: string }) =>
+                            h('option', { value: option.value }, option.label),
+                        ),
+                    ],
+                ),
+    }),
     Button: defineComponent({
         setup:
             (_, { attrs, slots }) =>
@@ -123,6 +147,68 @@ const input = {
     intent: 'update' as const,
     installDependencies: true,
 }
+
+it('data packs require a real world and a failed world switch cannot queue the previous plan', async () => {
+    ready()
+    vi.mocked(get_instance_worlds)
+        .mockRejectedValueOnce(new Error('world scan failed'))
+        .mockResolvedValue([
+            { type: 'singleplayer', path: 'one', name: 'One' },
+            { type: 'singleplayer', path: 'two', name: 'Two' },
+        ] as Awaited<ReturnType<typeof get_instance_worlds>>)
+    vi.mocked(resourcePrepareOperation)
+        .mockResolvedValueOnce(plan())
+        .mockRejectedValueOnce(new Error('preparation failed'))
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.showInstall({
+        instanceId: 'instance',
+        instanceName: 'Example',
+        installDependencies: true,
+        selections: [
+            {
+                id: 'pack',
+                resourceType: 'dataPack',
+                scope: { kind: 'instance' },
+                release: { kind: 'automatic' },
+                resource: {
+                    kind: 'source',
+                    project: { source: 'modrinth', projectId: 'pack0000' },
+                },
+            },
+        ],
+    })
+    try {
+        await flushPromises()
+        expect(resourcePrepareOperation).not.toHaveBeenCalled()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Retry')!
+            .trigger('click')
+        await flushPromises()
+        await wrapper.find('select').setValue('saves/one')
+        await flushPromises()
+        expect(vi.mocked(resourcePrepareOperation).mock.calls[0][2][0].scope).toEqual({
+            kind: 'world',
+            relativePath: 'saves/one',
+        })
+        await wrapper.find('select').setValue('saves/two')
+        await flushPromises()
+        expect(
+            wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Queue changes')
+                ?.attributes('disabled'),
+        ).toBeDefined()
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Cancel')!
+            .trigger('click')
+        expect(await result).toBeNull()
+    } finally {
+        wrapper.unmount()
+    }
+})
 
 it('requires explicit addition of a missing dependency when automatic installation is off', async () => {
     ready()

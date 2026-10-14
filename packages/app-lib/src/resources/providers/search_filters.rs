@@ -29,6 +29,12 @@ pub(crate) fn for_source(
             let selected: Vec<_> = values
                 .iter()
                 .filter_map(|value| {
+                    if field == "projectId" && *excluded {
+                        if let Some((owner, id)) = value.split_once(':') {
+                            return (owner == source.as_str())
+                                .then(|| id.to_string());
+                        }
+                    }
                     if field == "category"
                         && let Some((owner, value)) = value.split_once(':')
                     {
@@ -39,6 +45,9 @@ pub(crate) fn for_source(
                 })
                 .collect();
             if selected.is_empty() {
+                if field == "projectId" && *excluded {
+                    return Ok(ResourceSearchExpression::All { terms: vec![] });
+                }
                 return Err(ResourceError::Unsupported(format!(
                     "source cannot express {field} filter"
                 )));
@@ -64,7 +73,10 @@ pub(crate) fn modrinth(
     match expression {
         ResourceSearchExpression::All { terms }
         | ResourceSearchExpression::Any { terms } => {
-            if terms.is_empty() || terms.len() > 100 {
+            if terms.is_empty() {
+                return Ok("project_id != \"\"".into());
+            }
+            if terms.len() > 4096 {
                 return Err(ResourceError::InvalidRequest(
                     "invalid search filter group".into(),
                 ));
@@ -175,6 +187,13 @@ pub(crate) fn validate_curseforge(
             "type" | "category" | "loader" | "gameVersion"
         ) =>
         {
+            Ok(())
+        }
+        ResourceSearchExpression::Predicate {
+            field,
+            excluded: true,
+            ..
+        } if matches!(field.as_str(), "projectId" | "allTypes" | "type") => {
             Ok(())
         }
         _ => Err(ResourceError::Unsupported(

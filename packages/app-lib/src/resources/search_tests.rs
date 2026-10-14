@@ -2,6 +2,39 @@ use super::*;
 use crate::resources::ipc::*;
 use std::collections::HashSet;
 
+#[tokio::test]
+async fn provider_qualified_hidden_entries_do_not_disable_a_source_or_hide_another_provider()
+ {
+    let (_temp, cache) = cache().await;
+    let cf = SearchProvider::new(
+        SourceId::curseforge(),
+        &["CF 1".into(), "CF 2".into()],
+    );
+    let service = ResourceService::new(cache.clone(), vec![cf]).unwrap();
+    let mut query = query(20);
+    query.filter = Some(ResourceSearchExpression::Predicate {
+        field: "projectId".into(),
+        values: vec!["curseforge:1".into(), "modrinth:2".into()],
+        excluded: true,
+    });
+    let page = service
+        .search(
+            query,
+            None,
+            RequestId::new("hidden").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 1);
+    assert_eq!(
+        page.entries[0].entry.default_project.project_id.as_str(),
+        "2"
+    );
+    assert!(page.source_failures.is_empty());
+    cache.close().await;
+}
+
 struct SearchProvider {
     source: SourceId,
     entries: Vec<SourceProjectMetadata>,
