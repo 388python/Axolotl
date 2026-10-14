@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub async fn recover_interrupted_jobs(state: &State) -> crate::Result<()> {
+    crate::state::instances::commands::recover_legacy_rollbacks(state).await?;
     let jobs = store::list_interrupted_candidates(state).await?;
 
     for mut job in jobs {
@@ -28,7 +29,9 @@ pub async fn recover_interrupted_jobs(state: &State) -> crate::Result<()> {
         )
         .await?
         {
-            apply_cleanup(&mut job.state, state).await?;
+            if let Err(error) = apply_cleanup(&mut job.state, state).await {
+                tracing::warn!(job_id = %job.id, %error, "Committed resource task staging cleanup deferred");
+            }
             job.state.progress.phase = InstallPhaseId::Finalizing;
             job.state.progress.progress = None;
             job.state.progress.details = InstallPhaseDetails::Empty;

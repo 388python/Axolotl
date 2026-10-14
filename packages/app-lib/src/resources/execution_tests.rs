@@ -1,6 +1,7 @@
 use super::*;
 use crate::state::{DirectoryInfo, ModrinthProjectId, ModrinthVersionId};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use std::sync::Arc;
 
 #[tokio::test]
 async fn missing_backup_is_only_idempotent_when_original_bytes_are_restored() {
@@ -24,6 +25,271 @@ async fn missing_backup_is_only_idempotent_when_original_bytes_are_restored() {
     std::fs::write(temp.path().join("old.jar"), b"old bytes").unwrap();
     recover_files(temp.path(), &[file]).await.unwrap();
     assert!(!temp.path().join("new.jar").exists());
+}
+
+#[tokio::test]
+async fn restoring_a_missing_current_artifact_executes_without_inventing_a_backup()
+ {
+    let (_temp, state, mut original, old, root) = fixture().await;
+    std::fs::remove_file(root.join(&original.relative_path)).unwrap();
+    original.missing = true;
+    sqlx::query(
+        "UPDATE instance_files SET missing = 1 WHERE instance_id = 'instance'",
+    )
+    .execute(&state.pool)
+    .await
+    .unwrap();
+    std::fs::write(root.join("download.zip"), b"old bytes").unwrap();
+    let plan =
+        local_plan(&state, original.clone(), old, "download.zip", None).await;
+    execute("instance", &plan, None, &state).await.unwrap();
+    assert_eq!(
+        std::fs::read(root.join(original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    let current = plans::installed(&state.pool, "instance")
+        .await
+        .unwrap()
+        .remove(0);
+    assert!(!current.missing);
+    let history = history::list_with_state("instance", None, &state)
+        .await
+        .unwrap();
+    assert!(!history[0].backup_available);
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn selected_installed_entries_verify_disk_even_with_saved_exact_artifacts()
+ {
+    let (_temp, state, original, old, root) = fixture().await;
+    sqlx::query("INSERT INTO resource_installed_artifacts(entry_id, artifact, scope) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET artifact = excluded.artifact, scope = excluded.scope").bind(original.entry_id.as_str()).bind(serde_json::to_string(&old).unwrap()).bind(serde_json::to_string(&InstallScope::Instance).unwrap()).execute(&state.pool).await.unwrap();
+    std::fs::write(root.join(&original.relative_path), b"modified").unwrap();
+    let selected = super::installed::hydrate_selected(
+        &state,
+        "instance",
+        &CancellationToken::new(),
+        Some(&[original.entry_id.clone()]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(selected.failures.len(), 1);
+    assert!(selected.failures[0].1.contains("installed files changed"));
+    std::fs::remove_file(root.join(&original.relative_path)).unwrap();
+    let selected = super::installed::hydrate_selected(
+        &state,
+        "instance",
+        &CancellationToken::new(),
+        Some(&[original.entry_id]),
+    )
+    .await
+    .unwrap();
+    assert_eq!(selected.failures.len(), 1);
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn frozen_switch_jobs_report_switch_version_and_match_ipc_snapshot_contracts()
+ {
+    use crate::install::{model::*, store};
+    let (_temp, state, original, _, _) = fixture().await;
+    let mut plan = local_plan(
+        &state,
+        original,
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes"),
+        "unused",
+        None,
+    )
+    .await;
+    plan.intent = ResourceOperationIntent::SwitchVersion;
+    let job_state = InstallJobState::new(InstallRequest::InstallContentBatch {
+        instance_id: "instance".into(),
+        items: vec![InstallContentBatchItem::FrozenResource { plan }],
+        display_title: "Switch".into(),
+        display_icon: None,
+    });
+    let record = store::insert(
+        uuid::Uuid::new_v4(),
+        &job_state,
+        InstallJobStatus::Queued,
+        &state,
+    )
+    .await
+    .unwrap();
+    let snapshot = record.snapshot();
+    let empty_export = ResourceExportPlan {
+        schema_version: ResourceContractVersion,
+        id: PlanId::new(uuid::Uuid::new_v4().to_string()).unwrap(),
+        revision: 1,
+        session_id: SessionId::new("export").unwrap(),
+        selection_revision: 1,
+        instance_id: "instance".into(),
+        instance_revision: 1,
+        format: ResourceExportFormat::GenericZip,
+        package_info: ExportPackageInfo {
+            name: "Test".into(),
+            version: "1".into(),
+            summary: "".into(),
+            author: None,
+        },
+        requirements: ExportGameRequirements {
+            game_version: "1.20.1".into(),
+            loader: None,
+            loader_version: None,
+        },
+        files: vec![],
+        embedded_failure_choices: vec![],
+    };
+    let export = super::export::plan::PreparedExport {
+        plan: empty_export,
+        queued: Some(snapshot.clone()),
+        output: Some(std::path::PathBuf::from("A.zip")),
+    };
+    assert_eq!(
+        export
+            .queued_for(Path::new("A.zip"))
+            .unwrap()
+            .unwrap()
+            .job_id,
+        snapshot.job_id
+    );
+    assert!(export.queued_for(Path::new("B.zip")).is_err());
+    assert!(matches!(
+        snapshot.content_change.as_ref().unwrap().intent,
+        ContentChangeIntent::SwitchVersion { .. }
+    ));
+    for command in [
+        "resource_queue_plan",
+        "resource_rollback",
+        "resource_export_execute",
+    ] {
+        let response: crate::resources::ipc::ResourceResponse =
+            serde_json::from_value(
+                serde_json::json!({"command":command, "result": snapshot}),
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(response).unwrap()["result"]["job_id"],
+            snapshot.job_id.to_string()
+        );
+    }
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn committed_resource_cleanup_failure_does_not_block_other_interrupted_jobs()
+ {
+    use crate::install::{model::*, store};
+    let (_temp, state, original, _, root) = fixture().await;
+    std::fs::create_dir_all(
+        state.directories.caches_dir().join("resource-staging"),
+    )
+    .unwrap();
+    let mut plan = local_plan(
+        &state,
+        original,
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes"),
+        "unused",
+        None,
+    )
+    .await;
+    plan.id = PlanId::new("invalid-staging-id").unwrap();
+    sqlx::query("INSERT INTO resource_operation_plans(id, instance_id, revision, payload, completed) VALUES (?, 'instance', 1, '{}', 1)").bind(plan.id.as_str()).execute(&state.pool).await.unwrap();
+    let committed = store::insert(
+        uuid::Uuid::new_v4(),
+        &InstallJobState::new(InstallRequest::InstallContentBatch {
+            instance_id: "instance".into(),
+            items: vec![InstallContentBatchItem::FrozenResource { plan }],
+            display_title: "Committed".into(),
+            display_icon: None,
+        }),
+        InstallJobStatus::Running,
+        &state,
+    )
+    .await
+    .unwrap();
+    let interrupted = store::insert(
+        uuid::Uuid::new_v4(),
+        &InstallJobState::new(InstallRequest::DownloadJava {
+            vendor: "test".into(),
+            version: 21,
+        }),
+        InstallJobStatus::Running,
+        &state,
+    )
+    .await
+    .unwrap();
+    crate::install::recovery::recover_interrupted_jobs(&state)
+        .await
+        .unwrap();
+    assert_eq!(
+        store::get_required(committed.id, &state)
+            .await
+            .unwrap()
+            .status,
+        InstallJobStatus::Succeeded
+    );
+    assert_ne!(
+        store::get_required(interrupted.id, &state)
+            .await
+            .unwrap()
+            .status,
+        InstallJobStatus::Running
+    );
+    assert!(root.exists());
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn dropped_legacy_rollback_is_recovered_from_its_durable_journal() {
+    let (_temp, state, original, _, root) = fixture().await;
+    let backup = "resourcepacks/prefix-old.zip_legacy.zip.old";
+    let archive = "resourcepacks/legacy.zip_prefix-old.zip.old";
+    let restored = "resourcepacks/legacy.zip.disabled";
+    std::fs::write(root.join(backup), b"legacy bytes").unwrap();
+    let journal = serde_json::json!({"active":original.relative_path,"backup":backup,"restored":"resourcepacks/legacy.zip","final_path":restored,"archive":archive,"active_size":9,"active_sha1":sha1_smol::Sha1::from(b"old bytes").digest().to_string(),"backup_size":12,"backup_sha1":sha1_smol::Sha1::from(b"legacy bytes").digest().to_string()});
+    let pool = state.pool.clone();
+    let base = root.clone();
+    let active = original.relative_path.clone();
+    let moved = Arc::new(tokio::sync::Notify::new());
+    let signal = moved.clone();
+    let task = tokio::spawn(async move {
+        sqlx::query("INSERT INTO resource_legacy_rollback_journals(instance_id, payload) VALUES ('instance', ?)").bind(journal.to_string()).execute(&pool).await.unwrap();
+        tokio::fs::rename(base.join(active), base.join(archive))
+            .await
+            .unwrap();
+        tokio::fs::rename(base.join(backup), base.join(restored))
+            .await
+            .unwrap();
+        signal.notify_one();
+        std::future::pending::<()>().await;
+    });
+    moved.notified().await;
+    task.abort();
+    assert!(task.await.unwrap_err().is_cancelled());
+    crate::state::instances::commands::recover_legacy_rollbacks(&state)
+        .await
+        .unwrap();
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    assert_eq!(std::fs::read(root.join(backup)).unwrap(), b"legacy bytes");
+    assert!(!root.join(restored).exists());
+    assert_eq!(
+        plans::installed(&state.pool, "instance").await.unwrap()[0],
+        original
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM resource_legacy_rollback_journals"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    state.pool.close().await;
 }
 
 #[tokio::test]
@@ -1729,6 +1995,7 @@ async fn legacy_backup_rollback_clears_stale_release_and_recovers_database_failu
  {
     let (_temp, state, original, _, root) = fixture().await;
     let backup = "resourcepacks/prefix-old.zip_legacy.zip.old";
+    sqlx::query("UPDATE instance_files SET local_mod_data = 'stale metadata', icon_path = 'stale icon' WHERE instance_id = 'instance'").execute(&state.pool).await.unwrap();
     std::fs::write(root.join(backup), b"legacy bytes").unwrap();
     sqlx::raw_sql("CREATE TRIGGER fail_legacy_rollback BEFORE DELETE ON instance_content_provider_refs BEGIN SELECT RAISE(ABORT, 'test failure'); END;").execute(&state.pool).await.unwrap();
     assert!(
@@ -1761,6 +2028,8 @@ async fn legacy_backup_rollback_clears_stale_release_and_recovers_database_failu
     .await
     .unwrap();
     assert_eq!(restored, "resourcepacks/legacy.zip.disabled");
+    let metadata: (Option<String>, Option<String>) = sqlx::query_as("SELECT local_mod_data, icon_path FROM instance_files WHERE instance_id = 'instance' AND relative_path = 'resourcepacks/legacy.zip.disabled'").fetch_one(&state.pool).await.unwrap();
+    assert_eq!(metadata, (None, None));
     assert_eq!(std::fs::read(root.join(restored)).unwrap(), b"legacy bytes");
     let entry = plans::installed(&state.pool, "instance")
         .await

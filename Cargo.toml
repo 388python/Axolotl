@@ -36,6 +36,8 @@ cidre = { version = "0.15.0", default-features = false, features = [
   "macos_15_0"
 ] }
 content-management = { path = "packages/content-management" }
+cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 crc32fast = "1.5.0"
 daedalus = { path = "packages/daedalus" }
 dashmap = "6.1.0"

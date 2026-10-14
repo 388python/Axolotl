@@ -35,6 +35,7 @@ import {
     type ContentSortMode,
     type ContentViewState,
     getPinnedContentViewPreferences,
+    hasContentUpdate,
     isDisabledContentItem,
     isEnabledContentItem,
     isPresentContentItem,
@@ -47,9 +48,11 @@ import {
     useContentPipeline,
     useContentSelection,
 } from './composables'
+import { deletePendingItems, disablePendingItems } from './composables/content-deletion'
 import {
     duplicateContentGroups,
     duplicateContentRows,
+    duplicateUpdateAnchor,
     visibleDuplicateGroups,
 } from './composables/content-duplicates'
 import { injectContentManager } from './providers/content-manager'
@@ -84,6 +87,10 @@ function handleVisibleTableItems(visibleTableItems: ContentCardTableItem[]) {
 }
 
 const messages = defineMessages({
+    dependencyDisableFailed: {
+        id: 'content.page-layout.dependency-disable-failed',
+        defaultMessage: 'Dependent content could not be disabled. Retry to finish the deletion.',
+    },
     scrollToTop: { id: 'content.page-layout.scroll-to-top', defaultMessage: 'Scroll to top' },
     updateDuplicateGroup: {
         id: 'content.page-layout.update-duplicate-group',
@@ -543,9 +550,7 @@ function mapToTableItem(item: ContentItem, group?: string): ContentCardTableItem
         installing: item.installing === true,
         pendingManualDownload: item.pendingManualDownload === true,
         hasUpdate:
-            !group &&
-            (item.resourceUpdate != null || item.update != null) &&
-            item.instanceCapabilities?.canUpdate !== false,
+            !group && hasContentUpdate(item) && item.instanceCapabilities?.canUpdate !== false,
         rollbackFileName: item.rollback?.file_name,
         hideSwitchVersion: base.hideSwitchVersion ?? !base.versionLink,
         overflowOptions: buildItemOverflowOptions(item),
@@ -657,10 +662,10 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
     )
     const modpack = ctx.modpack.value
 
-    if (modpack && modpack.project && filteredModpackItems.value.length > 0) {
+    if (modpack && modpack.project && modpackItems.length > 0) {
         const groupItems: ContentCardTableItem[] = []
-        const childIds = filteredModpackItems.value.map((item) => getItemId(item))
-        const presentChildren = filteredModpackItems.value.filter(isPresentContentItem)
+        const childIds = modpackItems.map((item) => getItemId(item))
+        const presentChildren = modpackItems.filter(isPresentContentItem)
         const allChildrenDisabled =
             presentChildren.length > 0 && presentChildren.every(isDisabledContentItem)
         if (expandedGroups.value.has('modpack')) {
@@ -673,7 +678,7 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
             id: '__modpack_group__',
             isGroupHeader: true,
             group: 'modpack',
-            groupItemCount: filteredModpackItems.value.length,
+            groupItemCount: modpackItems.length,
             groupChildIds: childIds,
             groupSwitchVersion: ctx.updateModpack,
             project: {
@@ -738,7 +743,7 @@ const tableItems = computed<ContentCardTableItem[]>(() => {
 watch(tableItems, restoreContentViewScroll, { flush: 'post', immediate: true })
 
 const hasOutdatedProjects = computed(() => {
-    const outdated = ctx.items.value.filter((p) => p.resourceUpdate != null || p.update != null)
+    const outdated = ctx.items.value.filter((p) => hasContentUpdate(p))
     const modpackHasUpdate =
         ctx.bulkUpdateIncludesModpack !== false && (ctx.modpack.value?.hasUpdate ?? false)
     return outdated.length > 0 || modpackHasUpdate
@@ -815,7 +820,9 @@ async function promptDeleteItems(items: ContentItem[], event?: MouseEvent) {
 
 async function showDeletionConfirmation(event?: MouseEvent) {
     if ((event?.shiftKey || skipNonEssentialWarnings.value) && !ctx.isBusy.value) {
-        confirmDelete()
+        void confirmDelete().catch((error) => {
+            ctx.error.value = error instanceof Error ? error : new Error(String(error))
+        })
     } else {
         await nextTick()
         confirmDeletionModal.value?.show()
@@ -848,11 +855,14 @@ async function confirmDependencyWarningDelete(disableDependentsAfterDeleting: bo
 
 async function disablePendingDependencyWarningDependents() {
     const items = pendingDependencyWarningDisableTargets.value.filter((item) => item.enabled)
-    pendingDependencyWarningDisableTargets.value = []
     if (items.length === 0) return
 
     if (ctx.bulkDisableItems) {
-        await ctx.bulkDisableItems(items)
+        await disablePendingItems(
+            pendingDependencyWarningDisableTargets,
+            () => ctx.bulkDisableItems!(items),
+            () => new Error(formatMessage(messages.dependencyDisableFailed)),
+        )
         return
     }
 
@@ -861,6 +871,10 @@ async function disablePendingDependencyWarningDependents() {
         markChanging(id)
         try {
             await ctx.toggleEnabled(item)
+            pendingDependencyWarningDisableTargets.value =
+                pendingDependencyWarningDisableTargets.value.filter(
+                    (target) => getItemId(target) !== id,
+                )
         } finally {
             unmarkChanging(id)
         }
@@ -870,50 +884,11 @@ async function disablePendingDependencyWarningDependents() {
 async function confirmDelete() {
     if (ctx.isBusy.value) return
     const itemsToDelete = [...pendingDeletionItems.value]
-    if (itemsToDelete.length === 0) return
-
-    if (ctx.bulkDeleteItems && itemsToDelete.length > 1) {
-        await runBulkWithWaiting(
-            'delete',
-            itemsToDelete.length,
-            async () => {
-                await ctx.bulkDeleteItems!(itemsToDelete)
-            },
-            () => {
-                clearSelection()
-            },
-        )
-        await disablePendingDependencyWarningDependents()
-        pendingDeletionItems.value = []
-        return
-    }
-
-    if (itemsToDelete.length === 1) {
-        const item = itemsToDelete[0]
-        const id = getItemId(item)
-        markChanging(id)
-        try {
-            await ctx.deleteItem(item)
-            removeFromSelection(id)
-            await disablePendingDependencyWarningDependents()
-            pendingDeletionItems.value = []
-        } finally {
-            unmarkChanging(id)
-        }
-        return
-    }
-
-    await runBulk(
-        'delete',
-        itemsToDelete,
-        async (item) => {
-            await ctx.deleteItem(item)
-            removeFromSelection(getItemId(item))
-        },
-        { onComplete: clearSelection },
+    await runBulkWithWaiting('delete', itemsToDelete.length, () =>
+        deletePendingItems(pendingDeletionItems, ctx.deleteItem, getItemId, removeFromSelection),
     )
     await disablePendingDependencyWarningDependents()
-    pendingDeletionItems.value = []
+    clearSelection()
 }
 
 async function handleToggleEnabledById(id: string, _value: boolean) {
@@ -923,6 +898,8 @@ async function handleToggleEnabledById(id: string, _value: boolean) {
     markChanging(id)
     try {
         await ctx.toggleEnabled(item)
+    } catch (error) {
+        ctx.error.value = error instanceof Error ? error : new Error(String(error))
     } finally {
         unmarkChanging(id)
     }
@@ -942,63 +919,81 @@ async function handleRollbackById(id: string) {
 
 async function bulkEnable() {
     if (ctx.isBusy.value) return
-    const items = selectedItems.value.filter(
-        (item) => canToggleContentItem(item) && isDisabledContentItem(item),
-    )
-    if (items.length === 0) return
-    if (ctx.bulkEnableItems) {
-        await runBulkWithWaiting(
-            'enable',
-            items.length,
-            async () => {
-                return await ctx.bulkEnableItems!(items)
-            },
-            clearSelection,
+    try {
+        const items = selectedItems.value.filter(
+            (item) => canToggleContentItem(item) && isDisabledContentItem(item),
         )
-        return
+        if (items.length === 0) return
+        if (ctx.bulkEnableItems) {
+            await runBulkWithWaiting(
+                'enable',
+                items.length,
+                async () => {
+                    return await ctx.bulkEnableItems!(items)
+                },
+                clearSelection,
+            )
+            return
+        }
+        await runBulk('enable', items, (item) => ctx.toggleEnabled(item), {
+            onComplete: clearSelection,
+        })
+    } catch (error) {
+        ctx.error.value = error instanceof Error ? error : new Error(String(error))
     }
-    await runBulk('enable', items, (item) => ctx.toggleEnabled(item), {
-        onComplete: clearSelection,
-    })
 }
 
 async function bulkDisable() {
     if (ctx.isBusy.value) return
-    const items = selectedItems.value.filter(
-        (item) => canToggleContentItem(item) && isEnabledContentItem(item),
-    )
-    if (items.length === 0) return
-    if (ctx.bulkDisableItems) {
-        await runBulkWithWaiting(
-            'disable',
-            items.length,
-            async () => {
-                return await ctx.bulkDisableItems!(items)
-            },
-            clearSelection,
+    try {
+        const items = selectedItems.value.filter(
+            (item) => canToggleContentItem(item) && isEnabledContentItem(item),
         )
-        return
+        if (items.length === 0) return
+        if (ctx.bulkDisableItems) {
+            await runBulkWithWaiting(
+                'disable',
+                items.length,
+                async () => {
+                    return await ctx.bulkDisableItems!(items)
+                },
+                clearSelection,
+            )
+            return
+        }
+        await runBulk('disable', items, (item) => ctx.toggleEnabled(item), {
+            onComplete: clearSelection,
+        })
+    } catch (error) {
+        ctx.error.value = error instanceof Error ? error : new Error(String(error))
     }
-    await runBulk('disable', items, (item) => ctx.toggleEnabled(item), {
-        onComplete: clearSelection,
-    })
 }
 
-function handleUpdateById(id: string) {
-    if (id === '__modpack_group__') {
-        ctx.updateModpack?.()
-        return
-    }
-    const duplicate = tableItems.value.find((row) => row.id === id && row.groupKind === 'duplicate')
-    if (duplicate) {
-        if (duplicate.disabled) return
-        const anchor = findContentItem(duplicate.groupChildIds?.[0] ?? '')
-        if (anchor) void ctx.updateDuplicateGroup?.(anchor)
-        return
-    }
-    const item = findContentItem(id)
-    if (item) {
-        void ctx.updateItem?.(item)
+async function handleUpdateById(id: string) {
+    if (ctx.isBusy.value || isChanging(id)) return
+    markChanging(id)
+    try {
+        if (id === '__modpack_group__') {
+            ctx.updateModpack?.()
+            return
+        }
+        const duplicate = tableItems.value.find(
+            (row) => row.id === id && row.isGroupHeader && row.groupKind === 'duplicate',
+        )
+        if (duplicate) {
+            if (duplicate.disabled) return
+            const anchor = findContentItem(duplicateUpdateAnchor(tableItems.value, id) ?? '')
+            if (anchor) await ctx.updateDuplicateGroup?.(anchor)
+            return
+        }
+        const item = findContentItem(id)
+        if (item) {
+            await ctx.updateItem?.(item)
+        }
+    } catch (error) {
+        ctx.error.value = error instanceof Error ? error : new Error(String(error))
+    } finally {
+        unmarkChanging(id)
     }
 }
 
@@ -1020,9 +1015,7 @@ const hasBulkUpdateSupport = computed(
 
 function promptUpdateAll(event?: MouseEvent) {
     if (!hasBulkUpdateSupport.value) return
-    const items = ctx.items.value.filter(
-        (item) => item.resourceUpdate != null || item.update != null,
-    )
+    const items = ctx.items.value.filter((item) => hasContentUpdate(item))
     const modpackHasUpdate =
         ctx.bulkUpdateIncludesModpack !== false && (ctx.modpack.value?.hasUpdate ?? false)
     if (items.length === 0 && !modpackHasUpdate) return
@@ -1037,9 +1030,7 @@ function promptUpdateAll(event?: MouseEvent) {
 
 function promptUpdateSelected(event?: MouseEvent) {
     if (!hasBulkUpdateSupport.value) return
-    const items = selectedItems.value.filter(
-        (item) => item.resourceUpdate != null || item.update != null,
-    )
+    const items = selectedItems.value.filter((item) => hasContentUpdate(item))
     if (items.length === 0) return
     pendingBulkUpdateItems.value = items
     pendingBulkUpdateAll.value = false
@@ -1283,10 +1274,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
         >
             <template #actions>
                 <Button
-                    v-if="
-                        hasBulkUpdateSupport &&
-                        selectedItems.some((m) => m.resourceUpdate != null || m.update != null)
-                    "
+                    v-if="hasBulkUpdateSupport && selectedItems.some((m) => hasContentUpdate(m))"
                     v-tooltip="formatMessage(commonMessages.updateButton)"
                     type="quiet"
                     color="green"

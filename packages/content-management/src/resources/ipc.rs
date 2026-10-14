@@ -135,10 +135,12 @@ pub enum ResourceCommand {
     ResourceGet {
         reference: ResourceRef,
         source: Option<SourceId>,
+        request_id: RequestId,
     },
     ResourceGetDescription {
         reference: ResourceRef,
         source: SourceId,
+        request_id: RequestId,
     },
     ResourceListReleases {
         reference: ResourceRef,
@@ -148,6 +150,7 @@ pub enum ResourceCommand {
     },
     ResourceGetRelease {
         reference: SourceReleaseRef,
+        request_id: RequestId,
     },
     ResourceGetChangelog {
         release_ref: SourceReleaseRef,
@@ -224,7 +227,7 @@ pub enum ResourceCommand {
         output_path: String,
     },
     ResourceExportCancel {
-        target: ResourceCancellationTarget,
+        request_id_or_job_id: String,
     },
     ResourceCacheInfo,
     ResourceCacheClear,
@@ -251,20 +254,28 @@ pub enum ResourceResponse {
     ResourceListChangelogs(ResourcePage<ResourceChangelog>),
     ResourcePrepareOperation(ResourceOperationPlan),
     ResourceRevisePlan(ResourceOperationPlan),
-    ResourceQueuePlan(JobId),
+    ResourceQueuePlan(ResourceJobSnapshot),
     ResourceListHistory(Vec<ResourceHistoryEntry>),
     ResourceScanBackups(Vec<ResourceBackupFile>),
     ResourcePrepareHistoryCleanup(ResourceHistoryCleanupPlan),
     ResourceExecuteHistoryCleanup(ResourceHistoryCleanupResult),
-    ResourceRollback(JobId),
+    ResourceRollback(ResourceJobSnapshot),
     ResourceExportScan(ResourceExportScan),
     ResourceExportRefresh(ExportResolutionSession),
     ResourceExportRefreshRetry(ExportResolutionSession),
     ResourceExportPlan(ResourceExportPlan),
-    ResourceExportExecute(JobId),
+    ResourceExportExecute(ResourceJobSnapshot),
     ResourceExportCancel,
     ResourceCacheInfo(ResourceCacheInfo),
     ResourceCacheClear,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ResourceJobSnapshot {
+    pub job_id: String,
+    pub status: String,
+    #[serde(flatten)]
+    pub details: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Every asynchronous event carries request identity and its plan/selection

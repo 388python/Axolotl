@@ -67,13 +67,31 @@ impl From<serde_json::Error> for ResourceError {
 
 impl From<crate::Error> for ResourceError {
     fn from(error: crate::Error) -> Self {
-        let status = match &*error.raw {
-            crate::ErrorKind::FetchError(error) => {
-                error.status().map(|status| status.as_u16())
+        match &*error.raw {
+            crate::ErrorKind::ResourceError(error) => error.clone(),
+            crate::ErrorKind::FetchError(error) if error.is_decode() => {
+                Self::InvalidResponse(error.to_string())
             }
-            crate::ErrorKind::HttpError { status, .. } => Some(*status),
-            _ => None,
-        };
-        Self::Network { status }
+            crate::ErrorKind::FetchError(error) => Self::Network {
+                status: error.status().map(|status| status.as_u16()),
+            },
+            crate::ErrorKind::HttpError { status, .. } => Self::Network {
+                status: Some(*status),
+            },
+            crate::ErrorKind::JSONError(_) => {
+                Self::InvalidResponse(error.to_string())
+            }
+            crate::ErrorKind::Sqlx(_) | crate::ErrorKind::SqlxMigrate(_) => {
+                Self::Database(error.to_string())
+            }
+            crate::ErrorKind::NetworkError(_)
+            | crate::ErrorKind::ApiIsDownError(_) => {
+                Self::Network { status: None }
+            }
+            crate::ErrorKind::InputError(_) => {
+                Self::InvalidRequest(error.to_string())
+            }
+            _ => Self::InvalidResponse(error.to_string()),
+        }
     }
 }

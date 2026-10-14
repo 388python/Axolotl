@@ -163,10 +163,15 @@ pub enum ResourceDependencyKind {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DependencyTarget {
     SourceRelease {
         source: SourceId,
+        #[serde(alias = "release_id")]
         release_id: super::SourceReleaseId,
     },
     FileName {

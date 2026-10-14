@@ -541,6 +541,7 @@ pub(crate) async fn execute(
     .fetch_optional(&state.pool)
     .await?;
     if let Some(journal) = previous_journal {
+        let _critical = crate::install::critical_section::enter();
         recover_files(
             &root,
             &serde_json::from_str::<Vec<JournalFile>>(&journal)?,
@@ -556,7 +557,9 @@ pub(crate) async fn execute(
     let mut journal = Vec::new();
     for (index, action) in plan.actions.iter().enumerate() {
         let destination = checked_path(&root, &action.target_relative_path)?;
-        if let Some(current) = &action.current {
+        if let Some(current) = &action.current
+            && !current.missing
+        {
             let previous = checked_path(&root, &current.relative_path)?;
             if !matches_file(&previous, &current.integrity).await? {
                 return Err(input("installed artifact changed since review"));
@@ -701,6 +704,7 @@ pub(crate) async fn recover_plan(
         .lock_instance_content_exclusive(&plan.instance_id)
         .await;
     let payload: Option<String> = sqlx::query_scalar("SELECT journal.payload FROM resource_execution_journals journal JOIN resource_operation_plans plan ON plan.id = journal.plan_id WHERE journal.plan_id = ? AND plan.completed = 0").bind(plan.id.as_str()).fetch_optional(&state.pool).await?;
+    let _critical = crate::install::critical_section::enter();
     if let Some(payload) = payload {
         let scope =
             resolve_content_scope(&plan.instance_id, None, state).await?;
@@ -1008,7 +1012,9 @@ async fn persist_plan(
                 history.previous_nodes.clear();
                 history.previous_dependencies.clear();
             }
-            if let Some(old_digest) = old_digest {
+            if let Some(old_digest) = old_digest
+                && file.backup.is_some()
+            {
                 sqlx::query("INSERT OR IGNORE INTO store_retained_refs(digest, reason, created_at) VALUES (?, ?, ?)").bind(old_digest).bind(format!("resource-history:{}", history.id.as_str())).bind(now.timestamp()).execute(&mut *tx).await?;
             }
             let mut payload = serde_json::to_value(&history)?;
@@ -1028,7 +1034,7 @@ async fn persist_plan(
                     .filter(|edge| edge.parent_entry_id == id)
                     .collect::<Vec<_>>(),
             )?;
-            sqlx::query("INSERT INTO resource_history(id, instance_id, entry_id, recorded_at, payload, backup_relative_path, backup_size, backup_sha1, backup_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)").bind(history.id.as_str()).bind(&plan.instance_id).bind(id).bind(now.timestamp()).bind(payload.to_string()).bind(&file.backup).bind(current.integrity.size.map(|size| size as i64)).bind(current.integrity.hashes.iter().find(|hash| hash.algorithm == HashAlgorithm::Sha1).map(|hash| &hash.value)).execute(&mut *tx).await?;
+            sqlx::query("INSERT INTO resource_history(id, instance_id, entry_id, recorded_at, payload, backup_relative_path, backup_size, backup_sha1, backup_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(history.id.as_str()).bind(&plan.instance_id).bind(id).bind(now.timestamp()).bind(payload.to_string()).bind(&file.backup).bind(current.integrity.size.map(|size| size as i64)).bind(current.integrity.hashes.iter().find(|hash| hash.algorithm == HashAlgorithm::Sha1).map(|hash| &hash.value)).bind(history.backup_available).execute(&mut *tx).await?;
         }
         let (nodes, edges) = entry_graph(plan, &action.node_id);
         sqlx::query("INSERT INTO resource_entry_graphs(entry_id, nodes, edges) VALUES (?, ?, ?) ON CONFLICT(entry_id) DO UPDATE SET nodes = excluded.nodes, edges = excluded.edges").bind(id).bind(serde_json::to_string(&nodes)?).bind(serde_json::to_string(&edges)?).execute(&mut *tx).await?;

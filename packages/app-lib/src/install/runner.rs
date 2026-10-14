@@ -1263,6 +1263,18 @@ fn install_error_code(
     use InstallPhaseId::*;
 
     match error.raw.as_ref() {
+        ErrorKind::ResourceError(error) => match error {
+            crate::resources::ResourceError::Network { .. }
+            | crate::resources::ResourceError::Unavailable => "network_error",
+            crate::resources::ResourceError::Database(_) => "database_error",
+            crate::resources::ResourceError::Cache(_) => {
+                "cache_repair_required"
+            }
+            crate::resources::ResourceError::InvalidResponse(_) => {
+                "parse_error"
+            }
+            _ => "export_error",
+        },
         ErrorKind::CacheReadError { .. } => "cache_repair_required",
         ErrorKind::InputError(msg)
             if msg.starts_with("Unrecognized modpack format")

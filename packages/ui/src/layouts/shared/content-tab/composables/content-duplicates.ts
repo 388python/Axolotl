@@ -1,4 +1,5 @@
 import type { ContentCardTableItem, ContentItem } from '../types'
+import { hasContentUpdate } from './content-filtering.ts'
 
 export function confirmedContentGroupKey(item: ContentItem): string | null {
     if (!item.instanceResourceId) return null
@@ -28,7 +29,7 @@ export function duplicateContentStatus(items: ContentItem[]) {
     return {
         updates: items.filter(
             (item) =>
-                (item.resourceUpdate != null || item.update != null) &&
+                hasContentUpdate(item) &&
                 item.instanceMaterializationState === 'present' &&
                 item.instanceCapabilities?.canUpdate !== false,
         ).length,
@@ -108,4 +109,14 @@ export function duplicateContentRows(options: {
         }
     }
     return rows
+}
+
+export function duplicateUpdateAnchor(
+    rows: ContentCardTableItem[],
+    id: string,
+): string | undefined {
+    const row = rows.find(
+        (row) => row.id === id && row.isGroupHeader && row.groupKind === 'duplicate',
+    )
+    return row?.groupChildIds?.[0]
 }

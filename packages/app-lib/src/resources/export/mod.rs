@@ -1,4 +1,5 @@
 pub mod categories;
+pub(crate) mod files;
 pub mod formats;
 pub mod job;
 pub mod plan;

@@ -2,6 +2,103 @@ use super::*;
 use crate::resources::plans::OperationDraft;
 use std::collections::HashMap;
 
+#[tokio::test]
+async fn switching_a_missing_entry_to_its_current_artifact_restores_the_file() {
+    let current = release("root0000", "1", 'a');
+    let (_temp, service) = service(vec![current.clone()]).await;
+    let mut entry = installed(&current, "entry", "mods/current.jar");
+    entry.missing = true;
+    let built = service
+        .build_operation(
+            draft(
+                vec![selection("root", &current, Some("entry"))],
+                ResourceOperationIntent::SwitchVersion,
+            ),
+            &target(),
+            &[entry],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(built.plan.actions.len(), 1);
+    assert_eq!(built.plan.actions[0].kind, ResourceActionKind::Replace);
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn source_confirmation_during_a_switch_resolves_the_installed_identity_redirect()
+ {
+    let mut mr = release("dep00000", "2", 'b');
+    mr.reference.release_id = SourceReleaseId::new("depver02").unwrap();
+    mr.artifacts[0].reference.release = mr.reference.clone();
+    let mut cf = release("123", "2", 'b');
+    cf.reference.project.source = SourceId::curseforge();
+    cf.reference.release_id = SourceReleaseId::new("101").unwrap();
+    cf.artifacts[0].reference.release = cf.reference.clone();
+    let mut old = cf.clone();
+    old.reference.release_id = SourceReleaseId::new("100").unwrap();
+    old.artifacts[0].reference.release = old.reference.clone();
+    old.artifacts[0].integrity.hashes[0].value = "a".repeat(40);
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    sqlx::query("INSERT INTO resources(id) VALUES ('a'), ('z')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO resource_source_projects(source, project_id, resource_id) VALUES ('modrinth', 'dep00000', 'a'), ('curseforge', '123', 'z')").execute(&pool).await.unwrap();
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::with_store(
+        cache.clone(),
+        vec![
+            Arc::new(PlanProvider {
+                source: SourceId::modrinth(),
+                releases: vec![mr],
+                requests: Mutex::new(vec![]),
+            }),
+            Arc::new(PlanProvider {
+                source: SourceId::curseforge(),
+                releases: vec![old.clone(), cf.clone()],
+                requests: Mutex::new(vec![]),
+            }),
+        ],
+        crate::state::resources::ResourceStore::new(pool.clone()),
+    )
+    .unwrap();
+    let mut current = installed(&old, "entry", "mods/current.jar");
+    current.resource_id = Some(ResourceId::new("z").unwrap());
+    let built = service
+        .build_operation(
+            draft(
+                vec![selection("root", &cf, Some("entry"))],
+                ResourceOperationIntent::SwitchVersion,
+            ),
+            &target(),
+            &[current],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(built.plan.issues.is_empty(), "{:?}", built.plan.issues);
+    assert_eq!(
+        service
+            .store()
+            .unwrap()
+            .resolve(&ResourceId::new("z").unwrap())
+            .await
+            .unwrap()
+            .unwrap()
+            .as_str(),
+        "a"
+    );
+    assert_eq!(built.plan.actions.len(), 1);
+    cache.close().await;
+    pool.close().await;
+}
+
 #[path = "plans_graph_tests.rs"]
 mod graph_tests;
 

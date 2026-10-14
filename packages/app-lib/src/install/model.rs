@@ -2830,7 +2830,7 @@ impl InstallJobState {
                 let targets: Vec<_> = plan.actions.iter().filter(|action| action.current.is_some()).map(|action| ContentChangeTarget { content_id: action.entry_id.as_str().into(), target_release_id: action.target.reference.release.release_id.as_str().into() }).collect();
                 let status = if self.events.iter().any(|event| matches!(event.kind, InstallJobEventKind::JobSucceeded { .. })) { ContentChangeActionStatus::Completed } else if self.error.is_some() { ContentChangeActionStatus::Failed } else { ContentChangeActionStatus::Prepared };
                 return Some(ContentChangeSnapshot {
-                    intent: ContentChangeIntent::UpdateSelected { targets },
+                    intent: if plan.intent == crate::resources::ResourceOperationIntent::SwitchVersion && !targets.is_empty() { ContentChangeIntent::SwitchVersion { content_id: targets[0].content_id.clone(), target_release_id: targets[0].target_release_id.clone() } } else { ContentChangeIntent::UpdateSelected { targets } },
                     content_ids: plan.actions.iter().map(|action| action.entry_id.as_str().into()).collect(),
                     plan_version: Some(plan.revision),
                     actions: plan.actions.iter().map(|action| ContentChangeActionSnapshot { content_id: action.entry_id.as_str().into(), operation: if plan.intent == crate::resources::ResourceOperationIntent::SwitchVersion { ContentChangeOperation::SwitchVersion } else { ContentChangeOperation::Update }, target_release_id: action.target.reference.release.release_id.as_str().into(), final_relative_path: Some(action.target_relative_path.clone()), status, error: self.error.as_ref().map(|error| error.message.clone()) }).collect(),

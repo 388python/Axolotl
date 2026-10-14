@@ -1,4 +1,7 @@
 {
+  "content.page-layout.dependency-disable-failed": {
+    "defaultMessage": "无法禁用依赖这些内容的项目。请重试以完成删除。"
+  },
   "action.no-permission": {
     "defaultMessage": "你没有权限。"
   },

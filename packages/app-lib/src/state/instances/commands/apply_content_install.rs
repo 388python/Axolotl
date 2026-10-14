@@ -3742,6 +3742,20 @@ pub(crate) async fn archive_project_file(
 pub(crate) async fn rollback_project(
     instance_id: &str,
     project_path: &str,
+    state: &std::sync::Arc<State>,
+) -> crate::Result<String> {
+    let instance_id = instance_id.to_owned();
+    let project_path = project_path.to_owned();
+    let state = state.clone();
+    tokio::spawn(async move {
+        rollback_project_inner(&instance_id, &project_path, &state).await
+    })
+    .await?
+}
+
+async fn rollback_project_inner(
+    instance_id: &str,
+    project_path: &str,
     state: &State,
 ) -> crate::Result<String> {
     let _writer = state.acquire_install_db_permit().await?;
@@ -3750,6 +3764,7 @@ pub(crate) async fn rollback_project(
 
     let scope = resolve_content_scope(instance_id, None, state).await?;
     let base = instance_content_root(&state.directories, &scope.instance)?;
+    recover_legacy_rollback_for_instance(instance_id, &base, state).await?;
     content_rows::get_instance_file_by_relative_path(
         &scope.instance.id,
         project_path,
@@ -3835,6 +3850,21 @@ pub(crate) async fn rollback_project(
     if full_archive.exists() {
         return Err(crate::ErrorKind::InputError("Existing rollback archive must be reviewed before it can be replaced".into()).into());
     }
+    let (active_size, active_sha1) =
+        fetch::sha1_file_async(&full_active).await?;
+    let journal = LegacyRollbackJournal {
+        active: project_path.into(),
+        backup: format!("{active_dir}/{backup_name}"),
+        restored: restored_relative_path.clone(),
+        final_path: final_path.clone(),
+        archive: format!("{active_dir}/{archive_name}"),
+        active_size,
+        active_sha1,
+        backup_size: restored_size,
+        backup_sha1: restored_sha1.clone(),
+    };
+    sqlx::query("INSERT INTO resource_legacy_rollback_journals(instance_id, payload) VALUES (?, ?)").bind(instance_id).bind(serde_json::to_string(&journal)?).execute(&state.pool).await?;
+    let _critical = crate::install::critical_section::enter();
     let result: crate::Result<String> = async {
     io::rename_or_move(&full_active, &full_archive).await?;
     touch_file_modified_time(&full_archive);
@@ -3874,7 +3904,7 @@ pub(crate) async fn rollback_project(
     };
 
     let mut tx = state.pool.begin().await?;
-    sqlx::query("UPDATE instance_files SET relative_path = ?, file_name = ?, enabled = ? WHERE instance_id = ? AND relative_path = ?").bind(&final_relative_path).bind(&final_name).bind(!disabled).bind(&scope.instance.id).bind(project_path).execute(&mut *tx).await?;
+    sqlx::query("UPDATE instance_files SET relative_path = ?, file_name = ?, enabled = ?, local_mod_data = NULL, icon_path = NULL WHERE instance_id = ? AND relative_path = ?").bind(&final_relative_path).bind(&final_name).bind(!disabled).bind(&scope.instance.id).bind(project_path).execute(&mut *tx).await?;
     content_rows::upsert_instance_file_from_parts_in_transaction(
         content_rows::UpsertInstanceFile {
             instance_id: &scope.instance.id,
@@ -3924,19 +3954,130 @@ pub(crate) async fn rollback_project(
         &mut tx,
     )
     .await?;
+    sqlx::query("DELETE FROM resource_legacy_rollback_journals WHERE instance_id = ?").bind(instance_id).execute(&mut *tx).await?;
     tx.commit().await?;
 
     Ok(final_relative_path)
     }.await;
-    if result.is_err() && full_archive.exists() {
-        if full_final.exists() {
-            io::rename_or_move(&full_final, &full_backup).await?;
-        } else if full_restored.exists() {
-            io::rename_or_move(&full_restored, &full_backup).await?;
-        }
-        io::rename_or_move(&full_archive, &full_active).await?;
+    if result.is_err() {
+        recover_legacy_rollback_for_instance(instance_id, &base, state).await?;
     }
     result
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct LegacyRollbackJournal {
+    active: String,
+    backup: String,
+    restored: String,
+    final_path: String,
+    archive: String,
+    active_size: u64,
+    active_sha1: String,
+    backup_size: u64,
+    backup_sha1: String,
+}
+
+async fn recover_legacy_rollback_for_instance(
+    instance_id: &str,
+    root: &Path,
+    state: &State,
+) -> crate::Result<()> {
+    let payload: Option<String> = sqlx::query_scalar("SELECT payload FROM resource_legacy_rollback_journals WHERE instance_id = ?").bind(instance_id).fetch_optional(&state.pool).await?;
+    let Some(payload) = payload else {
+        return Ok(());
+    };
+    let journal: LegacyRollbackJournal = serde_json::from_str(&payload)?;
+    let path = |relative: &str| {
+        crate::resources::execution::checked_path(root, relative)
+    };
+    let active = path(&journal.active)?;
+    let backup = path(&journal.backup)?;
+    let restored = path(&journal.restored)?;
+    let final_path = path(&journal.final_path)?;
+    let archive = path(&journal.archive)?;
+    let matches = |size, hash: &str| crate::resources::ArtifactIntegrity {
+        size: Some(size),
+        hashes: vec![crate::resources::ContentHash {
+            algorithm: crate::resources::HashAlgorithm::Sha1,
+            value: hash.into(),
+        }],
+    };
+    let _critical = crate::install::critical_section::enter();
+    if !backup.exists() {
+        let candidate = if final_path.exists() {
+            &final_path
+        } else {
+            &restored
+        };
+        if !crate::resources::execution::matches_file(
+            candidate,
+            &matches(journal.backup_size, &journal.backup_sha1),
+        )
+        .await?
+        {
+            return Err(crate::ErrorKind::InputError(
+                "Rollback backup could not be recovered".into(),
+            )
+            .into());
+        }
+        io::rename_or_move(candidate, &backup).await?;
+    } else if !crate::resources::execution::matches_file(
+        &backup,
+        &matches(journal.backup_size, &journal.backup_sha1),
+    )
+    .await?
+    {
+        return Err(crate::ErrorKind::InputError(
+            "Rollback backup changed during recovery".into(),
+        )
+        .into());
+    }
+    if !active.exists() {
+        if !crate::resources::execution::matches_file(
+            &archive,
+            &matches(journal.active_size, &journal.active_sha1),
+        )
+        .await?
+        {
+            return Err(crate::ErrorKind::InputError(
+                "Rollback active file could not be recovered".into(),
+            )
+            .into());
+        }
+        io::rename_or_move(&archive, &active).await?;
+    } else if !crate::resources::execution::matches_file(
+        &active,
+        &matches(journal.active_size, &journal.active_sha1),
+    )
+    .await?
+    {
+        return Err(crate::ErrorKind::InputError(
+            "Rollback active file changed during recovery".into(),
+        )
+        .into());
+    }
+    sqlx::query("DELETE FROM resource_legacy_rollback_journals WHERE instance_id = ? AND payload = ?").bind(instance_id).bind(payload).execute(&state.pool).await?;
+    Ok(())
+}
+
+pub(crate) async fn recover_legacy_rollbacks(
+    state: &State,
+) -> crate::Result<()> {
+    let instances: Vec<String> = sqlx::query_scalar(
+        "SELECT instance_id FROM resource_legacy_rollback_journals",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    for instance_id in instances {
+        let _writer = state.acquire_install_db_permit().await?;
+        let _lock = state.lock_instance_content_exclusive(&instance_id).await;
+        let scope = resolve_content_scope(&instance_id, None, state).await?;
+        let root = instance_content_root(&state.directories, &scope.instance)?;
+        recover_legacy_rollback_for_instance(&instance_id, &root, state)
+            .await?;
+    }
+    Ok(())
 }
 
 fn scan_folder_backups(

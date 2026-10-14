@@ -15,7 +15,8 @@ pub(super) fn index(
         .insert("minecraft".into(), json!(plan.requirements.game_version));
     if let Some(loader) = &plan.requirements.loader {
         let key = match loader.as_str() {
-            "forge" | "neoforge" | "cleanroom" => loader.as_str(),
+            "forge" | "neoforge" => loader.as_str(),
+            "cleanroom" if !standard => "cleanroom",
             "fabric" => "fabric-loader",
             "quilt" => "quilt-loader",
             _ => {

@@ -1,4 +1,7 @@
 {
+  "content.page-layout.dependency-disable-failed": {
+    "defaultMessage": "Dependent content could not be disabled. Retry to finish the deletion."
+  },
   "action.no-permission": {
     "defaultMessage": "You do not have permission."
   },

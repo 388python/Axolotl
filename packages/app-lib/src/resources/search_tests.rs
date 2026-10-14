@@ -32,6 +32,7 @@ async fn provider_qualified_hidden_entries_do_not_disable_a_source_or_hide_anoth
         "2"
     );
     assert!(page.source_failures.is_empty());
+    assert_ne!(page.total.precision, TotalPrecision::Exact);
     cache.close().await;
 }
 

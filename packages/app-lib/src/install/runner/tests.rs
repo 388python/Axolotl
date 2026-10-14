@@ -439,6 +439,31 @@ fn stalled_downloads_are_reported_as_network_errors() {
 }
 
 #[test]
+fn export_resolution_errors_keep_network_database_and_parse_categories() {
+    use crate::resources::ResourceError;
+    for (error, expected) in [
+        (
+            ResourceError::Network { status: Some(503) },
+            "network_error",
+        ),
+        (
+            ResourceError::Database("query failed".into()),
+            "database_error",
+        ),
+        (ResourceError::InvalidResponse("JSON".into()), "parse_error"),
+        (
+            ResourceError::InvalidRequest("selection".into()),
+            "export_error",
+        ),
+    ] {
+        assert_eq!(
+            install_error_code(InstallPhaseId::Verifying, &error.into()),
+            expected
+        );
+    }
+}
+
+#[test]
 fn cache_read_errors_have_repair_context_but_generic_sqlx_does_not() {
     let cache_error: crate::Error = crate::ErrorKind::CacheReadError {
         cache_type: "curseforge_project".to_string(),

@@ -52,6 +52,7 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+    20261014210000: { tables: ['resource_legacy_rollback_journals'] },
     20261014190000: {
         objects: [
             { type: 'index', name: 'resource_pending_download_project' },

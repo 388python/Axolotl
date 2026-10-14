@@ -88,46 +88,77 @@ async fn scan_directory(
     root: &Path,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceExportScan> {
+    let root = root.to_owned();
+    let cancel = cancel.clone();
+    tokio::task::spawn_blocking(move || scan_directory_blocking(&root, &cancel))
+        .await
+        .map_err(|error| filesystem(Path::new("export"), error))?
+}
+
+fn scan_directory_blocking(
+    root: &Path,
+    cancel: &CancellationToken,
+) -> ResourceResult<ResourceExportScan> {
+    use cap_fs_ext::DirExt;
+    let root_handle =
+        super::files::root(root).map_err(|error| filesystem(root, error))?;
     let mut pending = vec![PathBuf::new()];
     let mut files = vec![];
     let mut directories = vec![];
     let mut excluded = vec![];
     while let Some(relative) = pending.pop() {
         let path = root.join(&relative);
-        let mut entries = tokio::select! {
-            _ = cancel.cancelled() => return Err(ResourceError::Canceled),
-            result = tokio::fs::read_dir(&path) => result.map_err(|e| filesystem(&path, e))?,
+        if cancel.is_cancelled() {
+            return Err(ResourceError::Canceled);
+        }
+        let unix_directory = if relative.as_os_str().is_empty() {
+            String::new()
+        } else {
+            super::files::relative_path(&relative)
+                .map_err(|error| filesystem(&relative, error))?
         };
-        loop {
-            let entry = tokio::select! {
-                _ = cancel.cancelled() => return Err(ResourceError::Canceled),
-                result = entries.next_entry() => result.map_err(|e| filesystem(&path, e))?,
-            };
-            let Some(entry) = entry else {
-                break;
-            };
+        let directory = super::files::directory(&root_handle, &unix_directory)
+            .map_err(|error| filesystem(&relative, error))?;
+        let entries = directory
+            .entries()
+            .map_err(|error| filesystem(&path, error))?;
+        for entry in entries {
+            if cancel.is_cancelled() {
+                return Err(ResourceError::Canceled);
+            }
+            let entry = entry.map_err(|error| filesystem(&path, error))?;
             let entry_relative = relative.join(entry.file_name());
-            let Some(utf8) = entry_relative.to_str() else {
-                return Err(filesystem(
-                    &entry_relative,
-                    "filename is not valid UTF-8",
-                ));
-            };
-            let unix = utf8.replace('\\', "/");
+            let unix = super::files::relative_path(&entry_relative)
+                .map_err(|error| filesystem(&entry_relative, error))?;
             path_util::SafeRelativeUtf8UnixPathBuf::try_from(unix.clone())
                 .map_err(|error| filesystem(&entry_relative, error))?;
             if categories::forbidden(&unix) {
                 excluded.push(unix);
                 continue;
             }
-            let metadata = tokio::fs::symlink_metadata(entry.path())
-                .await
-                .map_err(|e| filesystem(&entry_relative, e))?;
-            if linked(&metadata) || (!metadata.is_dir() && !metadata.is_file())
+            let file_type = entry
+                .file_type()
+                .map_err(|error| filesystem(&entry_relative, error))?;
+            if file_type.is_symlink()
+                || (!file_type.is_dir() && !file_type.is_file())
             {
                 excluded.push(unix);
                 continue;
             }
+            let metadata = if file_type.is_dir() {
+                directory
+                    .open_dir_nofollow(entry.file_name())
+                    .and_then(|dir| dir.into_std_file().metadata())
+            } else {
+                super::files::open(
+                    &directory,
+                    entry.file_name().to_str().ok_or_else(|| {
+                        filesystem(&entry_relative, "filename is not UTF-8")
+                    })?,
+                )
+                .and_then(|file| file.metadata())
+            }
+            .map_err(|error| filesystem(&entry_relative, error))?;
             if metadata.is_dir() {
                 directories.push(ExportDirectorySnapshot {
                     relative_path: unix,
@@ -198,11 +229,9 @@ async fn scan_directory(
                 }
             }
             let title = if category.id == "worlds" {
-                let world_path = root.join(&object);
-                tokio::task::spawn_blocking(move || world_name(&world_path))
-                    .await
+                super::files::open(&root_handle, &format!("{object}/level.dat"))
                     .ok()
-                    .flatten()
+                    .and_then(world_name_from_file)
             } else {
                 None
             };
@@ -235,8 +264,8 @@ async fn scan_directory(
     })
 }
 
+#[cfg(test)]
 fn world_name(path: &Path) -> Option<String> {
-    use std::io::Read;
     let path = path.join("level.dat");
     let metadata = std::fs::symlink_metadata(&path).ok()?;
     if linked(&metadata)
@@ -246,6 +275,14 @@ fn world_name(path: &Path) -> Option<String> {
         return None;
     }
     let file = std::fs::File::open(path).ok()?;
+    world_name_from_file(file)
+}
+
+fn world_name_from_file(file: std::fs::File) -> Option<String> {
+    use std::io::Read;
+    if file.metadata().ok()?.len() > 4 * 1024 * 1024 {
+        return None;
+    }
     let mut bytes = vec![];
     flate2::read::GzDecoder::new(file)
         .take(4 * 1024 * 1024 + 1)
@@ -266,6 +303,20 @@ fn world_name(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn literal_backslashes_never_alias_nested_paths() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("a\\b.jar"), b"literal").unwrap();
+        std::fs::create_dir(root.path().join("a")).unwrap();
+        std::fs::write(root.path().join("a/b.jar"), b"nested").unwrap();
+        assert!(
+            scan_directory(root.path(), &CancellationToken::new())
+                .await
+                .is_err()
+        );
+    }
+
     use super::*;
 
     #[tokio::test]

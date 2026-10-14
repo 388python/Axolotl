@@ -9,6 +9,21 @@ pub(crate) fn invalid(message: impl Into<String>) -> ResourceError {
 pub struct PreparedExport {
     pub plan: ResourceExportPlan,
     pub queued: Option<crate::install::InstallJobSnapshot>,
+    pub output: Option<std::path::PathBuf>,
+}
+
+impl PreparedExport {
+    pub(crate) fn queued_for(
+        &self,
+        output: &std::path::Path,
+    ) -> ResourceResult<Option<crate::install::InstallJobSnapshot>> {
+        if self.queued.is_some() && self.output.as_deref() != Some(output) {
+            return Err(invalid(
+                "export plan was queued for another output path",
+            ));
+        }
+        Ok(self.queued.clone())
+    }
 }
 
 pub fn validate_choices(
@@ -286,6 +301,7 @@ pub async fn prepare(
         Arc::new(tokio::sync::Mutex::new(PreparedExport {
             plan: plan.clone(),
             queued: None,
+            output: None,
         })),
     );
     Ok(plan)
@@ -306,8 +322,12 @@ pub async fn queue(
     if prepared.plan.revision != revision {
         return Err(invalid("export plan revision changed"));
     }
-    if let Some(job) = &prepared.queued {
-        return Ok(job.clone());
+    let root =
+        crate::api::instance::get_full_path(&prepared.plan.instance_id).await?;
+    let output =
+        super::writer::validate_output(&root, &prepared.plan, &output).await?;
+    if let Some(job) = prepared.queued_for(&output)? {
+        return Ok(job);
     }
     let draft = service.export_draft(&prepared.plan.session_id)?;
     let draft = draft.lock().await;
@@ -327,14 +347,13 @@ pub async fn queue(
     {
         return Err(invalid("export selection changed; prepare it again"));
     }
-    let root =
-        crate::api::instance::get_full_path(&prepared.plan.instance_id).await?;
-    let output =
-        super::writer::validate_output(&root, &prepared.plan, &output).await?;
-    let job =
-        crate::install::runner::export_resource(prepared.plan.clone(), output)
-            .await?;
+    let job = crate::install::runner::export_resource(
+        prepared.plan.clone(),
+        output.clone(),
+    )
+    .await?;
     prepared.queued = Some(job.clone());
+    prepared.output = Some(output);
     Ok(job)
 }
 

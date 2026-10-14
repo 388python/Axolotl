@@ -37,6 +37,25 @@ fn mr_release() -> Value {
     value
 }
 
+#[test]
+fn malformed_json_is_a_response_error_and_export_failures_keep_their_category()
+{
+    let error: crate::Error =
+        serde_json::from_str::<Value>("invalid").unwrap_err().into();
+    assert!(matches!(
+        ResourceError::from(error),
+        ResourceError::InvalidResponse(_)
+    ));
+    let error: crate::Error =
+        ResourceError::Network { status: Some(503) }.into();
+    assert!(matches!(
+        error.raw.as_ref(),
+        crate::ErrorKind::ResourceError(ResourceError::Network {
+            status: Some(503)
+        })
+    ));
+}
+
 #[tokio::test]
 async fn curseforge_filter_only_constraints_reach_the_request_and_conflicts_fail()
  {

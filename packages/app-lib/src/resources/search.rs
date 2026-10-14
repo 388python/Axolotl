@@ -500,7 +500,10 @@ impl ResourceService {
             .sources
             .iter()
             .any(|source| !source.done || !source.entries.is_empty());
-        let total = if state.sources.len() == 1 {
+        let total = if state.sources.len() == 1
+            && state.query.filter.is_none()
+            && state.seen_resources.is_empty()
+        {
             state.sources[0].total.clone()
         } else {
             ResourceTotal {

@@ -328,7 +328,12 @@ fn numeric_version(value: &str) -> Option<Vec<u64>> {
             }
         })
         .collect();
-    parts.filter(|parts| !parts.is_empty())
+    parts.filter(|parts| !parts.is_empty()).map(|mut parts| {
+        while parts.len() > 1 && parts.last() == Some(&0) {
+            parts.pop();
+        }
+        parts
+    })
 }
 
 pub fn release_is_newer(
@@ -339,9 +344,10 @@ pub fn release_is_newer(
         numeric_version(&target.version),
         numeric_version(&current.version),
     ) {
-        (Some(target_version), Some(current_version))
-            if target_version.len() == current_version.len() =>
-        {
+        (Some(mut target_version), Some(mut current_version)) => {
+            let len = target_version.len().max(current_version.len());
+            target_version.resize(len, 0);
+            current_version.resize(len, 0);
             target_version > current_version
                 || (target_version == current_version
                     && target.published_at > current.published_at)
@@ -356,7 +362,17 @@ pub fn release_is_known_lower(
     target: &ResourceRelease,
     current: &ResourceRelease,
 ) -> bool {
-    matches!((numeric_version(&target.version), numeric_version(&current.version)), (Some(target), Some(current)) if target.len() == current.len() && target < current)
+    if let (Some(mut target), Some(mut current)) = (
+        numeric_version(&target.version),
+        numeric_version(&current.version),
+    ) {
+        let len = target.len().max(current.len());
+        target.resize(len, 0);
+        current.resize(len, 0);
+        target < current
+    } else {
+        false
+    }
 }
 
 /// Use one ordering basis for the complete set, never pairwise mixed ordering.
@@ -371,14 +387,15 @@ pub fn select_automatic_release(
         .iter()
         .map(|release| numeric_version(&release.version))
         .collect();
-    let comparable = versions.as_ref().is_some_and(|versions| {
-        versions
-            .iter()
-            .all(|version| version.len() == versions[0].len())
-    });
+    let comparable = versions.is_some();
     releases.sort_by(|a, b| {
         let order = if comparable {
-            numeric_version(&a.version).cmp(&numeric_version(&b.version))
+            let mut av = numeric_version(&a.version).unwrap();
+            let mut bv = numeric_version(&b.version).unwrap();
+            let len = av.len().max(bv.len());
+            av.resize(len, 0);
+            bv.resize(len, 0);
+            av.cmp(&bv)
         } else {
             a.published_at.cmp(&b.published_at)
         };

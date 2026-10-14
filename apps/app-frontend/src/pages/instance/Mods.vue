@@ -1876,6 +1876,7 @@ async function toggleDisableMod(
             })
         } catch (err) {
             handleError(err as Error)
+            throw err
         }
         return
     }
@@ -2034,6 +2035,7 @@ async function applyToggleDisableBatch(items: ContentItem[], enabled: boolean) {
         }
         applyBatchToggleState(operations, enabled, undefined, true)
         handleError(error as Error)
+        throw error
     } finally {
         const activeKeys = new Set(activeContentOperationKeys.value)
         for (const operation of operations) {

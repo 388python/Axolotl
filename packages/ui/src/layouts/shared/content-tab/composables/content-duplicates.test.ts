@@ -7,6 +7,7 @@ import {
     duplicateContentGroups,
     duplicateContentRows,
     duplicateContentStatus,
+    duplicateUpdateAnchor,
     visibleDuplicateGroups,
 } from './content-duplicates.ts'
 
@@ -111,6 +112,8 @@ test('duplicates start folded, expose every actual child when expanded, and keep
     assert.deepEqual(closed[0].groupChildIds, ['a', 'b'])
     options.expanded.add(closed[0].group!)
     const open = duplicateContentRows(options)
+    assert.equal(duplicateUpdateAnchor(open, open[0].id), 'a')
+    assert.equal(duplicateUpdateAnchor(open, 'a'), undefined)
     assert.deepEqual(
         open.map((row) => row.id),
         [closed[0].id, 'a', 'b'],

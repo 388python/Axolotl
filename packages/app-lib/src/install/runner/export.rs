@@ -13,15 +13,10 @@ pub(super) async fn resolve(
     output: &Path,
     checkpoint: crate::resources::export::job::ExportResolutionCheckpoint,
 ) -> crate::Result<()> {
-    validate(plan)
-        .await
-        .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    validate(plan).await.map_err(ErrorKind::ResourceError)?;
     let state = State::get().await?;
     let root = crate::api::instance::get_full_path(&plan.instance_id).await?;
-    let service = state
-        .resources()
-        .await
-        .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    let service = state.resources().await.map_err(ErrorKind::ResourceError)?;
     let reporter = InstallProgressReporter::new(job_id, job_state.clone());
     reporter
         .update(InstallPhaseId::Verifying, None, InstallPhaseDetails::Empty)
@@ -80,7 +75,7 @@ pub(super) async fn resolve(
         }
         Err(error) => {
             reporter.checkpoint_export(plan.clone(), Some(crate::resources::export::job::ExportResolutionCheckpoint::capture(&draft, checkpoint.preferred_source))).await?;
-            Err(ErrorKind::InputError(error.to_string()).into())
+            Err(ErrorKind::ResourceError(error).into())
         }
     }
 }
@@ -91,9 +86,7 @@ pub(super) async fn run(
     plan: &crate::resources::ResourceExportPlan,
     output: &Path,
 ) -> crate::Result<()> {
-    validate(plan)
-        .await
-        .map_err(|e| ErrorKind::InputError(e.to_string()))?;
+    validate(plan).await.map_err(ErrorKind::ResourceError)?;
     let root = crate::api::instance::get_full_path(&plan.instance_id).await?;
     let reporter = InstallProgressReporter::new(job_id, job_state.clone());
     let cancel = reporter.cancellation_token();
@@ -127,7 +120,7 @@ pub(super) async fn run(
     let mut reported = None;
     loop {
         tokio::select! {
-            result = &mut writing => { result.map_err(|e| ErrorKind::InputError(e.to_string()))?; break; }
+            result = &mut writing => { result.map_err(ErrorKind::ResourceError)?; break; }
             _ = tick.tick() => {
                 let current = progress.load(Ordering::Relaxed);
                 if reported != Some(current) {

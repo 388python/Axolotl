@@ -372,7 +372,7 @@ pub(crate) async fn hydrate_with_failures(
     hydrate_selected(state, instance_id, cancel, None).await
 }
 
-async fn hydrate_selected(
+pub(crate) async fn hydrate_selected(
     state: &crate::State,
     instance_id: &str,
     cancel: &CancellationToken,
@@ -406,19 +406,20 @@ async fn hydrate_selected(
         if cancel.is_cancelled() {
             return Err(ResourceError::Canceled);
         }
-        if saved_records
-            .get(entry.entry_id.as_str())
-            .and_then(|payload| {
-                serde_json::from_str::<ResourceArtifact>(payload).ok()
-            })
-            .is_some_and(|artifact| {
-                super::valid_artifact(&artifact)
-                    && identity::exact_integrity(
-                        &entry.integrity,
-                        &artifact.integrity,
-                    )
-                    && entry.artifact.as_ref() == Some(&artifact.reference)
-            })
+        if selected.is_none()
+            && saved_records
+                .get(entry.entry_id.as_str())
+                .and_then(|payload| {
+                    serde_json::from_str::<ResourceArtifact>(payload).ok()
+                })
+                .is_some_and(|artifact| {
+                    super::valid_artifact(&artifact)
+                        && identity::exact_integrity(
+                            &entry.integrity,
+                            &artifact.integrity,
+                        )
+                        && entry.artifact.as_ref() == Some(&artifact.reference)
+                })
         {
             continue;
         }
@@ -844,7 +845,7 @@ pub async fn prepare_entries_with_progress(
     for id in entry_ids {
         let entry = entries
             .iter()
-            .find(|entry| entry.entry_id == id && !entry.missing)
+            .find(|entry| entry.entry_id == id)
             .ok_or_else(|| {
                 ResourceError::InvalidRequest(
                     "installed entry is missing".into(),

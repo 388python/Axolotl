@@ -1035,7 +1035,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
 
     let num_files = pack.files.len();
     let content_total_bytes =
-        pack.files.iter().map(|file| file.file_size).sum::<u64>();
+        checked_download_size(pack.files.iter().map(|file| file.file_size))?;
     let mut cached_pack_hashes = pack
         .files
         .iter()
@@ -2267,8 +2267,27 @@ fn modpack_source_kind(version_id: Option<&str>) -> ContentSourceKind {
     }
 }
 
+fn checked_download_size(
+    sizes: impl IntoIterator<Item = u64>,
+) -> crate::Result<u64> {
+    sizes.into_iter().try_fold(0u64, |total, size| {
+        total.checked_add(size).ok_or_else(|| {
+            crate::ErrorKind::InputError(
+                "pack download size exceeds supported range".into(),
+            )
+            .into()
+        })
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn manifest_download_size_rejects_overflow() {
+        assert!(super::checked_download_size([u64::MAX, 1]).is_err());
+        assert_eq!(super::checked_download_size([10, 20]).unwrap(), 30);
+    }
+
     use super::*;
     use async_zip::tokio::write::ZipFileWriter;
     use async_zip::{Compression, ZipEntryBuilder};

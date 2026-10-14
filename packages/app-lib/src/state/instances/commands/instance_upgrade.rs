@@ -1628,7 +1628,13 @@ async fn load_curseforge_candidates(
         crate::resources::ipc::ResourceTarget {
             game_versions: vec![target.game_version.clone()],
             loaders: if project_type == ProjectType::Mod {
-                vec![target.mod_loader.as_str().into()]
+                match target.mod_loader.as_str() {
+                    "forge" | "fabric" | "quilt" | "neoforge" => {
+                        vec![target.mod_loader.as_str().into()]
+                    }
+                    "lite_loader" => vec!["liteloader".into()],
+                    _ => vec![],
+                }
             } else {
                 vec![]
             },

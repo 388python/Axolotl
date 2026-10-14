@@ -38,6 +38,75 @@ fn resource_artifact() -> ResourceArtifact {
     }
 }
 
+#[test]
+fn source_release_dependencies_and_command_arguments_match_camel_case_ipc() {
+    let dependency = DependencyTarget::SourceRelease {
+        source: SourceId::modrinth(),
+        release_id: SourceReleaseId::new("release1").unwrap(),
+    };
+    let encoded = serde_json::to_value(&dependency).unwrap();
+    assert_eq!(encoded["releaseId"], "release1");
+    assert!(encoded.get("release_id").is_none());
+    assert_eq!(
+        serde_json::from_value::<DependencyTarget>(encoded).unwrap(),
+        dependency
+    );
+    for name in [
+        "resource_get",
+        "resource_get_description",
+        "resource_get_release",
+    ] {
+        let reference = if name == "resource_get_release" {
+            json!({"project":{"source":"modrinth","projectId":"project1"},"releaseId":"release1"})
+        } else {
+            json!({"kind":"source","project":{"source":"modrinth","projectId":"project1"}})
+        };
+        let mut value = json!({"command":name,"args":{"reference":reference,"source":"modrinth", "requestId":"request1"}});
+        assert!(
+            serde_json::from_value::<ResourceCommand>(value.clone()).is_ok()
+        );
+        value["args"].as_object_mut().unwrap().remove("requestId");
+        assert!(serde_json::from_value::<ResourceCommand>(value).is_err());
+    }
+    let cancel: ResourceCommand = serde_json::from_value(json!({"command":"resource_export_cancel","args":{"requestIdOrJobId":"request1"}})).unwrap();
+    assert!(
+        matches!(cancel, ResourceCommand::ResourceExportCancel { request_id_or_job_id } if request_id_or_job_id == "request1")
+    );
+}
+
+#[test]
+fn numeric_release_versions_compare_across_component_counts() {
+    fn release(version: &str, published: &str) -> ResourceRelease {
+        ResourceRelease {
+            reference: SourceReleaseRef {
+                project: project(SourceId::modrinth()),
+                release_id: SourceReleaseId::new(version).unwrap(),
+            },
+            version: version.into(),
+            channel: ReleaseChannel::Release,
+            published_at: Some(published.parse().unwrap()),
+            compatibility: ReleaseCompatibility {
+                game_versions: vec![],
+                loaders: vec![],
+            },
+            artifacts: vec![],
+            equivalent_releases: vec![],
+        }
+    }
+    let current = release("2.0", "2020-01-01T00:00:00Z");
+    let older = release("1.9.9", "2025-01-01T00:00:00Z");
+    assert!(release_is_known_lower(&older, &current));
+    assert!(!release_is_newer(&older, &current));
+    let next = release("2.0.1", "2019-01-01T00:00:00Z");
+    assert!(release_is_newer(&next, &current));
+    let (chosen, _) = select_automatic_release(
+        vec![older, current, next],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    assert_eq!(chosen.version, "2.0.1");
+}
+
 fn installed(id: &str, scope: InstallScope, path: &str) -> InstalledResource {
     InstalledResource {
         entry_id: InstalledEntryId::new(id).unwrap(),

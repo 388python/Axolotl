@@ -15,6 +15,13 @@ use std::{
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
 
+async fn await_output<T, E: std::fmt::Display>(
+    cancel: &CancellationToken,
+    output: impl std::future::Future<Output = Result<T, E>>,
+) -> ResourceResult<T> {
+    tokio::select! { biased; _ = cancel.cancelled() => Err(ResourceError::Canceled), result = output => result.map_err(|error| invalid(error.to_string())) }
+}
+
 fn canceled(cancel: &CancellationToken) -> ResourceResult<()> {
     if cancel.is_cancelled() {
         Err(ResourceError::Canceled)
@@ -183,10 +190,9 @@ async fn verify_files(
                 snapshot.relative_path
             )));
         }
-        let mut file =
-            tokio::fs::File::open(root.join(&snapshot.relative_path))
-                .await
-                .map_err(|e| invalid(e.to_string()))?;
+        let mut file = super::files::open_async(root, &snapshot.relative_path)
+            .await
+            .map_err(|e| invalid(e.to_string()))?;
         let mut hasher = Sha256::new();
         let mut size = 0u64;
         loop {
@@ -334,11 +340,9 @@ where
             compression,
         )
         .deflate_option(DeflateOption::Other(1));
-        let mut entry = zip
-            .write_entry_stream(builder)
-            .await
-            .map_err(|e| invalid(e.to_string()))?;
-        let mut input = tokio::fs::File::open(&path)
+        let mut entry =
+            await_output(cancel, zip.write_entry_stream(builder)).await?;
+        let mut input = super::files::open_async(root, &snapshot.relative_path)
             .await
             .map_err(|e| invalid(e.to_string()))?;
         let mut sha256 = Sha256::new();
@@ -348,10 +352,7 @@ where
             if read == 0 {
                 break;
             }
-            entry
-                .write_all(&buffer[..read])
-                .await
-                .map_err(|e| invalid(e.to_string()))?;
+            await_output(cancel, entry.write_all(&buffer[..read])).await?;
             sha256.update(&buffer[..read]);
             size += read as u64;
             if snapshot
@@ -373,18 +374,21 @@ where
                 snapshot.relative_path
             )));
         }
-        entry.close().await.map_err(|e| invalid(e.to_string()))?;
+        await_output(cancel, entry.close()).await?;
     }
     canceled(cancel)?;
-    zip.write_entry_whole(
-        ZipEntryBuilder::new(manifest_name.into(), Compression::Deflate),
-        &serde_json::to_vec_pretty(&manifest)
-            .map_err(|e| invalid(e.to_string()))?,
+    let manifest = serde_json::to_vec_pretty(&manifest)
+        .map_err(|e| invalid(e.to_string()))?;
+    await_output(
+        cancel,
+        zip.write_entry_whole(
+            ZipEntryBuilder::new(manifest_name.into(), Compression::Deflate),
+            &manifest,
+        ),
     )
-    .await
-    .map_err(|e| invalid(e.to_string()))?;
-    zip.close().await.map_err(|e| invalid(e.to_string()))?;
-    file.sync_all().await.map_err(|e| invalid(e.to_string()))?;
+    .await?;
+    await_output(cancel, zip.close()).await?;
+    await_output(cancel, file.sync_all()).await?;
     drop(file);
     tracing::debug!(
         plan_id = plan.id.as_str(),
@@ -416,4 +420,39 @@ where
         "Published verified export archive"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod output_tests {
+    use super::*;
+    #[tokio::test]
+    async fn cancellation_interrupts_a_blocked_target_write_and_removes_temporary_output()
+     {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("out.zip");
+        std::fs::write(&output, b"previous archive").unwrap();
+        let temporary = root.path().join("out.zip.tmp");
+        std::fs::write(&temporary, b"partial archive").unwrap();
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        let task = tokio::spawn(async move {
+            let _temporary =
+                tempfile::TempPath::try_from_path(temporary).unwrap();
+            await_output(
+                &cancel,
+                std::future::pending::<Result<(), std::io::Error>>(),
+            )
+            .await
+        });
+        trigger.cancel();
+        assert!(matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), task)
+                .await
+                .unwrap()
+                .unwrap(),
+            Err(ResourceError::Canceled)
+        ));
+        assert!(!root.path().join("out.zip.tmp").exists());
+        assert_eq!(std::fs::read(output).unwrap(), b"previous archive");
+    }
 }

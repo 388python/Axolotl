@@ -18,6 +18,107 @@ struct Provider {
 }
 
 #[tokio::test]
+async fn cleanroom_is_only_supported_by_the_generic_index() {
+    let (_, service, _, _) = setup(false).await;
+    let mut draft = draft(vec![]);
+    draft.scan.requirements.loader = Some("cleanroom".into());
+    draft.scan.requirements.loader_version = Some("0.3.0".into());
+    draft.selection_revision = 1;
+    let info = ExportPackageInfo {
+        name: "Test".into(),
+        version: "1".into(),
+        summary: "".into(),
+        author: None,
+    };
+    assert!(
+        build(
+            &draft,
+            1,
+            ResourceExportFormat::Modrinth,
+            info.clone(),
+            vec![],
+            &SourceId::modrinth()
+        )
+        .is_err()
+    );
+    let generic = build(
+        &draft,
+        1,
+        ResourceExportFormat::GenericZip,
+        info,
+        vec![],
+        &SourceId::modrinth(),
+    )
+    .unwrap();
+    let (_, manifest) = super::formats::manifest(&generic).unwrap();
+    assert_eq!(manifest["dependencies"]["cleanroom"], "0.3.0");
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn identified_connector_artifact_with_failed_release_refresh_is_a_failure()
+ {
+    struct Connector;
+    #[async_trait]
+    impl ResourceProvider for Connector {
+        fn source(&self) -> ResourceSource {
+            ResourceSource {
+                id: SourceId::mcarchive(),
+                available: true,
+                types: vec![ResourceType::Mod],
+                capabilities: vec![
+                    SourceCapability::IdentifyHash,
+                    SourceCapability::Releases,
+                ],
+                supported_search_sorts: vec![],
+            }
+        }
+        fn namespace(&self) -> String {
+            "connector-failure".into()
+        }
+        fn batch_limit(&self, _: &ProviderQuery) -> usize {
+            50
+        }
+        async fn fetch_many(
+            &self,
+            queries: &[ProviderQuery],
+        ) -> Vec<ResourceResult<ProviderValue>> {
+            queries.iter().map(|query| match query {
+                ProviderQuery::Identify { integrity, .. } => Ok(ProviderValue::Matches(vec![ResourceArtifact { reference: SourceArtifactRef { release: SourceReleaseRef { project: SourceProjectRef { source: SourceId::mcarchive(), project_id: SourceProjectId::new("b319f41b-13f0-4c78-b95b-439640bf4606").unwrap() }, release_id: SourceReleaseId::new("release1").unwrap() }, artifact_id: SourceArtifactId::new("artifact1").unwrap() }, file_name: Some("file.jar".into()), role: ArtifactRole::Unknown, available: Some(true), integrity: integrity.clone(), acquisition: ArtifactAcquisition::Unavailable, dependencies: vec![] }])),
+                ProviderQuery::Release { .. } => Err(ResourceError::Network { status: Some(503) }),
+                _ => panic!("unexpected query"),
+            }).collect()
+        }
+    }
+    let temp = tempfile::tempdir().unwrap();
+    let cache =
+        Arc::new(ResourceCache::open(temp.path().join("cache.db")).await);
+    let service =
+        ResourceService::new(cache.clone(), vec![Arc::new(Connector)]).unwrap();
+    let mut file = file("file.jar");
+    file.integrity.hashes.push(ContentHash {
+        algorithm: HashAlgorithm::Sha256,
+        value: "a".repeat(64),
+    });
+    let mut draft = draft(vec![file.clone()]);
+    let resolutions = resolve_source(
+        &service,
+        SourceId::mcarchive(),
+        &[(file, 0)],
+        &HashMap::new(),
+        &mut draft,
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        resolutions[0],
+        ExportSourceResolution::Failed { .. }
+    ));
+    cache.close().await;
+}
+
+#[tokio::test]
 async fn explicit_refresh_rehashes_bytes_even_when_file_size_and_mtime_are_preserved()
  {
     let (root, service, _, _) = setup(false).await;

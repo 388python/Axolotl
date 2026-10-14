@@ -195,7 +195,7 @@ pub async fn freeze_with_progress(
             ));
         }
     }
-    let mut file = tokio::fs::File::open(&path)
+    let mut file = super::files::open_async(root, safe.as_str())
         .await
         .map_err(|e| invalid(e.to_string()))?;
     let before = file.metadata().await.map_err(|e| invalid(e.to_string()))?;
@@ -462,6 +462,12 @@ pub async fn resolve_source(
         }
     }
     for (index, (file, _)) in locals.iter().enumerate() {
+        for artifact in &candidates[index] {
+            if let Some(error) = release_errors.get(&artifact.reference.release)
+            {
+                errors[index] = Some(error.clone());
+            }
+        }
         if !detailed {
             candidates[index] = candidates[index]
                 .iter()

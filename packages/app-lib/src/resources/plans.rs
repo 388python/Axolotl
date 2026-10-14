@@ -1339,7 +1339,15 @@ impl ResourceService {
             if let Some(current) = current {
                 let same_resource = match &selection.resource {
                     ResourceRef::Resource { id } => {
-                        current.resource_id.as_ref() == Some(id)
+                        let current_id =
+                            if let (Some(store), Some(current_id)) =
+                                (self.store(), current.resource_id.as_ref())
+                            {
+                                store.resolve(current_id).await?
+                            } else {
+                                current.resource_id.clone()
+                            };
+                        current_id.as_ref() == Some(id)
                     }
                     ResourceRef::Source { project } => {
                         current.artifact.as_ref().is_some_and(|artifact| {
@@ -1546,10 +1554,11 @@ impl ResourceService {
                             );
                             continue;
                         }
-                        if (draft.plan.intent
-                            == ResourceOperationIntent::SwitchVersion
-                            && current.artifact.as_ref()
-                                != Some(&artifact.reference))
+                        if current.missing
+                            || (draft.plan.intent
+                                == ResourceOperationIntent::SwitchVersion
+                                && current.artifact.as_ref()
+                                    != Some(&artifact.reference))
                             || !identity::exact_integrity(
                                 &current.integrity,
                                 &artifact.integrity,
