@@ -731,6 +731,16 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
         serde_json::from_str(&serde_json::to_string(&legacy).unwrap()).unwrap();
     assert!(historical.declared_compatibility.is_none());
     assert!(snapshot[0].content.as_ref().unwrap().rollback.is_some());
+    sqlx::query("UPDATE resource_history SET backup_available = 0 WHERE instance_id = 'instance'").execute(&state.pool).await.unwrap();
+    history::attach_to_snapshot("instance", &mut snapshot, &state)
+        .await
+        .unwrap();
+    assert!(snapshot[0].content.as_ref().unwrap().rollback.is_none());
+    sqlx::query("UPDATE resource_history SET backup_available = 1 WHERE instance_id = 'instance'").execute(&state.pool).await.unwrap();
+    history::attach_to_snapshot("instance", &mut snapshot, &state)
+        .await
+        .unwrap();
+    assert!(snapshot[0].content.as_ref().unwrap().rollback.is_some());
     let count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM instance_content_entries")
             .fetch_one(&state.pool)

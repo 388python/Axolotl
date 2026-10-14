@@ -73,6 +73,54 @@ impl ResourceStore {
         id.map(ResourceId::new).transpose().map_err(Into::into)
     }
 
+    pub async fn lookup_many(
+        &self,
+        projects: &[SourceProjectRef],
+    ) -> ResourceResult<std::collections::HashMap<SourceProjectRef, ResourceId>>
+    {
+        let mut unique = std::collections::HashSet::new();
+        for project in projects {
+            validate_project(project)?;
+            unique.insert(project);
+        }
+        let projects: Vec<_> = unique.into_iter().collect();
+        let mut result = std::collections::HashMap::new();
+        for batch in projects.chunks(400) {
+            let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "WITH selected(source, project_id) AS (",
+            );
+            query.push_values(batch, |mut row, project| {
+                row.push_bind(project.source.as_str())
+                    .push_bind(project.project_id.as_str());
+            });
+            query.push(") SELECT project.source, project.project_id, project.resource_id FROM resource_source_projects project JOIN selected ON selected.source = project.source AND selected.project_id = project.project_id");
+            for row in query
+                .build()
+                .fetch_all(&self.pool)
+                .await
+                .map_err(database_error)?
+            {
+                result.insert(
+                    SourceProjectRef {
+                        source: SourceId::new(
+                            row.try_get::<String, _>("source")
+                                .map_err(database_error)?,
+                        )?,
+                        project_id: SourceProjectId::new(
+                            row.try_get::<String, _>("project_id")
+                                .map_err(database_error)?,
+                        )?,
+                    },
+                    ResourceId::new(
+                        row.try_get::<String, _>("resource_id")
+                            .map_err(database_error)?,
+                    )?,
+                );
+            }
+        }
+        Ok(result)
+    }
+
     /// Resolve a saved ID after any number of confirmed project merges.
     pub async fn resolve(
         &self,

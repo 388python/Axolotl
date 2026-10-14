@@ -3,6 +3,7 @@ import { computed, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useDebugLogger } from '#ui/composables/debug-logger'
+import { defineMessages, useVIntl } from '#ui/composables/i18n'
 import type {
     EnvironmentSearchOverride,
     FilterType,
@@ -17,6 +18,7 @@ import { useServerSearch } from '#ui/utils/server-search'
 import type { BrowseDisplayMode, BrowseSearchResponse } from '../types'
 
 export interface UseBrowseSearchOptions {
+    formatError?: (error: unknown) => string
     projectType: Ref<string>
     tags: Ref<Tags>
     providedFilters?: ComputedRef<FilterValue[]>
@@ -69,6 +71,14 @@ export interface BrowseSearchState {
 }
 
 export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchState {
+    const { formatMessage } = useVIntl()
+    const messages = defineMessages({
+        failed: {
+            id: 'browse.search.failed',
+            defaultMessage:
+                'The search could not be completed. Check your connection or filters and try again.',
+        },
+    })
     const debug = useDebugLogger('BrowseSearch')
     const route = useRoute()
     const router = useRouter()
@@ -294,12 +304,7 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
             debug('refreshSearch error', err)
             console.error('Browse search error:', err)
             if (version === searchVersion) {
-                searchError.value =
-                    err instanceof Error
-                        ? err.message
-                        : typeof err === 'object' && err && 'message' in err
-                          ? String(err.message)
-                          : String(err)
+                searchError.value = options.formatError?.(err) ?? formatMessage(messages.failed)
                 loading.value = false
             }
         } finally {

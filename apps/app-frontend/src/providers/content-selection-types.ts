@@ -69,6 +69,10 @@ export const [injectContentSelection, provideContentSelection] =
     createContext<ContentSelectionContext>('App', 'contentSelection')
 
 export const contentSelectionMessages = defineMessages({
+    noTarget: {
+        id: 'app.content-selection.no-target',
+        defaultMessage: 'Select a target instance before adding content.',
+    },
     previewFailed: {
         id: 'app.content-selection.preview-failed',
         defaultMessage: 'Some selected content could not be prepared. Remove it or try again.',

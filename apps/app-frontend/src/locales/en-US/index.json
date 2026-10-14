@@ -1,4 +1,10 @@
 {
+  "app.account.modrinth-account": {
+    "message": "Modrinth account"
+  },
+  "app.account.sign-in-modrinth": {
+    "message": "Sign in to a Modrinth account"
+  },
   "app.account.signed-in-as": {
     "message": "Signed in as"
   },
@@ -860,6 +866,9 @@
   "app.browse.back-to-instance": {
     "message": "Back to instance"
   },
+  "app.browse.categories-failed": {
+    "message": "CurseForge categories could not be loaded. Try again later."
+  },
   "app.browse.choose-instance": {
     "message": "Choose instance"
   },
@@ -983,8 +992,14 @@
   "app.browse.server-instance-content-warning": {
     "message": "Adding content can break compatibility when joining the server. Any added content will also be lost when you update the server instance content."
   },
+  "app.browse.server-source-unavailable": {
+    "message": "The server content source is unavailable. Try again later."
+  },
   "app.browse.server.installing": {
     "message": "Installing"
+  },
+  "app.browse.source-failed": {
+    "message": "{source} could not return results for this search. Check the filters or try again later."
   },
   "app.browse.source.all": {
     "message": "All sources"
@@ -1066,6 +1081,45 @@
   },
   "app.content-install.dependencies-skipped.notification-title": {
     "message": "Some dependencies were skipped"
+  },
+  "app.content-install.error.failed": {
+    "message": "Could not install the selected content."
+  },
+  "app.content-install.error.invalid-curseforge-project": {
+    "message": "The CurseForge project reference is invalid. Reopen the project and try again."
+  },
+  "app.content-install.error.missing-curseforge-file": {
+    "message": "The selected CurseForge project or file is unavailable. Reopen the project and try again."
+  },
+  "app.content-install.error.missing-game-version": {
+    "message": "This CurseForge modpack does not specify a Minecraft version."
+  },
+  "app.content-install.error.missing-target": {
+    "message": "The selected project or instance is no longer available."
+  },
+  "app.content-install.error.missing-version": {
+    "message": "The selected release is no longer available."
+  },
+  "app.content-install.error.no-curseforge-files": {
+    "message": "This CurseForge project has no available files."
+  },
+  "app.content-install.error.preview-unavailable": {
+    "message": "The installation preview is unavailable. Reopen the project and try again."
+  },
+  "app.content-install.error.project-not-found": {
+    "message": "Could not find project {project}."
+  },
+  "app.content-install.error.reinstall-unavailable": {
+    "message": "The selected CurseForge modpack release is unavailable for reinstallation."
+  },
+  "app.content-install.error.review-required": {
+    "message": "Review the content changes before installing."
+  },
+  "app.content-install.error.unsupported-provider": {
+    "message": "This content source cannot be used for this installation."
+  },
+  "app.content-install.error.unsupported-type": {
+    "message": "This content type cannot be installed here."
   },
   "app.content-install.no-compatible-versions": {
     "message": "No available versions match {compatibilityLabel}. Select a version to install anyway. Matching dependencies will still be installed."
@@ -1207,6 +1261,9 @@
   },
   "app.content-selection.duplicate-content": {
     "message": "{project} is already installed or selected from another source."
+  },
+  "app.content-selection.no-target": {
+    "message": "Select a target instance before adding content."
   },
   "app.content-selection.preview-failed": {
     "message": "Some selected content could not be prepared. Remove it or try again."
@@ -2956,6 +3013,9 @@
   },
   "app.instance.confirm-delete.symlink-warning": {
     "message": "This is a shared instance linked to \"{path}\". Only the link will be removed; the original files will not be deleted."
+  },
+  "app.instance.content.versions-failed": {
+    "message": "The release list could not be loaded. Reopen the version selector and try again."
   },
   "app.instance.copy-links": {
     "message": "Copy links"
@@ -7049,6 +7109,9 @@
   "app.privileged-modal.stopped": {
     "message": "Stop request sent"
   },
+  "app.project.coming-soon": {
+    "message": "Coming soon"
+  },
   "app.project.curseforge.unavailable-description": {
     "message": "The CurseForge project did not return any data."
   },
@@ -7072,6 +7135,9 @@
   },
   "app.project.install-context.install-content-to-instance": {
     "message": "Install content to instance"
+  },
+  "app.project.load-failed": {
+    "message": "The project could not be loaded. Try again."
   },
   "app.project.mcarchive.install": {
     "message": "Install"
@@ -7108,6 +7174,9 @@
   },
   "app.project.mcarchive.source": {
     "message": "MCArchive source"
+  },
+  "app.project.mcarchive.unavailable": {
+    "message": "This MCArchive project is unavailable. Reopen the project and try again."
   },
   "app.project.mcarchive.versions": {
     "message": "Versions"
@@ -7153,6 +7222,9 @@
   },
   "app.project.planet-minecraft.manual.title": {
     "message": "Manual download required"
+  },
+  "app.project.planet-minecraft.unavailable": {
+    "message": "This Planet Minecraft project is unavailable. Reopen the project and try again."
   },
   "app.project.planet-minecraft.unknown-file": {
     "message": "Downloaded file"
@@ -7316,6 +7388,45 @@
   "app.resources.description.retry": {
     "message": "Retry description"
   },
+  "app.resources.error.backup-unavailable": {
+    "message": "This rollback backup is unavailable or no longer matches the recorded file."
+  },
+  "app.resources.error.cache": {
+    "message": "The resource cache is unavailable. Restart the launcher and try again."
+  },
+  "app.resources.error.canceled": {
+    "message": "The content operation was cancelled."
+  },
+  "app.resources.error.cursor-expired": {
+    "message": "The search session expired. Restart the search."
+  },
+  "app.resources.error.database": {
+    "message": "The resource database is unavailable. Restart the launcher and try again."
+  },
+  "app.resources.error.failed": {
+    "message": "Could not complete the content operation. Refresh and try again."
+  },
+  "app.resources.error.http": {
+    "message": "The content source rejected the request (HTTP {status, number, ::group-off}). Try again later."
+  },
+  "app.resources.error.invalid-search": {
+    "message": "These search filters could not be applied. Reset the filters and try again."
+  },
+  "app.resources.error.network": {
+    "message": "Could not connect to the content source. Check your connection and try again."
+  },
+  "app.resources.error.source-response": {
+    "message": "The content source returned an invalid response. Try again."
+  },
+  "app.resources.error.stale": {
+    "message": "The instance or selected files changed. Refresh the preview before continuing."
+  },
+  "app.resources.error.unavailable": {
+    "message": "The content source is unavailable. Check your connection and try again."
+  },
+  "app.resources.error.unsupported": {
+    "message": "This content source does not support the requested operation or filters."
+  },
   "app.resources.history.cancel": {
     "message": "Close"
   },
@@ -7379,8 +7490,14 @@
   "app.resources.operation.header": {
     "message": "Review content changes"
   },
+  "app.resources.operation.identity-unconfirmed": {
+    "message": "The selected resource could not be identified reliably."
+  },
   "app.resources.operation.installed-dependency-unavailable": {
     "message": "An installed copy is disabled, missing, or does not satisfy the required release. Review that copy before continuing."
+  },
+  "app.resources.operation.invalid-path": {
+    "message": "The file path is invalid or cannot be used for this installation."
   },
   "app.resources.operation.loading": {
     "message": "Resolving releases and dependencies…"
@@ -7423,6 +7540,9 @@
   },
   "app.resources.operation.source-unavailable": {
     "message": "The source cannot provide this item right now."
+  },
+  "app.resources.operation.stale-revision": {
+    "message": "The instance changed. Refresh this preview before continuing."
   },
   "app.resources.operation.unresolved-optional": {
     "message": "Some optional dependencies could not be resolved."

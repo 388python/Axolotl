@@ -162,7 +162,15 @@
                                             class="px-2.5 py-0.5 rounded-full text-sm font-medium flex items-center flex-shrink-0 border border-solid"
                                             :class="getVersionTypeBadgeClasses(selectedVersion)"
                                         >
-                                            {{ capitalizeString(selectedVersion.version_type) }}
+                                            {{
+                                                formatMessage(
+                                                    selectedVersion.version_type === 'release'
+                                                        ? commonMessages.release
+                                                        : selectedVersion.version_type === 'beta'
+                                                          ? commonMessages.beta
+                                                          : commonMessages.alpha,
+                                                )
+                                            }}
                                         </span>
                                     </div>
                                     <span class="font-medium text-[var(--color-text-default)]">

@@ -13855,5 +13855,125 @@
   },
   "app.resources.operation.no-worlds": {
     "message": "安装数据包前，请先在此实例中创建一个单人存档。"
+  },
+  "app.account.modrinth-account": {
+    "message": "Modrinth 账户"
+  },
+  "app.account.sign-in-modrinth": {
+    "message": "登录 Modrinth 账户"
+  },
+  "app.browse.categories-failed": {
+    "message": "无法加载 CurseForge 分类，请稍后重试。"
+  },
+  "app.browse.server-source-unavailable": {
+    "message": "服务器内容来源暂不可用，请稍后重试。"
+  },
+  "app.browse.source-failed": {
+    "message": "{source} 无法返回此次搜索的结果，请检查筛选条件或稍后重试。"
+  },
+  "app.content-install.error.failed": {
+    "message": "无法安装所选内容。"
+  },
+  "app.content-install.error.invalid-curseforge-project": {
+    "message": "CurseForge 项目引用无效，请重新打开项目后重试。"
+  },
+  "app.content-install.error.missing-curseforge-file": {
+    "message": "所选 CurseForge 项目或文件不可用，请重新打开项目后重试。"
+  },
+  "app.content-install.error.missing-game-version": {
+    "message": "此 CurseForge 整合包未注明 Minecraft 版本。"
+  },
+  "app.content-install.error.missing-target": {
+    "message": "所选项目或实例已不可用。"
+  },
+  "app.content-install.error.missing-version": {
+    "message": "所选发布版本已不可用。"
+  },
+  "app.content-install.error.no-curseforge-files": {
+    "message": "此 CurseForge 项目没有可用文件。"
+  },
+  "app.content-install.error.preview-unavailable": {
+    "message": "安装预览不可用，请重新打开项目后重试。"
+  },
+  "app.content-install.error.project-not-found": {
+    "message": "找不到项目 {project}。"
+  },
+  "app.content-install.error.reinstall-unavailable": {
+    "message": "所选 CurseForge 整合包版本不可用于重新安装。"
+  },
+  "app.content-install.error.review-required": {
+    "message": "请先审核内容变更，再进行安装。"
+  },
+  "app.content-install.error.unsupported-provider": {
+    "message": "此内容来源不支持本次安装。"
+  },
+  "app.content-install.error.unsupported-type": {
+    "message": "无法在此处安装这种内容类型。"
+  },
+  "app.content-selection.no-target": {
+    "message": "请先选择目标实例，再添加内容。"
+  },
+  "app.instance.content.versions-failed": {
+    "message": "无法加载发布版本列表，请重新打开版本选择器后重试。"
+  },
+  "app.project.load-failed": {
+    "message": "无法加载项目，请重试。"
+  },
+  "app.project.mcarchive.unavailable": {
+    "message": "此 MCArchive 项目不可用，请重新打开项目后重试。"
+  },
+  "app.project.planet-minecraft.unavailable": {
+    "message": "此 Planet Minecraft 项目不可用，请重新打开项目后重试。"
+  },
+  "app.resources.error.backup-unavailable": {
+    "message": "此回滚备份不可用，或已与记录中的文件不符。"
+  },
+  "app.resources.error.cache": {
+    "message": "资源缓存不可用，请重启启动器后重试。"
+  },
+  "app.resources.error.canceled": {
+    "message": "内容操作已取消。"
+  },
+  "app.resources.error.cursor-expired": {
+    "message": "搜索会话已过期，请重新搜索。"
+  },
+  "app.resources.error.database": {
+    "message": "资源数据库不可用，请重启启动器后重试。"
+  },
+  "app.resources.error.failed": {
+    "message": "无法完成内容操作，请刷新后重试。"
+  },
+  "app.resources.error.http": {
+    "message": "内容来源拒绝了请求（HTTP {status, number, ::group-off}），请稍后重试。"
+  },
+  "app.resources.error.invalid-search": {
+    "message": "无法应用这些筛选条件，请重置筛选后重试。"
+  },
+  "app.resources.error.network": {
+    "message": "无法连接内容来源，请检查网络后重试。"
+  },
+  "app.resources.error.source-response": {
+    "message": "内容来源返回了无效响应，请重试。"
+  },
+  "app.resources.error.stale": {
+    "message": "实例或所选文件已发生变化，请刷新预览后继续。"
+  },
+  "app.resources.error.unavailable": {
+    "message": "内容来源暂不可用，请检查网络后重试。"
+  },
+  "app.resources.error.unsupported": {
+    "message": "此内容来源不支持所请求的操作或筛选条件。"
+  },
+  "app.resources.operation.identity-unconfirmed": {
+    "message": "无法可靠识别所选资源。"
+  },
+  "app.resources.operation.invalid-path": {
+    "message": "文件路径无效，或无法用于此次安装。"
+  },
+  "app.resources.operation.stale-revision": {
+    "message": "实例已发生变化，请刷新预览后继续。"
+  },
+  "app.project.coming-soon": {
+    "message": "即将推出"
   }
 }

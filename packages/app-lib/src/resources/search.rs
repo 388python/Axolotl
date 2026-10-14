@@ -341,18 +341,21 @@ impl ResourceService {
             &slugs(SourceId::curseforge()),
         );
         let mut groups: Vec<ResourceSearchResult> = Vec::new();
-        let mut identities = HashMap::new();
-        for metadata in &pool {
-            let identity = if let Some(store) = self.store() {
-                store.lookup(&metadata.project).await?
-            } else {
-                None
-            };
-            identities.insert(metadata.project.clone(), identity);
-        }
+        let identities = if let Some(store) = self.store() {
+            store
+                .lookup_many(
+                    &pool
+                        .iter()
+                        .map(|metadata| metadata.project.clone())
+                        .collect::<Vec<_>>(),
+                )
+                .await?
+        } else {
+            HashMap::new()
+        };
         while !pool.is_empty() && groups.len() < query.page_size as usize {
             let first = pool.remove(0);
-            let id = identities[&first.project].clone();
+            let id = identities.get(&first.project).cloned();
             if state.seen.contains(&first.project)
                 || id
                     .as_ref()
@@ -370,8 +373,8 @@ impl ResourceService {
             let mut index = 0;
             while index < pool.len() {
                 let other = &pool[index];
-                let confirmed =
-                    id.is_some() && identities[&other.project] == id;
+                let confirmed = id.is_some()
+                    && identities.get(&other.project) == id.as_ref();
                 let pair = !confirmed && wiki_pair(&first, other, &wiki_lookup);
                 let exact = !confirmed
                     && !pair
@@ -395,7 +398,7 @@ impl ResourceService {
                 }
             }
             let status = if projects.iter().all(|project| {
-                id.is_some() && identities[&project.project] == id
+                id.is_some() && identities.get(&project.project) == id.as_ref()
             }) {
                 IdentityStatus::Confirmed
             } else {

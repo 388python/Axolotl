@@ -17,7 +17,8 @@ import { mountThemed, waitFor } from '@/test/visual-harness'
 
 import ExportModal from '../ExportModal.vue'
 
-vi.mock('@/helpers/resources', () => ({
+vi.mock('@/helpers/resources', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/helpers/resources')>()),
     resourceExportScan: vi.fn(),
     resourceExportRefresh: vi.fn(),
     resourceExportRefreshRetry: vi.fn(),
@@ -393,7 +394,9 @@ it('retains package input and selection when queue submission fails', async () =
         input.dispatchEvent(new Event('input', { bubbles: true }))
         exportButton().click()
         await flushPromises()
-        expect(document.querySelector('[role="alert"]')?.textContent).toContain('Queue unavailable')
+        expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+            'Could not complete the content operation. Refresh and try again.',
+        )
         expect(input.value).toBe('Retained package')
         expect(exportButton().disabled).toBe(false)
     } finally {

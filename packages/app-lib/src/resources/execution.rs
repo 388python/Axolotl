@@ -725,6 +725,26 @@ async fn persist_plan(
         let entry = content_rows::get_content_entry_by_id(id, pool).await?;
         prior.insert(action.entry_id.clone(), (refs, graph, entry));
     }
+    let instance_path: String =
+        sqlx::query_scalar("SELECT path FROM instances WHERE id = ?")
+            .bind(&plan.instance_id)
+            .fetch_one(pool)
+            .await?;
+    let mut mod_metadata = HashMap::new();
+    for (action, (source_path, kind, _, _, _)) in
+        plan.actions.iter().zip(downloads)
+    {
+        if *kind == ResourceType::Mod {
+            let bytes = bytes::Bytes::from(tokio::fs::read(source_path).await?);
+            let metadata = tokio::task::spawn_blocking(move || {
+                crate::mod_metadata::extract_mod_metadata(&bytes)
+                    .and_then(|metadata| serde_json::to_string(&metadata).ok())
+            })
+            .await
+            .map_err(|error| input(error.to_string()))?;
+            mod_metadata.insert(action.entry_id.clone(), metadata);
+        }
+    }
     let mut tx = pool.begin().await?;
     let mut node_entries: HashMap<SelectionId, Vec<InstalledEntryId>> = plan
         .nodes
@@ -740,7 +760,7 @@ async fn persist_plan(
     } else {
         None
     };
-    for ((action, (source_path, kind, size, sha1, digest)), file) in
+    for ((action, (_, kind, size, sha1, digest)), file) in
         plan.actions.iter().zip(downloads).zip(journal)
     {
         let id = action.entry_id.as_str();
@@ -764,14 +784,7 @@ async fn persist_plan(
                 "artifact size disagrees with the reviewed snapshot",
             ));
         }
-        let local_mod_data = if *kind == ResourceType::Mod {
-            crate::mod_metadata::extract_mod_metadata(&bytes::Bytes::from(
-                tokio::fs::read(source_path).await?,
-            ))
-            .and_then(|metadata| serde_json::to_string(&metadata).ok())
-        } else {
-            None
-        };
+        let local_mod_data = mod_metadata.remove(&action.entry_id).flatten();
         if let Some(current) = &action.current {
             sqlx::query("UPDATE instance_files SET relative_path = ?, file_name = ? WHERE id = (SELECT file_id FROM instance_content_entries WHERE id = ?) AND instance_id = ? AND relative_path = ?")
                 .bind(&action.target_relative_path).bind(file_name).bind(id).bind(&plan.instance_id).bind(&current.relative_path).execute(&mut *tx).await?;
@@ -795,11 +808,6 @@ async fn persist_plan(
                 &mut tx,
             )
             .await?;
-        let instance_path: String =
-            sqlx::query_scalar("SELECT path FROM instances WHERE id = ?")
-                .bind(&plan.instance_id)
-                .fetch_one(&mut *tx)
-                .await?;
         let cache =
             crate::state::CacheValue::FileHash(crate::state::CachedFileHash {
                 path: format!(

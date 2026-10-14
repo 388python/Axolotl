@@ -8,6 +8,8 @@ import {
     useFormatBytes,
 } from '@modrinth/ui'
 
+import { resourceOperationError, resourceSourceName } from '@/helpers/resource-operation-logic'
+
 import { injectExportContext } from './context'
 import { exportMessages } from './messages'
 const {
@@ -47,7 +49,7 @@ const formatBytes = useFormatBytes()
                 >
                     <strong class="break-all">{{ file.snapshot.relativePath }}</strong>
                     <p v-if="file.localError" class="m-0 break-all">
-                        {{ formatMessage(exportMessages.localFailure) }} {{ file.localError }}
+                        {{ formatMessage(exportMessages.localFailure) }}
                     </p>
                     <template v-else>
                         <p
@@ -55,8 +57,12 @@ const formatBytes = useFormatBytes()
                             :key="failure.source"
                             class="m-0 break-all"
                         >
-                            {{ failure.source }}:
-                            {{ failure.kind === 'failed' ? failure.message : '' }}
+                            {{ resourceSourceName(failure.source) }}:
+                            {{
+                                failure.kind === 'failed'
+                                    ? resourceOperationError(failure.message, formatMessage)
+                                    : ''
+                            }}
                         </p>
                         <Checkbox
                             :disabled="exporting"

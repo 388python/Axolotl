@@ -2,12 +2,67 @@ import { expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 
 import { get_version_many } from '@/helpers/cache.js'
+import { compareContentIdentities } from '@/helpers/content-identity'
 import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { queue_content_batch } from '@/helpers/instance'
 import type { GameInstance } from '@/helpers/types'
 
 import { createContentSelection } from './content-selection'
 import type { ContentSelectionItem } from './content-selection-types'
+
+it('concurrent additions recheck the live cart before committing a shared identity', async () => {
+    vi.mocked(compareContentIdentities).mockImplementation((candidate, existing) =>
+        candidate.title === existing.title
+            ? ({ source: 'curated_mapping', confidence: 'exact', identity: existing } as never)
+            : null,
+    )
+    try {
+        const selection = createContentSelection({
+            addNotification: vi.fn(),
+            handleError: vi.fn(),
+            downloadManager: { jobs: ref([]) } as never,
+        })
+        selection.setTarget(instance)
+        const results = await Promise.all(
+            ['modrinth', 'curseforge'].map((provider) =>
+                selection.add({
+                    key: `${provider}:same`,
+                    provider: provider as 'modrinth' | 'curseforge',
+                    projectId: 'same',
+                    providerProjectId: 'same',
+                    contentType: 'mod',
+                    title: 'Same resource',
+                }),
+            ),
+        )
+        expect(results.filter(Boolean)).toHaveLength(1)
+        expect(selection.items.value.size).toBe(1)
+    } finally {
+        vi.mocked(compareContentIdentities).mockImplementation(() => null)
+    }
+})
+
+it('rejects a version prepared for a different target before resolving its identity', async () => {
+    const selection = createContentSelection({
+        addNotification: vi.fn(),
+        handleError: vi.fn(),
+        downloadManager: { jobs: ref([]) } as never,
+    })
+    selection.setTarget({ ...instance, id: 'new-target' })
+    expect(
+        await selection.add({
+            key: 'modrinth:old',
+            provider: 'modrinth',
+            projectId: 'old',
+            providerProjectId: 'old',
+            contentType: 'mod',
+            title: 'Old target release',
+            versionId: 'old-release',
+            targetInstanceId: instance.id,
+        }),
+    ).toBe(false)
+    expect(selection.items.value.size).toBe(0)
+})
 
 it('discarding pending additions after target changes or clearing the cart cannot repopulate another instance', async () => {
     for (const change of ['target', 'clear']) {

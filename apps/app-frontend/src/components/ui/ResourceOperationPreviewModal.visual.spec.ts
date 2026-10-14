@@ -288,7 +288,9 @@ it('previews an exact path, retains the previous revision on optional failure, a
             .find((button) => button.text() === '＋')!
             .trigger('click')
         await flushPromises()
-        expect(wrapper.text()).toContain('dependency source unavailable')
+        expect(wrapper.text()).toContain(
+            'Could not complete the content operation. Refresh and try again.',
+        )
         expect(wrapper.text()).toContain('mods/custom.jar.disabled')
         vi.mocked(resourceRevisePlan).mockResolvedValueOnce({
             ...plan(2),

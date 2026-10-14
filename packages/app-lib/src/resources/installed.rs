@@ -30,14 +30,49 @@ pub(crate) async fn attach_compatibility(
         .enumerate()
         .filter_map(|(index, item)| item.entry_id.clone().map(|id| (id, index)))
         .collect();
+    let rows: Vec<_> = rows
+        .into_iter()
+        .map(|(id, sha1, size, local, artifact)| {
+            let record = artifact.and_then(|payload| {
+                serde_json::from_str::<InstalledArtifactRecord>(&payload).ok()
+            });
+            (id, sha1, size, local, record)
+        })
+        .collect();
+    let projects = rows
+        .iter()
+        .filter_map(|(id, sha1, size, _, artifact)| {
+            let item = items.get(*indices.get(id)?)?;
+            if item.resource_id.is_some() {
+                return None;
+            }
+            artifact
+                .as_ref()
+                .filter(|record| {
+                    super::identity::exact_integrity(
+                        &ArtifactIntegrity {
+                            size: u64::try_from(*size).ok(),
+                            hashes: vec![ContentHash {
+                                algorithm: HashAlgorithm::Sha1,
+                                value: sha1.clone(),
+                            }],
+                        },
+                        &record.artifact.integrity,
+                    )
+                })
+                .map(|record| record.artifact.reference.release.project.clone())
+        })
+        .collect::<Vec<_>>();
+    let identities = crate::state::resources::ResourceStore::new(pool.clone())
+        .lookup_many(&projects)
+        .await
+        .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
     for (id, sha1, size, local, artifact) in rows {
         let Some(&index) = indices.get(&id) else {
             continue;
         };
         let item = &mut items[index];
-        if let Some(record) = artifact.as_ref().and_then(|payload| {
-            serde_json::from_str::<InstalledArtifactRecord>(payload).ok()
-        }) {
+        if let Some(record) = artifact.as_ref() {
             let local = ArtifactIntegrity {
                 size: u64::try_from(size).ok(),
                 hashes: vec![ContentHash {
@@ -58,15 +93,9 @@ pub(crate) async fn attach_compatibility(
                     item.capabilities.can_change_version = true;
                 }
                 if item.resource_id.is_none() {
-                    item.resource_id =
-                        crate::state::resources::ResourceStore::new(
-                            pool.clone(),
-                        )
-                        .lookup(&record.artifact.reference.release.project)
-                        .await
-                        .map_err(|error| {
-                            crate::ErrorKind::OtherError(error.to_string())
-                        })?;
+                    item.resource_id = identities
+                        .get(&record.artifact.reference.release.project)
+                        .cloned();
                 }
             }
         }
@@ -80,17 +109,13 @@ pub(crate) async fn attach_compatibility(
             _ => continue,
         };
         item.compatibility = None;
-        let exact = artifact
-            .and_then(|artifact| {
-                serde_json::from_str::<InstalledArtifactRecord>(&artifact).ok()
-            })
-            .filter(|artifact| {
-                artifact.artifact.integrity.size == u64::try_from(size).ok()
-                    && artifact.artifact.integrity.hashes.iter().any(|hash| {
-                        hash.algorithm == HashAlgorithm::Sha1
-                            && hash.value.eq_ignore_ascii_case(&sha1)
-                    })
-            });
+        let exact = artifact.filter(|artifact| {
+            artifact.artifact.integrity.size == u64::try_from(size).ok()
+                && artifact.artifact.integrity.hashes.iter().any(|hash| {
+                    hash.algorithm == HashAlgorithm::Sha1
+                        && hash.value.eq_ignore_ascii_case(&sha1)
+                })
+        });
         let declared = exact
             .and_then(|record| record.declared_compatibility)
             .or_else(|| {

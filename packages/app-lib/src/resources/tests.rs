@@ -106,6 +106,55 @@ async fn presentation_failure_uses_expired_metadata_without_masking_force_refres
 #[path = "../../../content-management/tests/fixtures/mod.rs"]
 mod fixtures;
 
+#[tokio::test]
+async fn presentation_keeps_incomplete_protocol_cache_when_offline_without_retrying_twice()
+ {
+    for ttl in [-1, 60] {
+        let (_temp, cache) = cache().await;
+        let provider = MockProvider::new(100, None);
+        let query = project_query("abcdefgh");
+        let value = project_value(SourceId::modrinth(), "abcdefgh", "Saved");
+        let key = CacheKey::new("mock-v1".into(), SourceId::modrinth(), &query)
+            .unwrap();
+        cache
+            .put(
+                &key,
+                &value,
+                ttl,
+                cache.generation().await,
+                chrono::Utc::now().timestamp_micros(),
+            )
+            .await;
+        provider.fail.store(true, Ordering::Relaxed);
+        let service =
+            ResourceService::new(cache.clone(), vec![provider.clone()])
+                .unwrap();
+        let outcome = service
+            .presentation_query(
+                &SourceId::modrinth(),
+                query.clone(),
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(outcome.value, value);
+        assert!(outcome.from_cache);
+        assert_eq!(provider.calls(), 1);
+        assert!(
+            service
+                .presentation_many_with_policy(
+                    &SourceId::modrinth(),
+                    vec![query],
+                    &CancellationToken::new(),
+                    CachePolicy::ForceRefresh
+                )
+                .await[0]
+                .is_err()
+        );
+        cache.close().await;
+    }
+}
+
 #[path = "plans_tests.rs"]
 mod plans_tests;
 #[path = "protocol_tests.rs"]

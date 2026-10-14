@@ -572,6 +572,7 @@ async function toggleProjectSelection(project: FavoriteProject) {
                   ).files
                       .find((file) => file.isAvailable)
                       ?.id.toString()
+        if (contentSelection.targetInstance.value?.id !== target.id) return
         if (!versionId) throw new Error(formatMessage(messages.noCompatibleVersion))
 
         await contentSelection.add({
@@ -585,9 +586,10 @@ async function toggleProjectSelection(project: FavoriteProject) {
             iconUrl: project.iconUrl,
             slug: project.slug,
             preferences,
+            targetInstanceId: target.id,
         })
     } catch (error) {
-        handleError(error)
+        if (contentSelection.targetInstance.value?.id === target.id) handleError(error)
     } finally {
         setInstalling(key, false)
     }

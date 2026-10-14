@@ -2,6 +2,8 @@
 import { ProgressBar } from '@modrinth/ui'
 import { computed } from 'vue'
 
+import { resourceSourceName } from '@/helpers/resource-operation-logic'
+
 import { injectExportContext } from './context'
 import { exportMessages } from './messages'
 
@@ -22,18 +24,14 @@ const label = computed(() => {
             return formatMessage(exportMessages.finalizingAnalysis)
         if (refreshProgress.value?.phase === 'hashing')
             return formatMessage(exportMessages.verifyingLocal)
-        if (refreshProgress.value)
+        if (
+            refreshProgress.value &&
+            ['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft'].includes(
+                refreshProgress.value.phase,
+            )
+        )
             return formatMessage(exportMessages.verifyingSource, {
-                source:
-                    refreshProgress.value.phase === 'modrinth'
-                        ? 'Modrinth'
-                        : refreshProgress.value.phase === 'curseforge'
-                          ? 'CurseForge'
-                          : refreshProgress.value.phase === 'mcarchive'
-                            ? 'MCArchive'
-                            : refreshProgress.value.phase === 'planet_minecraft'
-                              ? 'Planet Minecraft'
-                              : refreshProgress.value.phase,
+                source: resourceSourceName(refreshProgress.value.phase),
             })
         return formatMessage(exportMessages.analyzing)
     }

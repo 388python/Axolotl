@@ -71,6 +71,9 @@
   "browse.retry": {
     "defaultMessage": "Try again"
   },
+  "browse.search.failed": {
+    "defaultMessage": "The search could not be completed. Check your connection or filters and try again."
+  },
   "browse.search.placeholder": {
     "defaultMessage": "Search {projectType}..."
   },
@@ -761,6 +764,9 @@
   "content-type.item.lowercase": {
     "defaultMessage": "{count, plural, one {item} other {items}}"
   },
+  "content.actions.update-all": {
+    "defaultMessage": "Update all"
+  },
   "content.card.dependency-badge": {
     "defaultMessage": "Dependency"
   },
@@ -806,6 +812,9 @@
   "content.confirm-deletion.delete-button": {
     "defaultMessage": "Delete {count, number} {itemType}"
   },
+  "content.confirm-deletion.failed": {
+    "defaultMessage": "The selected content could not be deleted. Try again."
+  },
   "content.confirm-deletion.header": {
     "defaultMessage": "Delete {itemType}"
   },
@@ -850,6 +859,9 @@
   },
   "content.dependency-warning.delete-anyway-button": {
     "defaultMessage": "Delete anyway"
+  },
+  "content.dependency-warning.delete-failed": {
+    "defaultMessage": "The selected content and dependencies could not be deleted. Try again."
   },
   "content.dependency-warning.delete-many-anyway-button": {
     "defaultMessage": "Delete {count, number} {itemType} anyway"
@@ -1033,6 +1045,9 @@
   },
   "content.page-layout.reset-view": {
     "defaultMessage": "Reset view"
+  },
+  "content.page-layout.scroll-to-top": {
+    "defaultMessage": "Scroll to top"
   },
   "content.page-layout.search-placeholder": {
     "defaultMessage": "Search {count, number} {contentType}..."
@@ -2857,6 +2872,9 @@
   },
   "locale.zh-TW": {
     "defaultMessage": "Chinese (Traditional)"
+  },
+  "modal.confirm-action.failed": {
+    "defaultMessage": "The action could not be completed. Try again."
   },
   "modal.confirm.confirmation-placeholder": {
     "defaultMessage": "Type here..."
@@ -4801,5 +4819,8 @@
   },
   "version.supplementary-resources.type": {
     "defaultMessage": "Type"
+  },
+  "version.uploaded-by": {
+    "defaultMessage": "Uploaded by"
   }
 }

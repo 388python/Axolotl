@@ -332,6 +332,21 @@ async fn validate(
     let selected: HashSet<_> =
         plan.entries.iter().map(|entry| &entry.id).collect();
     let rows = sqlx::query("SELECT id, backup_relative_path FROM resource_history WHERE instance_id = ? AND backup_available = 1").bind(&plan.instance_id).fetch_all(&state.pool).await.map_err(db)?;
+    let mut retained_paths = HashSet::new();
+    for row in rows {
+        let id = HistoryId::new(row.get::<String, _>("id"))?;
+        if !selected.contains(&id)
+            && let Some(path) =
+                row.get::<Option<String>, _>("backup_relative_path")
+        {
+            retained_paths.insert(path.to_ascii_lowercase());
+        }
+    }
+    let current_paths: Vec<String> = sqlx::query_scalar("SELECT file.relative_path FROM instance_files file JOIN instance_content_entries entry ON entry.file_id = file.id WHERE file.instance_id = ? UNION ALL SELECT relative_path FROM store_instance_files WHERE instance_id = ?").bind(&plan.instance_id).bind(&plan.instance_id).fetch_all(&state.pool).await.map_err(db)?;
+    let current_paths: HashSet<_> = current_paths
+        .into_iter()
+        .map(|path| path.to_ascii_lowercase())
+        .collect();
     for file in &plan.files {
         let path = super::execution::checked_path(&root, &file.relative_path)?;
         if !file.recognized
@@ -340,26 +355,16 @@ async fn validate(
         {
             return Err(invalid("backup changed since cleanup review"));
         }
-        let current: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM instance_files file JOIN instance_content_entries entry ON entry.file_id = file.id WHERE file.instance_id = ? AND lower(file.relative_path) = lower(?))").bind(&plan.instance_id).bind(&file.relative_path).fetch_one(&state.pool).await.map_err(db)?;
-        let stored: i64 = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM store_instance_files WHERE instance_id = ? AND lower(relative_path) = lower(?))").bind(&plan.instance_id).bind(&file.relative_path).fetch_one(&state.pool).await.map_err(db)?;
-        if current != 0 || stored != 0 {
+        let path_key = file.relative_path.to_ascii_lowercase();
+        if current_paths.contains(&path_key) {
             return Err(invalid(
                 "backup is still referenced as current instance content",
             ));
         }
-        for row in &rows {
-            let id = HistoryId::new(row.get::<String, _>("id"))?;
-            if row
-                .get::<Option<String>, _>("backup_relative_path")
-                .is_some_and(|path| {
-                    path.eq_ignore_ascii_case(&file.relative_path)
-                })
-                && !selected.contains(&id)
-            {
-                return Err(invalid(
-                    "backup is still required by another history entry",
-                ));
-            }
+        if retained_paths.contains(&path_key) {
+            return Err(invalid(
+                "backup is still required by another history entry",
+            ));
         }
     }
     Ok(())

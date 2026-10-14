@@ -69,7 +69,9 @@ it('dependency deletion unlocks and closes only after the accepted action settle
         await wrapper.findAll('button')[1].trigger('click')
         await flushPromises()
         expect(hide).not.toHaveBeenCalled()
-        expect(wrapper.text()).toContain('delete failed')
+        expect(wrapper.text()).toContain(
+            'The selected content and dependencies could not be deleted. Try again.',
+        )
         await wrapper.findAll('button')[1].trigger('click')
         expect(wrapper.attributes('data-locked')).toBe('true')
         complete()

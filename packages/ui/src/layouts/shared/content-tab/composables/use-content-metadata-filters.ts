@@ -297,10 +297,7 @@ export function useContentMetadataFilters(
                         case UNKNOWN:
                             return formatMessage(messages.optionUnknown)
                         default:
-                            // 未登记的新来源值：显示可读的原始值，避免与真正的"未知"选项重复
-                            return value
-                                .replace(/_/g, ' ')
-                                .replace(/\b\w/g, (char) => char.toUpperCase())
+                            return formatMessage(messages.optionUnknown)
                     }
                 },
             },

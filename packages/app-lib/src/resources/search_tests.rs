@@ -40,6 +40,7 @@ struct SearchProvider {
     entries: Vec<SourceProjectMetadata>,
     calls: Mutex<Vec<ProviderQuery>>,
     fail: AtomicBool,
+    gate: Option<Arc<Semaphore>>,
 }
 
 fn metadata(
@@ -70,6 +71,7 @@ impl SearchProvider {
             source,
             calls: Mutex::new(vec![]),
             fail: AtomicBool::new(false),
+            gate: None,
         })
     }
 }
@@ -104,6 +106,9 @@ impl ResourceProvider for SearchProvider {
         queries: &[ProviderQuery],
     ) -> Vec<ResourceResult<ProviderValue>> {
         self.calls.lock().unwrap().extend_from_slice(queries);
+        if let Some(gate) = &self.gate {
+            gate.acquire().await.unwrap().forget();
+        }
         queries
             .iter()
             .map(|query| {
@@ -377,6 +382,67 @@ fn artifact(project: SourceProjectRef) -> ResourceArtifact {
         },
         dependencies: vec![],
     }
+}
+
+#[tokio::test]
+async fn confirmed_project_details_fetch_sources_concurrently_and_keep_preferred_order()
+ {
+    let pool = main_pool().await;
+    let (_directory, cache) = cache().await;
+    let mut mr = SearchProvider::new(SourceId::modrinth(), &["MR".into()]);
+    let mut cf = SearchProvider::new(SourceId::curseforge(), &["CF".into()]);
+    let mr_gate = Arc::new(Semaphore::new(0));
+    let cf_gate = Arc::new(Semaphore::new(0));
+    Arc::get_mut(&mut mr).unwrap().gate = Some(mr_gate.clone());
+    Arc::get_mut(&mut cf).unwrap().gate = Some(cf_gate.clone());
+    let left = mr.entries[0].clone();
+    let right = cf.entries[0].clone();
+    let store = crate::state::resources::ResourceStore::new(pool.clone());
+    store
+        .confirm_projects(
+            &left,
+            &right,
+            &artifact(left.project.clone()),
+            &artifact(right.project.clone()),
+        )
+        .await
+        .unwrap();
+    store
+        .set_preferred_source(&SourceId::curseforge())
+        .await
+        .unwrap();
+    let service = ResourceService::with_store(
+        cache.clone(),
+        vec![mr.clone(), cf.clone()],
+        store,
+    )
+    .unwrap();
+    let request = tokio::spawn(async move {
+        service
+            .get(
+                &ResourceRef::Source {
+                    project: left.project,
+                },
+                None,
+                None,
+                &CancellationToken::new(),
+            )
+            .await
+    });
+    wait_until(|| {
+        !mr.calls.lock().unwrap().is_empty()
+            && !cf.calls.lock().unwrap().is_empty()
+    })
+    .await;
+    assert!(!request.is_finished());
+    mr_gate.add_permits(1);
+    cf_gate.add_permits(1);
+    let resource = request.await.unwrap().unwrap();
+    assert_eq!(resource.projects.len(), 2);
+    assert_eq!(resource.projects[0].project.source, SourceId::curseforge());
+    assert_eq!(resource.default_project.source, SourceId::curseforge());
+    cache.close().await;
+    pool.close().await;
 }
 
 #[tokio::test]

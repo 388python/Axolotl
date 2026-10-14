@@ -80,6 +80,47 @@ fn project(source: SourceId, id: &str) -> SourceProjectRef {
     }
 }
 
+#[tokio::test]
+async fn batched_identity_lookup_keeps_provider_keys_and_missing_projects_across_chunks()
+ {
+    let pool = previous_database().await;
+    upgrade(&pool).await;
+    let store = ResourceStore::new(pool.clone());
+    let mr = project(SourceId::modrinth(), "12345678");
+    let cf = project(SourceId::curseforge(), "12345678");
+    let mr_id = store
+        .ensure_project(&mr, &[ResourceType::Mod])
+        .await
+        .unwrap();
+    let cf_id = store
+        .ensure_project(&cf, &[ResourceType::Mod])
+        .await
+        .unwrap();
+    let mut projects = (1..=801)
+        .map(|id| project(SourceId::curseforge(), &id.to_string()))
+        .collect::<Vec<_>>();
+    projects.extend([mr.clone(), cf.clone(), mr.clone()]);
+    let found = store.lookup_many(&projects).await.unwrap();
+    assert_eq!(found.len(), 2);
+    assert_eq!(found[&mr], mr_id);
+    assert_eq!(found[&cf], cf_id);
+    assert_ne!(mr_id, cf_id);
+    assert!(store.lookup_many(&[]).await.unwrap().is_empty());
+    assert!(
+        store
+            .lookup_many(&[project(SourceId::modrinth(), "a-slug")])
+            .await
+            .is_err()
+    );
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM resource_source_projects")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 2);
+    pool.close().await;
+}
+
 fn metadata(project: SourceProjectRef) -> SourceProjectMetadata {
     SourceProjectMetadata {
         environments: vec![],

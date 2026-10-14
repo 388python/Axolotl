@@ -3,7 +3,7 @@ import { Button, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
-import { resourceOperationError } from '@/helpers/resource-operation-logic'
+import { resourceOperationError, resourceSourceName } from '@/helpers/resource-operation-logic'
 import {
     type ResourceHistoryEntry,
     resourceListHistory,
@@ -57,7 +57,7 @@ function show(instanceId: string, entryId: string): Promise<InstallJobSnapshot |
             const value = await resourceListHistory(instanceId, entryId)
             if (current === generation) entries.value = value
         } catch (failure) {
-            if (current === generation) error.value = resourceOperationError(failure)
+            if (current === generation) error.value = resourceOperationError(failure, formatMessage)
         } finally {
             if (current === generation) busy.value = false
         }
@@ -80,7 +80,7 @@ async function rollback(entry: ResourceHistoryEntry) {
         await modal.value?.hide()
         resolve?.(job)
     } catch (failure) {
-        if (current === generation) error.value = resourceOperationError(failure)
+        if (current === generation) error.value = resourceOperationError(failure, formatMessage)
     } finally {
         if (current === generation) queueing.value = false
     }
@@ -116,7 +116,8 @@ defineExpose({ show })
                     {{ entry.previous.originalFileName ?? entry.previous.relativePath }}
                 </p>
                 <p class="m-0 text-sm">
-                    {{ entry.previous.artifact?.release.project.source ?? '' }} ·
+                    {{ resourceSourceName(entry.previous.artifact?.release.project.source ?? '') }}
+                    ·
                     {{ new Date(entry.recordedAt).toLocaleString() }}
                 </p>
                 <Button

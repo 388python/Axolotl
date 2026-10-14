@@ -375,6 +375,11 @@ import { injectDownloadManager } from '@/providers/download-manager'
 import { useTheming } from '@/store/state'
 
 const messages = defineMessages({
+    versionsFailed: {
+        id: 'app.instance.content.versions-failed',
+        defaultMessage:
+            'The release list could not be loaded. Reopen the version selector and try again.',
+    },
     unconfirmedUnlinkHistory: {
         id: 'app.instance.mods.unconfirmed-unlink-history',
         defaultMessage:
@@ -1499,7 +1504,8 @@ async function getUpdaterProjectVersions(
             if (!isActiveUpdateRequest(requestId)) return []
             releases.push(...page.entries)
             cursor = page.cursor
-            if (cursor && cursors.has(cursor)) throw new Error('Release cursor repeated')
+            if (cursor && cursors.has(cursor))
+                throw new Error(formatMessage(messages.versionsFailed))
             if (cursor) cursors.add(cursor)
         } while (cursor)
         if (

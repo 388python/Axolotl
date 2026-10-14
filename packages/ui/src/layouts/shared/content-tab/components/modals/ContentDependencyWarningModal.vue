@@ -266,6 +266,10 @@ const busy = ref(false)
 const error = ref<string | null>(null)
 
 const messages = defineMessages({
+    failed: {
+        id: 'content.dependency-warning.delete-failed',
+        defaultMessage: 'The selected content and dependencies could not be deleted. Try again.',
+    },
     header: {
         id: 'content.dependency-warning.header',
         defaultMessage: 'Dependency warning',
@@ -392,7 +396,8 @@ async function confirm() {
         await nextTick()
         await modal.value?.hide()
     } catch (failure) {
-        error.value = failure instanceof Error ? failure.message : String(failure)
+        console.error('Dependency deletion failed', failure)
+        error.value = formatMessage(messages.failed)
     } finally {
         busy.value = false
     }

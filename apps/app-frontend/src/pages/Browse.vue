@@ -101,6 +101,11 @@ import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { planetMinecraftConnectorAvailable } from '@/helpers/planet-minecraft'
 import {
+    isResourceOperationError,
+    resourceOperationError,
+    resourceSourceName,
+} from '@/helpers/resource-operation-logic'
+import {
     loadResourceSearchCategories,
     parseResourceSearchFilter,
 } from '@/helpers/resource-search-filter'
@@ -757,6 +762,19 @@ const {
 const { offline } = useNetworkStatus()
 
 const messages = defineMessages({
+    serverSourceUnavailable: {
+        id: 'app.browse.server-source-unavailable',
+        defaultMessage: 'The server content source is unavailable. Try again later.',
+    },
+    sourceFailed: {
+        id: 'app.browse.source-failed',
+        defaultMessage:
+            '{source} could not return results for this search. Check the filters or try again later.',
+    },
+    categoriesFailed: {
+        id: 'app.browse.categories-failed',
+        defaultMessage: 'CurseForge categories could not be loaded. Try again later.',
+    },
     confirmedSource: {
         id: 'app.resources.search.confirmed-source',
         defaultMessage: 'Open the confirmed {source} project',
@@ -1829,7 +1847,7 @@ async function search(requestParams: string, signal: AbortSignal) {
             )
             signal.throwIfAborted()
             const result = response?.result
-            if (!result) throw new Error('The server project provider is unavailable')
+            if (!result) throw new Error(formatMessage(messages.serverSourceUnavailable))
             updateServerHits(result.hits)
             return {
                 projectHits: [],
@@ -1920,7 +1938,11 @@ async function search(requestParams: string, signal: AbortSignal) {
     if (page.entries.length === 0 && page.sourceFailures.length > 0)
         throw new Error(
             page.sourceFailures
-                .map((failure) => `${failure.source}: ${failure.message}`)
+                .map((failure) =>
+                    formatMessage(messages.sourceFailed, {
+                        source: resourceSourceName(failure.source),
+                    }),
+                )
                 .join('; '),
         )
     const hits = page.entries
@@ -2001,10 +2023,16 @@ async function search(requestParams: string, signal: AbortSignal) {
         per_page: limit,
         page: resourceSearchPages.indexOf(page) + 1,
         resourceNotice: [
-            ...(categoryFailure ? [categoryFailure] : []),
-            ...page.sourceFailures.map((failure) => `${failure.source}: ${failure.message}`),
+            ...(categoryFailure ? [formatMessage(messages.categoriesFailed)] : []),
+            ...page.sourceFailures.map((failure) =>
+                formatMessage(messages.sourceFailed, {
+                    source: resourceSourceName(failure.source),
+                }),
+            ),
             ...page.exhaustedSources.map((source) =>
-                formatMessage(messages.sourceWindowExhausted, { source }),
+                formatMessage(messages.sourceWindowExhausted, {
+                    source: resourceSourceName(source),
+                }),
             ),
         ].join('; '),
     }
@@ -2055,6 +2083,12 @@ function setDisplayMode(mode: BrowseDisplayMode) {
 }
 
 const searchState = useBrowseSearch({
+    formatError: (error) =>
+        isResourceOperationError(error)
+            ? resourceOperationError(error, formatMessage)
+            : error instanceof Error
+              ? error.message
+              : resourceOperationError(error, formatMessage),
     sortOptions: [
         { name: 'relevance', display: 'Relevance' },
         { name: 'downloads', display: 'Downloads' },

@@ -247,12 +247,12 @@
 						</Transition>
 						-->
                         <OverflowMenu
-                            :tooltip="`More options`"
+                            :tooltip="formatMessage(commonMessages.moreOptionsButton)"
                             :options="[
                                 {
                                     id: 'follow',
                                     disabled: true,
-                                    tooltip: 'Coming soon',
+                                    tooltip: formatMessage(messages.comingSoon),
                                     action: () => {},
                                 },
                                 ...(favoriteSupported
@@ -320,7 +320,9 @@
                                     )
                                 }}
                             </template>
-                            <template #report> <ReportIcon /> Report </template>
+                            <template #report>
+                                <ReportIcon /> {{ formatMessage(commonMessages.reportButton) }}
+                            </template>
                         </OverflowMenu>
                     </template>
                 </ProjectHeader>
@@ -365,7 +367,7 @@
                     :start-server="(version) => openModpackServerFlow(version)"
                 />
             </template>
-            <template v-else> Project data couldn't not be loaded. </template>
+            <template v-else> {{ formatMessage(messages.loadFailed) }} </template>
         </div>
         <SelectedProjectsFloatingBar
             v-if="projectInstallContext"
@@ -553,6 +555,11 @@ const contentFavorites = useContentFavorites()
 void contentFavorites.load().catch(handleError)
 
 const messages = defineMessages({
+    comingSoon: { id: 'app.project.coming-soon', defaultMessage: 'Coming soon' },
+    loadFailed: {
+        id: 'app.project.load-failed',
+        defaultMessage: 'The project could not be loaded. Try again.',
+    },
     backToBrowse: {
         id: 'app.project.install-context.back-to-browse',
         defaultMessage: 'Back to discover',
@@ -1086,7 +1093,7 @@ async function fetchProjectData() {
     projectV3.value = projectV3Result
 
     if (!project) {
-        handleError('Error loading project')
+        handleError(formatMessage(messages.loadFailed))
         return
     }
 

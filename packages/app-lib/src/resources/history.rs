@@ -92,10 +92,15 @@ pub(crate) async fn attach_to_snapshot(
     items: &mut [crate::state::InstanceContentSnapshotItem],
     state: &crate::State,
 ) -> ResourceResult<()> {
-    let payloads: Vec<String> = sqlx::query_scalar("SELECT payload FROM (SELECT payload, ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY recorded_at DESC, rowid DESC) AS rank FROM resource_history WHERE instance_id = ?) WHERE rank = 1").bind(instance_id).fetch_all(&state.pool).await.map_err(db)?;
-    let histories: Vec<ResourceHistoryEntry> = payloads
+    let rows: Vec<(String, i64)> = sqlx::query_as("SELECT payload, backup_available FROM (SELECT payload, backup_available, ROW_NUMBER() OVER (PARTITION BY entry_id ORDER BY recorded_at DESC, rowid DESC) AS rank FROM resource_history WHERE instance_id = ?) WHERE rank = 1").bind(instance_id).fetch_all(&state.pool).await.map_err(db)?;
+    let histories: Vec<ResourceHistoryEntry> = rows
         .into_iter()
-        .filter_map(|payload| serde_json::from_str(&payload).ok())
+        .filter_map(|(payload, available)| {
+            let mut history: ResourceHistoryEntry =
+                serde_json::from_str(&payload).ok()?;
+            history.backup_available &= available != 0;
+            Some(history)
+        })
         .collect();
     if histories.is_empty() {
         return Ok(());

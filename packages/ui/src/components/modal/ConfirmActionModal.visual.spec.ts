@@ -60,7 +60,7 @@ it('unlink confirmation stays open through the request, preserves errors and clo
         await wrapper.findAll('button')[1].trigger('click')
         await flushPromises()
         expect(hide).not.toHaveBeenCalled()
-        expect(wrapper.text()).toContain('database unavailable')
+        expect(wrapper.text()).toContain('The action could not be completed. Try again.')
         await wrapper.findAll('button')[1].trigger('click')
         expect(wrapper.find('[data-locked="true"]').exists()).toBe(true)
         expect(wrapper.findAll('button')[0].attributes('disabled')).toBeDefined()

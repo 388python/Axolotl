@@ -32,7 +32,7 @@
 import { XIcon } from '@modrinth/assets'
 import { nextTick, ref } from 'vue'
 
-import { useVIntl } from '../../composables/i18n'
+import { defineMessages, useVIntl } from '../../composables/i18n'
 import { commonMessages } from '../../utils/common-messages'
 import Button from '../base/buttons/Button.vue'
 import NewModal from './NewModal.vue'
@@ -64,6 +64,12 @@ const emit = defineEmits<{
 }>()
 
 const { formatMessage } = useVIntl()
+const messages = defineMessages({
+    failed: {
+        id: 'modal.confirm-action.failed',
+        defaultMessage: 'The action could not be completed. Try again.',
+    },
+})
 const modal = ref<InstanceType<typeof NewModal>>()
 const busy = ref(false)
 const error = ref<string | null>(null)
@@ -84,7 +90,8 @@ async function onConfirm() {
         await nextTick()
         await modal.value?.hide()
     } catch (failure) {
-        error.value = failure instanceof Error ? failure.message : String(failure)
+        console.error('Confirmation action failed', failure)
+        error.value = formatMessage(messages.failed)
     } finally {
         busy.value = false
     }

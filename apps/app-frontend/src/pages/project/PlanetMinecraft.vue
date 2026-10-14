@@ -43,6 +43,11 @@ const manualDownload = ref<{
 } | null>(null)
 
 const messages = defineMessages({
+    unavailable: {
+        id: 'app.project.planet-minecraft.unavailable',
+        defaultMessage:
+            'This Planet Minecraft project is unavailable. Reopen the project and try again.',
+    },
     loading: {
         id: 'app.project.planet-minecraft.loading',
         defaultMessage: 'Loading Planet Minecraft project…',
@@ -105,7 +110,7 @@ onScopeDispose(() => {
 })
 
 function createRequest(version: PlanetMinecraftVersion): PlanetMinecraftContentInstallRequest {
-    if (!project.value) throw new Error('Planet Minecraft project is unavailable')
+    if (!project.value) throw new Error(formatMessage(messages.unavailable))
     return { projectId: project.value.id, versionId: version.id, projectType: 'mod' }
 }
 

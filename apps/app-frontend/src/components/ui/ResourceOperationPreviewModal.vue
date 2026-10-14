@@ -4,7 +4,7 @@ import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
 import { refresh_content } from '@/helpers/instance'
-import { resourceOperationError } from '@/helpers/resource-operation-logic'
+import { resourceOperationError, resourceSourceName } from '@/helpers/resource-operation-logic'
 import {
     type ResourceDependencyNode,
     resourceGet,
@@ -23,6 +23,18 @@ import { get_instance_worlds } from '@/helpers/worlds'
 
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
+    invalidPath: {
+        id: 'app.resources.operation.invalid-path',
+        defaultMessage: 'The file path is invalid or cannot be used for this installation.',
+    },
+    identityUnconfirmed: {
+        id: 'app.resources.operation.identity-unconfirmed',
+        defaultMessage: 'The selected resource could not be identified reliably.',
+    },
+    staleRevision: {
+        id: 'app.resources.operation.stale-revision',
+        defaultMessage: 'The instance changed. Refresh this preview before continuing.',
+    },
     world: { id: 'app.resources.operation.world', defaultMessage: 'Target world for data packs' },
     noWorlds: {
         id: 'app.resources.operation.no-worlds',
@@ -176,14 +188,14 @@ function issueNotice(issue: PlanIssue): Notice | null {
                     ? formatMessage(messages.pathOccupied, {
                           path: issue.message.slice('target already exists: '.length),
                       })
-                    : issue.message
+                    : formatMessage(messages.invalidPath)
             case 'sourceUnavailable':
                 return issue.blocking
                     ? formatMessage(messages.sourceUnavailable)
                     : formatMessage(messages.unresolvedOptional)
             case 'missingDependency':
                 if (node?.state === 'missing') return formatMessage(messages.unselectedDependency)
-                return `${formatMessage(messages.missingDependency)} ${issue.message}`
+                return formatMessage(messages.missingDependency)
             case 'versionConflict':
                 if (
                     issue.message ===
@@ -195,8 +207,12 @@ function issueNotice(issue: PlanIssue): Notice | null {
                     : formatMessage(messages.unresolvedOptional)
             case 'artifactMismatch':
                 return formatMessage(messages.artifactMismatch)
+            case 'identityUnconfirmed':
+                return formatMessage(messages.identityUnconfirmed)
+            case 'staleRevision':
+                return formatMessage(messages.staleRevision)
             default:
-                return issue.message
+                return resourceOperationError(issue.message, formatMessage)
         }
     })()
     return { text, blocking: issue.blocking }
@@ -339,7 +355,8 @@ async function run(action: (signal: AbortSignal) => Promise<ResourceOperationPla
         plan.value = value
         void enrich(value, signal, current)
     } catch (failure) {
-        if (current === generation && !signal.aborted) error.value = resourceOperationError(failure)
+        if (current === generation && !signal.aborted)
+            error.value = resourceOperationError(failure, formatMessage)
     } finally {
         if (current === generation) busy.value = false
     }
@@ -393,7 +410,8 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
                     )
                 })
                 .catch((failure) => {
-                    if (current === generation) error.value = resourceOperationError(failure)
+                    if (current === generation)
+                        error.value = resourceOperationError(failure, formatMessage)
                 })
                 .finally(() => {
                     if (current === generation) busy.value = false
@@ -467,7 +485,7 @@ async function apply() {
             await refresh()
             return
         }
-        error.value = resourceOperationError(failure)
+        error.value = resourceOperationError(failure, formatMessage)
         retryAction = apply
         queueFailed.value = true
     } finally {
@@ -626,7 +644,9 @@ defineExpose({ show, showInstall, showInstallSelection })
                 <p v-if="node.state !== 'satisfied' && node.artifact" class="m-0 break-all text-sm">
                     {{
                         formatMessage(messages.artifact, {
-                            source: node.artifact.reference.release.project.source,
+                            source: resourceSourceName(
+                                node.artifact.reference.release.project.source,
+                            ),
                             release: node.artifact.reference.release.releaseId,
                             file: node.artifact.fileName ?? '',
                         })

@@ -28,6 +28,7 @@ impl ResourceService {
         let mut results = self
             .query_many(source, queries.clone(), policy, cancel)
             .await;
+        let mut offline = std::collections::HashSet::new();
         if policy == CachePolicy::UseFresh && !cancel.is_cancelled() {
             let failed: Vec<_> = results.iter().enumerate().filter_map(|(index, result)| matches!(result, Err(error) if !matches!(error, ResourceError::Canceled)).then_some(index)).collect();
             let cached = self
@@ -46,6 +47,7 @@ impl ResourceService {
                     && !matches!(cached.value, ProviderValue::NotFound)
                 {
                     results[index] = Ok(cached);
+                    offline.insert(index);
                 }
             }
         }
@@ -59,11 +61,19 @@ impl ResourceService {
                 Ok(QueryOutcome {
                     from_cache: true,
                     value: ProviderValue::Project(document),
-                }) if document.protocol.is_none() => Some(index),
+                }) if document.protocol.is_none()
+                    && !offline.contains(&index) =>
+                {
+                    Some(index)
+                }
                 Ok(QueryOutcome {
                     from_cache: true,
                     value: ProviderValue::Release(document),
-                }) if document.protocol.is_none() => Some(index),
+                }) if document.protocol.is_none()
+                    && !offline.contains(&index) =>
+                {
+                    Some(index)
+                }
                 _ => None,
             })
             .collect();
@@ -75,7 +85,12 @@ impl ResourceService {
             self.query_many(source, refresh, CachePolicy::ForceRefresh, cancel)
                 .await,
         ) {
-            results[index] = value;
+            match value {
+                Err(
+                    ResourceError::Network { .. } | ResourceError::Unavailable,
+                ) if policy == CachePolicy::UseFresh => {}
+                value => results[index] = value,
+            }
         }
         results
     }
@@ -250,11 +265,26 @@ impl ResourceService {
         let mut source_failures = Vec::new();
         let mut metadata = Vec::new();
         let mut last_error = ResourceError::Unavailable;
-        for project in projects {
-            match self.project_document(&project, locator.clone().filter(|_| matches!(reference, ResourceRef::Source { project: exact } if exact == &project)), cancel).await {
+        let requests = projects.iter().map(|project| {
+            let locator = locator.clone().filter(|_| matches!(reference, ResourceRef::Source { project: exact } if exact == project));
+            self.project_document(project, locator, cancel)
+        });
+        for (project, result) in projects
+            .iter()
+            .zip(futures::future::join_all(requests).await)
+        {
+            match result {
                 Ok(document) => metadata.push(document.metadata),
-                Err(ResourceError::Canceled) => return Err(ResourceError::Canceled),
-                Err(error) => { source_failures.push(super::search::source_failure(project.source.clone(), error.clone())); last_error = error; },
+                Err(ResourceError::Canceled) => {
+                    return Err(ResourceError::Canceled);
+                }
+                Err(error) => {
+                    source_failures.push(super::search::source_failure(
+                        project.source.clone(),
+                        error.clone(),
+                    ));
+                    last_error = error;
+                }
             }
         }
         if metadata.is_empty() {

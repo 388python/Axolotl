@@ -63,6 +63,10 @@ import SymlinkWarningAdmonition from './SymlinkWarningAdmonition.vue'
 const { formatMessage } = useVIntl()
 
 const messages = defineMessages({
+    failed: {
+        id: 'content.confirm-deletion.failed',
+        defaultMessage: 'The selected content could not be deleted. Try again.',
+    },
     header: {
         id: 'content.confirm-deletion.header',
         defaultMessage: 'Delete {itemType}',
@@ -131,7 +135,8 @@ async function confirm() {
         await nextTick()
         await modal.value?.hide()
     } catch (failure) {
-        error.value = failure instanceof Error ? failure.message : String(failure)
+        console.error('Content deletion failed', failure)
+        error.value = formatMessage(messages.failed)
     } finally {
         busy.value = false
     }

@@ -272,7 +272,8 @@ export function createContentSelection({
 
     async function add(item: ContentSelectionItem) {
         const instance = targetInstance.value
-        if (!instance) throw new Error('No target instance selected')
+        if (!instance) throw new Error(formatMessage(messages.noTarget))
+        if (item.targetInstanceId && item.targetInstanceId !== instance.id) return false
         const generation = selectionGeneration
         const isCurrent = () =>
             generation === selectionGeneration && targetInstance.value?.id === instance.id
@@ -290,61 +291,76 @@ export function createContentSelection({
                   })
                 : await resolveSelectionIdentity(item))
         if (!isCurrent()) return false
-        const conflicts = await findConflicts({ ...item, identity }, instance, {
-            skipInstalled: versionPending,
-        })
-        if (!isCurrent()) return false
-        const hardConflict = conflicts.find((conflict) => conflict.match.source !== 'heuristic')
-        if (hardConflict) {
-            addNotification({
-                title: formatMessage(messages.duplicateContent, { project: item.title }),
-                type: 'error',
+        const reviewedConflicts = new Set<string>()
+        while (isCurrent()) {
+            const currentItems = items.value
+            const conflicts = await findConflicts({ ...item, identity }, instance, {
+                skipInstalled: versionPending,
             })
-            return false
-        }
-        const heuristicConflict = conflicts.find(
-            (conflict) => conflict.match.source === 'heuristic',
-        )
-        if (heuristicConflict) {
-            if (!previewModal || !heuristicConflict.existing) {
+            if (!isCurrent()) return false
+            if (currentItems !== items.value) continue
+            const hardConflict = conflicts.find((conflict) => conflict.match.source !== 'heuristic')
+            if (hardConflict) {
                 addNotification({
-                    title: formatMessage(messages.conflictUnavailable),
+                    title: formatMessage(messages.duplicateContent, { project: item.title }),
                     type: 'error',
                 })
                 return false
             }
-            const confirmed = await previewModal.showConflict({
-                candidate: {
-                    title: item.title,
-                    provider: item.provider,
-                    contentType: item.contentType,
-                    iconUrl: item.iconUrl,
-                },
-                existing: [
-                    {
-                        title: heuristicConflict.existing.title ?? '',
-                        provider: heuristicConflict.existing.provider,
-                        fileName: heuristicConflict.existing.fileName ?? undefined,
-                    },
-                ],
-                source: 'heuristic',
-                confidence: heuristicConflict.match.confidence === 'high' ? 'high' : 'possible',
+            const heuristicConflict = conflicts.find(
+                (conflict) => conflict.match.source === 'heuristic',
+            )
+            if (heuristicConflict) {
+                const conflictKey = selectedItemKey(
+                    heuristicConflict.existing.provider,
+                    heuristicConflict.existing.projectId,
+                )
+                if (!reviewedConflicts.has(conflictKey)) {
+                    if (!previewModal || !heuristicConflict.existing) {
+                        addNotification({
+                            title: formatMessage(messages.conflictUnavailable),
+                            type: 'error',
+                        })
+                        return false
+                    }
+                    const confirmed = await previewModal.showConflict({
+                        candidate: {
+                            title: item.title,
+                            provider: item.provider,
+                            contentType: item.contentType,
+                            iconUrl: item.iconUrl,
+                        },
+                        existing: [
+                            {
+                                title: heuristicConflict.existing.title ?? '',
+                                provider: heuristicConflict.existing.provider,
+                                fileName: heuristicConflict.existing.fileName ?? undefined,
+                            },
+                        ],
+                        source: 'heuristic',
+                        confidence:
+                            heuristicConflict.match.confidence === 'high' ? 'high' : 'possible',
+                    })
+                    if (!confirmed || !isCurrent()) return false
+                    reviewedConflicts.add(conflictKey)
+                }
+            }
+            if (currentItems !== items.value) continue
+            const next = new Map(items.value)
+            next.set(item.key, {
+                ...item,
+                identity,
+                sha1: identity.sha1,
+                targetInstanceId: instance.id,
+                versionPending,
             })
-            if (!confirmed || !isCurrent()) return false
+            items.value = next
+            const nextErrors = new Set(errorKeys.value)
+            nextErrors.delete(item.key)
+            errorKeys.value = nextErrors
+            return true
         }
-        const next = new Map(items.value)
-        next.set(item.key, {
-            ...item,
-            identity,
-            sha1: identity.sha1,
-            targetInstanceId: instance.id,
-            versionPending,
-        })
-        items.value = next
-        const nextErrors = new Set(errorKeys.value)
-        nextErrors.delete(item.key)
-        errorKeys.value = nextErrors
-        return true
+        return false
     }
 
     function remove(key: string) {

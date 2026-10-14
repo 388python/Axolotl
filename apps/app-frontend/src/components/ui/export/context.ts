@@ -166,7 +166,7 @@ export function createExportContext(
             resolution.value = result
         } catch (failure) {
             if (generation === refreshGeneration && !active.signal.aborted)
-                refreshError.value = resourceOperationError(failure)
+                refreshError.value = resourceOperationError(failure, formatMessage)
         } finally {
             if (generation === refreshGeneration) refreshing.value = false
         }
@@ -254,7 +254,7 @@ export function createExportContext(
             void refresh()
         } catch (failure) {
             if (generation === request && !activeController.signal.aborted)
-                error.value = resourceOperationError(failure)
+                error.value = resourceOperationError(failure, formatMessage)
         } finally {
             if (generation === request) scanning.value = false
         }
@@ -332,7 +332,7 @@ export function createExportContext(
             modal.value?.hide()
         } catch (failure) {
             if (generation !== activeGeneration) return
-            exportError.value = resourceOperationError(failure)
+            exportError.value = resourceOperationError(failure, formatMessage)
             handleError(failure)
         } finally {
             exporting.value = false

@@ -49,6 +49,10 @@ const manualDownload = ref<{
 } | null>(null)
 
 const messages = defineMessages({
+    unavailable: {
+        id: 'app.project.mcarchive.unavailable',
+        defaultMessage: 'This MCArchive project is unavailable. Reopen the project and try again.',
+    },
     loading: {
         id: 'app.project.mcarchive.loading',
         defaultMessage: 'Loading MCArchive project…',
@@ -129,7 +133,7 @@ onScopeDispose(() => {
 })
 
 function createRequest(version: McArchiveModVersion, file: McArchiveFile) {
-    if (!project.value) throw new Error('MCArchive project is unavailable')
+    if (!project.value) throw new Error(formatMessage(messages.unavailable))
     return {
         projectId: project.value.uuid,
         projectSlug: project.value.slug,

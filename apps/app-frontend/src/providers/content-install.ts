@@ -172,13 +172,16 @@ export function createContentInstall(opts: {
             removeInstallingItems(event.instance_id, event.project_ids ?? [])
             markInstanceContentInstallFailed(event.instance_id)
             markInstanceContentChanged(event.instance_id)
-            opts.handleError(event.message ?? 'Failed to install content')
+            opts.handleError(
+                event.message ?? formatMessage(contentInstallMessages.errorMessages.installFailed),
+            )
         }
     }).catch(opts.handleError)
 
     let modalRef: ModalRef | null = null
     function hideContentInstallModal() {
         contentInstallModalOpen = false
+        loading.value = false
         modalRef?.hide()
     }
     let resourcePreview: InstanceType<typeof ResourceOperationPreviewModal> | null = null
@@ -213,6 +216,7 @@ export function createContentInstall(opts: {
         beginInstallSession,
         settleCurrentCallback,
         settleInstallSession,
+        cancelCurrentSession,
         currentId: currentInstallSessionId,
         setCallback: setCurrentInstallCallback,
     } = installSession
@@ -236,6 +240,8 @@ export function createContentInstall(opts: {
                 if (sessionId === currentSessionId()) {
                     hideContentInstallModal()
                     settleInstallSession(sessionId)
+                } else {
+                    return
                 }
             } else {
                 callback()
@@ -352,7 +358,7 @@ export function createContentInstall(opts: {
             } else if (project.organization) {
                 get_organization(project.organization)
                     .then((org: { id: string; slug: string; name: string; icon_url?: string }) => {
-                        if (projectInfo.value) {
+                        if (sessionId === currentSessionId() && projectInfo.value) {
                             const orgSlug = org.slug ?? org.id
                             projectInfo.value = {
                                 ...projectInfo.value,
@@ -377,7 +383,7 @@ export function createContentInstall(opts: {
                             }[],
                         ) => {
                             const owner = members.find((m) => m.is_owner)
-                            if (owner && projectInfo.value) {
+                            if (sessionId === currentSessionId() && owner && projectInfo.value) {
                                 projectInfo.value = {
                                     ...projectInfo.value,
                                     owner: {
@@ -478,14 +484,14 @@ export function createContentInstall(opts: {
                 defaultTab.value = 'new'
             }
         } catch (err) {
-            opts.handleError(err)
+            if (sessionId === currentSessionId()) opts.handleError(err)
         } finally {
-            loading.value = false
+            if (sessionId === currentSessionId()) loading.value = false
         }
     }
 
-    async function showContentInstallLoading(callback: ContentInstallCallback) {
-        const sessionId = beginInstallSession(callback)
+    async function showContentInstallLoading(sessionId: number) {
+        if (sessionId !== currentSessionId()) return
         currentTargetMode = 'content'
         currentWorldFileId = null
         instances.value = []
@@ -497,10 +503,10 @@ export function createContentInstall(opts: {
         defaultTab.value = 'existing'
 
         await nextTick()
+        if (sessionId !== currentSessionId()) return
         contentInstallModalOpen = true
         modalRef?.show()
         trackEvent('ProjectInstallStart', { source: 'ProjectInstallModal' })
-        return sessionId
     }
 
     function rememberManualDownloads(
@@ -611,11 +617,13 @@ export function createContentInstall(opts: {
         const curseForgeProject = currentCurseForgeProject
         const file = currentCurseForgeFiles.get(version.id)
         if (!curseForgeProject || !file) {
-            throw new Error('CurseForge project or file was not loaded')
+            throw new Error(
+                formatMessage(contentInstallMessages.errorMessages.missingCurseForgeFile),
+            )
         }
 
         if (project.project_type !== 'modpack')
-            throw new Error('Resource installations require a reviewed resource plan')
+            throw new Error(formatMessage(contentInstallMessages.errorMessages.reviewRequired))
         const result = (
             await installCurseForgeModpack({
                 instanceId: instance.id,
@@ -672,7 +680,8 @@ export function createContentInstall(opts: {
         version: Labrinth.Versions.v2.Version,
         provider: 'modrinth' | 'curseforge',
     ) {
-        if (!resourcePreview) throw new Error('Resource install preview is unavailable')
+        if (!resourcePreview)
+            throw new Error(formatMessage(contentInstallMessages.errorMessages.previewUnavailable))
         const projectId =
             provider === 'curseforge' ? project.id.replace(/^curseforge:/, '') : project.id
         const resourceType = (
@@ -684,7 +693,8 @@ export function createContentInstall(opts: {
                 shader: 'shader',
             } as Record<string, ResourceType>
         )[project.project_type]
-        if (!resourceType) throw new Error('Unsupported resource install type')
+        if (!resourceType)
+            throw new Error(formatMessage(contentInstallMessages.errorMessages.unsupportedType))
         const result = await resourcePreview.showInstallSelection({
             instanceId: instance.id,
             instanceName: instance.name,
@@ -751,7 +761,7 @@ export function createContentInstall(opts: {
         const selectedInstance = instanceMap[instance.id]
         const storeInstance = instances.value.find((i) => i.id === instance.id)
         if (!currentProject || !selectedInstance) {
-            opts.handleError('No project or instance found')
+            opts.handleError(formatMessage(contentInstallMessages.errorMessages.missingTarget))
             settleCurrentCallback()
             return
         }
@@ -799,7 +809,7 @@ export function createContentInstall(opts: {
                     onIncompatibleInstall,
                 )
             } else {
-                opts.handleError('No version found')
+                opts.handleError(formatMessage(contentInstallMessages.errorMessages.missingVersion))
                 settleCurrentCallback()
             }
             return
@@ -896,7 +906,9 @@ export function createContentInstall(opts: {
                 primaryInstalled = result.primaryInstalled
                 removeInstallingItems(instance.id, plannedProjectIds)
             } else {
-                throw new Error('Unexpected content provider')
+                throw new Error(
+                    formatMessage(contentInstallMessages.errorMessages.unsupportedProvider),
+                )
             }
             if (storeInstance) {
                 storeInstance.installed = primaryInstalled
@@ -1127,7 +1139,9 @@ export function createContentInstall(opts: {
                 installedProjectIds = result.installedProjectIds
                 removeInstallingItems(id, [currentProject!.id])
             } else {
-                throw new Error('Unexpected content provider')
+                throw new Error(
+                    formatMessage(contentInstallMessages.errorMessages.unsupportedProvider),
+                )
             }
             await opts.router.push(
                 currentProvider === 'curseforge' && currentProject?.project_type === 'modpack'
@@ -1168,7 +1182,8 @@ export function createContentInstall(opts: {
     function handleCancel() {
         if (!contentInstallModalOpen) return
         contentInstallModalOpen = false
-        settleCurrentCallback()
+        loading.value = false
+        cancelCurrentSession()
     }
 
     async function installInternal(
@@ -1184,32 +1199,33 @@ export function createContentInstall(opts: {
             showProjectInfo?: boolean
         },
     ) {
-        let modalSessionId: number | null = null
+        const modalSessionId = instanceId ? null : beginInstallSession(callback)
+        const requestCallback: ContentInstallCallback =
+            modalSessionId === null
+                ? callback
+                : (...args) => settleInstallSession(modalSessionId, ...args)
+        if (modalSessionId !== null && contentInstallModalOpen) hideContentInstallModal()
         currentProvider = 'modrinth'
         currentTargetMode = 'content'
         currentWorldFileId = null
         currentCurseForgeProject = null
         currentCurseForgeFiles = new Map()
         const shouldShowInstallTargetModal = !instanceId
-        const project: Labrinth.Projects.v2.Project = await get_project(projectId).catch(
-            (error) => {
-                if (modalSessionId === currentSessionId()) {
-                    hideContentInstallModal()
-                    settleCurrentCallback()
-                }
-                throw error
-            },
-        )
+        const project: Labrinth.Projects.v2.Project = await get_project(projectId)
+        if (modalSessionId !== null && modalSessionId !== currentSessionId()) return
         if (!project) {
             if (modalSessionId === currentSessionId()) {
                 hideContentInstallModal()
                 settleCurrentCallback()
             }
-            opts.handleError(`Project not found: '${projectId}'`)
+            opts.handleError(
+                formatMessage(contentInstallMessages.errorMessages.projectNotFound, {
+                    project: projectId,
+                }),
+            )
+            requestCallback()
             return
         }
-        if (modalSessionId !== null && modalSessionId !== currentSessionId()) return
-        let requestCallback: ContentInstallCallback = callback
 
         if (project.project_type === 'modpack') {
             if (shouldShowInstallTargetModal) hideContentInstallModal()
@@ -1219,6 +1235,7 @@ export function createContentInstall(opts: {
                 >,
                 list(),
             ])
+            if (modalSessionId !== null && modalSessionId !== currentSessionId()) return
             const sortedVersions = versions.sort(
                 (a, b) => dayjs(b.date_published).valueOf() - dayjs(a.date_published).valueOf(),
             )
@@ -1252,17 +1269,18 @@ export function createContentInstall(opts: {
             return
         }
 
-        if (shouldShowInstallTargetModal) {
-            modalSessionId = await showContentInstallLoading(callback)
-            requestCallback = (...args) => settleInstallSession(modalSessionId!, ...args)
+        if (modalSessionId !== null) {
+            await showContentInstallLoading(modalSessionId)
+            if (modalSessionId !== currentSessionId()) return
         }
 
         if (instanceId) {
             const [instanceOrNull, versions] = await Promise.all([
                 get(instanceId),
-                get_version_many(project.versions, 'must_revalidate') as Promise<
-                    Labrinth.Versions.v2.Version[]
-                >,
+                get_version_many(
+                    versionId ? [versionId] : project.versions,
+                    'must_revalidate',
+                ) as Promise<Labrinth.Versions.v2.Version[]>,
             ])
             if (!instanceOrNull) {
                 callback()
@@ -1307,8 +1325,11 @@ export function createContentInstall(opts: {
         }
 
         let versions = (
-            (await get_version_many(project.versions)) as Labrinth.Versions.v2.Version[]
+            (await get_version_many(
+                versionId ? [versionId] : project.versions,
+            )) as Labrinth.Versions.v2.Version[]
         ).sort((a, b) => dayjs(b.date_published).valueOf() - dayjs(a.date_published).valueOf())
+        if (modalSessionId !== currentSessionId()) return
         if (versionId) versions = versions.filter((v) => v.id === versionId)
         await showModInstallModal(project, versions, callback, hints, true)
     }
@@ -1326,26 +1347,30 @@ export function createContentInstall(opts: {
             showProjectInfo?: boolean
         },
     ) {
-        let modalSessionId: number | null = null
+        const modalSessionId = instanceId ? null : beginInstallSession(callback)
+        const requestCallback: ContentInstallCallback =
+            modalSessionId === null
+                ? callback
+                : (...args) => settleInstallSession(modalSessionId, ...args)
+        if (modalSessionId !== null && contentInstallModalOpen) hideContentInstallModal()
         currentTargetMode = 'content'
         currentWorldFileId = null
         const numericProjectId = Number(projectId.replace(/^curseforge:/, ''))
         if (!Number.isFinite(numericProjectId)) {
-            throw new Error('Invalid CurseForge project ID')
+            throw new Error(
+                formatMessage(contentInstallMessages.errorMessages.invalidCurseForgeProject),
+            )
         }
         const shouldShowInstallTargetModal = !instanceId
         const [curseForgeProject, fileResponse] = await Promise.all([
             getCurseForgeProject(numericProjectId),
-            getCurseForgeFiles(numericProjectId, { index: 0, pageSize: 50 }),
-        ]).catch((error) => {
-            if (modalSessionId === currentSessionId()) {
-                hideContentInstallModal()
-                settleCurrentCallback()
-            }
-            throw error
-        })
+            versionId
+                ? getCurseForgeFile(numericProjectId, Number(versionId)).then((file) => ({
+                      files: [file],
+                  }))
+                : getCurseForgeFiles(numericProjectId, { index: 0, pageSize: 50 }),
+        ])
         if (modalSessionId !== null && modalSessionId !== currentSessionId()) return
-        let requestCallback: ContentInstallCallback = callback
         const availableFiles = fileResponse.files.filter((file) => file.isAvailable)
         const project = mapCurseForgeProject(curseForgeProject, availableFiles)
         let versions = availableFiles
@@ -1356,7 +1381,7 @@ export function createContentInstall(opts: {
         }
         if (versions.length === 0) {
             if (shouldShowInstallTargetModal) hideContentInstallModal()
-            throw new Error('No CurseForge files are available for this project')
+            throw new Error(formatMessage(contentInstallMessages.errorMessages.noCurseForgeFiles))
         }
 
         currentProvider = 'curseforge'
@@ -1368,6 +1393,7 @@ export function createContentInstall(opts: {
         if (project.project_type === 'modpack') {
             if (shouldShowInstallTargetModal) hideContentInstallModal()
             const packs = await list()
+            if (modalSessionId !== null && modalSessionId !== currentSessionId()) return
             pendingModpackInstall = {
                 project,
                 version: versionId ?? versions[0]?.id ?? '',
@@ -1399,9 +1425,9 @@ export function createContentInstall(opts: {
             return
         }
 
-        if (shouldShowInstallTargetModal) {
-            modalSessionId = await showContentInstallLoading(callback)
-            requestCallback = (...args) => settleInstallSession(modalSessionId!, ...args)
+        if (modalSessionId !== null) {
+            await showContentInstallLoading(modalSessionId)
+            if (modalSessionId !== currentSessionId()) return
         }
 
         if (instanceId) {
@@ -1505,9 +1531,9 @@ export function createContentInstall(opts: {
             })
             instanceMap = newInstanceMap
         } catch (err) {
-            opts.handleError(err)
+            if (sessionId === currentSessionId()) opts.handleError(err)
         } finally {
-            loading.value = false
+            if (sessionId === currentSessionId()) loading.value = false
         }
     }
 
@@ -1683,12 +1709,16 @@ export function createContentInstall(opts: {
                     currentVersions[0]
                 if (!selectedVersion || !Number.isFinite(numericProjectId)) {
                     callback()
-                    throw new Error('Unable to reinstall the CurseForge modpack')
+                    throw new Error(
+                        formatMessage(contentInstallMessages.errorMessages.reinstallUnavailable),
+                    )
                 }
                 const gameVersion = selectedVersion.game_versions[0]
                 if (!gameVersion) {
                     callback()
-                    throw new Error('The CurseForge modpack does not declare a Minecraft version')
+                    throw new Error(
+                        formatMessage(contentInstallMessages.errorMessages.missingGameVersion),
+                    )
                 }
                 const loader =
                     (selectedVersion.loaders.find((candidate) =>

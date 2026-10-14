@@ -100,7 +100,7 @@ async function scan() {
             value.some((file) => file.id === id && file.exists && file.recognized),
         )
     } catch (failure) {
-        if (current === generation) error.value = resourceOperationError(failure)
+        if (current === generation) error.value = resourceOperationError(failure, formatMessage)
     } finally {
         if (current === generation) busy.value = false
     }
@@ -120,7 +120,7 @@ async function review() {
         const value = await resourcePrepareHistoryCleanup(instanceId, [...selected.value])
         if (current === generation) plan.value = value
     } catch (failure) {
-        if (current === generation) error.value = resourceOperationError(failure)
+        if (current === generation) error.value = resourceOperationError(failure, formatMessage)
     } finally {
         if (current === generation) busy.value = false
     }
@@ -144,7 +144,9 @@ async function cleanup() {
             },
         )
         if (result.failures.length)
-            error.value = result.failures.map(([, failure]) => failure).join('\n')
+            error.value = result.failures
+                .map(([, failure]) => resourceOperationError(failure, formatMessage))
+                .join('\n')
         const affectedPaths = new Set(reviewed.files.map((file) => file.relativePath))
         const affected = new Set(
             files.value
@@ -157,7 +159,7 @@ async function cleanup() {
         )
         emit('cleaned')
     } catch (failure) {
-        if (current === generation) error.value = resourceOperationError(failure)
+        if (current === generation) error.value = resourceOperationError(failure, formatMessage)
     } finally {
         if (current === generation) {
             busy.value = false

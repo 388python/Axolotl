@@ -130,7 +130,7 @@ async function load() {
         const result = await resourceChangelog(props.release, request.signal)
         request.signal.throwIfAborted()
         if (result.source !== props.release.project.source)
-            throw new Error('Changelog source changed')
+            throw new Error(formatMessage(messages.failed))
         text.value = result
         void translateBody(true)
     } catch {

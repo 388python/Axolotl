@@ -84,6 +84,7 @@ function handleVisibleTableItems(visibleTableItems: ContentCardTableItem[]) {
 }
 
 const messages = defineMessages({
+    scrollToTop: { id: 'content.page-layout.scroll-to-top', defaultMessage: 'Scroll to top' },
     updateDuplicateGroup: {
         id: 'content.page-layout.update-duplicate-group',
         defaultMessage: 'Review updates for all {count, number} copies',
@@ -1415,7 +1416,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
             <button
                 v-if="showScrollToTop"
                 class="scroll-to-top-btn"
-                aria-label="Scroll to top"
+                :aria-label="formatMessage(messages.scrollToTop)"
                 @click="scrollToTop"
             >
                 <ChevronUpIcon class="size-5" />
