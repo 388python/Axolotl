@@ -8,6 +8,33 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceOperationProgress {
+    pub plan_id: PlanId,
+    pub revision: u32,
+    pub node: ResourceDependencyNode,
+    pub metadata: Option<SourceProjectMetadata>,
+}
+
+pub type OperationProgress<'a> =
+    Option<&'a (dyn Fn(ResourceOperationProgress) + Send + Sync)>;
+
+fn report_node(
+    plan: &ResourceOperationPlan,
+    metadata: Option<SourceProjectMetadata>,
+    progress: OperationProgress<'_>,
+) {
+    if let (Some(progress), Some(node)) = (progress, plan.nodes.last()) {
+        progress(ResourceOperationProgress {
+            plan_id: plan.id.clone(),
+            revision: plan.revision,
+            node: node.clone(),
+            metadata,
+        });
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct OperationDraft {
     #[serde(default)]
     pub naming: super::naming::NamingPreferences,
@@ -881,12 +908,27 @@ impl ResourceService {
         Ok(Some(selection))
     }
 
+    #[cfg(test)]
     pub(crate) async fn build_operation(
+        self: &Arc<Self>,
+        draft: OperationDraft,
+        target: &ResourceTarget,
+        installed: &[InstalledResource],
+        cancel: &CancellationToken,
+    ) -> ResourceResult<OperationDraft> {
+        self.build_operation_with_progress(
+            draft, target, installed, cancel, None,
+        )
+        .await
+    }
+
+    pub(crate) async fn build_operation_with_progress(
         self: &Arc<Self>,
         mut draft: OperationDraft,
         target: &ResourceTarget,
         installed: &[InstalledResource],
         cancel: &CancellationToken,
+        progress: OperationProgress<'_>,
     ) -> ResourceResult<OperationDraft> {
         let preferred = self.preferred_source().await?;
         draft.plan.nodes.clear();
@@ -943,7 +985,7 @@ impl ResourceService {
                 }
                 continue;
             }
-            let _metadata = match self.canonical(&mut selection, cancel).await {
+            let metadata = match self.canonical(&mut selection, cancel).await {
                 Ok(metadata) => metadata,
                 Err(ResourceError::Canceled) => {
                     return Err(ResourceError::Canceled);
@@ -1525,6 +1567,7 @@ impl ResourceService {
                 node_id: selection.id.clone(),
                 basis,
             });
+            report_node(&draft.plan, Some(metadata), progress);
             if let Some(root) = draft
                 .plan
                 .selections
@@ -1760,6 +1803,7 @@ impl ResourceService {
                 },
                 declared_compatibility: None,
             });
+            report_node(&draft.plan, None, progress);
             if satisfied.is_empty() {
                 candidates.push(candidate);
             }
@@ -2017,6 +2061,25 @@ pub async fn prepare(
     install_dependencies: bool,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceOperationPlan> {
+    prepare_with_progress(
+        instance_id,
+        intent,
+        selections,
+        install_dependencies,
+        cancel,
+        None,
+    )
+    .await
+}
+
+pub async fn prepare_with_progress(
+    instance_id: String,
+    intent: ResourceOperationIntent,
+    selections: Vec<ResourceSelection>,
+    install_dependencies: bool,
+    cancel: &CancellationToken,
+    progress: OperationProgress<'_>,
+) -> ResourceResult<ResourceOperationPlan> {
     prepare_with_installed(
         instance_id,
         intent,
@@ -2024,6 +2087,7 @@ pub async fn prepare(
         install_dependencies,
         cancel,
         None,
+        progress,
     )
     .await
 }
@@ -2035,6 +2099,7 @@ pub(crate) async fn prepare_with_installed(
     install_dependencies: bool,
     cancel: &CancellationToken,
     verified: Option<&[InstalledResource]>,
+    progress: OperationProgress<'_>,
 ) -> ResourceResult<ResourceOperationPlan> {
     match intent {
         ResourceOperationIntent::Install
@@ -2127,7 +2192,9 @@ pub(crate) async fn prepare_with_installed(
     let draft = state
         .resources()
         .await?
-        .build_operation(draft, &target, &installed, cancel)
+        .build_operation_with_progress(
+            draft, &target, &installed, cancel, progress,
+        )
         .await?;
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);
@@ -2155,13 +2222,29 @@ pub(crate) async fn load(
 }
 
 impl ResourceService {
+    #[cfg(test)]
     pub(crate) async fn revise_operation(
+        self: &Arc<Self>,
+        draft: OperationDraft,
+        decisions: Vec<ResourcePlanDecision>,
+        target: &ResourceTarget,
+        installed: &[InstalledResource],
+        cancel: &CancellationToken,
+    ) -> ResourceResult<OperationDraft> {
+        self.revise_operation_with_progress(
+            draft, decisions, target, installed, cancel, None,
+        )
+        .await
+    }
+
+    pub(crate) async fn revise_operation_with_progress(
         self: &Arc<Self>,
         mut draft: OperationDraft,
         decisions: Vec<ResourcePlanDecision>,
         target: &ResourceTarget,
         installed: &[InstalledResource],
         cancel: &CancellationToken,
+        progress: OperationProgress<'_>,
     ) -> ResourceResult<OperationDraft> {
         let added_dependency = decisions.iter().any(|decision| {
             matches!(
@@ -2256,7 +2339,9 @@ impl ResourceService {
             .checked_add(1)
             .ok_or_else(|| invalid("plan revision overflow"))?;
         let draft = self
-            .build_operation(draft, target, installed, cancel)
+            .build_operation_with_progress(
+                draft, target, installed, cancel, progress,
+            )
             .await?;
         if added_dependency
             && draft.plan.issues.iter().any(|issue| {
@@ -2297,6 +2382,16 @@ pub async fn revise(
     decisions: Vec<ResourcePlanDecision>,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceOperationPlan> {
+    revise_with_progress(id, revision, decisions, cancel, None).await
+}
+
+pub async fn revise_with_progress(
+    id: PlanId,
+    revision: u32,
+    decisions: Vec<ResourcePlanDecision>,
+    cancel: &CancellationToken,
+    progress: OperationProgress<'_>,
+) -> ResourceResult<ResourceOperationPlan> {
     let state = crate::State::get().await?;
     let draft = load(&state.pool, &id, revision).await?;
     if instance_revision(&state.pool, &draft.plan.instance_id).await?
@@ -2317,7 +2412,9 @@ pub async fn revise(
     let draft = state
         .resources()
         .await?
-        .revise_operation(draft, decisions, &target, &installed, cancel)
+        .revise_operation_with_progress(
+            draft, decisions, &target, &installed, cancel, progress,
+        )
         .await?;
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);

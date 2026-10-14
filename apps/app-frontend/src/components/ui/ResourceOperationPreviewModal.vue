@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Avatar, Button, Combobox, defineMessages, NewModal, useVIntl } from '@modrinth/ui'
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, triggerRef } from 'vue'
 
 import type { InstallJobSnapshot } from '@/helpers/install'
 import { refresh_content } from '@/helpers/instance'
@@ -10,6 +10,7 @@ import {
     resourceGet,
     type ResourceOperationIntent,
     type ResourceOperationPlan,
+    type ResourceOperationProgress,
     type ResourcePlanDecision,
     resourcePrepareEntryOperation,
     resourcePrepareOperation,
@@ -145,6 +146,12 @@ type OperationInput = {
 }
 const modal = ref<InstanceType<typeof NewModal> | null>(null)
 const plan = ref<ResourceOperationPlan | null>(null)
+const progressNodes = shallowRef(new Map<string, ResourceDependencyNode>())
+const displayedNodes = computed(() => {
+    const nodes = new Map((plan.value?.nodes ?? []).map((node) => [node.id, node]))
+    for (const [id, node] of progressNodes.value) nodes.set(id, node)
+    return [...nodes.values()]
+})
 const input = ref<OperationInput | null>(null)
 const busy = ref(false)
 const worldOptions = ref<{ value: string; label: string }[]>([])
@@ -167,10 +174,10 @@ const submittedRoots = ref<string[]>([])
 let retryAction: (() => Promise<void>) | null = null
 
 const active = computed(() => {
-    return plan.value?.nodes.filter((node) => node.state !== 'optionalCandidate') ?? []
+    return displayedNodes.value.filter((node) => node.state !== 'optionalCandidate')
 })
-const candidates = computed(
-    () => plan.value?.nodes.filter((node) => node.state === 'optionalCandidate') ?? [],
+const candidates = computed(() =>
+    displayedNodes.value.filter((node) => node.state === 'optionalCandidate'),
 )
 type PlanIssue = ResourceOperationPlan['issues'][number]
 type Notice = { text: string; blocking: boolean }
@@ -274,7 +281,7 @@ function requiredBy(id: string, kind = 'required') {
 }
 async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current: number) {
     const refs = value.nodes
-        .filter((node) => node.state !== 'satisfied')
+        .filter((node) => node.state !== 'satisfied' && !names.value[node.id])
         .flatMap((node) => {
             const project =
                 node.artifact?.reference.release.project ??
@@ -301,6 +308,7 @@ async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current
     if (current !== generation || signal.aborted) return
     await Promise.allSettled(
         value.nodes.map(async (node) => {
+            if (names.value[node.id]) return
             const cachedRef =
                 node.artifact?.reference.release.project ??
                 (node.resource.kind === 'source' ? node.resource.project : null)
@@ -341,16 +349,34 @@ async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current
         }),
     )
 }
-async function run(action: (signal: AbortSignal) => Promise<ResourceOperationPlan>) {
+async function run(
+    action: (
+        signal: AbortSignal,
+        onProgress: (progress: ResourceOperationProgress) => void,
+    ) => Promise<ResourceOperationPlan>,
+) {
     const current = generation
     controller?.abort()
     controller = new AbortController()
     const signal = controller.signal
     busy.value = true
+    progressNodes.value = new Map()
     error.value = null
     retryAction = () => run(action)
+    let acceptingProgress = true
     try {
-        const value = await action(signal)
+        const value = await action(signal, (progress) => {
+            if (!acceptingProgress || current !== generation || signal.aborted) return
+            progressNodes.value.set(progress.node.id, progress.node)
+            triggerRef(progressNodes)
+            if (progress.metadata)
+                names.value[progress.node.id] = {
+                    title: progress.metadata.title,
+                    iconUrl: progress.metadata.iconUrl,
+                    summary:
+                        progress.node.state === 'satisfied' ? undefined : progress.metadata.summary,
+                }
+        })
         if (current !== generation || signal.aborted) return
         plan.value = value
         void enrich(value, signal, current)
@@ -358,13 +384,19 @@ async function run(action: (signal: AbortSignal) => Promise<ResourceOperationPla
         if (current === generation && !signal.aborted)
             error.value = resourceOperationError(failure, formatMessage)
     } finally {
-        if (current === generation) busy.value = false
+        acceptingProgress = false
+        if (current === generation && !signal.aborted) {
+            busy.value = false
+            progressNodes.value = new Map()
+        }
     }
 }
 async function revise(decision: ResourcePlanDecision) {
     const value = plan.value
     if (!value || busy.value) return
-    await run((signal) => resourceRevisePlan(value.id, value.revision, [decision], signal))
+    await run((signal, onProgress) =>
+        resourceRevisePlan(value.id, value.revision, [decision], signal, onProgress),
+    )
 }
 function hide() {
     generation++
@@ -378,6 +410,7 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
     hide()
     input.value = value
     plan.value = null
+    progressNodes.value = new Map()
     submittedRoots.value = []
     names.value = {}
     error.value = null
@@ -425,7 +458,7 @@ function show(value: OperationInput): Promise<InstallJobSnapshot | null> {
     return result
 }
 async function prepareInput(value: OperationInput) {
-    await run((signal) =>
+    await run((signal, onProgress) =>
         value.selections
             ? resourcePrepareOperation(
                   value.instanceId,
@@ -435,6 +468,7 @@ async function prepareInput(value: OperationInput) {
                   signal,
                   value.importFiles,
                   value.locators,
+                  onProgress,
               )
             : resourcePrepareEntryOperation(
                   value.instanceId,
@@ -443,6 +477,7 @@ async function prepareInput(value: OperationInput) {
                   value.release ?? null,
                   value.installDependencies,
                   signal,
+                  onProgress,
               ),
     )
 }
@@ -498,7 +533,7 @@ async function refresh() {
     const value = input.value
     if (!current || !value || busy.value) return
     queueFailed.value = false
-    await run(async (signal) => {
+    await run(async (signal, onProgress) => {
         await refresh_content(value.instanceId)
         signal.throwIfAborted()
         const prepared = await resourcePrepareOperation(
@@ -509,6 +544,7 @@ async function refresh() {
             signal,
             value.importFiles,
             value.locators,
+            onProgress,
         )
         const retainedExceptions = current.exceptions.filter((exception) =>
             prepared.nodes.some(
@@ -527,6 +563,7 @@ async function refresh() {
             prepared.revision,
             retainedExceptions.map((exception) => ({ kind: 'acceptCompatibility', exception })),
             signal,
+            onProgress,
         )
     })
 }
@@ -564,7 +601,7 @@ defineExpose({ show, showInstall, showInstallSelection })
         ref="modal"
         :header="formatMessage(messages.header)"
         :on-hide="hide"
-        :disable-close="queueing"
+        :disable-close="busy"
         scrollable
         width="min(42rem, 90vw)"
     >
@@ -581,22 +618,7 @@ defineExpose({ show, showInstall, showInstallSelection })
                     {{ formatMessage(messages.noWorlds) }}
                 </p>
             </div>
-            <div v-if="busy && !plan" class="flex flex-col gap-3" role="status">
-                <span class="sr-only">{{ formatMessage(messages.loading) }}</span>
-                <div
-                    v-for="index in 3"
-                    :key="index"
-                    class="flex flex-col gap-2 rounded-lg border border-surface-4 bg-surface-2 p-3"
-                >
-                    <div class="flex items-center gap-2">
-                        <div class="size-8 shrink-0 animate-pulse rounded-full bg-surface-3" />
-                        <div class="h-4 w-2/5 animate-pulse rounded bg-surface-3" />
-                    </div>
-                    <div class="h-3 w-3/5 animate-pulse rounded bg-surface-3" />
-                </div>
-            </div>
-            <p v-if="busy && plan" class="m-0">{{ formatMessage(messages.loading) }}</p>
-            <p v-if="plan" class="m-0">
+            <p v-if="plan && !busy" class="m-0">
                 {{
                     formatMessage(messages.changes, {
                         count: plan.actions.length,
@@ -767,6 +789,24 @@ defineExpose({ show, showInstall, showInstallSelection })
                     >
                 </div>
             </template>
+            <div
+                v-if="busy && !queueing"
+                class="flex flex-col gap-3"
+                role="status"
+                data-operation-skeleton
+            >
+                <span class="sr-only">{{ formatMessage(messages.loading) }}</span>
+                <div
+                    class="flex flex-col gap-2 rounded-lg border border-surface-4 bg-surface-2 p-3"
+                    aria-hidden="true"
+                >
+                    <div class="flex items-center gap-2">
+                        <div class="size-8 shrink-0 animate-pulse rounded-full bg-surface-3" />
+                        <div class="h-4 w-2/5 animate-pulse rounded bg-surface-3" />
+                    </div>
+                    <div class="h-3 w-3/5 animate-pulse rounded bg-surface-3" />
+                </div>
+            </div>
             <p
                 v-for="(notice, index) in notices.other"
                 :key="index"
@@ -789,7 +829,7 @@ defineExpose({ show, showInstall, showInstallSelection })
         </div>
         <template #actions>
             <div class="flex items-center justify-end gap-2">
-                <Button :disabled="queueing" @click="modal?.hide()">{{
+                <Button :disabled="busy" @click="modal?.hide()">{{
                     formatMessage(messages.cancel)
                 }}</Button>
                 <Button color="brand" :disabled="!canApply" @click="apply">{{

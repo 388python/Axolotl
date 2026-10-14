@@ -1,6 +1,7 @@
 use dashmap::DashMap;
 use std::sync::{Arc, LazyLock};
 use theseus::resources::favorites::ResourceFavorite;
+use theseus::resources::plans::ResourceOperationProgress;
 use theseus::resources::providers::{
     ProjectDocument, ProviderQuery, ProviderValue, ReleaseDocument,
 };
@@ -274,28 +275,41 @@ pub async fn resource_check_updates(
 }
 
 #[tauri::command]
-pub async fn resource_prepare_entry_operation(
+pub async fn resource_prepare_entry_operation<R: tauri::Runtime>(
+    webview: tauri::Webview<R>,
     instance_id: String,
     intent: ResourceOperationIntent,
     entry_ids: Vec<InstalledEntryId>,
     release: Option<SourceReleaseRef>,
     install_dependencies: bool,
     request_id: RequestId,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<ResourceOperationPlan> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(theseus::resources::installed::prepare_entries(
-        instance_id,
-        intent,
-        entry_ids,
-        release,
-        install_dependencies,
-        &cancel,
+    let on_progress = on_progress
+        .map(|id| id.channel_on::<_, ResourceOperationProgress>(webview));
+    let progress = move |value| {
+        if let Some(channel) = &on_progress {
+            let _ = channel.send(value);
+        }
+    };
+    Ok(
+        theseus::resources::installed::prepare_entries_with_progress(
+            instance_id,
+            intent,
+            entry_ids,
+            release,
+            install_dependencies,
+            &cancel,
+            Some(&progress),
+        )
+        .await?,
     )
-    .await?)
 }
 
 #[tauri::command]
-pub async fn resource_prepare_operation(
+pub async fn resource_prepare_operation<R: tauri::Runtime>(
+    webview: tauri::Webview<R>,
     instance_id: String,
     intent: ResourceOperationIntent,
     selections: Vec<ResourceSelection>,
@@ -303,8 +317,11 @@ pub async fn resource_prepare_operation(
     import_files: Option<std::collections::HashMap<SelectionId, String>>,
     locators: Option<std::collections::HashMap<SelectionId, String>>,
     request_id: RequestId,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<ResourceOperationPlan> {
     let (_guard, cancel) = request(&request_id)?;
+    let on_progress = on_progress
+        .map(|id| id.channel_on::<_, ResourceOperationProgress>(webview));
     if let Some(locators) = locators {
         let resources = service().await?;
         for selection in &selections {
@@ -324,12 +341,18 @@ pub async fn resource_prepare_operation(
             }
         }
     }
-    let plan = theseus::resources::plans::prepare(
+    let progress = move |value| {
+        if let Some(channel) = &on_progress {
+            let _ = channel.send(value);
+        }
+    };
+    let plan = theseus::resources::plans::prepare_with_progress(
         instance_id,
         intent,
         selections,
         install_dependencies.unwrap_or(true),
         &cancel,
+        Some(&progress),
     )
     .await?;
     Ok(
@@ -345,19 +368,30 @@ pub async fn resource_prepare_operation(
 }
 
 #[tauri::command]
-pub async fn resource_revise_plan(
+pub async fn resource_revise_plan<R: tauri::Runtime>(
+    webview: tauri::Webview<R>,
     plan_id: PlanId,
     revision: u32,
     decisions: Vec<ResourcePlanDecision>,
     request_id: RequestId,
+    on_progress: Option<tauri::ipc::JavaScriptChannelId>,
 ) -> Result<ResourceOperationPlan> {
     let (_guard, cancel) = request(&request_id)?;
-    Ok(
-        theseus::resources::plans::revise(
-            plan_id, revision, decisions, &cancel,
-        )
-        .await?,
+    let on_progress = on_progress
+        .map(|id| id.channel_on::<_, ResourceOperationProgress>(webview));
+    let progress = move |value| {
+        if let Some(channel) = &on_progress {
+            let _ = channel.send(value);
+        }
+    };
+    Ok(theseus::resources::plans::revise_with_progress(
+        plan_id,
+        revision,
+        decisions,
+        &cancel,
+        Some(&progress),
     )
+    .await?)
 }
 
 #[tauri::command]

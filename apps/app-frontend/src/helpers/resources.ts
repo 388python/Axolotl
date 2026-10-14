@@ -338,10 +338,18 @@ export function resourcePrepareEntryOperation(
     release: SourceReleaseRef | null,
     installDependencies: boolean,
     signal?: AbortSignal,
+    onProgress?: (progress: ResourceOperationProgress) => void,
 ) {
     return resourceRequest<ResourceOperationPlan>(
         'resource_prepare_entry_operation',
-        { instanceId, intent, entryIds, release, installDependencies },
+        {
+            instanceId,
+            intent,
+            entryIds,
+            release,
+            installDependencies,
+            onProgress: operationProgressChannel(onProgress, signal),
+        },
         signal,
     )
 }
@@ -379,6 +387,23 @@ export type ResourceOperationPlan = {
     }[]
     selectionReasons: unknown[]
 }
+export type ResourceOperationProgress = {
+    planId: string
+    revision: number
+    node: ResourceDependencyNode
+    metadata: SourceProjectMetadata | null
+}
+function operationProgressChannel(
+    onProgress?: (progress: ResourceOperationProgress) => void,
+    signal?: AbortSignal,
+) {
+    if (!onProgress) return null
+    const channel = new Channel<ResourceOperationProgress>()
+    channel.onmessage = (progress) => {
+        if (!signal?.aborted) onProgress(progress)
+    }
+    return channel
+}
 export type ResourcePlanDecision =
     | { kind: 'addRequired'; nodeId: string }
     | { kind: 'addOptional'; nodeId: string }
@@ -395,6 +420,7 @@ export function resourcePrepareOperation(
     signal?: AbortSignal,
     importFiles?: Record<string, string>,
     locators?: Record<string, string>,
+    onProgress?: (progress: ResourceOperationProgress) => void,
 ) {
     return resourceRequest<ResourceOperationPlan>(
         'resource_prepare_operation',
@@ -405,6 +431,7 @@ export function resourcePrepareOperation(
             installDependencies,
             importFiles: importFiles ?? null,
             locators: locators ?? null,
+            onProgress: operationProgressChannel(onProgress, signal),
         },
         signal,
     )
@@ -414,10 +441,11 @@ export function resourceRevisePlan(
     revision: number,
     decisions: ResourcePlanDecision[],
     signal?: AbortSignal,
+    onProgress?: (progress: ResourceOperationProgress) => void,
 ) {
     return resourceRequest<ResourceOperationPlan>(
         'resource_revise_plan',
-        { planId, revision, decisions },
+        { planId, revision, decisions, onProgress: operationProgressChannel(onProgress, signal) },
         signal,
     )
 }

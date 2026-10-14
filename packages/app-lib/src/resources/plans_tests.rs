@@ -6,6 +6,88 @@ use std::collections::HashMap;
 mod graph_tests;
 
 #[tokio::test]
+async fn operation_progress_reports_each_node_before_resolving_its_children() {
+    let mut root = release("root0000", "1", 'a');
+    let required = release("required", "1", 'b');
+    let optional = release("optional", "1", 'c');
+    requires(&mut root, &required, ResourceDependencyKind::Required);
+    requires(&mut root, &optional, ResourceDependencyKind::Optional);
+    let (_directory, cache) = cache().await;
+    let provider = Arc::new(PlanProvider {
+        source: SourceId::modrinth(),
+        releases: vec![root.clone(), required.clone(), optional],
+        requests: Mutex::new(vec![]),
+    });
+    let service = ResourceService::new(cache, vec![provider.clone()]).unwrap();
+    let events = Mutex::new(vec![]);
+    let progress =
+        |event: crate::resources::plans::ResourceOperationProgress| {
+            if event.node.id.as_str() == "root" {
+                assert!(!provider.requests.lock().unwrap().iter().any(|query| {
+                matches!(query, ProviderQuery::Release { release_id, .. }
+                    if release_id == &required.reference.release_id)
+            }));
+            }
+            events.lock().unwrap().push(event);
+        };
+    let plan = service
+        .build_operation_with_progress(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+            Some(&progress),
+        )
+        .await
+        .unwrap()
+        .plan;
+    let events = events.lock().unwrap();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].node.id.as_str(), "root");
+    assert!(events[0].metadata.is_some());
+    assert!(events.iter().all(
+        |event| event.plan_id == plan.id && event.revision == plan.revision
+    ));
+    assert_eq!(events[2].node.state, DependencyNodeState::OptionalCandidate);
+    assert_eq!(plan.nodes.len(), events.len());
+    assert_eq!(plan.actions.len(), 2);
+    drop(events);
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn canceling_after_a_progress_node_does_not_publish_a_complete_plan() {
+    let mut root = release("root0000", "1", 'a');
+    let child = release("required", "1", 'b');
+    requires(&mut root, &child, ResourceDependencyKind::Required);
+    let (_directory, service) = service(vec![root.clone(), child]).await;
+    let cancel = CancellationToken::new();
+    let events = Mutex::new(vec![]);
+    let progress = |event| {
+        events.lock().unwrap().push(event);
+        cancel.cancel();
+    };
+    let result = service
+        .build_operation_with_progress(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &cancel,
+            Some(&progress),
+        )
+        .await;
+    assert!(matches!(result, Err(ResourceError::Canceled)));
+    assert_eq!(events.lock().unwrap().len(), 1);
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn automatic_catalog_without_compatible_candidates_is_a_normal_no_update_result()
  {
     let mut old = release("root0000", "1", 'a');

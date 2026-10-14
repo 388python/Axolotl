@@ -600,6 +600,27 @@ pub async fn prepare_entries(
     install_dependencies: bool,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceOperationPlan> {
+    prepare_entries_with_progress(
+        instance_id,
+        intent,
+        entry_ids,
+        release,
+        install_dependencies,
+        cancel,
+        None,
+    )
+    .await
+}
+
+pub async fn prepare_entries_with_progress(
+    instance_id: String,
+    intent: ResourceOperationIntent,
+    entry_ids: Vec<InstalledEntryId>,
+    release: Option<SourceReleaseRef>,
+    install_dependencies: bool,
+    cancel: &CancellationToken,
+    progress: plans::OperationProgress<'_>,
+) -> ResourceResult<ResourceOperationPlan> {
     if intent == ResourceOperationIntent::Install || entry_ids.is_empty() {
         return Err(ResourceError::InvalidRequest(
             "select installed entries to change".into(),
@@ -660,6 +681,7 @@ pub async fn prepare_entries(
         install_dependencies,
         cancel,
         Some(&entries),
+        progress,
     )
     .await
 }
