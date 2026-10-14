@@ -87,6 +87,17 @@ async fn get_content_snapshot_inner(
     } else {
         cached_files
     };
+    let content_set = if refresh_remote {
+        content_rows::get_applied_content_set(instance_id, &state.pool)
+            .await?
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(
+                    "Instance has no applied content set after refresh".into(),
+                )
+            })?
+    } else {
+        content_set
+    };
     let mut warnings = Vec::new();
     if refresh_remote
         && let InstanceLink::CurseForgeModpack {
@@ -430,6 +441,21 @@ async fn get_content_snapshot_inner(
                     return;
                 }
             };
+            let current: Option<(String, i64)> = match sqlx::query_as("SELECT content.id, content.revision FROM instances instance JOIN instance_content_sets content ON content.id = instance.applied_content_set_id WHERE instance.id = ?")
+                .bind(&instance_id).fetch_optional(&mut *tx).await {
+                Ok(current) => current,
+                Err(error) => {
+                    tracing::warn!(%error, "Content dependency backfill snapshot check failed");
+                    return;
+                }
+            };
+            if !current.is_some_and(|(id, revision)| {
+                id == content_set.id
+                    && u64::try_from(revision).ok()
+                        == Some(content_set.revision)
+            }) {
+                return;
+            }
             for edge in &backfill.edges {
                 if let Err(error) =
                     content_rows::upsert_content_dependency_edge_in_transaction(

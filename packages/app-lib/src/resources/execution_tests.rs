@@ -196,6 +196,41 @@ async fn verified_manual_import_rejects_changed_bytes_and_preserves_connector_so
 }
 
 #[tokio::test]
+async fn externally_replaced_file_does_not_reuse_local_metadata_or_icon() {
+    let (_temp, state, original, _, root) = fixture().await;
+    sqlx::query("UPDATE instance_files SET local_mod_data = ?, icon_path = 'old-icon.png' WHERE instance_id = 'instance'")
+        .bind(r#"{"mod_id":"old","name":"Old title","dependencies":[]}"#).execute(&state.pool).await.unwrap();
+    std::fs::write(
+        root.join(&original.relative_path),
+        b"externally changed content",
+    )
+    .unwrap();
+    let cache =
+        crate::state::CacheValue::FileHash(crate::state::CachedFileHash {
+            path: format!("example/{}", original.relative_path),
+            size: b"externally changed content".len() as u64,
+            hash: sha1_smol::Sha1::from(b"externally changed content")
+                .hexdigest(),
+            project_type: Some(crate::state::ProjectType::ResourcePack),
+            project_id: None,
+            version_id: None,
+        })
+        .get_entry();
+    let mut tx = state.pool.begin().await.unwrap();
+    crate::state::CachedEntry::upsert_many(&[cache], &mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    crate::state::sync_content_files("instance", &state)
+        .await
+        .unwrap();
+    let (metadata, icon): (Option<String>, Option<String>) = sqlx::query_as("SELECT local_mod_data, icon_path FROM instance_files WHERE instance_id = 'instance' AND relative_path = ?")
+        .bind(&original.relative_path).fetch_one(&state.pool).await.unwrap();
+    assert!(metadata.is_none());
+    assert_ne!(icon.as_deref(), Some("old-icon.png"));
+}
+
+#[tokio::test]
 async fn display_snapshot_keeps_local_entries_without_verifying_history_backups()
  {
     let (_temp, state, original, _, root) = fixture().await;

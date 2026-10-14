@@ -169,6 +169,7 @@ pub(crate) async fn sync_instance_content_files(
     let mut merges: HashMap<String, String> = HashMap::new();
     let mut claimed_reclaim_ids = HashSet::new();
     let mut externally_changed_file_ids = HashSet::new();
+    let mut refreshed_metadata_file_ids = HashSet::new();
 
     for file in scanned {
         let hash_key = file.hash_cache_key.trim_end_matches(".disabled");
@@ -243,6 +244,9 @@ pub(crate) async fn sync_instance_content_files(
             merges.insert(file.relative_path.clone(), candidate.id.clone());
         }
 
+        let metadata_source = source_file.filter(|file| {
+            !physical_file_identity_changed(file, &scanned_sha1, scanned_size)
+        });
         files.push(InstanceFile {
             id: source_file
                 .map(|file| file.id.clone())
@@ -256,8 +260,9 @@ pub(crate) async fn sync_instance_content_files(
             missing: false,
             added_at: source_file.map(|file| file.added_at).unwrap_or(now),
             modified_at: now,
-            local_mod_data: source_file.and_then(|f| f.local_mod_data.clone()),
-            icon_path: source_file.and_then(|f| f.icon_path.clone()),
+            local_mod_data: metadata_source
+                .and_then(|file| file.local_mod_data.clone()),
+            icon_path: metadata_source.and_then(|file| file.icon_path.clone()),
         });
     }
 
@@ -273,9 +278,6 @@ pub(crate) async fn sync_instance_content_files(
         let Some(project_type) = project_type_for_file(file) else {
             continue;
         };
-        // Re-extract metadata written before dependency extraction existed:
-        // legacy JSON parses with `dependencies: None` and needs one pass
-        // through the updated extractor.
         let extract_metadata = project_type == ProjectType::Mod
             && file
                 .local_mod_data
@@ -286,8 +288,7 @@ pub(crate) async fn sync_instance_content_files(
                     >(json)
                     .ok()
                 })
-                .and_then(|metadata| metadata.dependencies)
-                .is_none();
+                .is_none_or(|metadata| metadata.needs_refresh());
         let extract_icon = file.icon_path.is_none()
             && matches!(
                 project_type,
@@ -326,6 +327,7 @@ pub(crate) async fn sync_instance_content_files(
             && let Ok(json) = serde_json::to_string(&meta)
         {
             file.local_mod_data = Some(json);
+            refreshed_metadata_file_ids.insert(file.id.clone());
         }
 
         if extract_icon {
@@ -354,8 +356,31 @@ pub(crate) async fn sync_instance_content_files(
     sqlite::content_rows::ensure_instance_exists(&instance.id, &mut tx).await?;
     sqlite::content_rows::mark_instance_files_missing(&instance.id, &mut tx)
         .await?;
-    let mut invalidated_provider_identity = false;
+    let mut invalidated_provider_identity =
+        !externally_changed_file_ids.is_empty();
+    for file_id in &externally_changed_file_ids {
+        sqlx::query("UPDATE instance_files SET local_mod_data = NULL, icon_path = NULL WHERE instance_id = ? AND id = ?").bind(&instance.id).bind(file_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM instance_content_dependencies WHERE parent_entry_id IN (SELECT id FROM instance_content_entries WHERE instance_id = ? AND file_id = ?)").bind(&instance.id).bind(file_id).execute(&mut *tx).await?;
+    }
     if let Some(content_set) = content_set.as_ref() {
+        let refreshed_metadata_file_ids: Vec<_> =
+            refreshed_metadata_file_ids.iter().collect();
+        for file_ids in refreshed_metadata_file_ids.chunks(400) {
+            let mut query = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
+                "DELETE FROM instance_content_dependencies WHERE content_set_id = ",
+            );
+            query.push_bind(&content_set.id).push(" AND evidence_provider = 'local' AND parent_entry_id IN (SELECT entry.id FROM instance_content_entries entry WHERE entry.content_set_id = ");
+            query
+                .push_bind(&content_set.id)
+                .push(" AND entry.file_id IN (");
+            let mut separated = query.separated(", ");
+            for id in file_ids {
+                separated.push_bind(*id);
+            }
+            separated.push_unseparated(") AND NOT EXISTS (SELECT 1 FROM instance_content_provider_refs ref WHERE ref.content_entry_id = entry.id))");
+            let removed = query.build().execute(&mut *tx).await?;
+            invalidated_provider_identity |= removed.rows_affected() > 0;
+        }
         for file_id in &externally_changed_file_ids {
             invalidated_provider_identity |= sqlite::content_rows::invalidate_exact_provider_refs_for_file_in_transaction(
                 &content_set.id,

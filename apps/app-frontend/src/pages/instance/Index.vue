@@ -459,6 +459,7 @@ import {
 } from '@/helpers/instance'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { get_by_instance_id } from '@/helpers/process'
+import { createRequestGeneration } from '@/helpers/request-generation'
 import type { GameInstance } from '@/helpers/types'
 import { createInstanceShortcut, showInstanceInFolder } from '@/helpers/utils.js'
 import { refreshWorlds, type ServerStatus } from '@/helpers/worlds'
@@ -598,9 +599,12 @@ function resetServerStatus() {
 
 let instanceGeneration = 0
 let instancePageClosed = false
+const instanceReads = createRequestGeneration()
+const processReads = createRequestGeneration()
 async function fetchInstance() {
     const generation = ++instanceGeneration
     const requestedId = props.id
+    const read = instanceReads.begin(requestedId)
     const isCurrent = () =>
         !instancePageClosed && instanceGeneration === generation && props.id === requestedId
     isServerInstance.value = false
@@ -608,9 +612,9 @@ async function fetchInstance() {
     resetServerStatus()
 
     const nextInstance = await get(requestedId).catch((error) => {
-        if (isCurrent()) handleError(error)
+        if (isCurrent() && instanceReads.isCurrent(read, props.id)) handleError(error)
     })
-    if (!isCurrent()) return
+    if (!isCurrent() || !instanceReads.isCurrent(read, props.id)) return
     instance.value = nextInstance ?? undefined
     activeInstanceId.value = nextInstance?.id
     isServerInstance.value = nextInstance?.link?.type === 'server_project_modpack'
@@ -627,6 +631,11 @@ async function fetchInstance() {
         void get_project_v3(nextInstance.link.project_id, 'stale_while_revalidate')
             .then((project) => {
                 if (!isCurrent()) return
+                if (
+                    instance.value?.link?.type !== nextInstance.link?.type ||
+                    instance.value?.link?.project_id !== nextInstance.link?.project_id
+                )
+                    return
                 linkedProjectV3.value = project
                 isServerInstance.value =
                     nextInstance.link?.type === 'server_project_modpack' ||
@@ -685,7 +694,23 @@ function fetchDeferredData(instanceId?: string) {
 }
 
 async function updatePlayState() {
-    const runningProcesses = await get_by_instance_id(props.id).catch(handleError)
+    const requestedId = props.id
+    const request = processReads.begin(requestedId)
+    const generation = instanceGeneration
+    const runningProcesses = await get_by_instance_id(requestedId).catch((error) => {
+        if (
+            !instancePageClosed &&
+            processReads.isCurrent(request, props.id) &&
+            instanceGeneration === generation
+        )
+            handleError(error)
+    })
+    if (
+        instancePageClosed ||
+        !processReads.isCurrent(request, props.id) ||
+        instanceGeneration !== generation
+    )
+        return
 
     playing.value = Array.isArray(runningProcesses) && runningProcesses.length > 0
 }
@@ -958,23 +983,45 @@ const unlistenInstances = await instance_listener(
             }
             return
         }
-        instance.value = await get(props.id).catch((err) => {
+        const requestedId = props.id
+        const generation = instanceGeneration
+        const read = instanceReads.begin(requestedId)
+        const next = await get(requestedId).catch((err) => {
+            if (
+                instancePageClosed ||
+                !instanceReads.isCurrent(read, props.id) ||
+                instanceGeneration !== generation
+            )
+                return
             if (String(err).includes('not managed')) {
                 router.push({ path: '/' })
                 return undefined
             }
             return handleError(err)
         })
-        if (!instance.value?.link?.project_id) {
+        if (
+            instancePageClosed ||
+            !instanceReads.isCurrent(read, props.id) ||
+            instanceGeneration !== generation
+        )
+            return
+        const oldLink = instance.value?.link
+        instance.value = next
+        if (
+            !next?.link?.project_id ||
+            oldLink?.type !== next.link.type ||
+            oldLink?.project_id !== next.link.project_id
+        ) {
             linkedProjectV3.value = undefined
             isServerInstance.value = false
         }
-        void queryClient.invalidateQueries({ queryKey: postUpgradeNoticeQueryKey(props.id) })
+        void queryClient.invalidateQueries({ queryKey: postUpgradeNoticeQueryKey(requestedId) })
     },
 )
 
 const unlistenProcesses = await process_listener((e: { event: string; instance_id: string }) => {
     if (e.event === 'finished' && e.instance_id === props.id) {
+        processReads.invalidate()
         playing.value = false
         void queryClient.invalidateQueries({ queryKey: postUpgradeNoticeQueryKey(props.id) })
     }
@@ -1005,6 +1052,8 @@ const timePlayedHumanized = computed(() => {
 })
 
 onUnmounted(() => {
+    instanceReads.invalidate()
+    processReads.invalidate()
     instancePageClosed = true
     instanceGeneration++
     clearInterval(launchElapsedTimer)
