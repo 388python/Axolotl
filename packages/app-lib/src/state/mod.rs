@@ -204,13 +204,9 @@ impl State {
                 let cache = Arc::new(
                     crate::resources::cache::ResourceCache::open(path).await,
                 );
-                let import_cache = cache.clone();
-                let import_main = self.pool.clone();
-                tokio::spawn(async move {
-                    if let Err(error) = import_cache.import_legacy(&import_main).await {
-                        tracing::warn!(error = %error, "Legacy resource cache import deferred");
-                    }
-                });
+                if let Err(error) = cache.import_legacy(&self.pool).await {
+                    tracing::warn!(error = %error, "Legacy resource cache import incomplete");
+                }
                 crate::resources::ResourceService::with_store(
                     cache,
                     crate::resources::providers::default_providers(),

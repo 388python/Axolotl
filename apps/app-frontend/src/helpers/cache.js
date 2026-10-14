@@ -141,6 +141,5 @@ export async function purge_cache_types(cacheTypes) {
  * @returns {Promise<Array|null>} Array of version objects (without changelogs) or null
  */
 export async function get_project_versions(projectId, cacheBehaviour) {
-    const project = await get_project(projectId, cacheBehaviour)
-    return get_version_many(project.versions ?? [], cacheBehaviour)
+    return readCache('plugin:cache|get_project_versions', { projectId, cacheBehaviour })
 }

@@ -52,6 +52,14 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+    20261014190000: {
+        objects: [
+            { type: 'index', name: 'resource_pending_download_project' },
+            { type: 'index', name: 'resource_link_modrinth_project' },
+            { type: 'index', name: 'resource_link_content_project' },
+            { type: 'index', name: 'resource_link_curseforge_project' },
+        ],
+    },
     20261013120000: {
         columns: [
             { table: 'settings', column: 'resource_chinese_filenames' },

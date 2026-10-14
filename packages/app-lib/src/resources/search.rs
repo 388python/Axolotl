@@ -17,6 +17,7 @@ pub(crate) struct SearchCursor {
     seen: HashSet<SourceProjectRef>,
     seen_resources: HashSet<ResourceId>,
     expires_at: i64,
+    next_source: usize,
 }
 
 #[derive(Clone)]
@@ -193,6 +194,7 @@ impl ResourceService {
                 seen: HashSet::new(),
                 seen_resources: HashSet::new(),
                 expires_at: now + 600,
+                next_source: 0,
             }
         };
         let mut failures = Vec::new();
@@ -311,7 +313,10 @@ impl ResourceService {
         // Round robin preserves provider relevance order without inventing scores.
         loop {
             let before = pool.len();
-            for source in &mut state.sources {
+            let count = state.sources.len();
+            for offset in 0..count {
+                let source =
+                    &mut state.sources[(state.next_source + offset) % count];
                 if let Some(entry) = source.entries.pop_front() {
                     pool.push(entry);
                 }
@@ -354,7 +359,35 @@ impl ResourceService {
             HashMap::new()
         };
         while !pool.is_empty() && groups.len() < query.page_size as usize {
+            pool.retain(|metadata| {
+                !state.seen.contains(&metadata.project)
+                    && !identities
+                        .get(&metadata.project)
+                        .is_some_and(|id| state.seen_resources.contains(id))
+            });
+            if pool.is_empty() {
+                break;
+            }
+            if query.sort != ResourceSearchSort::Relevance
+                && state.sources.iter().any(|source| {
+                    !source.done
+                        && source.failure.is_none()
+                        && !pool
+                            .iter()
+                            .any(|entry| entry.project.source == source.source)
+                })
+            {
+                break;
+            }
             let first = pool.remove(0);
+            if query.sort == ResourceSearchSort::Relevance
+                && let Some(index) = state
+                    .sources
+                    .iter()
+                    .position(|source| source.source == first.project.source)
+            {
+                state.next_source = (index + 1) % state.sources.len();
+            }
             let id = identities.get(&first.project).cloned();
             if state.seen.contains(&first.project)
                 || id
@@ -375,8 +408,20 @@ impl ResourceService {
                 let other = &pool[index];
                 let confirmed = id.is_some()
                     && identities.get(&other.project) == id.as_ref();
-                let pair = !confirmed && wiki_pair(&first, other, &wiki_lookup);
+                let distinct =
+                    identities.get(&other.project).is_some_and(|other_id| {
+                        projects
+                            .iter()
+                            .filter_map(|project| {
+                                identities.get(&project.project)
+                            })
+                            .any(|id| id != other_id)
+                    });
+                let pair = !distinct
+                    && !confirmed
+                    && wiki_pair(&first, other, &wiki_lookup);
                 let exact = !confirmed
+                    && !distinct
                     && !pair
                     && unambiguous
                     && other.project.source != first.project.source
@@ -539,7 +584,10 @@ fn excluded_entry(
                 excluded,
             } => {
                 let project = &entry.project;
-                if *excluded && matches!(field.as_str(), "allTypes" | "type") {
+                if project.source != SourceId::modrinth()
+                    && *excluded
+                    && matches!(field.as_str(), "allTypes" | "type")
+                {
                     return entry.types.iter().any(|kind| {
                         serde_json::to_value(kind)
                             .ok()

@@ -1,6 +1,7 @@
+import { invoke } from '@tauri-apps/api/core'
 import { expect, it, vi } from 'vitest'
 
-import { get_project } from './cache.js'
+import { get_project, get_project_versions } from './cache.js'
 import { resourceLocate } from './resources'
 
 vi.mock('./resources', () => ({
@@ -10,6 +11,16 @@ vi.mock('./resources', () => ({
     resourceReleaseDocuments: vi.fn(),
     resourceRequest: vi.fn(),
 }))
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+
+it('requests a lightweight project version list without fetching each changelog', async () => {
+    vi.mocked(invoke).mockResolvedValue([{ id: 'release1' }])
+    expect(await get_project_versions('abcdefgh', 'must_revalidate')).toEqual([{ id: 'release1' }])
+    expect(invoke).toHaveBeenCalledWith('plugin:cache|get_project_versions', {
+        projectId: 'abcdefgh',
+        cacheBehaviour: 'must_revalidate',
+    })
+})
 
 it('project links resolve slugs while retaining all source date semantics', async () => {
     vi.mocked(resourceLocate).mockResolvedValue({

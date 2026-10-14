@@ -11,6 +11,99 @@ fn mr_protocol() -> Value {
 }
 
 #[tokio::test]
+async fn offline_update_queries_use_expired_identification_and_release_lists_but_bypass_does_not()
+ {
+    let mut current = mr_protocol();
+    current["version_number"] = json!("1.0.0");
+    current["game_versions"] = json!(["1.20.1"]);
+    current["loaders"] = json!(["fabric"]);
+    current["date_published"] = json!("2020-01-01T00:00:00Z");
+    let mut newer = current.clone();
+    newer["id"] = json!("new00000");
+    newer["version_number"] = json!("2.0.0");
+    newer["date_published"] = json!("2021-01-01T00:00:00Z");
+    newer["files"][0]["hashes"]["sha1"] = json!("b".repeat(40));
+    newer["files"][0]["hashes"]["sha512"] = json!("b".repeat(128));
+    let hash = current["files"][0]["hashes"]["sha1"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (_temp, cache) = cache().await;
+    let identified = ProviderQuery::IdentifyExport {
+        integrity: ArtifactIntegrity {
+            size: None,
+            hashes: vec![ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: hash.clone(),
+            }],
+        },
+        fingerprint: None,
+    };
+    let list = ProviderQuery::ReleasesProtocol {
+        project_id: SourceProjectId::new(
+            current["project_id"].as_str().unwrap(),
+        )
+        .unwrap(),
+    };
+    for (query, value) in [
+        (
+            identified,
+            ProviderValue::Identified(vec![
+                providers::legacy::release(current.clone()).unwrap(),
+            ]),
+        ),
+        (list, ProviderValue::Protocol(json!([current, newer]))),
+    ] {
+        let key = CacheKey::new(
+            "modrinth-v2-dates".into(),
+            SourceId::modrinth(),
+            &query.cache_identity(),
+        )
+        .unwrap();
+        cache
+            .put(
+                &key,
+                &value,
+                -1,
+                cache.generation().await,
+                chrono::Utc::now().timestamp_micros(),
+            )
+            .await;
+    }
+    let transport = FixtureTransport::new(|_, _| {
+        Err(ResourceError::Network { status: Some(503) })
+    });
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(ModrinthProvider::new(transport))],
+    )
+    .unwrap();
+    let key = format!("{hash}-fabric-release-1.20.1");
+    let result = protocol::many(
+        &service,
+        CacheValueType::FileUpdate,
+        &[&key],
+        Some(CacheBehaviour::MustRevalidate),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.len(), 1);
+    assert!(
+        protocol::many(
+            &service,
+            CacheValueType::FileUpdate,
+            &[&key],
+            Some(CacheBehaviour::Bypass),
+            &CancellationToken::new()
+        )
+        .await
+        .is_err()
+    );
+    cache.close().await;
+}
+
+#[tokio::test]
 async fn shared_pack_queries_use_independent_cache_and_force_refresh() {
     let transport = FixtureTransport::new(|_, request| {
         assert_eq!(request.path, "/versions");
@@ -175,7 +268,7 @@ async fn force_refresh_never_falls_back_to_saved_protocol_metadata() {
             &service,
             CacheValueType::Version,
             &["G5dd9TM4"],
-            None,
+            Some(CacheBehaviour::MustRevalidate),
             &cancel
         )
         .await

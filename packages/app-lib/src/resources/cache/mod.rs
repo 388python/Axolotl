@@ -100,7 +100,7 @@ impl ResourceCache {
             .busy_timeout(Duration::from_secs(5))
             .foreign_keys(true);
         let attempt = open_pool(options.clone()).await;
-        let pool = match attempt {
+        let mut pool = match attempt {
             Ok(pool) => pool,
             Err(error) if exclusive && is_corrupt(&error) => {
                 for path in [
@@ -116,13 +116,39 @@ impl ResourceCache {
                         Err(error) => return Err(cache_error(error)),
                     }
                 }
-                open_pool(options).await.map_err(cache_error)?
+                open_pool(options.clone()).await.map_err(cache_error)?
             }
             Err(error) => return Err(cache_error(error)),
         };
         if let Err(error) = migrations::migrator().run(&pool).await {
             pool.close().await;
-            return Err(cache_error(error));
+            let corrupt = match &error {
+                sqlx::migrate::MigrateError::Execute(error)
+                | sqlx::migrate::MigrateError::ExecuteMigration(error, _) => {
+                    is_corrupt(error)
+                }
+                _ => false,
+            };
+            if !exclusive || !corrupt {
+                return Err(cache_error(error));
+            }
+            for file in [
+                path.to_path_buf(),
+                sidecar(path, "-wal"),
+                sidecar(path, "-shm"),
+            ] {
+                match tokio::fs::remove_file(file).await {
+                    Ok(()) => {}
+                    Err(error)
+                        if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(cache_error(error)),
+                }
+            }
+            pool = open_pool(options).await.map_err(cache_error)?;
+            migrations::migrator()
+                .run(&pool)
+                .await
+                .map_err(cache_error)?;
         }
         if exclusive {
             lock.unlock().map_err(cache_error)?;
@@ -151,13 +177,20 @@ impl ResourceCache {
     }
 
     pub(crate) async fn get(&self, key: &CacheKey) -> Option<ProviderValue> {
-        self.get_cached(key, true).await
+        self.get_cached(key, true).await.map(|(value, _)| value)
     }
 
     pub(crate) async fn get_any(
         &self,
         key: &CacheKey,
     ) -> Option<ProviderValue> {
+        self.get_cached(key, false).await.map(|(value, _)| value)
+    }
+
+    pub(crate) async fn get_with_freshness(
+        &self,
+        key: &CacheKey,
+    ) -> Option<(ProviderValue, bool)> {
         self.get_cached(key, false).await
     }
 
@@ -165,18 +198,19 @@ impl ResourceCache {
         &self,
         key: &CacheKey,
         fresh: bool,
-    ) -> Option<ProviderValue> {
+    ) -> Option<(ProviderValue, bool)> {
         let _guard = self.gate.read().await;
         let pool = self.pool.as_ref()?;
-        let row = sqlx::query("SELECT payload, value_version FROM resource_cache_entries WHERE namespace = ? AND source = ? AND query_key = ? AND (expires_at > ? OR ? = 0)")
+        let row = sqlx::query("SELECT payload, value_version, expires_at FROM resource_cache_entries WHERE namespace = ? AND source = ? AND query_key = ? AND (expires_at > ? OR ? = 0)")
             .bind(&key.namespace).bind(key.source.as_str()).bind(&key.query).bind(Utc::now().timestamp()).bind(fresh).fetch_optional(pool).await.ok()??;
         let version: i64 = row.try_get("value_version").ok()?;
         let payload: String = row.try_get("payload").ok()?;
+        let expires: i64 = row.try_get("expires_at").ok()?;
         if version != i64::from(RESOURCE_CONTRACT_VERSION) {
             return None;
         }
         match serde_json::from_str(&payload) {
-            Ok(value) => Some(value),
+            Ok(value) => Some((value, expires > Utc::now().timestamp())),
             Err(_) => {
                 let _ = sqlx::query("DELETE FROM resource_cache_entries WHERE namespace = ? AND source = ? AND query_key = ? AND payload = ?")
                     .bind(&key.namespace).bind(key.source.as_str()).bind(&key.query).bind(payload).execute(pool).await;
@@ -228,10 +262,9 @@ impl ResourceCache {
 
     pub async fn clear(&self) -> ResourceResult<()> {
         let _guard = self.gate.write().await;
-        let pool = self
-            .pool
-            .as_ref()
-            .ok_or_else(|| ResourceError::Cache("pool disabled".into()))?;
+        let Some(pool) = &self.pool else {
+            return Ok(());
+        };
         let mut transaction = pool.begin().await.map_err(cache_error)?;
         sqlx::query("UPDATE resource_cache_state SET generation = generation + 1 WHERE id = 1").execute(&mut *transaction).await.map_err(cache_error)?;
         sqlx::query("DELETE FROM resource_cache_entries")
@@ -343,7 +376,7 @@ async fn open_pool(
 }
 
 fn is_corrupt(error: &sqlx::Error) -> bool {
-    matches!(error, sqlx::Error::Database(error) if error.code().is_some_and(|code| matches!(code.as_ref(), "11" | "26")))
+    matches!(error, sqlx::Error::Database(error) if error.code().and_then(|code| code.parse::<u32>().ok()).is_some_and(|code| matches!(code & 255, 11 | 26)))
 }
 
 fn sidecar(path: &Path, suffix: &str) -> PathBuf {

@@ -3,6 +3,16 @@ use tokio_util::sync::CancellationToken;
 
 use super::{ipc::*, providers::*, *};
 
+#[derive(Clone)]
+pub(crate) struct CatalogCursor {
+    reference: ResourceRef,
+    target: ResourceTarget,
+    project: SourceProjectRef,
+    locator: Option<String>,
+    cursor: String,
+    expires: i64,
+}
+
 impl ResourceService {
     pub async fn presentation_many(
         self: &Arc<Self>,
@@ -29,7 +39,11 @@ impl ResourceService {
             .query_many(source, queries.clone(), policy, cancel)
             .await;
         let mut offline = std::collections::HashSet::new();
-        if policy == CachePolicy::UseFresh && !cancel.is_cancelled() {
+        if matches!(
+            policy,
+            CachePolicy::UseFresh | CachePolicy::StaleWhileRevalidate
+        ) && !cancel.is_cancelled()
+        {
             let failed: Vec<_> = results.iter().enumerate().filter_map(|(index, result)| matches!(result, Err(error) if !matches!(error, ResourceError::Canceled)).then_some(index)).collect();
             let cached = self
                 .query_many(
@@ -404,17 +418,38 @@ impl ResourceService {
         locator: Option<String>,
         cancel: &CancellationToken,
     ) -> ResourceResult<ResourcePage<ResourceRelease>> {
-        // A source-qualified catalog cursor never changes project or source.
-        let project = match reference {
-            ResourceRef::Source { project } => project.clone(),
-            ResourceRef::Resource { .. } => {
-                self.get(reference, None, None, cancel)
-                    .await?
-                    .default_project
+        let now = chrono::Utc::now().timestamp();
+        self.catalogs.retain(|_, cursor| cursor.expires > now);
+        let saved = cursor
+            .as_ref()
+            .map(|token| {
+                self.catalogs
+                    .get(token)
+                    .map(|value| value.clone())
+                    .ok_or(ResourceError::CursorExpired)
+            })
+            .transpose()?;
+        if saved.as_ref().is_some_and(|saved| {
+            saved.reference != *reference
+                || saved.target != target
+                || saved.locator != locator
+        }) {
+            return Err(ResourceError::CursorExpired);
+        }
+        let project = if let Some(saved) = &saved {
+            saved.project.clone()
+        } else {
+            match reference {
+                ResourceRef::Source { project } => project.clone(),
+                ResourceRef::Resource { .. } => {
+                    self.get(reference, None, None, cancel)
+                        .await?
+                        .default_project
+                }
             }
         };
         let slug = if locator.is_some() {
-            locator
+            locator.clone()
         } else if let Some(store) = self.store() {
             store.project_alias(&project).await?
         } else {
@@ -426,8 +461,8 @@ impl ResourceService {
                 ProviderQuery::Releases {
                     project_id: project.project_id.clone(),
                     slug,
-                    target,
-                    cursor,
+                    target: target.clone(),
+                    cursor: saved.map(|saved| saved.cursor),
                     page_size: 50,
                 },
                 CachePolicy::UseFresh,
@@ -446,10 +481,36 @@ impl ResourceService {
                         "release page contains another project".into(),
                     ));
                 }
+                let next = if let Some(cursor) = page.cursor {
+                    if self.catalogs.len() >= 128
+                        && let Some(key) = self
+                            .catalogs
+                            .iter()
+                            .min_by_key(|value| value.expires)
+                            .map(|value| value.key().clone())
+                    {
+                        self.catalogs.remove(&key);
+                    }
+                    let token = uuid::Uuid::new_v4().to_string();
+                    self.catalogs.insert(
+                        token.clone(),
+                        CatalogCursor {
+                            reference: reference.clone(),
+                            target,
+                            project: project.clone(),
+                            locator,
+                            cursor,
+                            expires: now + 600,
+                        },
+                    );
+                    Some(token)
+                } else {
+                    None
+                };
                 Ok(ResourcePage {
                     request_id,
-                    has_more: page.cursor.is_some(),
-                    cursor: page.cursor,
+                    has_more: next.is_some(),
+                    cursor: next,
                     entries: page.entries,
                     total: page.total,
                     source_failures: vec![],

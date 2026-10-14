@@ -29,6 +29,7 @@ use super::{
 #[serde(rename_all = "camelCase")]
 pub enum CachePolicy {
     UseFresh,
+    StaleWhileRevalidate,
     OnlyCached,
     /// Ignore positive, negative, and expired cache entries. A source error
     /// never becomes success by falling back to an old cached response.
@@ -64,6 +65,45 @@ struct Flight {
 }
 
 struct Subscription(Arc<Flight>);
+
+fn try_subscribe(subscribers: &AtomicUsize) -> bool {
+    subscribers
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            if count == 0 {
+                None
+            } else {
+                count.checked_add(1)
+            }
+        })
+        .is_ok()
+}
+
+#[cfg(test)]
+mod subscription_tests {
+    use super::*;
+
+    #[test]
+    fn joining_never_resurrects_a_flight_abandoned_by_the_last_subscriber() {
+        let count = Arc::new(AtomicUsize::new(1));
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let departure = std::thread::spawn({
+            let count = count.clone();
+            let barrier = barrier.clone();
+            move || {
+                assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 1);
+                barrier.wait();
+            }
+        });
+        barrier.wait();
+        assert!(!try_subscribe(&count));
+        assert_eq!(count.load(Ordering::Acquire), 0);
+        departure.join().unwrap();
+        count.store(1, Ordering::Release);
+        assert!(try_subscribe(&count));
+        assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 2);
+        assert_eq!(count.load(Ordering::Acquire), 1);
+    }
+}
 
 impl Drop for Subscription {
     fn drop(&mut self) {
@@ -110,6 +150,7 @@ pub struct ResourceService {
         Arc<tokio::sync::Mutex<super::export::refresh::ExportDraft>>,
     >,
     pub(crate) searches: DashMap<String, super::search::SearchCursor>,
+    pub(crate) catalogs: DashMap<String, super::catalog::CatalogCursor>,
     store: Option<crate::state::resources::ResourceStore>,
     cache: Arc<ResourceCache>,
     sources: HashMap<SourceId, SourceRuntime>,
@@ -176,6 +217,7 @@ impl ResourceService {
             export_sessions: DashMap::new(),
             export_plans: DashMap::new(),
             searches: DashMap::new(),
+            catalogs: DashMap::new(),
             store,
             cache,
             sources,
@@ -196,6 +238,26 @@ impl ResourceService {
 
     pub fn cache(&self) -> &Arc<ResourceCache> {
         &self.cache
+    }
+
+    fn refresh_background(
+        self: &Arc<Self>,
+        source: SourceId,
+        queries: Vec<ProviderQuery>,
+        generation: i64,
+    ) {
+        let service = self.clone();
+        tokio::spawn(async move {
+            let _ = service
+                .query_many_at_generation(
+                    &source,
+                    queries,
+                    CachePolicy::UseFresh,
+                    &CancellationToken::new(),
+                    Some(generation),
+                )
+                .await;
+        });
     }
 
     pub fn store(&self) -> Option<&crate::state::resources::ResourceStore> {
@@ -233,6 +295,18 @@ impl ResourceService {
         policy: CachePolicy,
         cancel: &CancellationToken,
     ) -> Vec<ResourceResult<QueryOutcome>> {
+        self.query_many_at_generation(source, queries, policy, cancel, None)
+            .await
+    }
+
+    async fn query_many_at_generation(
+        self: &Arc<Self>,
+        source: &SourceId,
+        queries: Vec<ProviderQuery>,
+        policy: CachePolicy,
+        cancel: &CancellationToken,
+        expected_generation: Option<i64>,
+    ) -> Vec<ResourceResult<QueryOutcome>> {
         if cancel.is_cancelled() {
             return vec![Err(ResourceError::Canceled); queries.len()];
         }
@@ -240,7 +314,12 @@ impl ResourceService {
             return vec![Err(ResourceError::Unavailable); queries.len()];
         };
         let capabilities = runtime.provider.source();
-        if !capabilities.available && policy != CachePolicy::OnlyCached {
+        if !capabilities.available
+            && !matches!(
+                policy,
+                CachePolicy::OnlyCached | CachePolicy::StaleWhileRevalidate
+            )
+        {
             return vec![Err(ResourceError::Unavailable); queries.len()];
         }
         let namespace = runtime.provider.namespace();
@@ -248,7 +327,11 @@ impl ResourceService {
         let local_release_pagination =
             runtime.provider.local_release_pagination();
         let generation = self.cache.generation().await;
+        if expected_generation.is_some_and(|expected| expected != generation) {
+            return vec![Err(ResourceError::Canceled); queries.len()];
+        }
         let mut subscriptions = Vec::with_capacity(queries.len());
+        let mut background = Vec::new();
         let mut fresh = Vec::new();
         for mut query in queries {
             if cancel.is_cancelled() {
@@ -296,14 +379,24 @@ impl ResourceService {
                 }
             };
             if policy != CachePolicy::ForceRefresh {
-                let value = if policy == CachePolicy::OnlyCached {
-                    self.cache.get_any(&cache_key).await
-                } else {
-                    self.cache.get(&cache_key).await
-                };
+                let (value, expired) =
+                    if policy == CachePolicy::StaleWhileRevalidate {
+                        self.cache
+                            .get_with_freshness(&cache_key)
+                            .await
+                            .map(|(value, fresh)| (Some(value), !fresh))
+                            .unwrap_or((None, false))
+                    } else if policy == CachePolicy::OnlyCached {
+                        (self.cache.get_any(&cache_key).await, false)
+                    } else {
+                        (self.cache.get(&cache_key).await, false)
+                    };
                 if let Some(value) = value
                     && validate_value(source, &query, &value).is_ok()
                 {
+                    if expired {
+                        background.push(query.clone());
+                    }
                     subscriptions.push(Ok(Ok(QueryOutcome {
                         value,
                         from_cache: true,
@@ -315,6 +408,10 @@ impl ResourceService {
                 subscriptions.push(Err(ResourceError::Unavailable));
                 continue;
             }
+            if !capabilities.available {
+                subscriptions.push(Err(ResourceError::Unavailable));
+                continue;
+            }
             let key = FlightKey {
                 cache: cache_key,
                 policy,
@@ -322,10 +419,9 @@ impl ResourceService {
             };
             let flight = match self.flights.entry(key.clone()) {
                 Entry::Occupied(entry)
-                    if entry.get().subscribers.load(Ordering::Acquire) > 0 =>
+                    if try_subscribe(&entry.get().subscribers) =>
                 {
                     let flight = entry.get().clone();
-                    flight.subscribers.fetch_add(1, Ordering::AcqRel);
                     flight
                 }
                 entry => {
@@ -351,6 +447,9 @@ impl ResourceService {
                 }
             };
             subscriptions.push(Ok(Err(Subscription(flight))));
+        }
+        if !background.is_empty() {
+            self.refresh_background(source.clone(), background, generation);
         }
         let mut groups: HashMap<u8, Vec<Arc<Flight>>> = HashMap::new();
         for flight in fresh {

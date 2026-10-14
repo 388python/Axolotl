@@ -3,6 +3,91 @@ use crate::state::{DirectoryInfo, ModrinthProjectId, ModrinthVersionId};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
 #[tokio::test]
+async fn missing_backup_is_only_idempotent_when_original_bytes_are_restored() {
+    let temp = tempfile::tempdir().unwrap();
+    let old =
+        artifact(SourceId::modrinth(), "old00000", "release1", b"old bytes")
+            .integrity;
+    let target =
+        artifact(SourceId::modrinth(), "new00000", "release2", b"new bytes")
+            .integrity;
+    let file = JournalFile {
+        path: "new.jar".into(),
+        previous_path: Some("old.jar".into()),
+        backup: Some("backup.old".into()),
+        old: Some(old),
+        target,
+    };
+    assert!(recover_files(temp.path(), &[file.clone()]).await.is_err());
+    std::fs::write(temp.path().join("new.jar"), b"new bytes").unwrap();
+    assert!(recover_files(temp.path(), &[file.clone()]).await.is_err());
+    std::fs::write(temp.path().join("old.jar"), b"old bytes").unwrap();
+    recover_files(temp.path(), &[file]).await.unwrap();
+    assert!(!temp.path().join("new.jar").exists());
+}
+
+#[tokio::test]
+async fn replacing_import_files_restores_manual_requirements_and_increments_the_plan_revision()
+ {
+    let (_temp, state, original, _, root) = fixture().await;
+    let source = root.join("download.zip");
+    std::fs::write(&source, b"new bytes").unwrap();
+    let mut target =
+        artifact(SourceId::modrinth(), "project1", "release1", b"new bytes");
+    target.acquisition = ArtifactAcquisition::ManualDownload {
+        page_url: "https://example.com/download".into(),
+    };
+    let plan = local_plan(&state, original, target, "download.zip", None).await;
+    let id = plan.actions[0].node_id.clone();
+    let added = plans::prepare_import_files_with_pool(
+        &state.pool,
+        plan.clone(),
+        HashMap::from([(id, source.to_string_lossy().to_string())]),
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(added.revision, plan.revision + 1);
+    assert!(
+        !added.issues.iter().any(
+            |issue| issue.code == ResourceIssueCode::ManualDownloadRequired
+        )
+    );
+    assert!(
+        plans::prepare_import_files_with_pool(
+            &state.pool,
+            plan,
+            HashMap::new(),
+            &CancellationToken::new()
+        )
+        .await
+        .is_err()
+    );
+    let cancel = CancellationToken::new();
+    let (first, second) = tokio::join!(
+        plans::prepare_import_files_with_pool(
+            &state.pool,
+            added.clone(),
+            HashMap::new(),
+            &cancel
+        ),
+        plans::prepare_import_files_with_pool(
+            &state.pool,
+            added.clone(),
+            HashMap::new(),
+            &cancel
+        ),
+    );
+    assert_ne!(first.is_ok(), second.is_ok());
+    let removed = first.or(second).unwrap();
+    assert_eq!(removed.revision, added.revision + 1);
+    assert!(removed.issues.iter().any(|issue| issue.code
+        == ResourceIssueCode::ManualDownloadRequired
+        && issue.blocking));
+    state.pool.close().await;
+}
+
+#[tokio::test]
 async fn entry_graph_stores_only_the_entry_dependency_closure() {
     let (_temp, state, original, _, _) = fixture().await;
     let mut plan = local_plan(

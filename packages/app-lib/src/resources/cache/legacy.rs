@@ -39,7 +39,7 @@ impl ResourceCache {
             let last: i64 =
                 checkpoint.try_get("last_rowid").map_err(cache_error)?;
             let rows = sqlx::query("SELECT rowid, id, data_type,
-                CASE WHEN data_type IN ('project', 'version', 'curseforge_project') AND length(CAST(data AS BLOB)) <= ? THEN data END AS data,
+                CASE WHEN data_type IN ('project', 'version', 'curseforge_project', 'modpack_files') AND length(CAST(data AS BLOB)) <= ? THEN data END AS data,
                 expires FROM cache WHERE rowid > ? AND rowid <= ? ORDER BY rowid LIMIT ?")
                 .bind(MAX_LEGACY_PAYLOAD_BYTES).bind(last).bind(high_water).bind(PAGE_SIZE)
                 .fetch_all(main).await.map_err(cache_error)?;
@@ -58,6 +58,24 @@ impl ResourceCache {
                 let id: String = row.try_get("id").map_err(cache_error)?;
                 let expires: i64 =
                     row.try_get("expires").map_err(cache_error)?;
+                if data_type == "modpack_files" {
+                    if let Ok(index) = serde_json::from_value::<
+                        crate::state::CachedModpackFiles,
+                    >(payload.clone())
+                        && index.version_id == id
+                        && crate::resources::packs::valid_index(&index)
+                    {
+                        pending.push((
+                            crate::resources::packs::index_key(&id)?,
+                            serde_json::to_string(&ProviderValue::Protocol(
+                                serde_json::to_value(index)?,
+                            ))?,
+                            0,
+                            expires,
+                        ));
+                    }
+                    continue;
+                }
                 let retrieved = expires.saturating_sub(LEGACY_TTL);
                 if retrieved < 0 || retrieved > Utc::now().timestamp() {
                     continue;

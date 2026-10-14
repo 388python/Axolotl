@@ -90,7 +90,7 @@ pub(crate) async fn artifacts(
     output
 }
 
-fn index_key(release: &str) -> ResourceResult<cache::CacheKey> {
+pub(crate) fn index_key(release: &str) -> ResourceResult<cache::CacheKey> {
     SourceReleaseId::new(release)?;
     cache::CacheKey::new("pack-index".into(), SourceId::modrinth(), &release)
 }
@@ -136,7 +136,7 @@ pub(crate) async fn index(
     release: &str,
 ) -> Option<crate::state::CachedModpackFiles> {
     let key = index_key(release).ok()?;
-    let ProviderValue::Protocol(value) = cache.get(&key).await? else {
+    let ProviderValue::Protocol(value) = cache.get_any(&key).await? else {
         return None;
     };
     let index: crate::state::CachedModpackFiles =

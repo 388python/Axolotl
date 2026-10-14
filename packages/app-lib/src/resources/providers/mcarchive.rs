@@ -149,6 +149,11 @@ impl McArchiveProvider {
             }
             ProviderQuery::Search { query, cursor } => {
                 validate_archive_search(query)?;
+                let query = search_filters::merge_positive_filters(
+                    query,
+                    &SourceId::mcarchive(),
+                )?;
+                validate_archive_search(&query)?;
                 let mut request = ProtocolRequest::get("/mods/");
                 request.query.push(("keyword".into(), query.text.clone()));
                 if let Some(version) = query.target.game_versions.first() {

@@ -1,6 +1,75 @@
 use super::*;
 
 #[tokio::test]
+async fn constraints_from_deeper_parents_reselect_the_shared_dependency_in_both_root_orders()
+ {
+    let mut a = release("root0000", "1", 'a');
+    let mut b = release("parent00", "1", 'b');
+    let mut c = release("child000", "1", 'c');
+    let versions = vec![
+        release("depend00", "1", 'd'),
+        release("depend00", "2", 'e'),
+        release("depend00", "3", 'f'),
+    ];
+    requires(&mut b, &c, ResourceDependencyKind::Required);
+    for (root, constraint) in [(&mut a, ">=1"), (&mut c, "<3")] {
+        root.artifacts[0].dependencies.push(ArtifactDependency {
+            target: DependencyTarget::Resource {
+                reference: ResourceRef::Source {
+                    project: versions[0].reference.project.clone(),
+                },
+            },
+            kind: ResourceDependencyKind::Required,
+            version_constraint: Some(constraint.into()),
+        });
+    }
+    for roots in [
+        vec![selection("a", &a, None), selection("b", &b, None)],
+        vec![selection("b", &b, None), selection("a", &a, None)],
+    ] {
+        let (_temp, service) = service(
+            [vec![a.clone(), b.clone(), c.clone()], versions.clone()].concat(),
+        )
+        .await;
+        let built = service
+            .build_operation(
+                draft(roots, ResourceOperationIntent::Install),
+                &target(),
+                &[],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert!(built.plan.issues.is_empty(), "{:?}", built.plan.issues);
+        let d = built
+            .plan
+            .nodes
+            .iter()
+            .find(|node| {
+                node.artifact.as_ref().is_some_and(|artifact| {
+                    artifact.reference.release.project
+                        == versions[0].reference.project
+                })
+            })
+            .unwrap();
+        assert_eq!(
+            d.artifact.as_ref().unwrap().reference,
+            versions[1].artifacts[0].reference
+        );
+        assert_eq!(
+            built
+                .plan
+                .edges
+                .iter()
+                .filter(|edge| edge.child == d.id)
+                .count(),
+            2
+        );
+        service.cache().close().await;
+    }
+}
+
+#[tokio::test]
 async fn disabled_missing_and_outdated_dependencies_require_review_without_installing_an_extra_copy()
  {
     let mut a = release("root0000", "1", 'a');

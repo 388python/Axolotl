@@ -37,7 +37,7 @@ impl ModrinthProvider {
             let mut protocols = HashMap::new();
             for value in values {
                 let id = value["id"].as_str().ok_or_else(|| ResourceError::InvalidResponse("release protocol ID missing".into()))?.to_owned();
-                if !ids.contains(&id.as_str()) || protocols.insert(id, value).is_some() {
+                if !ids.contains(&id.as_str()) || protocols.insert(id, protocol_projection(value)).is_some() {
                     return Err(ResourceError::InvalidResponse("unexpected or duplicate release protocol".into()));
                 }
             }
@@ -369,7 +369,7 @@ impl ModrinthProvider {
                         "invalid search protocol response".into(),
                     ));
                 }
-                Ok(ProviderValue::Protocol(value))
+                Ok(ProviderValue::Protocol(protocol_projection(value)))
             }
             ProviderQuery::Locate { locator } => {
                 SourceProjectId::new(locator.clone())?;
@@ -582,6 +582,13 @@ impl ModrinthProvider {
                         &SourceId::modrinth(),
                     )?;
                     let mut terms = vec![expression];
+                    for category in &query.categories {
+                        terms.push(ResourceSearchExpression::Predicate {
+                            field: "category".into(),
+                            values: vec![category.clone()],
+                            excluded: false,
+                        });
+                    }
                     if !query.types.is_empty() {
                         terms.push(ResourceSearchExpression::Predicate {
                             field: "type".into(),

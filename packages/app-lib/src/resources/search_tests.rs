@@ -180,6 +180,164 @@ async fn main_pool() -> sqlx::SqlitePool {
 }
 
 #[tokio::test]
+async fn one_item_relevance_pages_alternate_sources() {
+    let (_temp, cache) = cache().await;
+    let providers: Vec<Arc<dyn ResourceProvider>> = vec![
+        SearchProvider::new(
+            SourceId::modrinth(),
+            &["MR A".into(), "MR B".into(), "MR C".into()],
+        ),
+        SearchProvider::new(
+            SourceId::curseforge(),
+            &["CF A".into(), "CF B".into(), "CF C".into()],
+        ),
+    ];
+    let service = ResourceService::new(cache.clone(), providers).unwrap();
+    let mut cursor = None;
+    let mut sources = Vec::new();
+    for _ in 0..6 {
+        let page = service
+            .search(
+                query(1),
+                cursor,
+                RequestId::new("alternate").unwrap(),
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        sources.push(page.entries[0].entry.default_project.source.clone());
+        cursor = page.cursor;
+    }
+    assert!(sources.windows(2).all(|pair| pair[0] != pair[1]));
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn ordered_pages_wait_for_a_source_head_after_filtered_batches() {
+    let (_temp, cache) = cache().await;
+    let mr = SearchProvider::new(
+        SourceId::modrinth(),
+        &["hidden A".into(), "hidden B".into(), "Newer".into()],
+    );
+    let cf = SearchProvider::new(SourceId::curseforge(), &["Older".into()]);
+    let mut mr = Arc::try_unwrap(mr).ok().unwrap();
+    mr.entries[2].created_at = Some("2026-10-14T00:00:00Z".parse().unwrap());
+    let mut cf = Arc::try_unwrap(cf).ok().unwrap();
+    cf.entries[0].created_at = Some("2020-01-01T00:00:00Z".parse().unwrap());
+    let service =
+        ResourceService::new(cache.clone(), vec![Arc::new(mr), Arc::new(cf)])
+            .unwrap();
+    let mut query = query(1);
+    query.sort = ResourceSearchSort::Created;
+    query.filter = Some(ResourceSearchExpression::Predicate {
+        field: "projectId".into(),
+        values: vec!["modrinth:00000000".into(), "modrinth:00000001".into()],
+        excluded: true,
+    });
+    let first = service
+        .search(
+            query.clone(),
+            None,
+            RequestId::new("sorted1").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(first.entries.is_empty());
+    assert!(first.has_more);
+    let second = service
+        .search(
+            query.clone(),
+            first.cursor,
+            RequestId::new("sorted2").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second.entries[0].projects[0].title, "Newer");
+    let third = service
+        .search(
+            query,
+            second.cursor,
+            RequestId::new("sorted3").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(third.entries[0].projects[0].title, "Older");
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn confirmed_distinct_resources_never_merge_by_title() {
+    let pool = main_pool().await;
+    let (_temp, cache) = cache().await;
+    sqlx::query("INSERT INTO resources(id) VALUES ('mr'), ('cf')")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO resource_source_projects(source, project_id, resource_id) VALUES ('modrinth', '00000000', 'mr'), ('curseforge', '1', 'cf')").execute(&pool).await.unwrap();
+    let service = ResourceService::with_store(
+        cache.clone(),
+        vec![
+            SearchProvider::new(SourceId::modrinth(), &["Same name".into()]),
+            SearchProvider::new(SourceId::curseforge(), &["Same name".into()]),
+        ],
+        crate::state::resources::ResourceStore::new(pool.clone()),
+    )
+    .unwrap();
+    let page = service
+        .search(
+            query(10),
+            None,
+            RequestId::new("distinct").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 2);
+    assert!(
+        page.entries
+            .iter()
+            .all(|entry| entry.entry.status == IdentityStatus::Confirmed
+                && entry.entry.resource_id.is_some())
+    );
+    cache.close().await;
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn modrinth_primary_type_exclusions_do_not_reject_server_filtered_mixed_projects()
+ {
+    let (_temp, cache) = cache().await;
+    let provider = SearchProvider::new(
+        SourceId::modrinth(),
+        &["Pack containing mods".into()],
+    );
+    let mut provider = Arc::try_unwrap(provider).ok().unwrap();
+    provider.entries[0].types = vec![ResourceType::ModPack, ResourceType::Mod];
+    let service =
+        ResourceService::new(cache.clone(), vec![Arc::new(provider)]).unwrap();
+    let mut query = query(10);
+    query.filter = Some(ResourceSearchExpression::Predicate {
+        field: "type".into(),
+        values: vec!["mod".into()],
+        excluded: true,
+    });
+    let page = service
+        .search(
+            query,
+            None,
+            RequestId::new("mixed").unwrap(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.entries.len(), 1);
+    cache.close().await;
+}
+
+#[tokio::test]
 async fn search_keeps_all_provider_remainders_and_has_no_fabricated_mixed_total()
  {
     let (_directory, cache) = cache().await;

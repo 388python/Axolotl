@@ -2937,7 +2937,7 @@ impl CachedEntry {
 
     pub async fn get_modpack_files(
         version_id: &str,
-        _pool: &SqlitePool,
+        pool: &SqlitePool,
         _fetch_semaphore: &FetchSemaphore,
     ) -> crate::Result<Option<CachedModpackFiles>> {
         let state = crate::State::get().await?;
@@ -2945,7 +2945,28 @@ impl CachedEntry {
             .resources()
             .await
             .map_err(crate::resources::protocol::error)?;
-        Ok(crate::resources::packs::index(service.cache(), version_id).await)
+        if let Some(index) =
+            crate::resources::packs::index(service.cache(), version_id).await
+        {
+            return Ok(Some(index));
+        }
+        if service.cache().generation().await > 0 {
+            return Ok(None);
+        }
+        let data: Option<String> = sqlx::query_scalar("SELECT data FROM cache WHERE id = ? AND data_type = 'modpack_files' AND length(CAST(data AS BLOB)) <= 1048576").bind(version_id).fetch_optional(pool).await?;
+        let index = data
+            .and_then(|data| {
+                serde_json::from_str::<CachedModpackFiles>(&data).ok()
+            })
+            .filter(|index| {
+                index.version_id == version_id
+                    && crate::resources::packs::valid_index(index)
+            });
+        if let Some(index) = &index {
+            let _ = crate::resources::packs::save_index(service.cache(), index)
+                .await;
+        }
+        Ok(index)
     }
 
     /// Get versions for a project (without changelogs for fast loading)

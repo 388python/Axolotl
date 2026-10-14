@@ -159,6 +159,8 @@ async fn presentation_keeps_incomplete_protocol_cache_when_offline_without_retry
 mod plans_tests;
 #[path = "protocol_tests.rs"]
 mod protocol_tests;
+#[path = "review_tests.rs"]
+mod review_tests;
 #[path = "search_tests.rs"]
 mod search_tests;
 
@@ -1993,7 +1995,7 @@ async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_to
 async fn curseforge_search_never_uses_game_version_sort_for_publication_dates()
 {
     let transport = FixtureTransport::new(|_, request| {
-        assert!(request.query.contains(&("sortField".into(), "11".into())));
+        assert!(request.query.contains(&("sortField".into(), "3".into())));
         assert!(
             request
                 .query
@@ -2020,7 +2022,7 @@ async fn curseforge_search_never_uses_game_version_sort_for_publication_dates()
             channels: vec![],
         },
         categories: vec![],
-        sort: ipc::ResourceSearchSort::Created,
+        sort: ipc::ResourceSearchSort::ProjectUpdated,
         page_size: 50,
     };
     let ProviderValue::Search(page) = provider
@@ -2036,7 +2038,7 @@ async fn curseforge_search_never_uses_game_version_sort_for_publication_dates()
     };
     assert!(page.entries[0].first_published_at.is_none());
     assert!(page.entries[0].latest_published_at > page.entries[0].created_at);
-    query.sort = ipc::ResourceSearchSort::FirstPublished;
+    query.sort = ipc::ResourceSearchSort::Created;
     assert!(matches!(
         provider
             .fetch_many(&[ProviderQuery::Search {

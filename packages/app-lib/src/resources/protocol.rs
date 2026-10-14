@@ -11,6 +11,10 @@ pub(crate) fn policy(behaviour: Option<CacheBehaviour>) -> CachePolicy {
     match behaviour.unwrap_or_default() {
         CacheBehaviour::Bypass => CachePolicy::ForceRefresh,
         CacheBehaviour::CacheOnly => CachePolicy::OnlyCached,
+        CacheBehaviour::StaleWhileRevalidate
+        | CacheBehaviour::StaleWhileRevalidateSkipOffline => {
+            CachePolicy::StaleWhileRevalidate
+        }
         _ => CachePolicy::UseFresh,
     }
 }
@@ -261,7 +265,12 @@ async fn updates(
         .collect::<ResourceResult<Vec<_>>>()
         .map_err(error)?;
     let identified = service
-        .query_many(&SourceId::modrinth(), queries, policy, cancel)
+        .presentation_many_with_policy(
+            &SourceId::modrinth(),
+            queries,
+            cancel,
+            policy,
+        )
         .await;
     let mut project_pages = std::collections::HashMap::new();
     let mut entries = Vec::new();
@@ -309,19 +318,22 @@ async fn updates(
         let project_id = current.reference.project.project_id.clone();
         if !project_pages.contains_key(&project_id) {
             let page = service
-                .query(
+                .presentation_many_with_policy(
                     &SourceId::modrinth(),
-                    ProviderQuery::ReleasesProtocol {
+                    vec![ProviderQuery::ReleasesProtocol {
                         project_id: current
                             .reference
                             .project
                             .project_id
                             .clone(),
-                    },
-                    policy,
+                    }],
                     cancel,
+                    policy,
                 )
-                .await;
+                .await
+                .into_iter()
+                .next()
+                .unwrap_or(Err(ResourceError::Unavailable));
             project_pages.insert(project_id.clone(), page);
         }
         let page = project_pages.get(&project_id).cloned().unwrap();

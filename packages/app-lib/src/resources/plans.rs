@@ -930,11 +930,84 @@ impl ResourceService {
 
     pub(crate) async fn build_operation_with_progress(
         self: &Arc<Self>,
+        draft: OperationDraft,
+        target: &ResourceTarget,
+        installed: &[InstalledResource],
+        cancel: &CancellationToken,
+        progress: OperationProgress<'_>,
+    ) -> ResourceResult<OperationDraft> {
+        let original = draft.clone();
+        let mut seeded: HashMap<SelectionKey, Vec<String>> = HashMap::new();
+        for _ in 0..32 {
+            let result = self
+                .build_operation_pass(
+                    original.clone(),
+                    target,
+                    installed,
+                    cancel,
+                    progress,
+                    &seeded,
+                )
+                .await?;
+            if !result
+                .plan
+                .issues
+                .iter()
+                .any(|issue| issue.code == ResourceIssueCode::VersionConflict)
+            {
+                return Ok(result);
+            }
+            let mut next: HashMap<SelectionKey, Vec<String>> = HashMap::new();
+            let nodes: HashMap<_, _> = result
+                .plan
+                .nodes
+                .iter()
+                .map(|node| (&node.id, node))
+                .collect();
+            for edge in &result.plan.edges {
+                if edge.kind != ResourceDependencyKind::Required
+                    && !result.plan.active_roots.contains(&edge.child)
+                {
+                    continue;
+                }
+                let Some(constraint) = &edge.version_constraint else {
+                    continue;
+                };
+                let Some(node) = nodes.get(&edge.child) else {
+                    continue;
+                };
+                let Some(kind) = node.resource_type else {
+                    continue;
+                };
+                next.entry(SelectionKey {
+                    resource: node.resource.clone(),
+                    scope: node.scope.clone(),
+                    kind,
+                    entry: None,
+                })
+                .or_default()
+                .push(constraint.clone());
+            }
+            for values in next.values_mut() {
+                values.sort();
+                values.dedup();
+            }
+            if next == seeded {
+                return Ok(result);
+            }
+            seeded = next;
+        }
+        Err(invalid("dependency constraints did not converge"))
+    }
+
+    async fn build_operation_pass(
+        self: &Arc<Self>,
         mut draft: OperationDraft,
         target: &ResourceTarget,
         installed: &[InstalledResource],
         cancel: &CancellationToken,
         progress: OperationProgress<'_>,
+        seeded: &HashMap<SelectionKey, Vec<String>>,
     ) -> ResourceResult<OperationDraft> {
         let preferred = self.preferred_source().await?;
         draft.plan.nodes.clear();
@@ -1034,7 +1107,7 @@ impl ResourceService {
             } else {
                 None
             };
-            let constraints: Vec<_> = draft
+            let mut constraints: Vec<_> = draft
                 .plan
                 .edges
                 .iter()
@@ -1049,6 +1122,11 @@ impl ResourceService {
                 })
                 .filter_map(|edge| edge.version_constraint.clone())
                 .collect();
+            if let Some(previous) = seeded.get(&selection_key(&selection)) {
+                constraints.extend(previous.iter().cloned());
+                constraints.sort();
+                constraints.dedup();
+            }
             let satisfied_dependency =
                 if selection.id.as_str().starts_with("dependency:")
                     && selection.entry_id.is_none()
@@ -1987,6 +2065,30 @@ impl ResourceService {
 pub(crate) async fn verify_import_files(
     draft: &mut OperationDraft,
 ) -> ResourceResult<()> {
+    draft.plan.issues.retain(|issue| {
+        issue.code != ResourceIssueCode::ManualDownloadRequired
+    });
+    let manual: Vec<_> = draft
+        .plan
+        .actions
+        .iter()
+        .filter(|action| {
+            !matches!(
+                action.target.acquisition,
+                ArtifactAcquisition::PublicDownload { .. }
+            )
+        })
+        .map(|action| action.node_id.clone())
+        .collect();
+    for id in manual {
+        issue(
+            &mut draft.plan,
+            ResourceIssueCode::ManualDownloadRequired,
+            &id,
+            true,
+            "artifact requires a manual download",
+        );
+    }
     for action in &mut draft.plan.actions {
         let Some(path) = draft.import_files.get(&action.node_id) else {
             continue;
@@ -2034,13 +2136,42 @@ pub async fn prepare_import_files(
         return Err(invalid("local imports must belong to selected roots"));
     }
     let state = crate::State::get().await?;
-    let mut draft = load(&state.pool, &plan.id, plan.revision).await?;
+    prepare_import_files_with_pool(&state.pool, plan, files, cancel).await
+}
+
+pub(crate) async fn prepare_import_files_with_pool(
+    pool: &SqlitePool,
+    plan: ResourceOperationPlan,
+    files: HashMap<SelectionId, String>,
+    cancel: &CancellationToken,
+) -> ResourceResult<ResourceOperationPlan> {
+    if files
+        .keys()
+        .any(|id| !plan.selections.iter().any(|selection| &selection.id == id))
+    {
+        return Err(invalid("local imports must belong to selected roots"));
+    }
+    let mut draft = load(pool, &plan.id, plan.revision).await?;
+    if files.keys().any(|id| {
+        !draft
+            .plan
+            .selections
+            .iter()
+            .any(|selection| &selection.id == id)
+    }) {
+        return Err(invalid("local imports must belong to selected roots"));
+    }
     draft.import_files = files;
     verify_import_files(&mut draft).await?;
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);
     }
-    let updated = sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ? AND revision = ? AND job_id IS NULL AND queued = 0").bind(serde_json::to_string(&draft)?).bind(plan.id.as_str()).bind(plan.revision).execute(&state.pool).await.map_err(db)?;
+    draft.plan.revision = draft
+        .plan
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| invalid("plan revision exhausted"))?;
+    let updated = sqlx::query("UPDATE resource_operation_plans SET payload = ?, revision = ? WHERE id = ? AND revision = ? AND job_id IS NULL AND queued = 0").bind(serde_json::to_string(&draft)?).bind(draft.plan.revision).bind(plan.id.as_str()).bind(plan.revision).execute(pool).await.map_err(db)?;
     if updated.rows_affected() != 1 {
         return Err(invalid("plan was revised or already queued"));
     }

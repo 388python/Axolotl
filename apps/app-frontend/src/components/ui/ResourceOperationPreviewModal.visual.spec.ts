@@ -229,6 +229,46 @@ const input = {
     installDependencies: true,
 }
 
+it('shows blocking compatibility and exception controls for byte-matched installed dependencies', async () => {
+    ready()
+    const dependency = {
+        ...node('installed', 'satisfied', { reference, fileName: 'Installed.jar' }),
+        compatibility: { gameVersion: 'incompatible', loader: 'compatible', reasons: [] },
+    }
+    vi.mocked(resourcePrepareEntryOperation).mockResolvedValue({
+        ...plan(),
+        nodes: [root, dependency],
+        issues: [
+            {
+                code: 'compatibilityMismatch',
+                selectionId: 'installed',
+                entryId: null,
+                blocking: true,
+                message: 'game version mismatch',
+            },
+        ],
+    } as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal)
+    const result = wrapper.vm.show(input)
+    try {
+        await flushPromises()
+        const accept = wrapper
+            .findAll('button')
+            .find((button) => button.text().includes('Minecraft'))!
+        expect(accept.exists()).toBe(true)
+        expect(
+            wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Queue changes')!
+                .attributes('disabled'),
+        ).toBeDefined()
+        await wrapper.vm.cancel()
+        expect(await result).toBeNull()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
 it('shows each parsed item while retaining the skeleton and locking every button until the final plan arrives', async () => {
     ready()
     let progress!: (value: ResourceOperationProgress) => void

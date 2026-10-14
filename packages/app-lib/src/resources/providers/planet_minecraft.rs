@@ -70,7 +70,7 @@ impl PlanetMinecraftProvider {
                     return Err(ResourceError::Unsupported("connector returned untyped projects; the requested content type cannot be verified".into()));
                 }
                 let entries = entries.into_iter().filter(|entry| {
-                    (query.types.is_empty() || query.types.iter().all(|kind| entry.types.contains(kind)))
+                    (query.types.is_empty() || query.types.iter().any(|kind| entry.types.contains(kind)))
                         && query.filter.as_ref().is_none_or(|filter| matches_type_filter(filter, &entry.types))
                 }).collect();
                 Ok(ProviderValue::Search(slice_page(entries, offset(cursor)?, query.page_size)?))

@@ -387,6 +387,8 @@ console.log('resource identities: real upgrade, downgrade and re-upgrade')
     check('malformed cache and slug do not become business identities', database.prepare("SELECT COUNT(*) AS count FROM resource_source_projects WHERE project_id IN ('old-slug', '000123', 'malformed')").get().count === 0)
     check('online pack has a durable identity', database.prepare('SELECT COUNT(*) AS count FROM resource_instance_pack_links').get().count === 1)
     check('upgrade has no broken foreign keys', database.prepare('PRAGMA foreign_key_check').all().length === 0)
+    const lookupPlan = database.prepare("EXPLAIN QUERY PLAN SELECT source, project_id, content_type FROM resource_legacy_projects WHERE source = 'curseforge' AND project_id = '12345678'").all().map(row => row.detail).join('\n')
+    check('resource trigger lookup searches pending downloads through its covering index', lookupPlan.includes('SEARCH instance_pending_manual_downloads USING COVERING INDEX resource_pending_download_project'), lookupPlan)
     check('resource favorites preserve exact source timestamps', database.prepare('SELECT saved_at FROM resource_favorites ORDER BY saved_at').all().map((row) => row.saved_at).join(',') === database.prepare("SELECT saved_at FROM content_favorites WHERE project_id = '12345678' ORDER BY saved_at").all().map((row) => row.saved_at).join(','))
     database.exec(`
         INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES ('frozen-plan', 'sample', 1, '{"exact":"retained"}');

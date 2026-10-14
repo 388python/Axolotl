@@ -9,6 +9,25 @@ use std::{
 fn invalid(message: impl Into<String>) -> ResourceError {
     ResourceError::InvalidRequest(message.into())
 }
+fn path_identity(path: &str) -> String {
+    if cfg!(windows) {
+        path.to_lowercase()
+    } else {
+        path.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    #[test]
+    fn backup_path_identity_preserves_case_on_case_sensitive_platforms() {
+        assert_eq!(
+            super::path_identity("mods/A.zip_previous.zip.old")
+                == super::path_identity("mods/a.zip_previous.zip.old"),
+            cfg!(windows)
+        );
+    }
+}
 fn db(error: sqlx::Error) -> ResourceError {
     ResourceError::Database(error.to_string())
 }
@@ -315,7 +334,7 @@ pub(crate) async fn prepare_with_state(
         .filter(|entry| selected.contains(&entry.id))
         .collect();
     let mut paths = HashSet::new();
-    files.retain(|file| paths.insert(file.relative_path.to_lowercase()));
+    files.retain(|file| paths.insert(path_identity(&file.relative_path)));
     let plan = ResourceHistoryCleanupPlan {
         id: PlanId::new(uuid::Uuid::new_v4().to_string())?,
         revision: 1,
@@ -352,13 +371,13 @@ async fn validate(
             && let Some(path) =
                 row.get::<Option<String>, _>("backup_relative_path")
         {
-            retained_paths.insert(path.to_ascii_lowercase());
+            retained_paths.insert(path_identity(&path));
         }
     }
     let current_paths: Vec<String> = sqlx::query_scalar("SELECT file.relative_path FROM instance_files file JOIN instance_content_entries entry ON entry.file_id = file.id WHERE file.instance_id = ? UNION ALL SELECT relative_path FROM store_instance_files WHERE instance_id = ?").bind(&plan.instance_id).bind(&plan.instance_id).fetch_all(&state.pool).await.map_err(db)?;
     let current_paths: HashSet<_> = current_paths
         .into_iter()
-        .map(|path| path.to_ascii_lowercase())
+        .map(|path| path_identity(&path))
         .collect();
     for file in &plan.files {
         let path = super::execution::checked_path(&root, &file.relative_path)?;
@@ -368,7 +387,7 @@ async fn validate(
         {
             return Err(invalid("backup changed since cleanup review"));
         }
-        let path_key = file.relative_path.to_ascii_lowercase();
+        let path_key = path_identity(&file.relative_path);
         if current_paths.contains(&path_key) {
             return Err(invalid(
                 "backup is still referenced as current instance content",

@@ -274,7 +274,8 @@ export function resourceSetPreferredSource(source: SourceId) {
     return invoke<void>('plugin:axolotl-resources|resource_set_preferred_source', { source })
 }
 
-export type ResourceCachePolicy = 'useFresh' | 'forceRefresh' | 'onlyCached'
+export type ResourceCachePolicy =
+    'useFresh' | 'forceRefresh' | 'onlyCached' | 'staleWhileRevalidate'
 
 export type ResourceOperationIntent = 'install' | 'update' | 'switchVersion'
 export type ResourceSelection = {
@@ -521,7 +522,10 @@ export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {
         ? 'forceRefresh'
         : behavior === 'cache_only'
           ? 'onlyCached'
-          : 'useFresh'
+          : behavior === 'stale_while_revalidate' ||
+              behavior === 'stale_while_revalidate_skip_offline'
+            ? 'staleWhileRevalidate'
+            : 'useFresh'
 }
 
 export interface ExportFileSnapshot {

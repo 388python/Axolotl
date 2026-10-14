@@ -389,6 +389,10 @@ impl CurseForgeProvider {
                         0,
                     )?;
                 }
+                let query = search_filters::merge_positive_filters(
+                    query,
+                    &SourceId::curseforge(),
+                )?;
                 if query.types.len() != 1 {
                     return Err(ResourceError::Unsupported("CurseForge search requires one content class per request".into()));
                 }
@@ -405,7 +409,6 @@ impl CurseForgeProvider {
                     ResourceSearchSort::Relevance => 1,
                     ResourceSearchSort::Downloads => 6,
                     ResourceSearchSort::ProjectUpdated => 3,
-                    ResourceSearchSort::Created => 11,
                     _ => return Err(ResourceError::Unsupported(
                         "CurseForge cannot provide requested sort semantics"
                             .into(),
@@ -497,7 +500,6 @@ impl ResourceProvider for CurseForgeProvider {
                 ResourceSearchSort::Relevance,
                 ResourceSearchSort::Downloads,
                 ResourceSearchSort::ProjectUpdated,
-                ResourceSearchSort::Created,
             ],
         }
     }

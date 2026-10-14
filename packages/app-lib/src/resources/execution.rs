@@ -256,6 +256,27 @@ async fn recover_files(
                 }
                 restore_project_materialization(&previous, Some(&backup))
                     .await?;
+            } else {
+                let old = file.old.as_ref().ok_or_else(|| {
+                    input("journal backup has no expected identity")
+                })?;
+                let previous = checked_path(
+                    root,
+                    file.previous_path.as_deref().unwrap_or(&file.path),
+                )?;
+                if !matches_file(&previous, old).await? {
+                    return Err(input(
+                        "resource recovery backup missing and original file not restored",
+                    ));
+                }
+                if previous != path && path.exists() {
+                    if !matches_file(&path, &file.target).await? {
+                        return Err(input(
+                            "resource file changed during recovery",
+                        ));
+                    }
+                    tokio::fs::remove_file(&path).await?;
+                }
             }
         } else if path.exists() {
             if !matches_file(&path, &file.target).await? {
