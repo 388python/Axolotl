@@ -78,33 +78,6 @@ fn try_subscribe(subscribers: &AtomicUsize) -> bool {
         .is_ok()
 }
 
-#[cfg(test)]
-mod subscription_tests {
-    use super::*;
-
-    #[test]
-    fn joining_never_resurrects_a_flight_abandoned_by_the_last_subscriber() {
-        let count = Arc::new(AtomicUsize::new(1));
-        let barrier = Arc::new(std::sync::Barrier::new(2));
-        let departure = std::thread::spawn({
-            let count = count.clone();
-            let barrier = barrier.clone();
-            move || {
-                assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 1);
-                barrier.wait();
-            }
-        });
-        barrier.wait();
-        assert!(!try_subscribe(&count));
-        assert_eq!(count.load(Ordering::Acquire), 0);
-        departure.join().unwrap();
-        count.store(1, Ordering::Release);
-        assert!(try_subscribe(&count));
-        assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 2);
-        assert_eq!(count.load(Ordering::Acquire), 1);
-    }
-}
-
 impl Drop for Subscription {
     fn drop(&mut self) {
         if self.0.subscribers.fetch_sub(1, Ordering::AcqRel) == 1
@@ -421,8 +394,7 @@ impl ResourceService {
                 Entry::Occupied(entry)
                     if try_subscribe(&entry.get().subscribers) =>
                 {
-                    let flight = entry.get().clone();
-                    flight
+                    entry.get().clone()
                 }
                 entry => {
                     let flight = Arc::new(Flight {
@@ -843,5 +815,32 @@ pub(crate) fn valid_artifact(artifact: &ResourceArtifact) -> bool {
             public_url(page_url).is_some()
         }
         ArtifactAcquisition::Unavailable => true,
+    }
+}
+
+#[cfg(test)]
+mod subscription_tests {
+    use super::*;
+
+    #[test]
+    fn joining_never_resurrects_a_flight_abandoned_by_the_last_subscriber() {
+        let count = Arc::new(AtomicUsize::new(1));
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let departure = std::thread::spawn({
+            let count = count.clone();
+            let barrier = barrier.clone();
+            move || {
+                assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 1);
+                barrier.wait();
+            }
+        });
+        barrier.wait();
+        assert!(!try_subscribe(&count));
+        assert_eq!(count.load(Ordering::Acquire), 0);
+        departure.join().unwrap();
+        count.store(1, Ordering::Release);
+        assert!(try_subscribe(&count));
+        assert_eq!(count.fetch_sub(1, Ordering::AcqRel), 2);
+        assert_eq!(count.load(Ordering::Acquire), 1);
     }
 }

@@ -365,33 +365,6 @@ async fn run_job(job_id: Uuid) -> crate::Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod registration_tests {
-    use super::*;
-    #[tokio::test]
-    async fn task_abort_always_unregisters_the_cancel_token() {
-        let registrations = std::sync::Arc::new(dashmap::DashMap::new());
-        let id = Uuid::new_v4();
-        let active = registrations.clone();
-        let started = std::sync::Arc::new(tokio::sync::Notify::new());
-        let signal = started.clone();
-        let task = tokio::spawn(async move {
-            active.insert(id, tokio_util::sync::CancellationToken::new());
-            let _registration = CancellationRegistration {
-                registrations: &active,
-                id,
-            };
-            signal.notify_one();
-            std::future::pending::<()>().await;
-        });
-        started.notified().await;
-        assert!(registrations.contains_key(&id));
-        task.abort();
-        assert!(task.await.unwrap_err().is_cancelled());
-        assert!(!registrations.contains_key(&id));
-    }
-}
-
 async fn finish_canceled_job(
     job_id: Uuid,
     job_state: &mut InstallJobState,
@@ -440,4 +413,31 @@ async fn finish_canceled_job(
     )
     .await?;
     emit_install_job(&record.snapshot()).await
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::*;
+    #[tokio::test]
+    async fn task_abort_always_unregisters_the_cancel_token() {
+        let registrations = std::sync::Arc::new(dashmap::DashMap::new());
+        let id = Uuid::new_v4();
+        let active = registrations.clone();
+        let started = std::sync::Arc::new(tokio::sync::Notify::new());
+        let signal = started.clone();
+        let task = tokio::spawn(async move {
+            active.insert(id, tokio_util::sync::CancellationToken::new());
+            let _registration = CancellationRegistration {
+                registrations: &active,
+                id,
+            };
+            signal.notify_one();
+            std::future::pending::<()>().await;
+        });
+        started.notified().await;
+        assert!(registrations.contains_key(&id));
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        assert!(!registrations.contains_key(&id));
+    }
 }

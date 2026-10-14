@@ -1,7 +1,4 @@
 {
-  "content.page-layout.dependency-disable-failed": {
-    "defaultMessage": "Dependent content could not be disabled. Retry to finish the deletion."
-  },
   "action.no-permission": {
     "defaultMessage": "You do not have permission."
   },
@@ -1027,6 +1024,9 @@
   },
   "content.page-layout.browse-content": {
     "defaultMessage": "Browse content"
+  },
+  "content.page-layout.dependency-disable-failed": {
+    "defaultMessage": "Dependent content could not be disabled. Retry to finish the deletion."
   },
   "content.page-layout.duplicate-status": {
     "defaultMessage": "{visible} matching · All copies: {updates} updates · {disabled} disabled · {missing} missing · {installing} in progress"
