@@ -386,11 +386,14 @@ import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
     confirmedContentGroupKey,
     duplicateGroupUpdateEntries,
+    queueResourceEntryChanges,
     reviewResourceEntryChanges,
 } from '@/helpers/resource-update-selection'
 import {
     resourceCheckUpdates,
     resourceListHistory,
+    resourcePrepareEntryOperation,
+    resourceQueuePlan,
     resourceReleaseDocuments,
     resourceReleases,
     type SourceProjectRef,
@@ -2256,20 +2259,45 @@ async function getDeleteDependencyWarning(items: ContentItem[]) {
     return dependents.length > 0 ? { items, dependents } : null
 }
 
+const directEntryChanges = new Set<string>()
 async function reviewResourceChanges(entryIds: string[], release: SourceReleaseRef | null = null) {
+    const installedMods = new Set(
+        contentSnapshot.value?.items
+            .filter((item) => item.projectType === 'mod')
+            .map((item) => item.entryId) ?? [],
+    )
+    const modIds = entryIds.filter((id) => installedMods.has(id))
+    const reviewedIds = entryIds.filter((id) => !installedMods.has(id))
+    let queued = false
+    if (modIds.length) {
+        if (modIds.some((id) => directEntryChanges.has(id))) return false
+        for (const id of modIds) directEntryChanges.add(id)
+        try {
+            queued = await queueResourceEntryChanges(
+                { instanceId: props.instance.id, entryIds: modIds, release },
+                resourcePrepareEntryOperation,
+                resourceQueuePlan,
+                (job) => downloadManager.trackJob(job),
+            )
+        } finally {
+            for (const id of modIds) directEntryChanges.delete(id)
+        }
+    }
+    if (!reviewedIds.length) return queued
     const preview = resourceOperationPreview.value
-    if (!preview) return false
-    return reviewResourceEntryChanges(
+    if (!preview) return queued
+    const reviewed = await reviewResourceEntryChanges(
         {
             instanceId: props.instance.id,
             instanceName: props.instance.name,
-            entryIds,
+            entryIds: reviewedIds,
             release,
             installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
         },
         (input) => preview.show(input),
         (job) => downloadManager.trackJob(job),
     )
+    return queued || reviewed
 }
 
 async function bulkUpdateAllProjects() {
@@ -2306,16 +2334,22 @@ async function bulkUpdateProjects(items: ContentItem[]) {
 
 async function updateProject(mod: ContentItem) {
     if (!mod.instanceEntryId || hasGlobalContentChange(mod)) return false
+    const operation = beginContentOperation(mod)
+    if (!operation) return false
     try {
         return await reviewResourceChanges([mod.instanceEntryId])
     } catch (err) {
         handleError(err as Error)
         return false
+    } finally {
+        finishContentOperation(mod, operation)
     }
 }
 
 async function switchProjectVersion(mod: ContentItem, version: Labrinth.Versions.v2.Version) {
     if (!mod.instanceEntryId || hasGlobalContentChange(mod)) return false
+    const operation = beginContentOperation(mod)
+    if (!operation) return false
     const cfId = getCurseForgeProjectIdForItem(mod)
     const source =
         mod.origin_provider === 'curseforge' || version.project_id.startsWith('curseforge:')
@@ -2333,6 +2367,8 @@ async function switchProjectVersion(mod: ContentItem, version: Labrinth.Versions
     } catch (err) {
         handleError(err as Error)
         return false
+    } finally {
+        finishContentOperation(mod, operation)
     }
 }
 

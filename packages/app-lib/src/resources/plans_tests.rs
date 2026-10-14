@@ -6,6 +6,57 @@ use std::collections::HashMap;
 mod graph_tests;
 
 #[tokio::test]
+async fn entry_changes_can_skip_dependency_resolution_without_skipping_artifact_validation()
+ {
+    let old = release("root0000", "1", 'a');
+    let mut new = release("root0000", "2", 'b');
+    let absent = release("missing0", "1", 'c');
+    requires(&mut new, &absent, ResourceDependencyKind::Required);
+    let (_directory, service) = service(vec![old.clone(), new.clone()]).await;
+    let mut request = draft(
+        vec![selection("root", &new, Some("entry"))],
+        ResourceOperationIntent::SwitchVersion,
+    );
+    request.resolve_dependencies = false;
+    let built = service
+        .build_operation(
+            request.clone(),
+            &target(),
+            &[installed(&old, "entry", "mods/custom.jar.disabled")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(built.plan.issues.is_empty(), "{:?}", built.plan.issues);
+    assert_eq!(built.plan.actions.len(), 1);
+    assert!(built.plan.edges.is_empty());
+    assert!(built.candidates.is_empty());
+    assert_eq!(built.plan.nodes.len(), 1);
+    assert_eq!(
+        built.plan.actions[0].target_relative_path,
+        "mods/custom.jar.disabled"
+    );
+    request.plan.selections[0].release = ReleaseSelection::Artifact {
+        reference: SourceArtifactRef {
+            artifact_id: SourceArtifactId::new("foreign.jar").unwrap(),
+            ..new.artifacts[0].reference.clone()
+        },
+    };
+    let invalid = service
+        .build_operation(
+            request,
+            &target(),
+            &[installed(&old, "entry", "mods/custom.jar.disabled")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(invalid.plan.actions.is_empty());
+    assert!(invalid.plan.issues.iter().any(|issue| issue.blocking));
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn operation_progress_reports_each_node_before_resolving_its_children() {
     let mut root = release("root0000", "1", 'a');
     let required = release("required", "1", 'b');
@@ -826,6 +877,7 @@ fn draft(
     intent: ResourceOperationIntent,
 ) -> OperationDraft {
     OperationDraft {
+        resolve_dependencies: true,
         import_files: Default::default(),
         naming: Default::default(),
         plan: ResourceOperationPlan {

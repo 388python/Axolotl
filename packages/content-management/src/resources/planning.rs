@@ -186,10 +186,14 @@ pub fn assess_game_version(pattern: &str, version: &str) -> CompatibilityState {
             return None;
         }
         let parts = numeric_version(value.trim())?;
-        if !(2..=3).contains(&parts.len()) {
+        if !(1..=3).contains(&parts.len()) {
             return None;
         }
-        Some([parts[0], parts[1], *parts.get(2).unwrap_or(&0)])
+        Some([
+            parts[0],
+            *parts.get(1).unwrap_or(&0),
+            *parts.get(2).unwrap_or(&0),
+        ])
     }
     fn evaluate(pattern: &str, actual: [u64; 3]) -> Option<bool> {
         for operator in [">=", "<=", ">", "<"] {
@@ -644,6 +648,11 @@ mod tests {
             ("[1.20,)", "1.21.0", true),
             ("[1.21.1]", "1.21.1", true),
             ("[1.21.1]", "1.21.0", false),
+            ("[1,)", "1.21.1", true),
+            (">=1 <2", "1.21.1", true),
+            ("[2,)", "1.21.1", false),
+            ("(,1]", "1.21.1", false),
+            ("[1.21,1.21.1)", "1.21.1", false),
             ("1.20 - 1.21", "1.21.0", true),
         ] {
             assert_eq!(

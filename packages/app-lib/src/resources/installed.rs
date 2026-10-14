@@ -16,6 +16,7 @@ pub(crate) async fn attach_compatibility(
     game_version: &str,
     loader: &str,
     items: &mut [crate::state::instances::InstanceContentSnapshotItem],
+    service: Option<&std::sync::Arc<ResourceService>>,
 ) -> crate::Result<()> {
     let rows: Vec<(String, String, i64, Option<String>, Option<String>)> = sqlx::query_as(
         "SELECT entry.id, file.sha1, file.size, file.local_mod_data, exact.artifact FROM instance_content_entries entry JOIN instance_files file ON file.id = entry.file_id LEFT JOIN resource_installed_artifacts exact ON exact.entry_id = entry.id WHERE entry.instance_id = ? AND file.missing = 0"
@@ -39,6 +40,86 @@ pub(crate) async fn attach_compatibility(
             (id, sha1, size, local, record)
         })
         .collect();
+    let mut cached = vec![None; rows.len()];
+    if let Some(service) = service {
+        let mut requested = Vec::new();
+        let files = rows
+            .iter()
+            .enumerate()
+            .filter_map(|(index, (id, sha1, size, _, record))| {
+                let item =
+                    indices.get(id).and_then(|index| items.get(*index))?;
+                let integrity = ArtifactIntegrity {
+                    size: u64::try_from(*size).ok(),
+                    hashes: vec![ContentHash {
+                        algorithm: HashAlgorithm::Sha1,
+                        value: sha1.clone(),
+                    }],
+                };
+                if record
+                    .as_ref()
+                    .filter(|record| {
+                        identity::exact_integrity(
+                            &integrity,
+                            &record.artifact.integrity,
+                        )
+                    })
+                    .and_then(|record| record.declared_compatibility.as_ref())
+                    .is_some_and(|declaration| {
+                        !declaration.game_versions.is_empty()
+                            && !declaration.loaders.is_empty()
+                    })
+                {
+                    return None;
+                }
+                if item.project_type != crate::state::ProjectType::Mod {
+                    return None;
+                }
+                requested.push(index);
+                let mut references = record
+                    .as_ref()
+                    .map(|record| record.artifact.reference.release.clone())
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                if let Some(item) =
+                    indices.get(id).and_then(|index| items.get(*index))
+                {
+                    for reference in item
+                        .content
+                        .iter()
+                        .flat_map(|content| &content.provider_refs)
+                    {
+                        let Some(release_id) = reference.database_release_id()
+                        else {
+                            continue;
+                        };
+                        if let (Ok(source), Ok(project_id), Ok(release_id)) = (
+                            SourceId::new(reference.provider().as_str()),
+                            SourceProjectId::new(
+                                reference.database_project_id(),
+                            ),
+                            SourceReleaseId::new(release_id),
+                        ) {
+                            references.push(SourceReleaseRef {
+                                project: SourceProjectRef {
+                                    source,
+                                    project_id,
+                                },
+                                release_id,
+                            });
+                        }
+                    }
+                }
+                Some((integrity, references))
+            })
+            .collect::<Vec<_>>();
+        for (index, declaration) in requested
+            .into_iter()
+            .zip(cached_file_compatibility(service, &files).await)
+        {
+            cached[index] = declaration;
+        }
+    }
     let projects = rows
         .iter()
         .filter_map(|(id, sha1, size, _, artifact)| {
@@ -67,7 +148,9 @@ pub(crate) async fn attach_compatibility(
         .lookup_many(&projects)
         .await
         .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
-    for (id, sha1, size, local, artifact) in rows {
+    for ((id, sha1, size, local, artifact), cached) in
+        rows.into_iter().zip(cached)
+    {
         let Some(&index) = indices.get(&id) else {
             continue;
         };
@@ -126,10 +209,17 @@ pub(crate) async fn attach_compatibility(
                 loaders: metadata.loader.into_iter().collect(),
             })
         })();
-        let declared = match (
-            exact.and_then(|record| record.declared_compatibility),
-            local_declared,
-        ) {
+        let mut remote = exact.and_then(|record| record.declared_compatibility);
+        if let Some(cached) = cached {
+            let remote = remote.get_or_insert_with(|| cached.clone());
+            if remote.game_versions.is_empty() {
+                remote.game_versions = cached.game_versions;
+            }
+            if remote.loaders.is_empty() {
+                remote.loaders = cached.loaders;
+            }
+        }
+        let declared = match (remote, local_declared) {
             (Some(mut remote), Some(local)) => {
                 if remote.game_versions.is_empty() {
                     remote.game_versions = local.game_versions;
@@ -147,6 +237,116 @@ pub(crate) async fn attach_compatibility(
         }
     }
     Ok(())
+}
+
+pub(crate) async fn cached_file_compatibility(
+    service: &std::sync::Arc<ResourceService>,
+    files: &[(ArtifactIntegrity, Vec<SourceReleaseRef>)],
+) -> Vec<Option<ReleaseCompatibility>> {
+    use super::providers::{ProviderQuery, ProviderValue};
+    let mut declarations = vec![None; files.len()];
+    if files.is_empty() {
+        return declarations;
+    }
+    let cancel = CancellationToken::new();
+    let mut sources = service.sources();
+    let preferred = service
+        .preferred_source()
+        .await
+        .unwrap_or_else(|_| SourceId::modrinth());
+    sources.sort_by_key(|source| {
+        (
+            source.id != preferred,
+            source.id != SourceId::modrinth(),
+            source.id.clone(),
+        )
+    });
+    for source in sources {
+        let mut queries = Vec::new();
+        let mut indices = Vec::new();
+        for (index, (integrity, references)) in files.iter().enumerate() {
+            if source.id == SourceId::modrinth()
+                && let Some(hash) = integrity
+                    .hashes
+                    .iter()
+                    .find(|hash| hash.algorithm == HashAlgorithm::Sha1)
+            {
+                queries.push(ProviderQuery::IdentifyExport {
+                    integrity: ArtifactIntegrity {
+                        size: None,
+                        hashes: vec![ContentHash {
+                            algorithm: HashAlgorithm::Sha1,
+                            value: hash.value.to_ascii_lowercase(),
+                        }],
+                    },
+                    fingerprint: None,
+                });
+                indices.push(index);
+            }
+            for reference in references
+                .iter()
+                .filter(|reference| reference.project.source == source.id)
+            {
+                queries.push(ProviderQuery::Release {
+                    project_id: Some(reference.project.project_id.clone()),
+                    release_id: reference.release_id.clone(),
+                    slug: None,
+                });
+                indices.push(index);
+            }
+        }
+        let mut matches =
+            std::collections::HashMap::<usize, Vec<ResourceRelease>>::new();
+        for (index, result) in indices.into_iter().zip(
+            service
+                .query_many(
+                    &source.id,
+                    queries,
+                    CachePolicy::OnlyCached,
+                    &cancel,
+                )
+                .await,
+        ) {
+            let Ok(result) = result else { continue };
+            let documents = match result.value {
+                ProviderValue::Identified(documents) => documents,
+                ProviderValue::Release(document) => vec![document],
+                _ => continue,
+            };
+            for document in documents {
+                let release = document.release;
+                if release.artifacts.iter().any(|artifact| {
+                    artifact.role == ArtifactRole::Primary
+                        && identity::exact_integrity(
+                            &files[index].0,
+                            &artifact.integrity,
+                        )
+                }) {
+                    let values = matches.entry(index).or_default();
+                    if !values
+                        .iter()
+                        .any(|value| value.reference == release.reference)
+                    {
+                        values.push(release);
+                    }
+                }
+            }
+        }
+        for (index, releases) in matches {
+            if let [release] = releases.as_slice() {
+                let declaration = declarations[index]
+                    .get_or_insert_with(|| release.compatibility.clone());
+                if declaration.game_versions.is_empty() {
+                    declaration.game_versions =
+                        release.compatibility.game_versions.clone();
+                }
+                if declaration.loaders.is_empty() {
+                    declaration.loaders = release.compatibility.loaders.clone();
+                }
+            }
+        }
+    }
+    declarations
 }
 
 pub(crate) async fn hydrate(
@@ -608,6 +808,7 @@ pub async fn prepare_entries(
         install_dependencies,
         cancel,
         None,
+        true,
     )
     .await
 }
@@ -620,6 +821,7 @@ pub async fn prepare_entries_with_progress(
     install_dependencies: bool,
     cancel: &CancellationToken,
     progress: plans::OperationProgress<'_>,
+    resolve_dependencies: bool,
 ) -> ResourceResult<ResourceOperationPlan> {
     if intent == ResourceOperationIntent::Install || entry_ids.is_empty() {
         return Err(ResourceError::InvalidRequest(
@@ -682,6 +884,7 @@ pub async fn prepare_entries_with_progress(
         cancel,
         Some(&entries),
         progress,
+        resolve_dependencies,
     )
     .await
 }

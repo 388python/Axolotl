@@ -632,6 +632,7 @@ async fn get_content_snapshot_inner(
         &content_set.game_version,
         content_set.loader.as_str(),
         &mut items,
+        state.resources().await.ok(),
     )
     .await?;
 

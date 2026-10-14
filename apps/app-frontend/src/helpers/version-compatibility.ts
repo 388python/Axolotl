@@ -16,11 +16,11 @@ export function parseVersion(versionStr: string): {
     minor: number
     patch: number
 } | null {
-    const match = versionStr.match(/^(\d+)\.(\d+)(?:\.(\d+))?$/)
+    const match = versionStr.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?$/)
     if (!match) return null
     return {
         major: parseInt(match[1], 10),
-        minor: parseInt(match[2], 10),
+        minor: match[2] ? parseInt(match[2], 10) : 0,
         patch: match[3] ? parseInt(match[3], 10) : 0,
     }
 }
@@ -57,7 +57,7 @@ export function parseVersionRange(rangeStr: string): VersionRange | null {
     }
 
     const bracketMatch = trimmed.match(
-        /^([[(])\s*(\d+\.\d+(?:\.\d+)?)?\s*,\s*(\d+\.\d+(?:\.\d+)?)?\s*([\])])$/,
+        /^([[(])\s*(\d+(?:\.\d+){0,2})?\s*,\s*(\d+(?:\.\d+){0,2})?\s*([\])])$/,
     )
     if (bracketMatch) {
         const lower = bracketMatch[2] ? parseVersion(bracketMatch[2]) : null
@@ -159,11 +159,11 @@ export function assessVersionRange(
               ? 'unknown'
               : 'incompatible'
     }
-    const bounds = modRange.trim().match(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){1,2}/g)
+    const bounds = modRange.trim().match(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){0,2}/g)
     if (
         bounds &&
         bounds.length > 1 &&
-        modRange.replace(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){1,2}/g, '').trim() === ''
+        modRange.replace(/(?:>=|<=|>|<|=)\s*\d+(?:\.\d+){0,2}/g, '').trim() === ''
     ) {
         const results = bounds.map((range) =>
             assessVersionRange(instanceVersion, range.replace(/\s/g, '').replace(/^=/, '')),

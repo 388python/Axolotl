@@ -57,7 +57,7 @@ vi.mock('@modrinth/ui', () => ({
                 h('button', attrs, slots.default?.()),
     }),
     NewModal: defineComponent({
-        props: ['onHide'],
+        props: ['onHide', 'disableClose'],
         setup(props, { slots, expose }) {
             const visible = ref(false)
             expose({
@@ -65,6 +65,7 @@ vi.mock('@modrinth/ui', () => ({
                     visible.value = true
                 },
                 hide: () => {
+                    if (props.disableClose) return
                     visible.value = false
                     props.onHide?.()
                 },
@@ -428,6 +429,7 @@ it('previews an exact path, retains the previous revision on optional failure, a
         await flushPromises()
         expect(resourceQueuePlan).toHaveBeenCalledExactlyOnceWith('plan', 2)
         expect(await result).toEqual({ job_id: 'job' })
+        expect(wrapper.find('section').exists()).toBe(false)
     } finally {
         wrapper.unmount()
     }

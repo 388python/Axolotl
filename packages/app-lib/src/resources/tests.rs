@@ -163,6 +163,246 @@ mod protocol_tests;
 mod search_tests;
 
 #[tokio::test]
+async fn installed_compatibility_uses_cached_exact_bytes_without_network_or_name_guesses()
+ {
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, None);
+    provider.fail.store(true, Ordering::Relaxed);
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let mut release = crate::resources::providers::legacy::release(
+        serde_json::from_str(fixtures::MR_IRIS).unwrap(),
+    )
+    .unwrap()
+    .release;
+    release.compatibility = ReleaseCompatibility {
+        game_versions: vec!["1.21.1".into()],
+        loaders: vec!["neoforge".into()],
+    };
+    let artifact = release
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.role == ArtifactRole::Primary)
+        .unwrap()
+        .clone();
+    let hash = artifact
+        .integrity
+        .hashes
+        .iter()
+        .find(|hash| hash.algorithm == HashAlgorithm::Sha1)
+        .unwrap()
+        .clone();
+    let lookup = ProviderQuery::IdentifyExport {
+        integrity: ArtifactIntegrity {
+            size: None,
+            hashes: vec![hash],
+        },
+        fingerprint: None,
+    };
+    let key =
+        CacheKey::new("mock-v1".into(), SourceId::modrinth(), &lookup).unwrap();
+    cache
+        .put(
+            &key,
+            &ProviderValue::Identified(vec![ReleaseDocument {
+                release: release.clone(),
+                changelog: None,
+                protocol: None,
+            }]),
+            -1,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    let release_query = ProviderQuery::Release {
+        project_id: Some(release.reference.project.project_id.clone()),
+        release_id: release.reference.release_id.clone(),
+        slug: None,
+    };
+    let release_key =
+        CacheKey::new("mock-v1".into(), SourceId::modrinth(), &release_query)
+            .unwrap();
+    cache
+        .put(
+            &release_key,
+            &ProviderValue::Release(ReleaseDocument {
+                release: release.clone(),
+                changelog: None,
+                protocol: None,
+            }),
+            -1,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    let mut wrong_size = artifact.integrity.clone();
+    wrong_size.size = wrong_size.size.map(|size| size + 1);
+    let mut wrong_hash = artifact.integrity.clone();
+    wrong_hash.hashes = vec![ContentHash {
+        algorithm: HashAlgorithm::Sha1,
+        value: "f".repeat(40),
+    }];
+    let declarations = super::installed::cached_file_compatibility(
+        &service,
+        &[
+            (artifact.integrity.clone(), vec![]),
+            (wrong_size, vec![]),
+            (wrong_hash, vec![release.reference.clone()]),
+        ],
+    )
+    .await;
+    assert_eq!(declarations[0], Some(release.compatibility.clone()));
+    assert!(declarations[1].is_none());
+    assert!(declarations[2].is_none());
+    assert_eq!(provider.calls(), 0);
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.unwrap();
+    for schema in [
+        "CREATE TABLE instance_content_entries(id TEXT, file_id TEXT, instance_id TEXT)",
+        "CREATE TABLE instance_files(id TEXT, sha1 TEXT, size INTEGER, local_mod_data TEXT, missing INTEGER)",
+        "CREATE TABLE resource_installed_artifacts(entry_id TEXT, artifact TEXT)",
+    ] {
+        sqlx::query(schema).execute(&pool).await.unwrap();
+    }
+    let local = json!({"metadata_version": 2, "mod_id": "example", "minecraft_version": "[1.21,1.21.1)", "loader": "neoforge"}).to_string();
+    let sha1 = artifact
+        .integrity
+        .hashes
+        .iter()
+        .find(|hash| hash.algorithm == HashAlgorithm::Sha1)
+        .unwrap()
+        .value
+        .clone();
+    let mut items = Vec::new();
+    for (id, hash, local) in [
+        ("missing", sha1.clone(), None),
+        ("incorrect", sha1, Some(local.clone())),
+        ("modified", "f".repeat(40), Some(local)),
+    ] {
+        sqlx::query(
+            "INSERT INTO instance_content_entries VALUES (?, ?, 'instance')",
+        )
+        .bind(id)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO instance_files VALUES (?, ?, ?, ?, 0)")
+            .bind(id)
+            .bind(hash)
+            .bind(artifact.integrity.size.unwrap() as i64)
+            .bind(local)
+            .execute(&pool)
+            .await
+            .unwrap();
+        items.push(crate::state::InstanceContentSnapshotItem {
+            artifact_ref: None,
+            resource_id: None,
+            pack_resource_id: None,
+            compatibility: None,
+            file_id: Some(id.into()),
+            entry_id: Some(id.into()),
+            member_id: None,
+            ownership_kind: crate::state::ContentOwnershipKind::UserAdded,
+            materialization_state:
+                crate::state::PackMemberMaterializationState::Present,
+            override_kind: crate::state::PackMemberOverrideKind::None,
+            expected_relative_path: format!("mods/{id}.jar"),
+            required: false,
+            project_type: crate::state::ProjectType::Mod,
+            provider: None,
+            provider_project_id: None,
+            provider_release_id: None,
+            content: None,
+            capabilities: Default::default(),
+            dependency: None,
+        });
+    }
+    super::installed::attach_compatibility(
+        &pool,
+        "instance",
+        "1.21.1",
+        "neoforge",
+        &mut items,
+        Some(&service),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        items[0].compatibility.as_ref().unwrap().game_version,
+        CompatibilityState::Compatible
+    );
+    assert_eq!(
+        items[1].compatibility.as_ref().unwrap().game_version,
+        CompatibilityState::Compatible
+    );
+    assert_eq!(
+        items[2].compatibility.as_ref().unwrap().game_version,
+        CompatibilityState::Incompatible
+    );
+    pool.close().await;
+    let mut attachment = release.clone();
+    for artifact in &mut attachment.artifacts {
+        artifact.role = ArtifactRole::Attachment;
+    }
+    cache
+        .put(
+            &key,
+            &ProviderValue::Identified(vec![ReleaseDocument {
+                release: attachment,
+                changelog: None,
+                protocol: None,
+            }]),
+            -1,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    assert!(
+        super::installed::cached_file_compatibility(
+            &service,
+            &[(artifact.integrity.clone(), vec![])]
+        )
+        .await[0]
+            .is_none()
+    );
+    let mut other = release.clone();
+    other.reference.release_id = SourceReleaseId::new("otherver").unwrap();
+    for artifact in &mut other.artifacts {
+        artifact.reference.release = other.reference.clone();
+    }
+    cache
+        .put(
+            &key,
+            &ProviderValue::Identified(vec![
+                ReleaseDocument {
+                    release: release.clone(),
+                    changelog: None,
+                    protocol: None,
+                },
+                ReleaseDocument {
+                    release: other,
+                    changelog: None,
+                    protocol: None,
+                },
+            ]),
+            -1,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    assert!(
+        super::installed::cached_file_compatibility(
+            &service,
+            &[(artifact.integrity, vec![])]
+        )
+        .await[0]
+            .is_none()
+    );
+    assert_eq!(provider.calls(), 0);
+    cache.close().await;
+}
+
+#[tokio::test]
 async fn changelog_catalog_pages_omit_bodies_and_reject_foreign_releases() {
     let release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
     let project = release["project_id"].as_str().unwrap().to_string();

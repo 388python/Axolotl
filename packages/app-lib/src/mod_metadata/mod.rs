@@ -18,7 +18,7 @@ mod toml_mod;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-const LOCAL_METADATA_VERSION: u32 = 1;
+const LOCAL_METADATA_VERSION: u32 = 2;
 
 /// Unified local mod metadata extracted from inside a JAR.
 ///
@@ -230,8 +230,15 @@ fn try_toml_path(
         .and_then(|entries| {
             entries
                 .iter()
-                .find(|dep| dep.mod_id.as_deref() == Some("minecraft"))
-                .and_then(|dep| dep.version_range.clone())
+                .find(|dep| {
+                    dep.mod_id.as_deref() == Some("minecraft") && dep.required()
+                })
+                .map(|dep| {
+                    dep.version_range
+                        .clone()
+                        .filter(|range| !range.trim().is_empty())
+                        .unwrap_or_else(|| "*".into())
+                })
         });
     let dependencies = parsed
         .dependencies
@@ -374,6 +381,37 @@ mod tests {
             archive.finish().expect("finish zip");
         }
         bytes::Bytes::from(buffer.into_inner())
+    }
+
+    #[test]
+    fn required_minecraft_without_a_range_is_unrestricted_but_missing_dependency_is_unknown()
+     {
+        for (dependency, expected) in [
+            ("", None),
+            (
+                "[[dependencies.example]]\nmodId = 'minecraft'\ntype = 'required'",
+                Some("*"),
+            ),
+            (
+                "[[dependencies.example]]\nmodId = 'minecraft'\ntype = 'optional'",
+                None,
+            ),
+            (
+                "[[dependencies.example]]\nmodId = 'minecraft'\nmandatory = true\nversionRange = '[1,)'",
+                Some("[1,)"),
+            ),
+        ] {
+            let content = format!(
+                "modLoader = 'javafml'\n[[mods]]\nmodId = 'example'\nversion = '1'\n{dependency}"
+            );
+            let jar = build_jar(&[("META-INF/neoforge.mods.toml", &content)]);
+            let metadata = super::extract_mod_metadata(&jar).unwrap();
+            assert_eq!(metadata.minecraft_version.as_deref(), expected);
+            let mut old = metadata.clone();
+            old.metadata_version = 1;
+            assert!(old.needs_refresh());
+            assert!(!metadata.needs_refresh());
+        }
     }
 
     #[test]

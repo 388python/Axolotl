@@ -36,6 +36,8 @@ fn report_node(
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct OperationDraft {
+    #[serde(default = "resolve_dependencies_default")]
+    pub resolve_dependencies: bool,
     #[serde(default)]
     pub naming: super::naming::NamingPreferences,
     pub plan: ResourceOperationPlan,
@@ -47,6 +49,10 @@ pub(crate) struct OperationDraft {
     pub import_files: HashMap<SelectionId, String>,
     #[serde(default)]
     pub restore_history: Option<HistoryId>,
+}
+
+fn resolve_dependencies_default() -> bool {
+    true
 }
 
 pub(crate) fn db(error: sqlx::Error) -> ResourceError {
@@ -1579,6 +1585,9 @@ impl ResourceService {
                     reference: artifact.reference.clone(),
                 };
             }
+            if !draft.resolve_dependencies {
+                continue;
+            }
             for dependency in &artifact.dependencies {
                 if dependency.kind == ResourceDependencyKind::Embedded {
                     continue;
@@ -2088,6 +2097,7 @@ pub async fn prepare_with_progress(
         cancel,
         None,
         progress,
+        true,
     )
     .await
 }
@@ -2100,6 +2110,7 @@ pub(crate) async fn prepare_with_installed(
     cancel: &CancellationToken,
     verified: Option<&[InstalledResource]>,
     progress: OperationProgress<'_>,
+    resolve_dependencies: bool,
 ) -> ResourceResult<ResourceOperationPlan> {
     match intent {
         ResourceOperationIntent::Install
@@ -2147,6 +2158,7 @@ pub(crate) async fn prepare_with_installed(
         .map(|selection| selection.id.clone())
         .collect();
     let draft = OperationDraft {
+        resolve_dependencies,
         import_files: Default::default(),
         naming: {
             let settings = crate::state::Settings::get(&state.pool).await?;

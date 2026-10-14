@@ -673,6 +673,7 @@ async fn local_plan(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
+        resolve_dependencies: true,
         import_files: Default::default(),
         naming: Default::default(),
         plan: plan.clone(),
@@ -759,6 +760,7 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
         "1.21.1",
         "neoforge",
         &mut snapshot,
+        None,
     )
     .await
     .unwrap();
@@ -776,6 +778,7 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
         "1.20.1",
         "fabric",
         &mut snapshot,
+        None,
     )
     .await
     .unwrap();

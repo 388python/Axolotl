@@ -35,6 +35,11 @@ test('exact versions and open or closed bounds compare whole versions', () => {
         ['1.21', '(1.20,1.21]', true],
         ['1.19', '(,1.20]', true],
         ['1.21', '[1.20,)', true],
+        ['1.21.1', '[1,)', true],
+        ['1.21.1', '>=1 <2', true],
+        ['1.21.1', '[2,)', false],
+        ['1.21.1', '(,1]', false],
+        ['1.21.1', '[1.21,1.21.1)', false],
         ['1.21', '1.20 - 1.21', true],
     ]
     for (const [version, range, expected] of cases)

@@ -509,6 +509,7 @@ async function apply() {
         submittedRoots.value = [...reviewed.activeRoots]
         resolveShow = null
         queueing.value = false
+        busy.value = false
         await nextTick()
         await modal.value?.hide()
         resolve?.(job)

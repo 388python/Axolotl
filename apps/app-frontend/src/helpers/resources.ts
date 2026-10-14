@@ -339,6 +339,7 @@ export function resourcePrepareEntryOperation(
     installDependencies: boolean,
     signal?: AbortSignal,
     onProgress?: (progress: ResourceOperationProgress) => void,
+    resolveDependencies = true,
 ) {
     return resourceRequest<ResourceOperationPlan>(
         'resource_prepare_entry_operation',
@@ -349,6 +350,7 @@ export function resourcePrepareEntryOperation(
             release,
             installDependencies,
             onProgress: operationProgressChannel(onProgress, signal),
+            resolveDependencies,
         },
         signal,
     )
