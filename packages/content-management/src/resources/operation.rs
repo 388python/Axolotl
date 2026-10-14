@@ -305,6 +305,8 @@ pub struct ResourceBackupFile {
     pub id: HistoryId,
     pub history_id: Option<HistoryId>,
     pub relative_path: String,
+    #[serde(default)]
+    pub original_file_name: Option<String>,
     pub integrity: ArtifactIntegrity,
     pub rollback_available: bool,
     pub recognized: bool,

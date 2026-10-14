@@ -1137,7 +1137,9 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
                     @browse="ctx.browse"
                     @refresh="handleRefresh"
                     @view-dependencies="ctx.viewDependencies?.()"
-                />
+                >
+                    <template #actions><slot name="toolbar-actions" /></template>
+                </ContentToolbar>
 
                 <ContentTypeFilter
                     v-model:selected="selectedTypeFilter"
@@ -1256,7 +1258,9 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
                 :disable-add-content-tooltip="ctx.disableAddContentTooltip"
                 @browse="ctx.browse"
                 @refresh="handleRefresh"
-            />
+            >
+                <template #actions><slot name="toolbar-actions" /></template>
+            </ContentEmptyState>
         </template>
 
         <ContentSelectionBar

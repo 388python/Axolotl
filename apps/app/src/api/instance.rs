@@ -1091,7 +1091,14 @@ pub async fn instance_get_content_items_by_paths(
 #[tauri::command]
 pub async fn instance_get_content_snapshot(
     instance_id: &str,
+    defer_enrichment: Option<bool>,
 ) -> Result<theseus::data::InstanceContentSnapshot> {
+    if defer_enrichment.unwrap_or(false) {
+        return Ok(theseus::instance::get_content_snapshot_for_display(
+            instance_id,
+        )
+        .await?);
+    }
     Ok(theseus::instance::get_content_snapshot(instance_id).await?)
 }
 

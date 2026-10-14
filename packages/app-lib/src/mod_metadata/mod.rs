@@ -362,6 +362,48 @@ mod tests {
     }
 
     #[test]
+    fn neoforge_exact_minecraft_dependency_is_an_explicit_compatibility_declaration()
+     {
+        let jar = build_jar(&[(
+            "META-INF/neoforge.mods.toml",
+            r#"
+modLoader = "javafml"
+loaderVersion = "[0,)"
+[[mods]]
+modId = "create"
+version = "6.0.10"
+[[dependencies."create"]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+"#,
+        )]);
+        let metadata = super::extract_mod_metadata(&jar).unwrap();
+        assert_eq!(metadata.minecraft_version.as_deref(), Some("[1.21.1]"));
+        let declared = crate::resources::ReleaseCompatibility {
+            game_versions: metadata.minecraft_version.into_iter().collect(),
+            loaders: metadata.loader.into_iter().collect(),
+        };
+        let assessment = crate::resources::assess_declared_compatibility(
+            &declared,
+            &crate::resources::ipc::ResourceTarget {
+                game_versions: vec!["1.21.1".into()],
+                loaders: vec!["neoforge".into()],
+                channels: vec![],
+            },
+            crate::resources::ResourceType::Mod,
+        );
+        assert_eq!(
+            assessment.game_version,
+            crate::resources::CompatibilityState::Compatible
+        );
+        assert_eq!(
+            assessment.loader,
+            crate::resources::CompatibilityState::Compatible
+        );
+    }
+
+    #[test]
     fn forge_placeholder_version_resolves_from_manifest() {
         let jar = build_jar(&[
             (

@@ -204,6 +204,14 @@ pub fn assess_game_version(pattern: &str, version: &str) -> CompatibilityState {
             }
         }
         if matches!(pattern.as_bytes().first(), Some(b'[' | b'(')) {
+            if pattern.starts_with('[')
+                && pattern.ends_with(']')
+                && !pattern.contains(',')
+            {
+                return Some(
+                    actual == numeric(&pattern[1..pattern.len() - 1])?,
+                );
+            }
             let lower_inclusive = pattern.starts_with('[');
             let upper_inclusive = pattern.ends_with(']');
             if !upper_inclusive && !pattern.ends_with(')') {
@@ -634,6 +642,8 @@ mod tests {
             ("(1.20,1.21]", "1.21.0", true),
             ("(,1.20]", "1.19.4", true),
             ("[1.20,)", "1.21.0", true),
+            ("[1.21.1]", "1.21.1", true),
+            ("[1.21.1]", "1.21.0", false),
             ("1.20 - 1.21", "1.21.0", true),
         ] {
             assert_eq!(

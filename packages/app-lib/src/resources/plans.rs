@@ -748,6 +748,9 @@ impl ResourceService {
                 }
                 select_automatic_release(releases, preferred).ok_or_else(
                     || {
+                        if failures.is_empty() {
+                            return ResourceError::NoCompatibleRelease;
+                        }
                         invalid(format!(
                             "no compatible release found for {:?} / {:?}{}",
                             target.game_versions,

@@ -6,6 +6,27 @@ use std::collections::HashMap;
 mod graph_tests;
 
 #[tokio::test]
+async fn automatic_catalog_without_compatible_candidates_is_a_normal_no_update_result()
+ {
+    let mut old = release("root0000", "1", 'a');
+    old.compatibility.game_versions = vec!["1.12.2".into()];
+    let (_directory, service) = service(vec![old.clone()]).await;
+    let mut automatic = selection("root", &old, Some("entry"));
+    automatic.release = ReleaseSelection::Automatic;
+    let result = service
+        .selected_release_for_current(
+            &automatic,
+            &target(),
+            &SourceId::modrinth(),
+            &CancellationToken::new(),
+            Some(&old),
+        )
+        .await;
+    assert!(matches!(result, Err(ResourceError::NoCompatibleRelease)));
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn complete_updates_keep_more_than_one_hundred_entry_actions() {
     let old = release("root0000", "1", 'a');
     let new = release("root0000", "2", 'b');

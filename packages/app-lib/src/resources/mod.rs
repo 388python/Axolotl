@@ -36,6 +36,8 @@ pub enum ResourceError {
     InvalidResponse(String),
     #[error("resource source is unavailable")]
     Unavailable,
+    #[error("no compatible release found")]
+    NoCompatibleRelease,
     #[error("resource request failed (HTTP status {status:?})")]
     Network { status: Option<u16> },
     #[error("resource request canceled")]

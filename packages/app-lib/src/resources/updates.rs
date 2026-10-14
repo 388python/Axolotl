@@ -110,6 +110,7 @@ pub async fn check(
             Err(ResourceError::Canceled) => {
                 return Err(ResourceError::Canceled);
             }
+            Err(ResourceError::NoCompatibleRelease) => {}
             Err(error) => {
                 result.failed_entries.push(entry.entry_id.clone());
                 result

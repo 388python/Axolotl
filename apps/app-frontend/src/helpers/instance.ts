@@ -487,8 +487,14 @@ export interface InstanceContentSnapshot {
     }>
 }
 
-export async function get_content_snapshot(instanceId: string): Promise<InstanceContentSnapshot> {
-    return await invoke('plugin:instance|instance_get_content_snapshot', { instanceId })
+export async function get_content_snapshot(
+    instanceId: string,
+    deferEnrichment = false,
+): Promise<InstanceContentSnapshot> {
+    return await invoke('plugin:instance|instance_get_content_snapshot', {
+        instanceId,
+        deferEnrichment,
+    })
 }
 
 export async function refresh_content(instanceId: string): Promise<InstanceContentSnapshot> {

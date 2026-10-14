@@ -1,7 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
 import { get_content_snapshot, type InstanceContentSnapshot } from './instance'
-import { loadInstanceContentData, refreshInstanceContentUpdates } from './instance-content'
+import {
+    type InstanceContentData,
+    loadInstanceContentData,
+    loadInstanceContentInStages,
+    refreshInstanceContentUpdates,
+} from './instance-content'
 import { resourceCheckUpdates } from './resources'
 
 vi.mock('./instance', () => ({ get_content_snapshot: vi.fn(), refresh_content: vi.fn() }))
@@ -9,6 +14,33 @@ vi.mock('./resources', () => ({ resourceCheckUpdates: vi.fn() }))
 vi.mock('@tauri-apps/api/core', () => ({ convertFileSrc: (path: string) => path }))
 
 beforeEach(() => vi.resetAllMocks())
+
+it('publishes the local list while the enriched snapshot is still pending', async () => {
+    let complete!: (value: InstanceContentSnapshot) => void
+    vi.mocked(get_content_snapshot)
+        .mockResolvedValueOnce(snapshot())
+        .mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    complete = resolve
+                }),
+        )
+    const showLocal = vi.fn((_data: InstanceContentData) => true)
+    const pending = loadInstanceContentInStages('instance', undefined, showLocal)
+    await vi.waitFor(() => expect(showLocal).toHaveBeenCalledOnce())
+    expect(get_content_snapshot).toHaveBeenNthCalledWith(1, 'instance', true)
+    expect(showLocal.mock.calls[0][0].contentItems[0].file_name).toBe('example.jar')
+    const enriched = snapshot()
+    enriched.revision = 2
+    complete(enriched)
+    expect((await pending)?.snapshot.revision).toBe(2)
+})
+
+it('does not start enrichment when the first local response belongs to an obsolete request', async () => {
+    vi.mocked(get_content_snapshot).mockResolvedValueOnce(snapshot())
+    await loadInstanceContentInStages('instance', undefined, () => false)
+    expect(get_content_snapshot).toHaveBeenCalledOnce()
+})
 
 it('connector installation source comes from exact durable artifact evidence instead of legacy local ownership', async () => {
     const value = snapshot()

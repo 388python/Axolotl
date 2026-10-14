@@ -6609,7 +6609,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。更新共用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可在“旧文件与备份”中预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。 重复资源默认折叠；展开可查看每个实际文件，组级更新会一起预览全部可更新副本。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。更新共用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可从内容工具栏打开“旧文件与备份”，搜索、选择并预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。 重复资源默认折叠；展开可查看每个实际文件，组级更新会一起预览全部可更新副本。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -13975,5 +13975,47 @@
   },
   "app.project.coming-soon": {
     "message": "即将推出"
+  },
+  "app.instance.mods.content-history-warning.title": {
+    "message": "部分本地历史信息暂不可用"
+  },
+  "app.instance.mods.content-history-warning.body": {
+    "message": "本地内容仍然完整且可正常管理，回滚或清理详情可能暂时不可用。"
+  },
+  "app.resources.backups.description": {
+    "message": "清理前请核对旧文件。有效回滚备份可用于恢复之前的安装。"
+  },
+  "app.resources.backups.filter.all": {
+    "message": "全部文件"
+  },
+  "app.resources.backups.filter.rollback": {
+    "message": "回滚备份"
+  },
+  "app.resources.backups.filter.old": {
+    "message": "其他旧文件"
+  },
+  "app.resources.backups.no-matches": {
+    "message": "没有符合搜索或筛选条件的文件。"
+  },
+  "app.resources.backups.review-size": {
+    "message": "删除 {count, number} 个文件 · {size}"
+  },
+  "app.resources.backups.review-title": {
+    "message": "确认清理备份"
+  },
+  "app.resources.backups.search": {
+    "message": "搜索文件名或路径…"
+  },
+  "app.resources.backups.select-visible": {
+    "message": "选择可清理文件"
+  },
+  "app.resources.backups.selected-size": {
+    "message": "已选 {count, number} 个 · {size}"
+  },
+  "app.instance.mods.pack-reconciliation-warning.title": {
+    "message": "无法刷新整合包文件信息"
+  },
+  "app.instance.mods.pack-reconciliation-warning.body": {
+    "message": "现有文件及其归属已保留，请重新刷新以核验缺失或手动下载的整合包文件。"
   }
 }

@@ -36,7 +36,7 @@ pub(crate) use self::list_content::{
 mod content_snapshot;
 pub(crate) use self::content_snapshot::{
     get_cached_content_snapshot, get_content_snapshot,
-    reconcile_curseforge_members,
+    get_local_content_snapshot, reconcile_curseforge_members,
 };
 
 mod remove_instance;

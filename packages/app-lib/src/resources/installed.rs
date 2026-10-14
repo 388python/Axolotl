@@ -116,21 +116,31 @@ pub(crate) async fn attach_compatibility(
                         && hash.value.eq_ignore_ascii_case(&sha1)
                 })
         });
-        let declared = exact
-            .and_then(|record| record.declared_compatibility)
-            .or_else(|| {
-                let metadata = serde_json::from_str::<
-                    crate::mod_metadata::LocalModMetadata,
-                >(local.as_deref()?)
-                .ok()?;
-                Some(ReleaseCompatibility {
-                    game_versions: metadata
-                        .minecraft_version
-                        .into_iter()
-                        .collect(),
-                    loaders: metadata.loader.into_iter().collect(),
-                })
-            });
+        let local_declared = (|| {
+            let metadata = serde_json::from_str::<
+                crate::mod_metadata::LocalModMetadata,
+            >(local.as_deref()?)
+            .ok()?;
+            Some(ReleaseCompatibility {
+                game_versions: metadata.minecraft_version.into_iter().collect(),
+                loaders: metadata.loader.into_iter().collect(),
+            })
+        })();
+        let declared = match (
+            exact.and_then(|record| record.declared_compatibility),
+            local_declared,
+        ) {
+            (Some(mut remote), Some(local)) => {
+                if remote.game_versions.is_empty() {
+                    remote.game_versions = local.game_versions;
+                }
+                if remote.loaders.is_empty() {
+                    remote.loaders = local.loaders;
+                }
+                Some(remote)
+            }
+            (remote, local) => remote.or(local),
+        };
         if let Some(declared) = declared {
             item.compatibility =
                 Some(assess_declared_compatibility(&declared, &target, kind));

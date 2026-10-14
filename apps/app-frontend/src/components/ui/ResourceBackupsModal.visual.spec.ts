@@ -18,6 +18,15 @@ vi.mock('@/helpers/resources', () => ({
     resourceExecuteHistoryCleanup: vi.fn(),
 }))
 vi.mock('@modrinth/ui', () => ({
+    Admonition: defineComponent({
+        setup:
+            (_, { slots }) =>
+            () =>
+                h('div', slots.default?.()),
+    }),
+    StyledInput: defineComponent({ setup: () => () => h('input') }),
+    Combobox: defineComponent({ props: ['options', 'modelValue'], setup: () => () => h('select') }),
+    useFormatBytes: () => (size: number) => `${size} bytes`,
     Button: defineComponent({
         setup:
             (_, { attrs, slots }) =>
@@ -169,8 +178,23 @@ it('late scans cannot replace another instance and scan failures remain retryabl
     vi.mocked(resourceScanBackups).mockRejectedValueOnce(new Error('scan failed'))
     await button(wrapper, 'Scan again').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[role="alert"]').text()).toContain('scan failed')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+        'Could not complete the content operation',
+    )
     expect(wrapper.text()).toContain('mods/new.old')
+})
+
+it('a failed first scan does not claim the file collection or search is empty', async () => {
+    vi.mocked(resourceScanBackups).mockRejectedValueOnce(new Error('offline'))
+    const wrapper = mount(ResourceBackupsModal)
+    mounted.push(wrapper)
+    wrapper.vm.show('instance')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+        'Could not complete the content operation',
+    )
+    expect(wrapper.text()).not.toContain('No files match your search or filter.')
+    expect(wrapper.text()).not.toContain('No old files or rollback backups found.')
 })
 
 it('partial cleanup marks staged failures unavailable and counts physical files once', async () => {

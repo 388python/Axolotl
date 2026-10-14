@@ -196,6 +196,46 @@ async fn verified_manual_import_rejects_changed_bytes_and_preserves_connector_so
 }
 
 #[tokio::test]
+async fn display_snapshot_keeps_local_entries_without_verifying_history_backups()
+ {
+    let (_temp, state, original, _, root) = fixture().await;
+    std::fs::write(root.join("new.zip"), b"new bytes").unwrap();
+    let plan = local_plan(
+        &state,
+        original.clone(),
+        artifact(SourceId::curseforge(), "123", "456", b"new bytes"),
+        "new.zip",
+        None,
+    )
+    .await;
+    execute("instance", &plan, None, &state).await.unwrap();
+    let snapshot =
+        crate::state::instances::commands::get_local_content_snapshot(
+            "instance", &state,
+        )
+        .await
+        .unwrap();
+    assert_eq!(snapshot.items.len(), 1);
+    assert_eq!(
+        snapshot.items[0].entry_id.as_deref(),
+        Some(original.entry_id.as_str())
+    );
+    assert_eq!(
+        snapshot.items[0].expected_relative_path,
+        original.relative_path
+    );
+    assert!(
+        snapshot.items[0]
+            .content
+            .as_ref()
+            .unwrap()
+            .rollback
+            .is_none()
+    );
+    assert!(snapshot.warnings.is_empty());
+}
+
+#[tokio::test]
 async fn update_restart_cache_clear_unlink_rollback_and_cleanup_keep_business_facts()
  {
     let (temp, state, original, old, root) = fixture().await;

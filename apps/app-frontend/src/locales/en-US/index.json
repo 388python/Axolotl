@@ -3473,6 +3473,12 @@
   "app.instance.mods.bulk-update.resolving-versions": {
     "message": "Resolving versions..."
   },
+  "app.instance.mods.content-history-warning.body": {
+    "message": "Local content is still complete and can be managed. Rollback or cleanup details may be temporarily unavailable."
+  },
+  "app.instance.mods.content-history-warning.title": {
+    "message": "Some local history details are unavailable"
+  },
   "app.instance.mods.content-operation-timeout": {
     "message": "Timed out waiting for another content operation to finish. Try again."
   },
@@ -3517,6 +3523,12 @@
   },
   "app.instance.mods.pack-member-removed": {
     "message": "This modpack file was removed locally"
+  },
+  "app.instance.mods.pack-reconciliation-warning.body": {
+    "message": "Existing files and ownership have been kept. Retry refreshing to verify missing or manually downloaded modpack files."
+  },
+  "app.instance.mods.pack-reconciliation-warning.title": {
+    "message": "Modpack file information could not be refreshed"
   },
   "app.instance.mods.parse-failed": {
     "message": "Failed to parse. This may not be a modpack"
@@ -6927,7 +6939,7 @@
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file, or review updates for every updatable copy together. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or use Old files and backups to review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file, or review updates for every updatable copy together. Updates share a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -7301,6 +7313,9 @@
   "app.resources.backups.confirm": {
     "message": "Delete these backups"
   },
+  "app.resources.backups.description": {
+    "message": "Review old files before removing them. Verified backups can restore a previous installation."
+  },
   "app.resources.backups.empty": {
     "message": "No old files or rollback backups found."
   },
@@ -7309,6 +7324,15 @@
   },
   "app.resources.backups.file-size": {
     "message": "{size, number} bytes"
+  },
+  "app.resources.backups.filter.all": {
+    "message": "All files"
+  },
+  "app.resources.backups.filter.old": {
+    "message": "Other old files"
+  },
+  "app.resources.backups.filter.rollback": {
+    "message": "Rollback backups"
   },
   "app.resources.backups.invalid": {
     "message": "Recorded backup unavailable for rollback"
@@ -7319,6 +7343,9 @@
   "app.resources.backups.missing": {
     "message": "File missing"
   },
+  "app.resources.backups.no-matches": {
+    "message": "No files match your search or filter."
+  },
   "app.resources.backups.orphan": {
     "message": "Old file without an available rollback"
   },
@@ -7328,8 +7355,23 @@
   "app.resources.backups.review": {
     "message": "Review selected cleanup"
   },
+  "app.resources.backups.review-size": {
+    "message": "{count, plural, one {Delete # file} other {Delete # files}} · {size}"
+  },
+  "app.resources.backups.review-title": {
+    "message": "Confirm backup cleanup"
+  },
   "app.resources.backups.scan": {
     "message": "Scan again"
+  },
+  "app.resources.backups.search": {
+    "message": "Search file names or paths…"
+  },
+  "app.resources.backups.select-visible": {
+    "message": "Select available files"
+  },
+  "app.resources.backups.selected-size": {
+    "message": "{count, number} selected · {size}"
   },
   "app.resources.backups.summary": {
     "message": "{count, number} selected · {size, number} bytes"

@@ -457,6 +457,7 @@ export type ResourceBackupFile = {
     id: string
     historyId: string | null
     relativePath: string
+    originalFileName?: string | null
     integrity: ResourceArtifact['integrity']
     rollbackAvailable: boolean
     recognized: boolean

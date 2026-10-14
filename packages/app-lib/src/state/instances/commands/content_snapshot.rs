@@ -30,20 +30,29 @@ pub(crate) async fn get_content_snapshot(
     refresh_remote: bool,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
-    get_content_snapshot_inner(instance_id, refresh_remote, true, state).await
+    get_content_snapshot_inner(instance_id, refresh_remote, true, true, state)
+        .await
 }
 
 pub(crate) async fn get_cached_content_snapshot(
     instance_id: &str,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
-    get_content_snapshot_inner(instance_id, false, false, state).await
+    get_content_snapshot_inner(instance_id, false, false, true, state).await
+}
+
+pub(crate) async fn get_local_content_snapshot(
+    instance_id: &str,
+    state: &State,
+) -> crate::Result<InstanceContentSnapshot> {
+    get_content_snapshot_inner(instance_id, false, false, false, state).await
 }
 
 async fn get_content_snapshot_inner(
     instance_id: &str,
     refresh_remote: bool,
     sync_direct_instance: bool,
+    enrich: bool,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
     super::repair_recorded_pack_unlink(instance_id, &state.pool).await?;
@@ -487,65 +496,72 @@ async fn get_content_snapshot_inner(
     } else {
         CacheBehaviour::CacheOnly
     };
-    match list_all_content_from_files(
-        instance_id,
-        files_for_listing,
-        Some(cache_behaviour),
-        refresh_remote,
-        state,
-    )
-    .await
-    {
-        Ok(enriched) => {
-            let enriched = enriched
-                .into_iter()
-                .map(|item| (item.file_path.clone(), item))
-                .collect::<HashMap<_, _>>();
-            for item in &mut items {
-                if let Some(content) =
-                    enriched.get(&item.expected_relative_path)
-                {
-                    if refresh_remote
-                        && item.member_id.is_none()
-                        && let Some(reference) = primary_persistent_ref(content)
+    if enrich {
+        match list_all_content_from_files(
+            instance_id,
+            files_for_listing,
+            Some(cache_behaviour),
+            refresh_remote,
+            state,
+        )
+        .await
+        {
+            Ok(enriched) => {
+                let enriched = enriched
+                    .into_iter()
+                    .map(|item| (item.file_path.clone(), item))
+                    .collect::<HashMap<_, _>>();
+                for item in &mut items {
+                    if let Some(content) =
+                        enriched.get(&item.expected_relative_path)
                     {
-                        item.provider = Some(reference.provider());
-                        item.provider_project_id =
-                            Some(reference.database_project_id());
-                        item.provider_release_id =
-                            reference.database_release_id();
+                        if refresh_remote
+                            && item.member_id.is_none()
+                            && let Some(reference) =
+                                primary_persistent_ref(content)
+                        {
+                            item.provider = Some(reference.provider());
+                            item.provider_project_id =
+                                Some(reference.database_project_id());
+                            item.provider_release_id =
+                                reference.database_release_id();
+                        }
+                        item.content = Some(content.clone());
+                        item.capabilities.can_update = content.update.is_some()
+                            && item.materialization_state
+                                == PackMemberMaterializationState::Present;
                     }
-                    item.content = Some(content.clone());
-                    item.capabilities.can_update = content.update.is_some()
-                        && item.materialization_state
-                            == PackMemberMaterializationState::Present;
                 }
             }
+            Err(error) => warnings.push(InstanceContentWarning {
+                code: "provider_metadata_unavailable".to_string(),
+                message: error.to_string(),
+                provider: None,
+            }),
         }
-        Err(error) => warnings.push(InstanceContentWarning {
-            code: "provider_metadata_unavailable".to_string(),
-            message: error.to_string(),
-            provider: None,
-        }),
     }
 
-    let remote_pack = match super::list_content::get_linked_modpack_info(
-        instance_id,
-        None,
-        Some(cache_behaviour),
-        state,
-    )
-    .await
-    {
-        Ok(pack) => pack,
-        Err(error) => {
-            warnings.push(InstanceContentWarning {
-                code: "pack_metadata_unavailable".to_string(),
-                message: error.to_string(),
-                provider: pack_provider(&link),
-            });
-            None
+    let remote_pack = if enrich {
+        match super::list_content::get_linked_modpack_info(
+            instance_id,
+            None,
+            Some(cache_behaviour),
+            state,
+        )
+        .await
+        {
+            Ok(pack) => pack,
+            Err(error) => {
+                warnings.push(InstanceContentWarning {
+                    code: "pack_metadata_unavailable".to_string(),
+                    message: error.to_string(),
+                    provider: pack_provider(&link),
+                });
+                None
+            }
         }
+    } else {
+        None
     };
     let mut pack = pack_snapshot(
         &instance.name,
@@ -593,12 +609,13 @@ async fn get_content_snapshot_inner(
     )
     .await?;
 
-    if let Err(error) = crate::resources::history::attach_to_snapshot(
-        instance_id,
-        &mut items,
-        state,
-    )
-    .await
+    if enrich
+        && let Err(error) = crate::resources::history::attach_to_snapshot(
+            instance_id,
+            &mut items,
+            state,
+        )
+        .await
     {
         warnings.push(InstanceContentWarning {
             code: "resource_history_unavailable".into(),

@@ -40,16 +40,31 @@ export function localContentIconUrl(iconUrl?: string | null): string {
     return /^(https?:|data:|blob:|asset:|tauri:)/.test(iconUrl) ? iconUrl : convertFileSrc(iconUrl)
 }
 
+export async function loadInstanceContentInStages(
+    path: string,
+    cacheBehaviour: CacheBehaviour | undefined,
+    showLocal: (data: InstanceContentData) => boolean,
+): Promise<InstanceContentData | null> {
+    if (cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate')
+        return loadInstanceContentData(path, cacheBehaviour)
+    const local = await loadInstanceContentData(path, undefined, undefined, true)
+    if (!local || !showLocal(local)) return local
+    return loadInstanceContentData(path, cacheBehaviour)
+}
+
 export async function loadInstanceContentData(
     path: string,
     cacheBehaviour?: CacheBehaviour,
     onError?: (error: Error) => unknown,
+    deferEnrichment = false,
 ): Promise<InstanceContentData | null> {
     try {
         const snapshot =
             cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate'
                 ? await refresh_content(path)
-                : await get_content_snapshot(path)
+                : deferEnrichment
+                  ? await get_content_snapshot(path, true)
+                  : await get_content_snapshot(path)
         const normalizedItems: ContentItem[] = snapshot.items.map((item) => {
             const fileName = item.expectedRelativePath.split('/').pop() ?? item.expectedRelativePath
             const requiresManualDownload =

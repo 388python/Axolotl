@@ -27,6 +27,10 @@ export function parseVersion(versionStr: string): {
 
 export function parseVersionRange(rangeStr: string): VersionRange | null {
     const trimmed = rangeStr.trim()
+    if (trimmed.startsWith('[') && trimmed.endsWith(']') && !trimmed.includes(',')) {
+        const exact = parseVersion(trimmed.slice(1, -1).trim())
+        return exact ? { type: 'exact', ...exact } : null
+    }
 
     if (trimmed.startsWith('>=')) {
         const version = parseVersion(trimmed.slice(2).trim())

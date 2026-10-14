@@ -596,38 +596,47 @@ function resetServerStatus() {
     loadingServerPing.value = false
 }
 
+let instanceGeneration = 0
+let instancePageClosed = false
 async function fetchInstance() {
+    const generation = ++instanceGeneration
+    const requestedId = props.id
+    const isCurrent = () =>
+        !instancePageClosed && instanceGeneration === generation && props.id === requestedId
     isServerInstance.value = false
     linkedProjectV3.value = undefined
     resetServerStatus()
 
-    const nextInstance = await get(props.id).catch(handleError)
+    const nextInstance = await get(requestedId).catch((error) => {
+        if (isCurrent()) handleError(error)
+    })
+    if (!isCurrent()) return
     instance.value = nextInstance ?? undefined
     activeInstanceId.value = nextInstance?.id
-    let nextLinkedProjectV3: Labrinth.Projects.v3.Project | undefined
-    let nextIsServerInstance = false
+    isServerInstance.value = nextInstance?.link?.type === 'server_project_modpack'
 
     if (nextInstance?.symlink_target) {
-        await allow_symlink_target(nextInstance.symlink_target).catch(() => {})
+        void allow_symlink_target(nextInstance.symlink_target).catch(() => {})
     }
 
-    if (!offline.value && nextInstance?.link && nextInstance.link.project_id) {
-        try {
-            nextLinkedProjectV3 = await get_project_v3(
-                nextInstance.link.project_id,
-                'must_revalidate',
-            )
-
-            if (nextLinkedProjectV3?.minecraft_server != null) {
-                nextIsServerInstance = true
-            }
-        } catch (error) {
-            handleError(error as Error)
-        }
+    if (
+        !offline.value &&
+        nextInstance?.link?.project_id &&
+        ['modrinth_modpack', 'server_project_modpack'].includes(nextInstance.link.type)
+    ) {
+        void get_project_v3(nextInstance.link.project_id, 'stale_while_revalidate')
+            .then((project) => {
+                if (!isCurrent()) return
+                linkedProjectV3.value = project
+                isServerInstance.value =
+                    nextInstance.link?.type === 'server_project_modpack' ||
+                    project?.minecraft_server != null
+                fetchDeferredData(nextInstance.id)
+            })
+            .catch((error) => {
+                if (isCurrent()) console.warn('Linked project metadata unavailable', error)
+            })
     }
-
-    linkedProjectV3.value = nextLinkedProjectV3
-    isServerInstance.value = nextIsServerInstance
 
     fetchDeferredData(nextInstance?.id)
 
@@ -996,6 +1005,8 @@ const timePlayedHumanized = computed(() => {
 })
 
 onUnmounted(() => {
+    instancePageClosed = true
+    instanceGeneration++
     clearInterval(launchElapsedTimer)
     unlistenProcesses()
     unlistenInstances()

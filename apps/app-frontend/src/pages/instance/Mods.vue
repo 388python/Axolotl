@@ -145,17 +145,31 @@
             </div>
         </CollapsibleAdmonition>
         <CollapsibleAdmonition
-            v-if="contentWarnings.length > 0"
+            v-if="onlineWarnings.length > 0 || localWarnings.length > 0"
             v-model="contentWarningExpanded"
             type="warning"
             class="mb-4"
         >
-            <template #header>{{ formatMessage(messages.contentRefreshWarningTitle) }}</template>
+            <template #header>{{
+                formatMessage(
+                    localWarnings.length
+                        ? messages.contentHistoryWarningTitle
+                        : messages.contentRefreshWarningTitle,
+                )
+            }}</template>
             <div class="border-0 border-t border-solid mods-admonition-body bg-bg-orange p-4">
-                <p class="m-0">{{ formatMessage(messages.contentRefreshWarningBody) }}</p>
+                <p class="m-0">
+                    {{
+                        formatMessage(
+                            localWarnings.length
+                                ? messages.contentHistoryWarningBody
+                                : messages.contentRefreshWarningBody,
+                        )
+                    }}
+                </p>
                 <p
                     v-if="
-                        contentWarnings.some(
+                        localWarnings.some(
                             (warning) => warning.code === 'pack_unlink_history_unconfirmed',
                         )
                     "
@@ -165,19 +179,34 @@
                 </p>
             </div>
         </CollapsibleAdmonition>
-        <div
+        <CollapsibleAdmonition
             v-if="
-                !instance.linked_dot_minecraft &&
-                !instance.symlink_target &&
-                !instance.game_dir_override
+                contentWarnings.some(
+                    (warning) => warning.code === 'pack_membership_reconciliation_failed',
+                )
             "
-            class="mb-3 flex justify-end"
+            type="warning"
+            class="mb-4"
         >
-            <Button @click="resourceBackupsModal?.show(instance.id)">{{
-                formatMessage(messages.manageBackups)
-            }}</Button>
-        </div>
+            <template #header>{{
+                formatMessage(messages.packReconciliationWarningTitle)
+            }}</template>
+            <p class="m-0 p-4">{{ formatMessage(messages.packReconciliationWarningBody) }}</p>
+        </CollapsibleAdmonition>
         <ContentPageLayout @visible-items="handleVisibleItems">
+            <template #toolbar-actions>
+                <Button
+                    v-if="
+                        !instance.linked_dot_minecraft &&
+                        !instance.symlink_target &&
+                        !instance.game_dir_override
+                    "
+                    type="outlined"
+                    class="!h-10"
+                    @click="resourceBackupsModal?.show(instance.id)"
+                    >{{ formatMessage(messages.manageBackups) }}</Button
+                >
+            </template>
             <template #modals>
                 <ContentToggleDependenciesModal ref="toggleDependenciesModal" />
                 <DependencyGraphModal
@@ -349,7 +378,7 @@ import { readInstanceCache, writeInstanceCache } from '@/helpers/instance-cache'
 import {
     type InstanceContentData,
     isWorldSaveContentItem,
-    loadInstanceContentData,
+    loadInstanceContentInStages,
     localContentIconUrl,
     refreshInstanceContentUpdates,
 } from '@/helpers/instance-content'
@@ -459,6 +488,24 @@ const messages = defineMessages({
         id: 'app.instance.mods.content-refresh-warning.body',
         defaultMessage:
             'Local content is still complete and can be managed. Names, icons, or update information may be temporarily unavailable.',
+    },
+    contentHistoryWarningTitle: {
+        id: 'app.instance.mods.content-history-warning.title',
+        defaultMessage: 'Some local history details are unavailable',
+    },
+    packReconciliationWarningTitle: {
+        id: 'app.instance.mods.pack-reconciliation-warning.title',
+        defaultMessage: 'Modpack file information could not be refreshed',
+    },
+    packReconciliationWarningBody: {
+        id: 'app.instance.mods.pack-reconciliation-warning.body',
+        defaultMessage:
+            'Existing files and ownership have been kept. Retry refreshing to verify missing or manually downloaded modpack files.',
+    },
+    contentHistoryWarningBody: {
+        id: 'app.instance.mods.content-history-warning.body',
+        defaultMessage:
+            'Local content is still complete and can be managed. Rollback or cleanup details may be temporarily unavailable.',
     },
     skippedFilesWarningTitle: {
         id: 'app.instance.mods.skipped-files-warning.title',
@@ -618,6 +665,20 @@ let visibleMetadataRefreshRunning = false
 let mcmodLookupVersion = 0
 let isUnmounted = false
 const contentWarnings = computed(() => contentSnapshot.value?.warnings ?? [])
+const onlineWarnings = computed(() =>
+    contentWarnings.value.filter((warning) =>
+        [
+            'provider_metadata_unavailable',
+            'pack_metadata_unavailable',
+            'resource_update_unavailable',
+        ].includes(warning.code),
+    ),
+)
+const localWarnings = computed(() =>
+    contentWarnings.value.filter((warning) =>
+        ['pack_unlink_history_unconfirmed', 'resource_history_unavailable'].includes(warning.code),
+    ),
+)
 const contentWarningExpanded = ref(true)
 
 // 从持久化缓存恢复整合包元数据
@@ -1202,7 +1263,10 @@ function getContentItemId(item: ContentItem | null | undefined) {
     )
 }
 
-function mergeVisibleMetadataItems(refreshedItems: ContentItem[]) {
+function mergeVisibleMetadataItems(
+    refreshedItems: ContentItem[],
+    originals: Map<string, ContentItem>,
+) {
     const refreshedByPath = new Map(
         refreshedItems.filter((item) => !!item.file_path).map((item) => [item.file_path!, item]),
     )
@@ -1211,7 +1275,15 @@ function mergeVisibleMetadataItems(refreshedItems: ContentItem[]) {
         items.map((item) => {
             const refreshed = item.file_path ? refreshedByPath.get(item.file_path) : undefined
 
-            if (!refreshed) return item
+            const original = item.file_path ? originals.get(item.file_path) : undefined
+            if (
+                !refreshed ||
+                !original ||
+                original.id !== item.id ||
+                original.instanceEntryId !== item.instanceEntryId ||
+                hasContentOperation(item)
+            )
+                return item
 
             return mergeContentItemMetadata(item, refreshed)
         })
@@ -1230,22 +1302,28 @@ async function flushVisibleMetadataRefresh() {
     try {
         while (visibleMetadataPendingPaths.size > 0) {
             const instanceId = props.instance.id
+            const generation = contentRequestGeneration
             const paths = [...visibleMetadataPendingPaths]
+            const originals = new Map(
+                [...projects.value, ...linkedModpackContentItems.value]
+                    .filter((item) => item.file_path && paths.includes(item.file_path))
+                    .map((item) => [item.file_path!, item]),
+            )
             visibleMetadataPendingPaths.clear()
 
             try {
                 let refreshedItems = await get_content_items_by_paths(instanceId, paths)
 
-                if (isUnmounted || props.instance.id !== instanceId) return
+                if (!isCurrentContentRequest(instanceId, generation)) continue
 
                 refreshedItems = await translateContentItemTitles(
                     refreshedItems,
                     i18n.global.locale.value,
                 ).catch(() => refreshedItems)
 
-                if (isUnmounted || props.instance.id !== instanceId) return
+                if (!isCurrentContentRequest(instanceId, generation)) continue
 
-                mergeVisibleMetadataItems(refreshedItems)
+                mergeVisibleMetadataItems(refreshedItems, originals)
             } catch (error) {
                 // 后台懒加载失败不弹通知。
                 // 删除 requested 标记，这样以后再次进入可见区域还能重试。
@@ -2710,14 +2788,27 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
     const instanceId = props.instance.id
     contentEnrichmentController?.abort()
     const generation = ++contentRequestGeneration
+    visibleMetadataRequestedPaths.clear()
+    visibleMetadataPendingPaths.clear()
     debugState('initProjects start', { instanceId, cacheBehaviour, generation })
     let contentData: InstanceContentData | null
     try {
-        contentData = await loadInstanceContentData(instanceId, cacheBehaviour)
+        contentData = await loadInstanceContentInStages(instanceId, cacheBehaviour, (local) => {
+            if (!isCurrentContentRequest(instanceId, generation)) return false
+            if (projects.value.length || linkedModpackContentItems.value.length) return true
+            if (
+                !local.contentItems.length &&
+                !local.linkedContentItems.length &&
+                (props.instance.linked_dot_minecraft || props.instance.symlink_target)
+            )
+                return true
+            return applyContentData(local)
+        })
     } catch (error) {
         if (isCurrentContentRequest(instanceId, generation)) {
             handleError(error as Error)
-            contentLoadError.value = error instanceof Error ? error : new Error(String(error))
+            if (!projects.value.length && !linkedModpackContentItems.value.length)
+                contentLoadError.value = error instanceof Error ? error : new Error(String(error))
             loading.value = false
         }
         return

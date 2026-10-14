@@ -105,6 +105,17 @@ pub async fn get_content_snapshot(
     crate::state::get_content_snapshot(instance_id, false, &state).await
 }
 
+pub async fn get_content_snapshot_for_display(
+    instance_id: &str,
+) -> crate::Result<InstanceContentSnapshot> {
+    let state = State::get().await?;
+    crate::state::instances::commands::get_local_content_snapshot(
+        instance_id,
+        &state,
+    )
+    .await
+}
+
 #[tracing::instrument]
 pub async fn refresh_content(
     instance_id: &str,

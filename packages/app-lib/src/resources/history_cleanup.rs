@@ -202,6 +202,18 @@ pub(crate) async fn scan_with_state(
         };
         known.insert(relative.clone());
         result.push(ResourceBackupFile {
+            original_file_name: history
+                .previous
+                .original_file_name
+                .clone()
+                .or_else(|| {
+                    history
+                        .previous
+                        .relative_path
+                        .rsplit('/')
+                        .next()
+                        .map(str::to_owned)
+                }),
             id: history.id.clone(),
             history_id: Some(history.id),
             relative_path: relative,
@@ -250,6 +262,7 @@ pub(crate) async fn scan_with_state(
                     sha1_smol::Sha1::from(relative.as_bytes()).hexdigest()
                 ))?;
                 result.push(ResourceBackupFile {
+                    original_file_name: None,
                     id,
                     history_id: None,
                     recognized: recognizable(&relative),

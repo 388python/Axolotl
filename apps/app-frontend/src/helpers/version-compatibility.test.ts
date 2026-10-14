@@ -41,6 +41,11 @@ test('exact versions and open or closed bounds compare whole versions', () => {
         assert.equal(isVersionInRange(version, range), expected, `${version}: ${range}`)
 })
 
+test('Maven single-version brackets are exact declarations', () => {
+    assert.equal(assessVersionRange('1.21.1', '[1.21.1]'), 'compatible')
+    assert.equal(assessVersionRange('1.21.0', '[1.21.1]'), 'incompatible')
+})
+
 test('unsupported declarations remain unknown without substring matching', () => {
     assert.equal(assessVersionRange('1.20.4', '>=1.20 <1.21'), 'compatible')
     assert.equal(assessVersionRange('1.21', '>=1.20 <1.21'), 'incompatible')
