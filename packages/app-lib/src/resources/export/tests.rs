@@ -1218,7 +1218,7 @@ async fn export_reference_verification_reports_bytes_without_repeating_identific
     file.set_times(std::fs::FileTimes::new().set_modified(modified))
         .unwrap();
     drop(file);
-    let previous = std::fs::read(&root.path().join("out.mrpack")).unwrap();
+    let previous = std::fs::read(root.path().join("out.mrpack")).unwrap();
     assert!(
         super::writer::write(
             root.path(),

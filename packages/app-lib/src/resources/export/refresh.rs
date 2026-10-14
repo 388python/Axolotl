@@ -610,53 +610,6 @@ impl ProgressEmitter<'_> {
     }
 }
 
-#[cfg(test)]
-mod progress_tests {
-    use super::*;
-
-    #[test]
-    fn fast_file_updates_are_coalesced_but_phase_changes_and_completion_are_delivered()
-     {
-        let calls = std::sync::Mutex::new(Vec::new());
-        let callback = |value| {
-            calls.lock().unwrap().push(value);
-        };
-        let emitter = ProgressEmitter {
-            callback: &callback,
-            last: std::sync::Mutex::new(None),
-        };
-        let mut value = ExportRefreshProgress {
-            session_id: SessionId::new("session").unwrap(),
-            request_id: RequestId::new("request").unwrap(),
-            selection_revision: 1,
-            completed: 0,
-            total: 10000,
-            phase: "hashing".into(),
-            overall_completed: 0,
-            overall_total: 30000,
-            current_file_fraction: 0.0,
-        };
-        emitter.emit(value.clone());
-        for index in 1..10000 {
-            value.completed = index;
-            value.overall_completed = index;
-            emitter.emit(value.clone());
-        }
-        let hashing_events = calls.lock().unwrap().len();
-        assert!(hashing_events < 100, "too many events: {hashing_events}");
-        value.phase = "modrinth".into();
-        emitter.emit(value.clone());
-        assert_eq!(calls.lock().unwrap().len(), hashing_events + 1);
-        value.phase = "complete".into();
-        value.overall_completed = value.overall_total;
-        emitter.finish(value);
-        assert_eq!(
-            calls.lock().unwrap().last().unwrap().overall_completed,
-            30000
-        );
-    }
-}
-
 pub async fn refresh_local(
     service: &Arc<ResourceService>,
     draft: &mut ExportDraft,
@@ -1023,4 +976,51 @@ pub(crate) async fn known_references(
         }
     }
     Ok(known)
+}
+
+#[cfg(test)]
+mod progress_tests {
+    use super::*;
+
+    #[test]
+    fn fast_file_updates_are_coalesced_but_phase_changes_and_completion_are_delivered()
+     {
+        let calls = std::sync::Mutex::new(Vec::new());
+        let callback = |value| {
+            calls.lock().unwrap().push(value);
+        };
+        let emitter = ProgressEmitter {
+            callback: &callback,
+            last: std::sync::Mutex::new(None),
+        };
+        let mut value = ExportRefreshProgress {
+            session_id: SessionId::new("session").unwrap(),
+            request_id: RequestId::new("request").unwrap(),
+            selection_revision: 1,
+            completed: 0,
+            total: 10000,
+            phase: "hashing".into(),
+            overall_completed: 0,
+            overall_total: 30000,
+            current_file_fraction: 0.0,
+        };
+        emitter.emit(value.clone());
+        for index in 1..10000 {
+            value.completed = index;
+            value.overall_completed = index;
+            emitter.emit(value.clone());
+        }
+        let hashing_events = calls.lock().unwrap().len();
+        assert!(hashing_events < 100, "too many events: {hashing_events}");
+        value.phase = "modrinth".into();
+        emitter.emit(value.clone());
+        assert_eq!(calls.lock().unwrap().len(), hashing_events + 1);
+        value.phase = "complete".into();
+        value.overall_completed = value.overall_total;
+        emitter.finish(value);
+        assert_eq!(
+            calls.lock().unwrap().last().unwrap().overall_completed,
+            30000
+        );
+    }
 }

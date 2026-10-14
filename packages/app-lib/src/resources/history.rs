@@ -309,7 +309,7 @@ pub(crate) async fn prepare_rollback(
     let draft = plans::OperationDraft {
         import_files: Default::default(),
         naming: Default::default(),
-        plan: plan,
+        plan,
         install_dependencies: false,
         candidates: vec![],
         local_files: std::collections::HashMap::from([(

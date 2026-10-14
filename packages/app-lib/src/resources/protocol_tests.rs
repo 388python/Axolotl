@@ -267,7 +267,7 @@ async fn pack_artifact_snapshot_requires_exact_size_and_hash() {
         size: artifact.integrity.size,
         hashes: vec![ContentHash {
             algorithm: HashAlgorithm::Sha1,
-            value: hash.clone(),
+            value: hash,
         }],
     };
     assert!(identity::exact_integrity(&local, &artifact.integrity));

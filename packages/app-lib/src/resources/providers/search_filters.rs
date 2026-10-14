@@ -29,11 +29,12 @@ pub(crate) fn for_source(
             let selected: Vec<_> = values
                 .iter()
                 .filter_map(|value| {
-                    if field == "projectId" && *excluded {
-                        if let Some((owner, id)) = value.split_once(':') {
-                            return (owner == source.as_str())
-                                .then(|| id.to_string());
-                        }
+                    if field == "projectId"
+                        && *excluded
+                        && let Some((owner, id)) = value.split_once(':')
+                    {
+                        return (owner == source.as_str())
+                            .then(|| id.to_string());
                     }
                     if field == "category"
                         && let Some((owner, value)) = value.split_once(':')

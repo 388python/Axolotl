@@ -487,10 +487,9 @@ impl ResourceService {
                 cancel,
             )
             .await
+            && let Some(text) = document.changelog
         {
-            if let Some(text) = document.changelog {
-                return Ok(text);
-            }
+            return Ok(text);
         }
         let slug = if locator.is_some() {
             locator
