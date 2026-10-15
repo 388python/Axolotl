@@ -12,6 +12,7 @@ import PlanetMinecraft from './PlanetMinecraft.vue'
 const route = reactive({ params: { slug: 'old', id: 'old' }, query: {} })
 const target = ref({ id: 'instance', name: 'Target' })
 const showInstall = vi.fn()
+const cancelInstall = vi.fn<() => Promise<void>>()
 const trackJob = vi.fn()
 vi.mock('vue-router', () => ({ useRoute: () => route }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }))
@@ -35,7 +36,7 @@ vi.mock('@/providers/download-manager', () => ({ injectDownloadManager: () => ({
 vi.mock('@/components/ui/ResourceOperationPreviewModal.vue', () => ({
     default: defineComponent({
         setup: (_, { expose }) => {
-            expose({ showInstall })
+            expose({ showInstall, cancel: cancelInstall })
             return () => h('div')
         },
     }),
@@ -113,6 +114,7 @@ beforeEach(() => {
     route.params.slug = 'old'
     route.params.id = 'old'
     showInstall.mockResolvedValue({ job_id: 'job' })
+    cancelInstall.mockResolvedValue(undefined)
     vi.mocked(getMcArchiveModBySlug).mockResolvedValue(archive('old') as never)
     vi.mocked(getPlanetMinecraftProject).mockResolvedValue(planet('old') as never)
 })
@@ -187,6 +189,7 @@ for (const [name, component, loader, field, data] of [
             finish(data('late'))
             await flushPromises()
             expect(signal?.aborted).toBe(true)
+            expect(cancelInstall).toHaveBeenCalledTimes(1)
             expect(wrapper.find('h1').text()).toBe('new')
             await wrapper
                 .findAll('button')
@@ -206,6 +209,7 @@ for (const [name, component, loader, field, data] of [
                 .trigger('click')
             target.value = { id: 'other', name: 'Other' }
             await flushPromises()
+            expect(cancelInstall).toHaveBeenCalledTimes(2)
             pick('C:/Downloads/mod.jar')
             await flushPromises()
             expect(showInstall).not.toHaveBeenCalled()

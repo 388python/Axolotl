@@ -3686,6 +3686,9 @@
   "project.versions.filter.toggle-tooltip": {
     "defaultMessage": "Toggle filter for {filter}"
   },
+  "project.versions.no-matching-versions": {
+    "defaultMessage": "No versions match the selected filters."
+  },
   "project.versions.platform.modloader.short": {
     "defaultMessage": "ModLoader"
   },
@@ -3706,9 +3709,6 @@
   },
   "project.versions.table.version": {
     "defaultMessage": "Version"
-  },
-  "project.versions.no-matching-versions": {
-    "defaultMessage": "No versions match the selected filters."
   },
   "project.versions.version.withheld": {
     "defaultMessage": "Withheld"
