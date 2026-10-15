@@ -1,6 +1,77 @@
 use super::*;
 
 #[tokio::test]
+async fn scan_reports_completed_areas_and_cache_retains_stale_results_for_display()
+ {
+    let temp = tempfile::tempdir().unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: temp.path().into(),
+        config_dir: temp.path().into(),
+        app_identifier: "test".into(),
+    };
+    fs::create_dir_all(directories.instances_dir())
+        .await
+        .unwrap();
+    fs::write(directories.instances_dir().join("test.jar"), b"game")
+        .await
+        .unwrap();
+    let events = std::sync::Mutex::new(Vec::new());
+    let mut tree = scan_with_directories_progress(
+        &directories,
+        &temp.path().join("backups"),
+        vec![],
+        &|event| events.lock().unwrap().push(event),
+    )
+    .await
+    .unwrap();
+    let events = events.into_inner().unwrap();
+    let steps: Vec<_> = events
+        .iter()
+        .filter_map(|event| match event {
+            StorageScanEvent::Progress {
+                completed, total, ..
+            } => Some((*completed, *total)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(steps[0], (0, 16));
+    assert_eq!(*steps.last().unwrap(), (16, 16));
+    assert!(
+        steps
+            .windows(2)
+            .all(|pair| pair[1].0 >= pair[0].0 && pair[1].1 == pair[0].1)
+    );
+    assert!(snapshot_is_fresh(&tree));
+    tree.scanned_at = Utc::now() - chrono::Duration::hours(1);
+    assert!(!snapshot_is_fresh(&tree));
+    let snapshot = StorageCacheFile {
+        version: STORAGE_CACHE_VERSION,
+        roots: "current-roots".into(),
+        tree: tree.clone(),
+    };
+    let bytes = serde_cbor::to_vec(&snapshot).unwrap();
+    assert_eq!(
+        decode_snapshot(&bytes, "current-roots")
+            .unwrap()
+            .total
+            .actual,
+        tree.total.actual
+    );
+    assert!(decode_snapshot(&bytes, "different-roots").is_none());
+    assert!(decode_snapshot(b"invalid cache", "current-roots").is_none());
+    let old = StorageCacheFile {
+        version: STORAGE_CACHE_VERSION - 1,
+        ..snapshot
+    };
+    assert!(
+        decode_snapshot(&serde_cbor::to_vec(&old).unwrap(), "current-roots")
+            .is_none()
+    );
+    tree.scanned_at = Utc::now() + chrono::Duration::hours(1);
+    assert!(!snapshot_is_fresh(&tree));
+}
+
+#[tokio::test]
 async fn nested_roots_and_external_backup_are_counted_once() {
     let temp = tempfile::tempdir().unwrap();
     let directories = DirectoryInfo {

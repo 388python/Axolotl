@@ -147,6 +147,19 @@ pub struct StorageTree {
     pub warnings: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StorageScanEvent {
+    Cached {
+        tree: StorageTree,
+    },
+    Progress {
+        completed: usize,
+        total: usize,
+        category: StorageNodeType,
+    },
+}
+
 mod cache;
 mod meta;
 #[cfg(test)]
@@ -164,6 +177,19 @@ struct StorageCacheFile {
     version: u32,
     roots: String,
     tree: StorageTree,
+}
+
+fn decode_snapshot(bytes: &[u8], roots: &str) -> Option<StorageTree> {
+    let cache: StorageCacheFile = serde_cbor::from_slice(bytes).ok()?;
+    (cache.version == STORAGE_CACHE_VERSION && cache.roots == roots)
+        .then_some(cache.tree)
+}
+
+fn snapshot_is_fresh(tree: &StorageTree) -> bool {
+    let age = Utc::now()
+        .signed_duration_since(tree.scanned_at)
+        .num_seconds();
+    (0..300).contains(&age)
 }
 
 fn dirs() -> crate::Result<DirectoryInfo> {
@@ -437,6 +463,13 @@ fn classify_children(node: &mut StorageNode, category: &StorageNodeType) {
 }
 
 pub async fn scan_storage(force: bool) -> crate::Result<StorageTree> {
+    scan_storage_with_progress(force, &|_| {}).await
+}
+
+pub async fn scan_storage_with_progress(
+    force: bool,
+    progress: &(dyn Fn(StorageScanEvent) + Send + Sync),
+) -> crate::Result<StorageTree> {
     let _scan = SCAN_LOCK.lock().await;
     let directories = dirs()?;
     let settings =
@@ -455,25 +488,19 @@ pub async fn scan_storage(force: bool) -> crate::Result<StorageTree> {
     let cache_path = directories.caches_dir().join(STORAGE_CACHE_FILE);
     if !force {
         if let Ok(bytes) = fs::read(&cache_path).await {
-            if let Ok(cache) =
-                serde_cbor::from_slice::<StorageCacheFile>(&bytes)
-            {
-                if cache.version == STORAGE_CACHE_VERSION
-                    && cache.roots == roots
-                    && Utc::now()
-                        .signed_duration_since(cache.tree.scanned_at)
-                        .num_seconds()
-                        < 300
-                {
-                    return Ok(cache.tree);
+            if let Some(tree) = decode_snapshot(&bytes, &roots) {
+                progress(StorageScanEvent::Cached { tree: tree.clone() });
+                if snapshot_is_fresh(&tree) {
+                    return Ok(tree);
                 }
             }
         }
     }
-    let tree = scan_with_directories(
+    let tree = scan_with_directories_progress(
         &directories,
         &backup,
         crate::api::instance::list().await?,
+        progress,
     )
     .await?;
     let cache = StorageCacheFile {
@@ -501,10 +528,21 @@ pub async fn scan_storage(force: bool) -> crate::Result<StorageTree> {
     Ok(tree)
 }
 
+#[cfg(test)]
 async fn scan_with_directories(
     directories: &DirectoryInfo,
     backup: &Path,
     instances: Vec<crate::state::InstanceMetadata>,
+) -> crate::Result<StorageTree> {
+    scan_with_directories_progress(directories, backup, instances, &|_| {})
+        .await
+}
+
+async fn scan_with_directories_progress(
+    directories: &DirectoryInfo,
+    backup: &Path,
+    instances: Vec<crate::state::InstanceMetadata>,
+    progress: &(dyn Fn(StorageScanEvent) + Send + Sync),
 ) -> crate::Result<StorageTree> {
     let mut warnings = Vec::new();
     let targets = vec![
@@ -557,7 +595,13 @@ async fn scan_with_directories(
     ];
     let mut categories: Vec<StorageNode> = Vec::new();
     let mut claimed = HashSet::new();
-    for (path, kind, depth) in &targets {
+    let total_sections = targets.len() + 2;
+    for (index, (path, kind, depth)) in targets.iter().enumerate() {
+        progress(StorageScanEvent::Progress {
+            completed: index,
+            total: total_sections,
+            category: kind.clone(),
+        });
         if !claimed.insert(path.clone()) {
             continue;
         }
@@ -622,6 +666,11 @@ async fn scan_with_directories(
     }
 
     let mut remainder = Vec::new();
+    progress(StorageScanEvent::Progress {
+        completed: targets.len(),
+        total: total_sections,
+        category: StorageNodeType::Other,
+    });
     for root in minimal_roots(vec![
         directories.settings_dir.clone(),
         directories.config_dir.clone(),
@@ -646,6 +695,11 @@ async fn scan_with_directories(
         Some(node)
     };
     let mut external = Vec::new();
+    progress(StorageScanEvent::Progress {
+        completed: targets.len() + 1,
+        total: total_sections,
+        category: StorageNodeType::Instance,
+    });
     let owned = minimal_roots(vec![
         directories.settings_dir.clone(),
         directories.config_dir.clone(),
@@ -688,6 +742,11 @@ async fn scan_with_directories(
         total += other.size;
     }
     warnings.truncate(100);
+    progress(StorageScanEvent::Progress {
+        completed: total_sections,
+        total: total_sections,
+        category: StorageNodeType::Other,
+    });
     Ok(StorageTree {
         version: STORAGE_CACHE_VERSION,
         scanned_at: Utc::now(),

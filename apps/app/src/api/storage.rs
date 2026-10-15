@@ -5,7 +5,7 @@ use tauri::Runtime;
 use tauri_plugin_opener::OpenerExt;
 use theseus::storage::{
     CacheCleanupResult, MetaAnalysis, MetaCleanupResult, StoragePath,
-    StoragePathKind, StorageTree,
+    StoragePathKind, StorageScanEvent, StorageTree,
 };
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
@@ -35,8 +35,18 @@ pub struct StorageOpenFailure {
 }
 
 #[tauri::command]
-pub async fn storage_scan(force: bool) -> Result<StorageTree> {
-    Ok(theseus::storage::scan_storage(force).await?)
+pub async fn storage_scan(
+    force: bool,
+    on_progress: Option<tauri::ipc::Channel<StorageScanEvent>>,
+) -> Result<StorageTree> {
+    Ok(
+        theseus::storage::scan_storage_with_progress(force, &move |event| {
+            if let Some(channel) = &on_progress {
+                let _ = channel.send(event);
+            }
+        })
+        .await?,
+    )
 }
 
 #[tauri::command]
