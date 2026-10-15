@@ -617,11 +617,18 @@ pub(crate) async fn get_linked_modpack_info(
             &state.api_semaphore,
         ),
     )?;
-    let version = version.ok_or_else(|| {
-        crate::ErrorKind::InputError(format!(
-            "Linked modpack version {version_id} not found"
-        ))
-    })?;
+    let version = match version {
+        Some(version) => version,
+        None if matches!(cache_behaviour, Some(CacheBehaviour::CacheOnly)) => {
+            return Ok(None);
+        }
+        None => {
+            return Err(crate::ErrorKind::InputError(format!(
+                "Linked modpack version {version_id} not found"
+            ))
+            .into());
+        }
+    };
     let (project, all_versions) = if version.project_id != project_id {
         let modpack_project_id_ref =
             ModrinthProjectId::new(version.project_id.clone())?;

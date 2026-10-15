@@ -45,7 +45,7 @@ pub struct PackFile {
     pub hashes: HashMap<PackFileHash, String>,
     pub env: Option<HashMap<EnvType, SideType>>,
     pub downloads: Vec<String>,
-    pub file_size: u32,
+    pub file_size: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -258,19 +258,32 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
 ) -> crate::Result<CreatePack> {
     let state = State::get().await?;
     let has_icon_url = icon_url.is_some();
-
-    let version = CachedEntry::get_version(
-        &ModrinthVersionId::new(version_id.clone())?,
+    let cancellation = reporter.cancellation_token();
+    let version_id_ref = ModrinthVersionId::new(version_id.clone())?;
+    let version_query = CachedEntry::get_version(
+        &version_id_ref,
         Some(CacheBehaviour::Bypass),
         &state.pool,
         &state.api_semaphore,
-    )
-    .await?
+    );
+    let version = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Err(crate::resources::protocol::error(crate::resources::ResourceError::Canceled)),
+        version = version_query => version?,
+    }
     .ok_or_else(|| {
         crate::ErrorKind::InputError(
             "Invalid version ID specified!".to_string(),
         )
     })?;
+
+    if version.project_id != project_id {
+        return Err(crate::ErrorKind::InputError(
+            "The selected modpack release belongs to a different project"
+                .into(),
+        )
+        .into());
+    }
 
     // Update instance with correct loader and game version from the API version metadata,
     // so the UI shows accurate info while the pack file is still downloading.

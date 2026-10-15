@@ -30,22 +30,32 @@ pub(crate) async fn get_content_snapshot(
     refresh_remote: bool,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
-    get_content_snapshot_inner(instance_id, refresh_remote, true, state).await
+    get_content_snapshot_inner(instance_id, refresh_remote, true, true, state)
+        .await
 }
 
 pub(crate) async fn get_cached_content_snapshot(
     instance_id: &str,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
-    get_content_snapshot_inner(instance_id, false, false, state).await
+    get_content_snapshot_inner(instance_id, false, false, true, state).await
+}
+
+pub(crate) async fn get_local_content_snapshot(
+    instance_id: &str,
+    state: &State,
+) -> crate::Result<InstanceContentSnapshot> {
+    get_content_snapshot_inner(instance_id, false, false, false, state).await
 }
 
 async fn get_content_snapshot_inner(
     instance_id: &str,
     refresh_remote: bool,
     sync_direct_instance: bool,
+    enrich: bool,
     state: &State,
 ) -> crate::Result<InstanceContentSnapshot> {
+    super::repair_recorded_pack_unlink(instance_id, &state.pool).await?;
     let instance = instance_rows::get_instance_by_id(instance_id, &state.pool)
         .await?
         .ok_or_else(|| {
@@ -76,6 +86,17 @@ async fn get_content_snapshot_inner(
         sync_instance_content_files(&instance, state).await?
     } else {
         cached_files
+    };
+    let content_set = if refresh_remote {
+        content_rows::get_applied_content_set(instance_id, &state.pool)
+            .await?
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(
+                    "Instance has no applied content set after refresh".into(),
+                )
+            })?
+    } else {
+        content_set
     };
     let mut warnings = Vec::new();
     if refresh_remote
@@ -180,6 +201,9 @@ async fn get_content_snapshot_inner(
         content_rows::get_content_entries(&content_set.id, &state.pool).await?;
     let members =
         content_rows::get_pack_members(&content_set.id, &state.pool).await?;
+    if matches!(link, InstanceLink::Unmanaged) && !members.is_empty() {
+        warnings.push(InstanceContentWarning { code: "pack_unlink_history_unconfirmed".into(), message: "Pack membership was preserved because this instance has no explicit unlink record. Local imported packs may legitimately have no online link.".into(), provider: None });
+    }
     let pending_manual_downloads =
         content_rows::get_pending_manual_downloads(instance_id, &state.pool)
             .await?;
@@ -417,6 +441,21 @@ async fn get_content_snapshot_inner(
                     return;
                 }
             };
+            let current: Option<(String, i64)> = match sqlx::query_as("SELECT content.id, content.revision FROM instances instance JOIN instance_content_sets content ON content.id = instance.applied_content_set_id WHERE instance.id = ?")
+                .bind(&instance_id).fetch_optional(&mut *tx).await {
+                Ok(current) => current,
+                Err(error) => {
+                    tracing::warn!(%error, "Content dependency backfill snapshot check failed");
+                    return;
+                }
+            };
+            if !current.is_some_and(|(id, revision)| {
+                id == content_set.id
+                    && u64::try_from(revision).ok()
+                        == Some(content_set.revision)
+            }) {
+                return;
+            }
             for edge in &backfill.edges {
                 if let Err(error) =
                     content_rows::upsert_content_dependency_edge_in_transaction(
@@ -483,73 +522,134 @@ async fn get_content_snapshot_inner(
     } else {
         CacheBehaviour::CacheOnly
     };
-    match list_all_content_from_files(
-        instance_id,
-        files_for_listing,
-        Some(cache_behaviour),
-        refresh_remote,
-        state,
-    )
-    .await
-    {
-        Ok(enriched) => {
-            let enriched = enriched
-                .into_iter()
-                .map(|item| (item.file_path.clone(), item))
-                .collect::<HashMap<_, _>>();
-            for item in &mut items {
-                if let Some(content) =
-                    enriched.get(&item.expected_relative_path)
-                {
-                    if refresh_remote
-                        && item.member_id.is_none()
-                        && let Some(reference) = primary_persistent_ref(content)
+    if enrich {
+        match list_all_content_from_files(
+            instance_id,
+            files_for_listing,
+            Some(cache_behaviour),
+            refresh_remote,
+            state,
+        )
+        .await
+        {
+            Ok(enriched) => {
+                let enriched = enriched
+                    .into_iter()
+                    .map(|item| (item.file_path.clone(), item))
+                    .collect::<HashMap<_, _>>();
+                for item in &mut items {
+                    if let Some(content) =
+                        enriched.get(&item.expected_relative_path)
                     {
-                        item.provider = Some(reference.provider());
-                        item.provider_project_id =
-                            Some(reference.database_project_id());
-                        item.provider_release_id =
-                            reference.database_release_id();
+                        if refresh_remote
+                            && item.member_id.is_none()
+                            && let Some(reference) =
+                                primary_persistent_ref(content)
+                        {
+                            item.provider = Some(reference.provider());
+                            item.provider_project_id =
+                                Some(reference.database_project_id());
+                            item.provider_release_id =
+                                reference.database_release_id();
+                        }
+                        item.content = Some(content.clone());
+                        item.capabilities.can_update = content.update.is_some()
+                            && item.materialization_state
+                                == PackMemberMaterializationState::Present;
                     }
-                    item.content = Some(content.clone());
-                    item.capabilities.can_update = content.update.is_some()
-                        && item.materialization_state
-                            == PackMemberMaterializationState::Present;
                 }
             }
+            Err(error) => warnings.push(InstanceContentWarning {
+                code: "provider_metadata_unavailable".to_string(),
+                message: error.to_string(),
+                provider: None,
+            }),
         }
-        Err(error) => warnings.push(InstanceContentWarning {
-            code: "provider_metadata_unavailable".to_string(),
-            message: error.to_string(),
-            provider: None,
-        }),
     }
 
-    let remote_pack = match super::list_content::get_linked_modpack_info(
-        instance_id,
-        None,
-        Some(cache_behaviour),
-        state,
-    )
-    .await
-    {
-        Ok(pack) => pack,
-        Err(error) => {
-            warnings.push(InstanceContentWarning {
-                code: "pack_metadata_unavailable".to_string(),
-                message: error.to_string(),
-                provider: pack_provider(&link),
-            });
-            None
+    let remote_pack = if enrich {
+        match super::list_content::get_linked_modpack_info(
+            instance_id,
+            None,
+            Some(cache_behaviour),
+            state,
+        )
+        .await
+        {
+            Ok(pack) => pack,
+            Err(error) => {
+                warnings.push(InstanceContentWarning {
+                    code: "pack_metadata_unavailable".to_string(),
+                    message: error.to_string(),
+                    provider: pack_provider(&link),
+                });
+                None
+            }
         }
+    } else {
+        None
     };
-    let pack = pack_snapshot(
+    let mut pack = pack_snapshot(
         &instance.name,
         instance.icon_path.clone(),
         &link,
         &members,
         remote_pack,
     );
+
+    let resource_store =
+        crate::state::resources::ResourceStore::new(state.pool.clone());
+    if let Some(pack) = &mut pack {
+        pack.resource_id = resource_store
+            .instance_pack_resource(instance_id)
+            .await
+            .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    }
+    let entry_resources = resource_store
+        .entry_resources(instance_id)
+        .await
+        .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    let pack_resources = resource_store
+        .pack_resources(instance_id)
+        .await
+        .map_err(|error| crate::ErrorKind::OtherError(error.to_string()))?;
+    for item in &mut items {
+        item.resource_id = item
+            .entry_id
+            .as_ref()
+            .and_then(|id| entry_resources.get(id))
+            .cloned();
+        item.pack_resource_id = item
+            .member_id
+            .as_ref()
+            .and_then(|id| pack_resources.get(id))
+            .cloned();
+    }
+
+    crate::resources::installed::attach_compatibility(
+        &state.pool,
+        instance_id,
+        &content_set.game_version,
+        content_set.loader.as_str(),
+        &mut items,
+        state.resources().await.ok(),
+    )
+    .await?;
+
+    if enrich
+        && let Err(error) = crate::resources::history::attach_to_snapshot(
+            instance_id,
+            &mut items,
+            state,
+        )
+        .await
+    {
+        warnings.push(InstanceContentWarning {
+            code: "resource_history_unavailable".into(),
+            message: error.to_string(),
+            provider: None,
+        });
+    }
 
     items.sort_by(|left, right| {
         left.expected_relative_path
@@ -1587,6 +1687,10 @@ fn snapshot_item(
         .is_some_and(|content| !content.provider_refs.is_empty());
 
     InstanceContentSnapshotItem {
+        artifact_ref: None,
+        compatibility: None,
+        resource_id: None,
+        pack_resource_id: None,
         file_id,
         entry_id,
         member_id: member.map(|member| member.id.clone()),
@@ -1686,6 +1790,7 @@ fn pack_snapshot(
         .unwrap_or(fallback_name);
 
     Some(InstanceContentPack {
+        resource_id: None,
         name,
         icon_path,
         provider,

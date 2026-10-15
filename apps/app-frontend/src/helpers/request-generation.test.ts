@@ -20,3 +20,21 @@ test('invalidating a workspace makes an in-flight request stale', () => {
 
     assert.equal(requests.isCurrent(token, 'server-a:/'), false)
 })
+
+test('a delayed instance event cannot replace a newer read of the same instance', async () => {
+    const requests = createRequestGeneration()
+    let finish!: (value: string) => void
+    const response = new Promise<string>((resolve) => {
+        finish = resolve
+    })
+    const old = requests.begin('instance-a')
+    let displayed = 'initial'
+    const pending = response.then((value) => {
+        if (requests.isCurrent(old, 'instance-a')) displayed = value
+    })
+    const latest = requests.begin('instance-a')
+    if (requests.isCurrent(latest, 'instance-a')) displayed = 'new state'
+    finish('old state')
+    await pending
+    assert.equal(displayed, 'new state')
+})

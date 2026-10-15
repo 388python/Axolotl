@@ -971,7 +971,7 @@ mod tests {
 
     #[test]
     fn display_compaction_bounds_many_distinct_lines() {
-        let log = (0..100_000)
+        let log = (0..300_000)
             .map(|index| format!("line-{index}\n"))
             .collect::<String>();
 

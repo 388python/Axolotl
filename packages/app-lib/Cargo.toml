@@ -26,8 +26,11 @@ base64 = { workspace = true }
 bon = { workspace = true }
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 bytes = { workspace = true, features = ["serde"] }
+cap-fs-ext = { workspace = true }
+cap-std = { workspace = true }
 chardetng = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
+content-management = { workspace = true }
 crc32fast = { workspace = true }
 daedalus = { workspace = true }
 dashmap = { workspace = true, features = ["serde"] }
@@ -56,7 +59,6 @@ jsonwebtoken = { workspace = true }
 keyring = { workspace = true }
 local-ip-address = { workspace = true }
 md5 = { workspace = true }
-modrinth-content-management = { workspace = true }
 notify = { workspace = true }
 notify-debouncer-mini = { workspace = true }
 p256 = { workspace = true, features = ["ecdsa"] }
@@ -132,6 +134,7 @@ toml = { workspace = true }
 tracing = { workspace = true }
 tracing-error = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["chrono", "env-filter"] }
+unicode-normalization = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 urlencoding = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4"] }

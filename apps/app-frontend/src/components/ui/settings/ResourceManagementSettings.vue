@@ -22,6 +22,7 @@ import {
     getMissingContentScannerSettings,
     setMissingContentScannerSettings,
 } from '@/helpers/downloads-scanner'
+import { resourcePreferredSource, resourceSetPreferredSource } from '@/helpers/resources'
 import { get, getProxyConfig, setProxyConfig, testProxyConfig, update } from '@/helpers/settings.ts'
 import { createSettingsPatchSaver } from '@/helpers/settings-patch'
 import { showAppDbBackupsFolder } from '@/helpers/utils.js'
@@ -48,6 +49,38 @@ const minecraftDirectories = ref(loadMinecraftDirectories())
 const minecraftDirectoryError = ref(null)
 const purgeCacheConfirmModal = ref(null)
 const { formatMessage } = useVIntl()
+const preferredResourceSource = ref('modrinth')
+try {
+    preferredResourceSource.value = await resourcePreferredSource()
+} catch (error) {
+    handleError(error)
+}
+const savingResourceSource = ref(false)
+const resourceSourceOptions = [
+    { value: 'modrinth', label: 'Modrinth' },
+    { value: 'curseforge', label: 'CurseForge' },
+    { value: 'mcarchive', label: 'MCArchive' },
+    { value: 'planet_minecraft', label: 'Planet Minecraft' },
+]
+const resourceSourceIds = ['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft']
+const resourceSourceChoice = computed({
+    get: () => preferredResourceSource.value,
+    set: (value) => {
+        void saveResourceSource(value)
+    },
+})
+async function saveResourceSource(value) {
+    savingResourceSource.value = true
+    try {
+        const source = resourceSourceIds.includes(value) ? value : resourceSourceIds[0]
+        await resourceSetPreferredSource(source)
+        preferredResourceSource.value = source
+    } catch (error) {
+        handleError(error)
+    } finally {
+        savingResourceSource.value = false
+    }
+}
 
 const isPortable = ref(false)
 
@@ -115,6 +148,32 @@ async function testProxy() {
 }
 
 const messages = defineMessages({
+    chineseNames: {
+        id: 'app.settings.resources.chinese-names',
+        defaultMessage: 'Add known Chinese names to downloads',
+    },
+    chineseNamesDescription: {
+        id: 'app.settings.resources.chinese-names-description',
+        defaultMessage:
+            'Prefix new resource filenames with the known Chinese project name, when available.',
+    },
+    preserveNames: {
+        id: 'app.settings.resources.preserve-names',
+        defaultMessage: 'Preserve local prefixes and suffixes when updating',
+    },
+    preserveNamesDescription: {
+        id: 'app.settings.resources.preserve-names-description',
+        defaultMessage:
+            'Updates and version changes replace only the known original filename. Custom names that cannot be matched are kept intact.',
+    },
+    preferredResourceSource: {
+        id: 'app.resources.preferred-source',
+        defaultMessage: 'Preferred resource source',
+    },
+    preferredResourceSourceDescription: {
+        id: 'app.resources.preferred-source.description',
+        defaultMessage: 'Used for default descriptions and equivalent releases. Default: Modrinth.',
+    },
     dataStorageSectionTitle: {
         id: 'app.settings.resources.sections.data-storage',
         defaultMessage: 'Data directories & cache',
@@ -655,27 +714,32 @@ watch(
 )
 
 async function purgeCache() {
-    await purge_cache_types([
-        'project',
-        'project_v3',
-        'curseforge_project',
-        'version',
-        'user',
-        'team',
-        'organization',
-        'file',
-        'loader_manifest',
-        'minecraft_manifest',
-        'categories',
-        'report_types',
-        'loaders',
-        'game_versions',
-        'donation_platforms',
-        'file_hash',
-        'file_update',
-        'search_results',
-        'search_results_v3',
-    ]).catch(handleError)
+    try {
+        await invoke('plugin:axolotl-resources|resource_cache_clear')
+        await purge_cache_types([
+            'project',
+            'project_v3',
+            'curseforge_project',
+            'version',
+            'user',
+            'team',
+            'organization',
+            'file',
+            'loader_manifest',
+            'minecraft_manifest',
+            'categories',
+            'report_types',
+            'loaders',
+            'game_versions',
+            'donation_platforms',
+            'file_hash',
+            'file_update',
+            'search_results',
+            'search_results_v3',
+        ])
+    } catch (error) {
+        handleError(error)
+    }
 }
 
 function handlePurgeCacheClick() {
@@ -875,6 +939,48 @@ function validateMinecraftDirectory(_value) {
         </SettingsSection>
 
         <SettingsSection v-if="props.scope === 'content-downloads'">
+            <SettingsRow>
+                <template #label>{{ formatMessage(messages.preferredResourceSource) }}</template>
+                <template #description>{{
+                    formatMessage(messages.preferredResourceSourceDescription)
+                }}</template>
+                <template #control
+                    ><Combobox
+                        v-model="resourceSourceChoice"
+                        :options="resourceSourceOptions"
+                        :disabled="savingResourceSource"
+                /></template>
+            </SettingsRow>
+            <SettingsRow>
+                <template #label
+                    ><span id="settings-target-resources-chinese-names" tabindex="-1">{{
+                        formatMessage(messages.chineseNames)
+                    }}</span></template
+                >
+                <template #description>{{
+                    formatMessage(messages.chineseNamesDescription)
+                }}</template>
+                <template #control
+                    ><Toggle
+                        id="resource-chinese-filenames"
+                        v-model="settings.resource_chinese_filenames"
+                /></template>
+            </SettingsRow>
+            <SettingsRow>
+                <template #label
+                    ><span id="settings-target-resources-preserve-names" tabindex="-1">{{
+                        formatMessage(messages.preserveNames)
+                    }}</span></template
+                >
+                <template #description>{{
+                    formatMessage(messages.preserveNamesDescription)
+                }}</template>
+                <template #control
+                    ><Toggle
+                        id="resource-preserve-filenames"
+                        v-model="settings.resource_preserve_filenames"
+                /></template>
+            </SettingsRow>
             <template #header>
                 <h2
                     id="settings-target-resources-download-mirrors"

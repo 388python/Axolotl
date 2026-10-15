@@ -495,6 +495,7 @@ async fn write_latest_log(details: &mut String, state: &State) {
 
 fn phase_label(phase: InstallPhaseId) -> &'static str {
     match phase {
+        InstallPhaseId::Exporting => "exporting selected files",
         InstallPhaseId::PreparingInstance => "preparing instance",
         InstallPhaseId::CreatingBackup => "creating backup",
         InstallPhaseId::StagingContent => "staging content",

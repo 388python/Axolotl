@@ -1297,6 +1297,12 @@ pub(crate) async fn upsert_instance_link(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> crate::Result<()> {
     let columns = instance_link_columns(link)?;
+    if !matches!(link, InstanceLink::Unmanaged) {
+        sqlx::query("DELETE FROM resource_pack_unlinks WHERE instance_id = ?")
+            .bind(instance_id)
+            .execute(&mut **tx)
+            .await?;
+    }
     let modrinth_project_id = columns.modrinth_project_id.as_deref();
     let modrinth_version_id = columns.modrinth_version_id.as_deref();
     let server_project_id = columns.server_project_id.as_deref();

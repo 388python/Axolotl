@@ -18,9 +18,8 @@ use crate::pack::install_from::{
 use crate::state::instances::ContentSourceKind;
 use crate::state::instances::adapters::sqlite::content_rows;
 use crate::state::{
-    CachedEntry, ContentProviderRef, EditInstance, InstanceInstallStage,
-    ModrinthHashMatch, ModrinthProjectId, ModrinthVersionId, Settings,
-    SideType,
+    CachedEntry, ContentProviderRef, ModrinthHashMatch, ModrinthProjectId,
+    ModrinthVersionId, Settings, SideType,
 };
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
@@ -1035,11 +1034,8 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     };
 
     let num_files = pack.files.len();
-    let content_total_bytes = pack
-        .files
-        .iter()
-        .map(|file| file.file_size as u64)
-        .sum::<u64>();
+    let content_total_bytes =
+        checked_download_size(pack.files.iter().map(|file| file.file_size))?;
     let mut cached_pack_hashes = pack
         .files
         .iter()
@@ -1146,7 +1142,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     queued_events.extend(pack.files.iter().map(|file| {
         InstallJobEventKind::ContentFileQueued {
             path: content_context.resolve_install_path(file),
-            bytes_total: (file.file_size > 0).then_some(file.file_size as u64),
+            bytes_total: (file.file_size > 0).then_some(file.file_size),
             max_attempts: estimated_file_max_attempts(file) as u32,
         }
     }));
@@ -1190,7 +1186,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                         item_id: target_path.clone(),
                         manifest_path: file.path.as_str().to_string(),
                         target_path,
-                        expected_size: file.file_size as u64,
+                        expected_size: file.file_size,
                         sha1: file.hashes.get(&PackFileHash::Sha1).cloned(),
                         sha512: file
                             .hashes
@@ -1521,7 +1517,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             let finalize_semaphore = finalize_semaphore.clone();
             let verification_tx = verification_tx.clone();
              async move {
-                let project_size = project.file_size as u64;
+                let project_size = project.file_size;
                 let project_path =
                     content_context.resolve_install_path(&project);
                 let target_path =
@@ -2271,155 +2267,27 @@ fn modpack_source_kind(version_id: Option<&str>) -> ContentSourceKind {
     }
 }
 
-#[tracing::instrument(skip(mrpack_file))]
-
-pub async fn remove_all_related_files(
-    instance_id: String,
-    mrpack_file: CreatePackFile,
-) -> crate::Result<()> {
-    // Updates can remove files from a locally imported or downloaded pack, so share the same reader path.
-    let mut zip_reader = MrpackZipReader::new(&mrpack_file).await?;
-
-    // Extract index of modrinth.index.json
-    let Some((manifest_idx, archive_base)) =
-        locate_mrpack_manifest(zip_reader.file())
-    else {
-        return Err(crate::Error::from(crate::ErrorKind::InputError(
-            "No pack manifest found in mrpack".to_string(),
-        )));
-    };
-    let overrides_prefix = format!("{archive_base}overrides/");
-    let client_overrides_prefix = format!("{archive_base}client-overrides/");
-
-    let manifest = zip_reader.read_entry_to_string(manifest_idx).await?;
-
-    let pack: PackFormat = serde_json::from_str(&manifest)?;
-
-    if &*pack.game != "minecraft" {
-        return Err(crate::ErrorKind::InputError(
-            "Pack does not support Minecraft".to_string(),
-        )
-        .into());
-    }
-
-    crate::api::instance::edit(
-        &instance_id,
-        EditInstance {
-            install_stage: Some(InstanceInstallStage::PackInstalling),
-            ..EditInstance::default()
-        },
-    )
-    .await?;
-
-    // First, remove all modrinth projects by their version hashes
-    // Remove all modrinth projects by their version hashes
-    // We need to do a fetch to get the project ids from Modrinth
-    let state = State::get().await?;
-    let metadata =
-        crate::api::instance::get(&instance_id)
-            .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(format!(
-                    "Unknown instance {instance_id}"
-                ))
-            })?;
-    let instance_full_path =
-        crate::api::instance::get_full_path(&instance_id).await?;
-    let all_hashes = pack
-        .files
-        .iter()
-        .filter_map(|f| Some(f.hashes.get(&PackFileHash::Sha1)?.clone()))
-        .collect::<Vec<_>>();
-
-    // First, get project info by hash
-    let file_infos = CachedEntry::get_file_many(
-        &all_hashes.iter().map(|x| &**x).collect::<Vec<_>>(),
-        None,
-        &state.pool,
-        &state.api_semaphore,
-    )
-    .await?;
-
-    let to_remove = file_infos
-        .into_iter()
-        .map(|p| p.project_id)
-        .collect::<Vec<_>>();
-
-    for file in crate::state::instances::commands::list_project_files(
-        &metadata.instance.id,
-        &state,
-    )
-    .await?
-    {
-        let is_modrinth_project = file.provider_refs.iter().any(|provider| {
-            matches!(
-                provider,
-                ContentProviderRef::Modrinth { project_id, .. }
-                    if to_remove.contains(&project_id.to_string())
+fn checked_download_size(
+    sizes: impl IntoIterator<Item = u64>,
+) -> crate::Result<u64> {
+    sizes.into_iter().try_fold(0u64, |total, size| {
+        total.checked_add(size).ok_or_else(|| {
+            crate::ErrorKind::InputError(
+                "pack download size exceeds supported range".into(),
             )
-        });
-        if is_modrinth_project {
-            crate::state::instances::commands::remove_project(
-                &metadata.instance.id,
-                &file.relative_path,
-                &state,
-            )
-            .await?;
-        }
-    }
-
-    // Iterate over all Modrinth project file paths in the json, and remove them
-    // (There should be few, but this removes any files the .mrpack intended as Modrinth projects but were unrecognized)
-    for file in pack.files {
-        match io::remove_file(instance_full_path.join(file.path.as_str())).await
-        {
-            Ok(_) => (),
-            Err(err) if err.kind() == ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
-        }
-    }
-
-    // Iterate over each 'overrides' file and remove it
-    let override_file_entries =
-        zip_reader.file().entries().iter().filter(|file| {
-            let filename = file.filename().as_str().unwrap_or_default();
-            (filename.starts_with(&overrides_prefix)
-                || filename.starts_with(&client_overrides_prefix))
-                && !filename.ends_with('/')
-        });
-
-    for file in override_file_entries {
-        let entry_name = file.filename().as_str().unwrap();
-        let entry_name =
-            entry_name.strip_prefix(&archive_base).unwrap_or(entry_name);
-        let relative_override_file_path =
-            SafeRelativeUtf8UnixPathBuf::try_from(entry_name.to_string())?;
-        let relative_override_file_path = relative_override_file_path
-            .strip_prefix("overrides")
-            .or_else(|_| relative_override_file_path.strip_prefix("client-overrides"))
-            .map_err(|_| {
-                crate::Error::from(crate::ErrorKind::OtherError(
-                    format!("Failed to strip override prefix from override file path: {relative_override_file_path}")
-                ))
-            })?;
-
-        // Remove this file if a corresponding one exists in the filesystem
-        match io::remove_file(
-            instance_full_path.join(relative_override_file_path.as_str()),
-        )
-        .await
-        {
-            Ok(_) => (),
-            Err(err) if err.kind() == ErrorKind::NotFound => (),
-            Err(err) => return Err(err.into()),
-        }
-    }
-
-    Ok(())
+            .into()
+        })
+    })
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn manifest_download_size_rejects_overflow() {
+        assert!(super::checked_download_size([u64::MAX, 1]).is_err());
+        assert_eq!(super::checked_download_size([10, 20]).unwrap(), 30);
+    }
+
     use super::*;
     use async_zip::tokio::write::ZipFileWriter;
     use async_zip::{Compression, ZipEntryBuilder};

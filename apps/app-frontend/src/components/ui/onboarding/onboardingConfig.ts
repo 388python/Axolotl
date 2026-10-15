@@ -73,7 +73,7 @@ export const onboardingMessages = defineMessages({
     browseDescription: {
         id: 'app.onboarding.browse.description',
         defaultMessage:
-            'Use types, search, and filters to narrow things down. Project pages keep versions, changelogs, galleries, and install options in one place.',
+            'Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements. When automatic dependency installation is off, use + to explicitly add missing required dependencies.',
     },
     favoritesTitle: {
         id: 'app.onboarding.favorites.title',
@@ -216,7 +216,7 @@ export const onboardingMessages = defineMessages({
     resourcesDescription: {
         id: 'app.onboarding.resources.description',
         defaultMessage:
-            'Choose how content downloads and installs, from download sources to safety checks.',
+            'Choose how content downloads and installs, including your preferred resource source. Modrinth is the default; changing the description source only changes what you read.',
     },
     privacyTitle: {
         id: 'app.onboarding.privacy.title',
@@ -322,7 +322,7 @@ export const onboardingMessages = defineMessages({
     instanceActionsDescription: {
         id: 'app.onboarding.instance-actions.description',
         defaultMessage:
-            'Launch, stop, repair, configure, export, or open the instance from its header.',
+            'Launch, stop, repair, configure, export, or open the instance from its header. Export verifies all exportable files once in the background while you choose categories, adjust files, and fill in package information. Changing selections reuses that verification. You can queue the export before verification finishes and follow its progress in Downloads.',
     },
     instanceTabsTitle: {
         id: 'app.onboarding.instance-tabs.title',
@@ -331,7 +331,7 @@ export const onboardingMessages = defineMessages({
     instanceTabsDescription: {
         id: 'app.onboarding.instance-tabs.description',
         defaultMessage:
-            'Use these tabs for content, files, screenshots, worlds, and logs. Tidy chaos.',
+            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Mod updates and version switches queue directly without resolving dependencies. New installations use a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
     },
     labTitle: {
         id: 'app.onboarding.lab.title',

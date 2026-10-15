@@ -27,7 +27,7 @@ This repository contains the Axolotl Launcher desktop application and its offici
 | `daedalus`                    | Minecraft metadata protocol              |
 | `ariadne`                     | Social and tunnel protocol types         |
 | `async-minecraft-ping`        | Minecraft server ping client             |
-| `modrinth-content-management` | Content installation model               |
+| `content-management`         | Provider-neutral resource and installation models |
 | `path-util`, `tooling-config` | Shared path and tooling configuration    |
 
 ## Pre-PR Commands

@@ -1,4 +1,10 @@
 {
+  "app.content-install.retained-instance.title": {
+    "message": "已保留创建的实例"
+  },
+  "app.content-install.retained-instance.description": {
+    "message": "已创建 {name}。内容安装已取消，你可以在实例库中管理或删除此实例。"
+  },
   "app.screenshots.selection.select-group": {
     "message": "选择“{group}”中的所有截图"
   },
@@ -1205,26 +1211,14 @@
   "app.content-selection.conflict-unavailable": {
     "message": "无法确认该内容是否与另一个来源重复。"
   },
-  "app.content-selection.dependency-conflict": {
-    "message": "{dependency} 在当前选择中解析出了冲突版本。"
-  },
   "app.content-selection.duplicate-content": {
     "message": "{project} 已从另一个来源安装或选中。"
   },
   "app.content-selection.preview-failed": {
     "message": "部分所选内容无法准备安装。请移除后重试。"
   },
-  "app.content-selection.queue-failed": {
-    "message": "部分内容未能加入安装队列，仍保留在已选列表中。"
-  },
   "app.content-selection.target-changed": {
     "message": "所选内容属于另一个实例。请切换回该实例或先清空选择。"
-  },
-  "app.content-selection.unknown-dependency": {
-    "message": "前置 {id}"
-  },
-  "app.content-selection.unknown-reason": {
-    "message": "无法解析"
   },
   "app.content.add-from-file": {
     "message": "从文件添加"
@@ -2084,9 +2078,6 @@
   "app.error.try-sign-in-again": {
     "message": "再次尝试登录"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "输入整合包描述……"
-  },
   "app.export-modal.export-button": {
     "message": "导出"
   },
@@ -2094,22 +2085,13 @@
     "message": "导出完成"
   },
   "app.export-modal.export-complete-description": {
-    "message": "{name} 已成功导出。"
-  },
-  "app.export-modal.header": {
-    "message": "导出整合包"
+    "message": "已成功导出 {name}。"
   },
   "app.export-modal.modpack-name-label": {
     "message": "整合包名称"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "整合包名称"
-  },
   "app.export-modal.version-number-label": {
     "message": "版本号"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.gc-notice.fallback": {
     "message": "Java 不接受 {preferred}，已改用 {chosen}。"
@@ -6537,7 +6519,7 @@
     "message": "调成你的顺眼样子"
   },
   "app.onboarding.browse.description": {
-    "message": "用类型、搜索和筛选快速收敛范围，项目页把版本、更新日志、图库和安装选择都放在一个地方。"
+    "message": "同时搜索可用来源。同名项目在文件核验前只是候选。项目页面集中展示版本、更新日志、图库和安装选项。安装预览会展开必选前置；点击＋添加可选前置后，才会解析它所需的前置。关闭自动安装依赖后，也需要点击＋明确添加缺失的必需前置。"
   },
   "app.onboarding.browse.title": {
     "message": "搜索，不靠玄学"
@@ -6627,13 +6609,13 @@
     "message": "你的主页，你的布局"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "从实例页头部启动、停止、修复、配置、导出或打开这个实例。"
+    "message": "在实例顶部启动、停止、修复、配置、导出或打开实例。打开导出框后会在后台统一校验全部可导出文件，你可以同时选择类别、微调文件和填写包信息。修改勾选会复用校验结果。校验完成前也可将导出加入队列，在下载中心查看后续进度。"
   },
   "app.onboarding.instance-actions.title": {
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "内容、文件、截图、世界和日志都在这些标签里。乱中有序。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。重复资源默认折叠；展开可查看每个实际文件，组级更新会处理全部可更新副本。Mod 更新和版本切换直接入队，不解析依赖。新增安装使用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可从内容工具栏打开“旧文件与备份”，搜索、选择并预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -6714,7 +6696,7 @@
     "message": "你的数据，由你决定"
   },
   "app.onboarding.resources.description": {
-    "message": "选择内容的下载与安装方式，包括下载源和安全确认。"
+    "message": "选择内容的下载、安装方式及首选资源来源。默认为 Modrinth；切换简介来源只改变阅读内容。"
   },
   "app.onboarding.resources.title": {
     "message": "别把电脑烤熟"
@@ -13414,5 +13396,632 @@
   },
   "app.settings.privacy.security-title": {
     "message": "安全"
+  },
+  "app.resources.description.retry": {
+    "message": "重试简介"
+  },
+  "app.resources.description.failed": {
+    "message": "无法加载简介。"
+  },
+  "app.resources.description.reading": {
+    "message": "来自 {source} 的简介"
+  },
+  "app.resources.preferred-source": {
+    "message": "首选资源来源"
+  },
+  "app.resources.preferred-source.description": {
+    "message": "用于默认简介和等价发布的来源选择。默认为 Modrinth。"
+  },
+  "app.resources.search.window-exhausted": {
+    "message": "{source} 已达到搜索结果窗口上限。"
+  },
+  "app.resources.search.confirmed-source": {
+    "message": "打开已确认的 {source} 项目"
+  },
+  "app.resources.search.candidate-source": {
+    "message": "打开 {source} 候选项目。它的身份尚未核验。"
+  },
+  "app.resources.route.failed": {
+    "message": "无法打开任何资源来源。"
+  },
+  "app.resources.route.retry": {
+    "message": "重试"
+  },
+  "app.resources.operation.header": {
+    "message": "审核内容变更"
+  },
+  "app.resources.operation.loading": {
+    "message": "正在解析发布和依赖…"
+  },
+  "app.resources.operation.artifact": {
+    "message": "{source} · 发布 {release} · {file}"
+  },
+  "app.resources.operation.required": {
+    "message": "必需依赖"
+  },
+  "app.resources.operation.optional-for": {
+    "message": "被 {names} 列为可选前置"
+  },
+  "app.resources.operation.optional": {
+    "message": "可添加的依赖"
+  },
+  "app.resources.operation.satisfied": {
+    "message": "已满足"
+  },
+  "app.resources.operation.changes": {
+    "message": "将在 {instance} 中变更 {count} 个文件。"
+  },
+  "app.resources.operation.add": {
+    "message": "添加 {name}"
+  },
+  "app.resources.operation.remove": {
+    "message": "移除 {name}"
+  },
+  "app.resources.operation.required-by": {
+    "message": "{names} 需要此资源"
+  },
+  "app.resources.operation.assessment": {
+    "message": "游戏版本：{game}；加载器：{loader}"
+  },
+  "app.resources.operation.compatibility": {
+    "message": "{state, select, compatible {兼容} incompatible {不兼容} other {未知}}"
+  },
+  "app.resources.operation.retry": {
+    "message": "重试"
+  },
+  "app.resources.operation.cancel": {
+    "message": "取消"
+  },
+  "app.resources.operation.apply": {
+    "message": "加入任务队列"
+  },
+  "app.resources.operation.empty": {
+    "message": "无需变更文件。"
+  },
+  "app.resources.history.header": {
+    "message": "安装历史"
+  },
+  "app.resources.history.restore": {
+    "message": "恢复此备份"
+  },
+  "app.resources.history.unavailable": {
+    "message": "回滚备份不可用"
+  },
+  "app.resources.history.loading": {
+    "message": "正在核验回滚备份…"
+  },
+  "app.resources.history.empty": {
+    "message": "没有可供回滚的备份。"
+  },
+  "app.resources.history.cancel": {
+    "message": "关闭"
+  },
+  "app.resources.history.retry": {
+    "message": "重试"
+  },
+  "app.resources.operation.refresh": {
+    "message": "刷新当前预览"
+  },
+  "app.resources.operation.manual-download": {
+    "message": "{name} 需要手动下载，无法自动安装。"
+  },
+  "app.resources.operation.path-occupied": {
+    "message": "{path} 已被其他文件占用，无法安装。"
+  },
+  "app.resources.operation.source-unavailable": {
+    "message": "来源暂时无法提供此内容。"
+  },
+  "app.resources.operation.unresolved-optional": {
+    "message": "部分可选依赖无法解析，已跳过。"
+  },
+  "app.resources.operation.missing-dependency": {
+    "message": "无法解析所需的依赖。"
+  },
+  "app.resources.operation.unselected-dependency": {
+    "message": "已关闭自动安装依赖。请添加此必需依赖后继续。"
+  },
+  "app.resources.operation.version-conflict": {
+    "message": "存在版本冲突，无法安装此内容。"
+  },
+  "app.resources.operation.artifact-mismatch": {
+    "message": "所选已安装条目与目标内容不匹配。"
+  },
+  "app.export.categories": {
+    "message": "选择类别"
+  },
+  "app.export.category-hint": {
+    "message": "先选择要包含的类别，再到下一步微调具体文件。"
+  },
+  "app.export.category.defaultConfig": {
+    "message": "默认配置"
+  },
+  "app.export.category.emiRecords": {
+    "message": "EMI 个人信息"
+  },
+  "app.export.category.gameSettings": {
+    "message": "游戏设置"
+  },
+  "app.export.category.importantData": {
+    "message": "脚本、数据包及重要资源"
+  },
+  "app.export.category.jeiRecords": {
+    "message": "JEI 个人信息"
+  },
+  "app.export.category.mapRecords": {
+    "message": "个人地图与路标"
+  },
+  "app.export.category.modConfig": {
+    "message": "模组配置"
+  },
+  "app.export.category.mods": {
+    "message": "模组与插件"
+  },
+  "app.export.category.oldResources": {
+    "message": "禁用及旧资源"
+  },
+  "app.export.category.optifine": {
+    "message": "OptiFine 设置"
+  },
+  "app.export.category.other": {
+    "message": "其他目录及根文件"
+  },
+  "app.export.category.patchouliRecords": {
+    "message": "Patchouli 个人信息"
+  },
+  "app.export.category.personalRecords": {
+    "message": "游戏个人记录"
+  },
+  "app.export.category.recordings": {
+    "message": "录像与视频"
+  },
+  "app.export.category.resourcePacks": {
+    "message": "资源包"
+  },
+  "app.export.category.schematics": {
+    "message": "结构"
+  },
+  "app.export.category.screenshots": {
+    "message": "截图"
+  },
+  "app.export.category.servers": {
+    "message": "服务器列表"
+  },
+  "app.export.category.shaders": {
+    "message": "光影包及配置"
+  },
+  "app.export.category.worlds": {
+    "message": "存档"
+  },
+  "app.export.count": {
+    "message": "{count} 个文件 · {size}"
+  },
+  "app.export.excluded": {
+    "message": "已排除 {count} 个受保护路径。认证文件、运行库和符号链接不可导出。"
+  },
+  "app.export.file-hint": {
+    "message": "勾选目录会包含快照中所有文件，包括未展开的子目录。更改类别后仍会保留手动排除。"
+  },
+  "app.export.files": {
+    "message": "微调文件"
+  },
+  "app.export.next": {
+    "message": "下一步"
+  },
+  "app.export.no-files": {
+    "message": "此实例没有可导出的文件。"
+  },
+  "app.export.package": {
+    "message": "包信息"
+  },
+  "app.export.requirements": {
+    "message": "游戏与加载器要求"
+  },
+  "app.export.requirements-description": {
+    "message": "写入清单；不内嵌游戏文件或运行库。"
+  },
+  "app.export.restore": {
+    "message": "恢复类别预选"
+  },
+  "app.export.retry": {
+    "message": "重试扫描"
+  },
+  "app.export.scan": {
+    "message": "正在扫描本地文件…"
+  },
+  "app.export.scan-failed": {
+    "message": "无法扫描实例文件"
+  },
+  "app.export.search": {
+    "message": "搜索文件路径"
+  },
+  "app.export.selected": {
+    "message": "仅显示已选文件"
+  },
+  "app.export.selection": {
+    "message": "已选择 {count} 个文件 · {size}"
+  },
+  "app.export.analyzing": {
+    "message": "正在核验可导出文件并刷新精确来源匹配…"
+  },
+  "app.export.analyzed": {
+    "message": "后台校验已完成，未匹配的选中文件将内嵌。"
+  },
+  "app.export.retry-analysis": {
+    "message": "重试分析"
+  },
+  "app.export.failed-analysis": {
+    "message": "部分文件解析失败。请重试，或明确选择内嵌来源请求失败的文件。"
+  },
+  "app.export.local-failure": {
+    "message": "无法读取此本地文件。请重试，或返回文件选择将其移除。"
+  },
+  "app.export.embed-failure": {
+    "message": "来源请求失败，仍内嵌此文件并继续"
+  },
+  "app.export.author": {
+    "message": "作者（可选）"
+  },
+  "app.export.format": {
+    "message": "导出格式"
+  },
+  "app.export.format.modrinth": {
+    "message": "Modrinth 标准（.mrpack）"
+  },
+  "app.export.format.genericZip": {
+    "message": "通用 ZIP（.zip）"
+  },
+  "app.export.format.curseForge": {
+    "message": "CurseForge ZIP（.zip）"
+  },
+  "app.export.format-hint": {
+    "message": "Modrinth 引用精确匹配的 MR 文件；通用 ZIP 使用已核验的公开链接；CurseForge 引用精确匹配的 CF 文件。其余选中文件将内嵌。"
+  },
+  "app.export.writing": {
+    "message": "正在写入导出归档…"
+  },
+  "app.export.cancel": {
+    "message": "取消导出"
+  },
+  "app.export.canceled": {
+    "message": "已取消导出，原有输出文件已保留。"
+  },
+  "app.downloads.phase.exporting": {
+    "message": "正在导出选中文件"
+  },
+  "app.export.failed": {
+    "message": "导出失败，请重新分析后再导出。"
+  },
+  "app.export.queued": {
+    "message": "导出已加入队列"
+  },
+  "app.export.queued-description": {
+    "message": "{name} 将在下载中心继续完成校验和导出。"
+  },
+  "app.export.verify-local": {
+    "message": "正在核验可导出的本地文件…"
+  },
+  "app.export.verify-source": {
+    "message": "正在核验 {source} 的精确匹配…"
+  },
+  "app.export.check-attention": {
+    "message": "部分文件需要处理，可在导出前检查，或交给导出任务重试校验。"
+  },
+  "app.install.phase.creating-backup": {
+    "message": "正在创建备份"
+  },
+  "app.install.phase.staging-content": {
+    "message": "正在准备内容"
+  },
+  "app.install.phase.applying-content": {
+    "message": "正在应用内容"
+  },
+  "app.install.phase.updating-loader": {
+    "message": "正在更新加载器"
+  },
+  "app.install.phase.verifying": {
+    "message": "正在校验文件"
+  },
+  "app.install.phase.completed": {
+    "message": "已完成"
+  },
+  "app.install.phase.unknown": {
+    "message": "正在处理"
+  },
+  "app.export.finalizing-analysis": {
+    "message": "正在整理校验结果…"
+  },
+  "app.drop.compatibility.unknown": {
+    "message": "未知"
+  },
+  "app.drop.compatibility-review-warning": {
+    "message": "{file} 声明支持 {modVersion}（{modLoader}）；实例为 {instVersion}（{instLoader}）。Minecraft：{gameState, select, compatible {兼容} incompatible {不兼容} other {未知}}；加载器：{loaderState, select, compatible {兼容} incompatible {不兼容} other {未知}}。确认后将按这些兼容例外导入此文件。"
+  },
+  "app.resources.installed.compatibility": {
+    "message": "Minecraft：{game, select, compatible {兼容} incompatible {不兼容} other {未提供可识别的版本声明}}；加载器：{loader, select, compatible {兼容} incompatible {不兼容} other {未提供加载器声明}}。"
+  },
+  "app.resources.operation.accept-dimension": {
+    "message": "{dimension, select, gameVersion {接受 Minecraft 兼容例外} other {接受加载器兼容例外}}"
+  },
+  "app.resources.operation.disabled-dependency": {
+    "message": "此已安装依赖已禁用。请先启用或检查其版本，再继续。"
+  },
+  "app.resources.operation.installed-dependency-unavailable": {
+    "message": "已有副本已禁用、缺失或不满足要求的发布。请先检查该副本，再继续。"
+  },
+  "app.instance.mods.manage-backups": {
+    "message": "旧文件与备份"
+  },
+  "app.resources.backups.back": {
+    "message": "返回选择"
+  },
+  "app.resources.backups.close": {
+    "message": "关闭"
+  },
+  "app.resources.backups.confirm": {
+    "message": "删除这些备份"
+  },
+  "app.resources.backups.empty": {
+    "message": "没有找到旧文件或回滚备份。"
+  },
+  "app.resources.backups.failed": {
+    "message": "有 {count, number} 个文件未能删除。请重新扫描以核查状态。"
+  },
+  "app.resources.backups.file-size": {
+    "message": "{size, number} 字节"
+  },
+  "app.resources.backups.invalid": {
+    "message": "已记录的备份无法用于回滚"
+  },
+  "app.resources.backups.loading": {
+    "message": "正在核查旧文件…"
+  },
+  "app.resources.backups.missing": {
+    "message": "文件缺失"
+  },
+  "app.resources.backups.orphan": {
+    "message": "没有可用回滚的旧文件"
+  },
+  "app.resources.backups.removed": {
+    "message": "已删除 {count, number} 个文件。"
+  },
+  "app.resources.backups.review": {
+    "message": "预览选中项清理"
+  },
+  "app.resources.backups.scan": {
+    "message": "重新扫描"
+  },
+  "app.resources.backups.summary": {
+    "message": "已选择 {count, number} 项 · {size, number} 字节"
+  },
+  "app.resources.backups.title": {
+    "message": "旧文件与回滚备份"
+  },
+  "app.resources.backups.unknown": {
+    "message": "未知旧文件，无法清理"
+  },
+  "app.resources.backups.valid": {
+    "message": "已核验的回滚备份"
+  },
+  "app.resources.backups.warning": {
+    "message": "删除这些文件将永久失去 {count, number} 份可用回滚备份。当前安装文件会保留。"
+  },
+  "app.settings.resources.chinese-names": {
+    "message": "下载时附加已知中文名"
+  },
+  "app.settings.resources.chinese-names-description": {
+    "message": "有已知中文项目名时，为新下载资源的文件名添加中文前缀。"
+  },
+  "app.settings.resources.preserve-names": {
+    "message": "更新时保留本地前后缀"
+  },
+  "app.settings.resources.preserve-names-description": {
+    "message": "更新和切换版本时只替换已知的原工件文件名。无法准确匹配的自定义名称会完整保留。"
+  },
+  "app.instance.mods.unconfirmed-unlink-history": {
+    "message": "没有明确的解除记录，因此保留了包成员。本地导入包可以没有在线链接；请使用“解除关联”明确取消包归属。"
+  },
+  "app.resources.changelog.empty": {
+    "message": "此发布没有提供更新日志。"
+  },
+  "app.resources.changelog.failed": {
+    "message": "无法加载更新日志。"
+  },
+  "app.resources.changelog.translate": {
+    "message": "翻译更新日志"
+  },
+  "app.resources.changelog.original": {
+    "message": "显示原文"
+  },
+  "app.resources.changelog.translation-failed": {
+    "message": "翻译失败，仍可查看原始更新日志。"
+  },
+  "app.resources.changelog.title": {
+    "message": "更新日志"
+  },
+  "app.resources.changelog.no-releases": {
+    "message": "暂无可用发布。"
+  },
+  "app.resources.changelog.list-failed": {
+    "message": "无法加载发布列表。"
+  },
+  "app.resources.changelog.more": {
+    "message": "加载更多发布"
+  },
+  "app.resources.changelog.exhausted": {
+    "message": "已达到此来源的发布分页上限。"
+  },
+  "app.resources.changelog.unsupported": {
+    "message": "此来源不提供发布更新日志。"
+  },
+  "app.resources.manual.unverifiable": {
+    "message": "此来源未提供文件哈希，无法核验对应工件。请从来源页面下载，然后通过本地导入流程添加。"
+  },
+  "app.resources.operation.world": {
+    "message": "数据包的目标存档"
+  },
+  "app.resources.operation.no-worlds": {
+    "message": "安装数据包前，请先在此实例中创建一个单人存档。"
+  },
+  "app.account.modrinth-account": {
+    "message": "Modrinth 账户"
+  },
+  "app.account.sign-in-modrinth": {
+    "message": "登录 Modrinth 账户"
+  },
+  "app.browse.categories-failed": {
+    "message": "无法加载 CurseForge 分类，请稍后重试。"
+  },
+  "app.browse.server-source-unavailable": {
+    "message": "服务器内容来源暂不可用，请稍后重试。"
+  },
+  "app.browse.source-failed": {
+    "message": "{source} 无法返回此次搜索的结果，请检查筛选条件或稍后重试。"
+  },
+  "app.content-install.error.failed": {
+    "message": "无法安装所选内容。"
+  },
+  "app.content-install.error.invalid-curseforge-project": {
+    "message": "CurseForge 项目引用无效，请重新打开项目后重试。"
+  },
+  "app.content-install.error.missing-curseforge-file": {
+    "message": "所选 CurseForge 项目或文件不可用，请重新打开项目后重试。"
+  },
+  "app.content-install.error.missing-game-version": {
+    "message": "此 CurseForge 整合包未注明 Minecraft 版本。"
+  },
+  "app.content-install.error.missing-target": {
+    "message": "所选项目或实例已不可用。"
+  },
+  "app.content-install.error.missing-version": {
+    "message": "所选发布版本已不可用。"
+  },
+  "app.content-install.error.no-curseforge-files": {
+    "message": "此 CurseForge 项目没有可用文件。"
+  },
+  "app.content-install.error.preview-unavailable": {
+    "message": "安装预览不可用，请重新打开项目后重试。"
+  },
+  "app.content-install.error.project-not-found": {
+    "message": "找不到项目 {project}。"
+  },
+  "app.content-install.error.reinstall-unavailable": {
+    "message": "所选 CurseForge 整合包版本不可用于重新安装。"
+  },
+  "app.content-install.error.review-required": {
+    "message": "请先审核内容变更，再进行安装。"
+  },
+  "app.content-install.error.unsupported-provider": {
+    "message": "此内容来源不支持本次安装。"
+  },
+  "app.content-install.error.unsupported-type": {
+    "message": "无法在此处安装这种内容类型。"
+  },
+  "app.content-selection.no-target": {
+    "message": "请先选择目标实例，再添加内容。"
+  },
+  "app.instance.content.versions-failed": {
+    "message": "无法加载发布版本列表，请重新打开版本选择器后重试。"
+  },
+  "app.project.load-failed": {
+    "message": "无法加载项目，请重试。"
+  },
+  "app.project.mcarchive.unavailable": {
+    "message": "此 MCArchive 项目不可用，请重新打开项目后重试。"
+  },
+  "app.project.planet-minecraft.unavailable": {
+    "message": "此 Planet Minecraft 项目不可用，请重新打开项目后重试。"
+  },
+  "app.resources.error.backup-unavailable": {
+    "message": "此回滚备份不可用，或已与记录中的文件不符。"
+  },
+  "app.resources.error.cache": {
+    "message": "资源缓存不可用，请重启启动器后重试。"
+  },
+  "app.resources.error.canceled": {
+    "message": "内容操作已取消。"
+  },
+  "app.resources.error.cursor-expired": {
+    "message": "搜索会话已过期，请重新搜索。"
+  },
+  "app.resources.error.database": {
+    "message": "资源数据库不可用，请重启启动器后重试。"
+  },
+  "app.resources.error.failed": {
+    "message": "无法完成内容操作，请刷新后重试。"
+  },
+  "app.resources.error.http": {
+    "message": "内容来源拒绝了请求（HTTP {status, number, ::group-off}），请稍后重试。"
+  },
+  "app.resources.error.invalid-search": {
+    "message": "无法应用这些筛选条件，请重置筛选后重试。"
+  },
+  "app.resources.error.network": {
+    "message": "无法连接内容来源，请检查网络后重试。"
+  },
+  "app.resources.error.source-response": {
+    "message": "内容来源返回了无效响应，请重试。"
+  },
+  "app.resources.error.stale": {
+    "message": "实例或所选文件已发生变化，请刷新预览后继续。"
+  },
+  "app.resources.error.unavailable": {
+    "message": "内容来源暂不可用，请检查网络后重试。"
+  },
+  "app.resources.error.unsupported": {
+    "message": "此内容来源不支持所请求的操作或筛选条件。"
+  },
+  "app.resources.operation.identity-unconfirmed": {
+    "message": "无法可靠识别所选资源。"
+  },
+  "app.resources.operation.invalid-path": {
+    "message": "文件路径无效，或无法用于此次安装。"
+  },
+  "app.resources.operation.stale-revision": {
+    "message": "实例已发生变化，请刷新预览后继续。"
+  },
+  "app.project.coming-soon": {
+    "message": "即将推出"
+  },
+  "app.instance.mods.content-history-warning.title": {
+    "message": "部分本地历史信息暂不可用"
+  },
+  "app.instance.mods.content-history-warning.body": {
+    "message": "本地内容仍然完整且可正常管理，回滚或清理详情可能暂时不可用。"
+  },
+  "app.resources.backups.description": {
+    "message": "清理前请核对旧文件。有效回滚备份可用于恢复之前的安装。"
+  },
+  "app.resources.backups.filter.all": {
+    "message": "全部文件"
+  },
+  "app.resources.backups.filter.rollback": {
+    "message": "回滚备份"
+  },
+  "app.resources.backups.filter.old": {
+    "message": "其他旧文件"
+  },
+  "app.resources.backups.no-matches": {
+    "message": "没有符合搜索或筛选条件的文件。"
+  },
+  "app.resources.backups.review-size": {
+    "message": "删除 {count, number} 个文件 · {size}"
+  },
+  "app.resources.backups.review-title": {
+    "message": "确认清理备份"
+  },
+  "app.resources.backups.search": {
+    "message": "搜索文件名或路径…"
+  },
+  "app.resources.backups.select-visible": {
+    "message": "选择可清理文件"
+  },
+  "app.resources.backups.selected-size": {
+    "message": "已选 {count, number} 个 · {size}"
+  },
+  "app.instance.mods.pack-reconciliation-warning.title": {
+    "message": "无法刷新整合包文件信息"
+  },
+  "app.instance.mods.pack-reconciliation-warning.body": {
+    "message": "现有文件及其归属已保留，请重新刷新以核验缺失或手动下载的整合包文件。"
   }
 }

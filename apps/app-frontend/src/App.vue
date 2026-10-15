@@ -101,6 +101,7 @@ import OfflineAccountRestrictionModal from '@/components/ui/OfflineAccountRestri
 import OnboardingOverlay from '@/components/ui/onboarding/OnboardingOverlay.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import RemoteAnnouncements from '@/components/ui/RemoteAnnouncements.vue'
+import ResourceOperationPreviewModal from '@/components/ui/ResourceOperationPreviewModal.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
@@ -137,6 +138,10 @@ import { getNavShortcutEnabled } from '@/helpers/nav-shortcut-state'
 import { runWhenIdle } from '@/helpers/page-transition'
 import { get_by_instance_id, kill as killProcess } from '@/helpers/process.js'
 import { getExternalLinkUrl, mergeUrlQuery, parseModrinthLink } from '@/helpers/project-links.ts'
+import {
+    isResourceOperationError,
+    resourceOperationError,
+} from '@/helpers/resource-operation-logic'
 import { getQuickScrollEnabled, getShowScrollTop } from '@/helpers/scroll-top-state'
 import {
     get as getSettings,
@@ -966,6 +971,11 @@ async function onImportFileReceived({
 }
 
 const messages = defineMessages({
+    modrinthAccount: { id: 'app.account.modrinth-account', defaultMessage: 'Modrinth account' },
+    signInModrinth: {
+        id: 'app.account.sign-in-modrinth',
+        defaultMessage: 'Sign in to a Modrinth account',
+    },
     updateInstalledToastTitle: {
         id: 'app.update.complete-toast.title',
         defaultMessage: 'Version {version} was successfully installed!',
@@ -1368,6 +1378,8 @@ const messages = defineMessages({
 })
 
 notificationManager.errorTitleProvider = () => formatMessage(messages.errorOccurred)
+notificationManager.errorTextFormatter = (error) =>
+    isResourceOperationError(error) ? resourceOperationError(error, formatMessage) : null
 
 function getErrorNotificationDetails(notification) {
     const details = [notification.title, notification.text, notification.errorCode].filter(Boolean)
@@ -2103,7 +2115,6 @@ const {
     handleNavigate: handleContentInstallNavigate,
     handleCancel: handleContentInstallCancel,
     setContentInstallModal,
-    setContentInstallPreviewModal,
     setModpackInstallModal: setContentInstallModpackInstallModal,
     handleModpackInstall: handleContentInstallModpackInstall,
     handleModpackInstallCancel: handleContentInstallModpackInstallCancel,
@@ -2129,6 +2140,7 @@ const {
 } = serverInstall
 
 const modInstallModal = ref()
+const resourceInstallPreview = ref<InstanceType<typeof ResourceOperationPreviewModal> | null>(null)
 const contentInstallPreviewModal = ref<InstanceType<typeof ContentInstallPreviewModal> | null>(null)
 const modpackAlreadyInstalledModal = ref()
 const contentInstallModpackInstallModal = ref<InstanceType<typeof ModpackInstallModal> | null>(null)
@@ -2298,8 +2310,9 @@ onMounted(() => {
     setContentIncompatibilityWarningModal(incompatibilityWarningModal.value)
     dropIncompatibilityWarningModal.value = incompatibilityWarningModal.value
     setContentInstallModal(modInstallModal.value)
-    setContentInstallPreviewModal(contentInstallPreviewModal.value)
     contentSelection.setPreviewModal(contentInstallPreviewModal.value)
+    contentSelection.setResourceInstallPreview(resourceInstallPreview.value)
+    contentInstall.setResourceInstallPreview(resourceInstallPreview.value)
     setContentInstallModpackInstallModal(contentInstallModpackInstallModal.value!)
     setContentInstallCurseForgeManualDownloadsModal(
         contentInstallCurseForgeManualDownloadsModal.value,
@@ -3039,7 +3052,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
             </NavButton>
             <OverflowMenu
                 v-if="AxolotlBrandConfig.capabilities.privateModrinthServices && credentials?.user"
-                v-tooltip.right="`Modrinth account`"
+                v-tooltip.right="formatMessage(messages.modrinthAccount)"
                 data-onboarding-id="account-entry"
                 class="w-12 h-12 text-[var(--color-text-default)] rounded-full flex items-center justify-center text-2xl transition-all bg-transparent hover:bg-surface-4 hover:text-[var(--color-text-primary)] border-0 cursor-pointer"
                 :options="[
@@ -3075,11 +3088,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
                     </span>
                     <ExternalIcon />
                 </template>
-                <template #sign-out> <LogOutIcon /> Sign out </template>
+                <template #sign-out>
+                    <LogOutIcon /> {{ formatMessage(commonMessages.signOutButton) }}
+                </template>
             </OverflowMenu>
             <NavButton
                 v-else-if="AxolotlBrandConfig.capabilities.privateModrinthServices"
-                v-tooltip.right="'Sign in to a Modrinth account'"
+                v-tooltip.right="formatMessage(messages.signInModrinth)"
                 data-onboarding-id="account-entry"
                 :to="() => signIn()"
             >
@@ -3385,6 +3400,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
         @cancel="handleContentInstallCancel"
     />
     <ContentInstallPreviewModal ref="contentInstallPreviewModal" />
+    <ResourceOperationPreviewModal ref="resourceInstallPreview" />
     <ModpackAlreadyInstalledModal
         ref="modpackAlreadyInstalledModal"
         @create-anyway="handleModpackDuplicateCreateAnyway"

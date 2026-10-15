@@ -55,6 +55,19 @@ test('content favorites load, add, remove, and keep provider-qualified identitie
     assert.equal(store.isFavorite('curseforge', 'same-id'), true)
 })
 
+test('refreshing a favorite replaces its updated locator even when its identity is unchanged', async () => {
+    let saved = { ...favorite('modrinth', 'same-id', 'mod', 1), locator: 'old-slug' }
+    const store = createContentFavoritesStore({
+        list: async () => [saved],
+        add: async () => saved,
+        remove: async () => {},
+    })
+    await store.load()
+    saved = { ...saved, locator: 'new-slug' }
+    await store.load(true)
+    assert.equal(store.favorites.value[0].locator, 'new-slug')
+})
+
 test('content favorite writes roll back busy state when persistence fails', async () => {
     const store = createContentFavoritesStore({
         async list() {
@@ -79,4 +92,25 @@ test('content favorite writes roll back busy state when persistence fails', asyn
     await assert.rejects(store.remove('curseforge', 'embeddium'))
     assert.equal(store.isFavorite('curseforge', 'embeddium'), true)
     assert.equal(store.isPending('curseforge', 'embeddium'), false)
+})
+
+test('a confirmed resource is bookmarked through all known sources and removed as one resource', async () => {
+    const saved = {
+        ...favorite('modrinth', 'abcdefgh', 'mod', 10),
+        resource_id: 'resource',
+        projects: [
+            { source: 'modrinth' as const, projectId: 'abcdefgh' },
+            { source: 'curseforge' as const, projectId: '123' },
+        ],
+    }
+    const store = createContentFavoritesStore({
+        list: async () => [saved],
+        add: async () => saved,
+        remove: async () => {},
+    })
+    await store.load()
+    assert.equal(store.isFavorite('curseforge', '123'), true)
+    await store.remove('curseforge', '123')
+    assert.equal(store.isFavorite('modrinth', 'abcdefgh'), false)
+    assert.equal(store.favorites.value.length, 0)
 })

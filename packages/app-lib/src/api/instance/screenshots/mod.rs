@@ -7,4 +7,6 @@ pub use self::operations::{
     list_all_screenshots, list_all_screenshots_with_warnings, list_screenshots,
     list_synced_screenshots, move_screenshots, save_edited_screenshot,
 };
-pub(crate) use self::reconciliation::reconcile_screenshots;
+pub(crate) use self::reconciliation::{
+    reconcile_screenshots, reconcile_screenshots_with_state,
+};
