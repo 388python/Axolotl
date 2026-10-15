@@ -1,19 +1,43 @@
 {
-  "updated_at": "2026-10-10T18:03:54.000Z",
+  "updated_at": "2026-10-13T16:03:57.706Z",
   "announcements": [
     {
-      "id": "launcher-1.9.8-beta.2",
-      "version": "1.9.8-beta.2",
-      "publishedAt": "2026-10-10",
+      "id": "launcher-1.9.8",
+      "version": "1.9.8",
+      "publishedAt": "2026-10-13",
       "title": {
-        "en-US": "Axolotl Launcher 1.9.8-beta.2",
-        "zh-CN": "Axolotl Launcher 1.9.8-beta.2"
+        "en-US": "Axolotl Launcher 1.9.8",
+        "zh-CN": "Axolotl Launcher 1.9.8"
       },
       "changes": {
         "added": [
           {
             "en-US": "Added Shift-click range selection, group selection, and rectangle selection in Screenshot Center.",
             "zh-CN": "截图中心新增 Shift 点击连续选择、分组选择和拖拽框选。"
+          },
+          {
+            "en-US": "Added more URL Scheme abilities, including routes for opening launcher pages and settings.",
+            "zh-CN": "新增更多 URL Scheme 功能，包括打开启动器页面和设置项。"
+          },
+          {
+            "en-US": "Added a confirmation gate and settings control for privileged URL Scheme actions.",
+            "zh-CN": "为高权限 URL Scheme 操作新增确认机制和设置开关。"
+          },
+          {
+            "en-US": "Added support for importing arbitrary Minecraft game directories and resolving game directories from launcher paths.",
+            "zh-CN": "新增任意 Minecraft 游戏目录导入，并支持从其他启动器路径解析游戏目录。"
+          },
+          {
+            "en-US": "Added configurable DNS-over-HTTPS servers for downloads.",
+            "zh-CN": "新增可配置的 DNS over HTTPS 服务器，用于下载解析。"
+          },
+          {
+            "en-US": "Added support for linking local servers to managed servers on the Home page, with an online-mode warning when needed.",
+            "zh-CN": "新增主页本地服务器与受管服务器关联功能，并在必要时提示正版验证冲突。"
+          },
+          {
+            "en-US": "Added download history access from the action bar and improved download progress reporting.",
+            "zh-CN": "新增从操作栏访问下载历史，并改进下载进度显示。"
           }
         ],
         "changed": [
@@ -32,6 +56,22 @@
           {
             "en-US": "Updated the available AI model list.",
             "zh-CN": "更新可用 AI 模型列表。"
+          },
+          {
+            "en-US": "Instances imported from a .minecraft folder now prefer using that folder directly.",
+            "zh-CN": "从 .minecraft 文件夹导入实例时，现在会优先直接使用该文件夹。"
+          },
+          {
+            "en-US": "Improved download reliability and performance with adaptive HTTP/2 connections, shared transfer budgets, verified checkpoints, and better fallback scheduling.",
+            "zh-CN": "通过自适应 HTTP/2 连接、共享传输配额、校验检查点和改进的回退调度，提升下载可靠性和性能。"
+          },
+          {
+            "en-US": "Improved content installation by batching shared objects and avoiding redundant metadata and local-pack processing.",
+            "zh-CN": "通过批量处理共享对象，减少重复元数据查询和本地整合包处理，改进内容安装流程。"
+          },
+          {
+            "en-US": "Improved instance launch and import handling for external game directories and loader runtime artifacts.",
+            "zh-CN": "改进外部游戏目录和加载器运行时文件的实例启动与导入处理。"
           }
         ],
         "fixed": [
@@ -154,64 +194,7 @@
           {
             "en-US": "Fixed accent color labels overlapping selection checks and inconsistent play-icon alignment.",
             "zh-CN": "修复强调色选项文字与勾选标记重叠，以及播放图标对齐不一致的问题。"
-          }
-        ]
-      }
-    },
-    {
-      "id": "launcher-1.9.8-beta.1",
-      "version": "1.9.8-beta.1",
-      "publishedAt": "2026-10-01",
-      "title": {
-        "en-US": "Axolotl Launcher 1.9.8-beta.1",
-        "zh-CN": "Axolotl Launcher 1.9.8-beta.1"
-      },
-      "changes": {
-        "added": [
-          {
-            "en-US": "Added more URL Scheme abilities, including routes for opening launcher pages and settings.",
-            "zh-CN": "新增更多 URL Scheme 功能，包括打开启动器页面和设置项。"
           },
-          {
-            "en-US": "Added a confirmation gate and settings control for privileged URL Scheme actions.",
-            "zh-CN": "为高权限 URL Scheme 操作新增确认机制和设置开关。"
-          },
-          {
-            "en-US": "Added support for importing arbitrary Minecraft game directories and resolving game directories from launcher paths.",
-            "zh-CN": "新增任意 Minecraft 游戏目录导入，并支持从其他启动器路径解析游戏目录。"
-          },
-          {
-            "en-US": "Added configurable DNS-over-HTTPS servers for downloads.",
-            "zh-CN": "新增可配置的 DNS over HTTPS 服务器，用于下载解析。"
-          },
-          {
-            "en-US": "Added support for linking local servers to managed servers on the Home page, with an online-mode warning when needed.",
-            "zh-CN": "新增主页本地服务器与受管服务器关联功能，并在必要时提示正版验证冲突。"
-          },
-          {
-            "en-US": "Added download history access from the action bar and improved download progress reporting.",
-            "zh-CN": "新增从操作栏访问下载历史，并改进下载进度显示。"
-          }
-        ],
-        "changed": [
-          {
-            "en-US": "Instances imported from a .minecraft folder now prefer using that folder directly.",
-            "zh-CN": "从 .minecraft 文件夹导入实例时，现在会优先直接使用该文件夹。"
-          },
-          {
-            "en-US": "Improved download reliability and performance with adaptive HTTP/2 connections, shared transfer budgets, verified checkpoints, and better fallback scheduling.",
-            "zh-CN": "通过自适应 HTTP/2 连接、共享传输配额、校验检查点和改进的回退调度，提升下载可靠性和性能。"
-          },
-          {
-            "en-US": "Improved content installation by batching shared objects and avoiding redundant metadata and local-pack processing.",
-            "zh-CN": "通过批量处理共享对象，减少重复元数据查询和本地整合包处理，改进内容安装流程。"
-          },
-          {
-            "en-US": "Improved instance launch and import handling for external game directories and loader runtime artifacts.",
-            "zh-CN": "改进外部游戏目录和加载器运行时文件的实例启动与导入处理。"
-          }
-        ],
-        "fixed": [
           {
             "en-US": "Fixed Copy and Paste context menus in Discover and Library search fields.",
             "zh-CN": "修复发现页和库页面搜索框无法通过右键菜单复制、粘贴的问题。"
