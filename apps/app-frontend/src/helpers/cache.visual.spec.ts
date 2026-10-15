@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { expect, it, vi } from 'vitest'
 
-import { get_project, get_project_versions } from './cache.js'
+import { get_project, get_project_versions, purgeLauncherCache } from './cache.js'
 import { resourceLocate } from './resources'
 
 vi.mock('./resources', () => ({
@@ -12,6 +12,14 @@ vi.mock('./resources', () => ({
     resourceRequest: vi.fn(),
 }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
+
+it('clears disk and metadata caches through one storage operation', async () => {
+    const result = { removed_bytes: 100, remaining_bytes: 20, failures: [] }
+    vi.mocked(invoke).mockClear().mockResolvedValueOnce(result)
+    expect(await purgeLauncherCache()).toEqual(result)
+    expect(invoke).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledWith('plugin:storage|storage_cache_clear')
+})
 
 it('requests a lightweight project version list without fetching each changelog', async () => {
     vi.mocked(invoke).mockResolvedValue([{ id: 'release1' }])

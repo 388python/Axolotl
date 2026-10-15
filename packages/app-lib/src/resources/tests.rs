@@ -1012,6 +1012,25 @@ async fn cache_expiry_malformed_json_and_unknown_payload_version_are_misses() {
 }
 
 #[tokio::test]
+async fn clearing_resource_cache_releases_database_file_space() {
+    let (_temp, cache) = cache().await;
+    let probe = sqlx::SqlitePool::connect_with(
+        sqlx::sqlite::SqliteConnectOptions::new().filename(cache.path()),
+    )
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO resource_cache_entries(namespace, source, query_key, value_version, payload, retrieved_at, expires_at) VALUES ('v1','modrinth','large',1,randomblob(2097152),0,99999999999)").execute(&probe).await.unwrap();
+    let before = cache.info().await.unwrap().size_bytes;
+    cache.clear().await.unwrap();
+    cache.compact().await.unwrap();
+    let after = cache.info().await.unwrap();
+    assert_eq!(after.entry_count, 0);
+    assert!(before > after.size_bytes + 1024 * 1024);
+    probe.close().await;
+    cache.close().await;
+}
+
+#[tokio::test]
 async fn cache_clear_rejects_old_generation_and_late_older_responses() {
     let (_temp, cache) = cache().await;
     let key = CacheKey::new(

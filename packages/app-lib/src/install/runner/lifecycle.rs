@@ -80,6 +80,7 @@ pub(super) fn begin_waiting_for_user(
 }
 
 async fn run_job(job_id: Uuid) -> crate::Result<()> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     let state = State::get().await?;
     let mut job = store::get_required(job_id, &state).await?;
 

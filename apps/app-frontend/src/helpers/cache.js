@@ -143,3 +143,8 @@ export async function purge_cache_types(cacheTypes) {
 export async function get_project_versions(projectId, cacheBehaviour) {
     return readCache('plugin:cache|get_project_versions', { projectId, cacheBehaviour })
 }
+
+/** Clears rebuildable metadata and downloaded files and reports disk usage. */
+export async function purgeLauncherCache() {
+    return await invoke('plugin:storage|storage_cache_clear')
+}

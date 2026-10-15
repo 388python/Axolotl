@@ -152,7 +152,7 @@ async fn idle(instance_id: &str, state: &crate::State) -> ResourceResult<()> {
     Ok(())
 }
 
-fn recognizable(path: &str) -> bool {
+pub(crate) fn recognizable(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
     if let Some(value) = name
         .strip_prefix(".resource-")

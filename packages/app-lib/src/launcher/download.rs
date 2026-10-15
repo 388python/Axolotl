@@ -926,9 +926,9 @@ fn missing_asset_bytes(
             );
             let should_fetch_object =
                 force || !asset_file_is_usable(&object_path, asset.size as u64);
-            let should_fetch_legacy = (with_legacy
-                && !asset_file_is_usable(&legacy_path, asset.size as u64))
-                || force;
+            let should_fetch_legacy = with_legacy
+                && (force
+                    || !asset_file_is_usable(&legacy_path, asset.size as u64));
 
             (should_fetch_object || should_fetch_legacy)
                 .then_some(asset.size as u64)
@@ -1819,9 +1819,12 @@ pub async fn download_assets(
             .join(name.replace('/', &String::from(std::path::MAIN_SEPARATOR)));
         let should_fetch_object =
             force || !asset_file_is_usable(&resource_path, asset.size as u64);
-        let should_fetch_legacy = (with_legacy
-            && !asset_file_is_usable(&legacy_resource_path, asset.size as u64))
-            || force;
+        let should_fetch_legacy = with_legacy
+            && (force
+                || !asset_file_is_usable(
+                    &legacy_resource_path,
+                    asset.size as u64,
+                ));
 
         if should_fetch_object {
             let local_candidate = !force
@@ -2022,9 +2025,9 @@ pub async fn download_assets(
                         .legacy_resource_paths
                         .iter()
                         .filter(|path| {
-                            force
-                                || (with_legacy
-                                    && !asset_file_is_usable(path, item.size))
+                            with_legacy
+                                && (force
+                                    || !asset_file_is_usable(path, item.size))
                         })
                         .collect::<Vec<_>>();
                     let should_fetch_legacy = !legacy_resource_paths.is_empty();
