@@ -1,35 +1,80 @@
-import type { CommandDataFile, CommandDefinition, VersionManifest } from './commands/types.ts'
-// 静态 import：JSON 在编译期被打包进 bundle，运行时零 IO 开销
+import type {
+    BaseDataFile,
+    CommandDataFile,
+    CommandDefinition,
+    PatchDataFile,
+    VersionManifest,
+} from './commands/types.ts'
 import manifestData from './data/manifest.json'
-import v120Data from './data/v1.20.json' // 假设还有其他版本数据文件
+import v116Data from './data/v1.16.json'
+import v117Data from './data/v1.17.json'
+import v118Data from './data/v1.18.json'
+import v119Data from './data/v1.19.json'
+import v120Data from './data/v1.20.json'
 import v121Data from './data/v1.21.json'
 
 const dataMap: Record<string, CommandDataFile> = {
-    'v1.21.json': v121Data as CommandDataFile,
+    'v1.16.json': v116Data as CommandDataFile,
+    'v1.17.json': v117Data as CommandDataFile,
+    'v1.18.json': v118Data as CommandDataFile,
+    'v1.19.json': v119Data as CommandDataFile,
     'v1.20.json': v120Data as CommandDataFile,
+    'v1.21.json': v121Data as CommandDataFile,
 }
 
 let manifestCache: VersionManifest | null = null
+const resolvedCache = new Map<string, CommandDefinition[]>()
 
-/** 同步获取版本清单 */
 export function loadManifest(): VersionManifest {
     if (manifestCache) return manifestCache
     manifestCache = manifestData as VersionManifest
     return manifestCache
 }
 
-/** 同步获取指定版本的命令数据 */
 export function loadCommandsForVersion(versionId: string): CommandDefinition[] {
+    const cached = resolvedCache.get(versionId)
+    if (cached) return cached
+
     const manifest = loadManifest()
     const entry = manifest.versions.find((v) => v.id === versionId)
-    if (!entry) {
-        throw new Error(`Unknown version: ${versionId}`)
-    }
+    if (!entry) throw new Error(`Unknown version: ${versionId}`)
 
     const data = dataMap[entry.dataFile]
-    if (!data) {
-        throw new Error(`Data file not registered: ${entry.dataFile}`)
+    if (!data) throw new Error(`Data file not registered: ${entry.dataFile}`)
+
+    const resolved =
+        'base' in data ? resolvePatch(data as PatchDataFile, new Set()) : (data as BaseDataFile).commands
+    resolvedCache.set(versionId, resolved)
+    return resolved
+}
+
+function resolvePatch(patch: PatchDataFile, visited: Set<string>): CommandDefinition[] {
+    if (visited.has(patch.version)) throw new Error(`Circular patch: ${patch.version}`)
+    visited.add(patch.version)
+
+    const baseCommands = loadCommandsForVersion(patch.base)
+    const removedSet = new Set(patch.removed ?? [])
+    const patchedMap = patch.patched ?? {}
+    const addedList = patch.added ?? []
+
+    const result: CommandDefinition[] = []
+    const seen = new Set<string>()
+
+    for (const cmd of baseCommands) {
+        if (removedSet.has(cmd.id)) continue
+        const override = patchedMap[cmd.id]
+        result.push(override ? { ...cmd, ...override } : cmd)
+        seen.add(cmd.id)
     }
 
-    return data.commands
+    for (const cmd of addedList) {
+        if (!seen.has(cmd.id)) result.push(cmd)
+    }
+
+    return result
+}
+
+export function clearDataCache(): void {
+    resolvedCache.clear()
+    manifestCache = null
 }

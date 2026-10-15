@@ -1,0 +1,46 @@
+{
+    "version": "1.19",
+    "base": "1.18",
+    "generatedAt": "2026-10-15",
+    "added": [
+        {
+            "id": "damage",
+            "name": "damage",
+            "description": "对实体造成伤害（1.19.4+）",
+            "category": "entity",
+            "permissionLevel": 2,
+            "arguments": [
+                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "目标选择器", "selector": true, "placeholder": "@e[type=zombie]", "presets": [{ "label": "所有僵尸", "value": "@e[type=zombie]" }, { "label": "所有玩家", "value": "@a" }, { "label": "自己", "value": "@s" }] },
+                { "name": "amount", "displayName": "伤害量", "type": "number", "required": true, "description": "造成的伤害值", "presets": [{ "label": "1", "value": 1 }, { "label": "5", "value": 5 }, { "label": "10", "value": 10 }, { "label": "致死", "value": 1000 }] },
+                { "name": "damageType", "displayName": "伤害类型", "type": "string", "required": false, "description": "伤害类型 ID", "placeholder": "minecraft:generic", "presets": [{ "label": "通用", "value": "minecraft:generic" }, { "label": "火焰", "value": "minecraft:in_fire" }, { "label": "摔落", "value": "minecraft:fall" }, { "label": "虚空", "value": "minecraft:out_of_world" }] },
+                { "name": "source", "displayName": "伤害来源", "type": "string", "required": false, "description": "来源实体选择器", "placeholder": "@p" }
+            ]
+        },
+        {
+            "id": "ride",
+            "name": "ride",
+            "description": "使实体骑乘/被骑乘（1.19.4+）",
+            "category": "entity",
+            "permissionLevel": 2,
+            "arguments": [
+                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "要骑乘的实体", "selector": true, "placeholder": "@s", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }] },
+                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "mount 骑乘 / dismount 下马", "enumValues": ["mount", "dismount"], "presets": [{ "label": "骑乘", "value": "mount" }, { "label": "下马", "value": "dismount" }] },
+                { "name": "vehicle", "displayName": "载体", "type": "entity-selector", "required": false, "description": "被骑乘的实体", "selector": true, "placeholder": "@e[type=pig]", "presets": [{ "label": "猪", "value": "@e[type=pig]" }, { "label": "船", "value": "@e[type=boat]" }, { "label": "矿车", "value": "@e[type=minecart]" }] }
+            ]
+        },
+        {
+            "id": "fillbiome",
+            "name": "fillbiome",
+            "description": "填充生物群系区域（1.19+）",
+            "category": "world",
+            "permissionLevel": 2,
+            "arguments": [
+                { "name": "from", "displayName": "起始坐标", "type": "coordinates", "required": true, "description": "起始坐标" },
+                { "name": "to", "displayName": "结束坐标", "type": "coordinates", "required": true, "description": "结束坐标" },
+                { "name": "biome", "displayName": "生物群系", "type": "biome", "required": true, "description": "生物群系 ID", "placeholder": "minecraft:plains", "presets": [{ "label": "平原", "value": "minecraft:plains" }, { "label": "沙漠", "value": "minecraft:desert" }, { "label": "森林", "value": "minecraft:forest" }, { "label": "海洋", "value": "minecraft:ocean" }, { "label": "雪原", "value": "minecraft:snowy_plains" }] }
+            ]
+        }
+    ],
+    "removed": ["placefeature"],
+    "patched": {}
+}

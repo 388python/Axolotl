@@ -1,0 +1,20 @@
+{
+    "version": "1.18",
+    "base": "1.17",
+    "generatedAt": "2026-10-15",
+    "added": [
+        {
+            "id": "placefeature",
+            "name": "placefeature",
+            "description": "放置已配置的地物（1.18.2+）",
+            "category": "world",
+            "permissionLevel": 2,
+            "arguments": [
+                { "name": "id", "displayName": "地物 ID", "type": "string", "required": true, "description": "地物标识符", "placeholder": "minecraft:oak" },
+                { "name": "pos", "displayName": "坐标", "type": "coordinates", "required": false, "description": "放置坐标", "presets": [{ "label": "当前位置", "value": "~ ~ ~" }] }
+            ]
+        }
+    ],
+    "removed": [],
+    "patched": {}
+}
