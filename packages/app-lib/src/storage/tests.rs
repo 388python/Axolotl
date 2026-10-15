@@ -34,8 +34,10 @@ async fn scan_reports_completed_areas_and_cache_retains_stale_results_for_displa
             _ => None,
         })
         .collect();
-    assert_eq!(steps[0], (0, 16));
-    assert_eq!(*steps.last().unwrap(), (16, 16));
+    assert_eq!(steps[0].0, 0);
+    assert!(steps[0].1 >= 16);
+    let last = steps.last().unwrap();
+    assert_eq!(last.0, last.1);
     assert!(
         steps
             .windows(2)
@@ -217,4 +219,114 @@ async fn database_category_has_release_and_beta_as_direct_children() {
         .collect();
     assert_eq!(names, HashSet::from(["release", "beta"]));
     assert_eq!(database.size.actual, 18);
+}
+
+#[tokio::test]
+async fn legacy_repository_and_launcher_files_are_classified_without_root_wrappers()
+ {
+    let temp = tempfile::tempdir().unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: temp.path().join("red.ghs.axolotl"),
+        config_dir: temp.path().join("data"),
+        app_identifier: "test".into(),
+    };
+    let legacy = directories.config_dir.join("Backups");
+    let active = legacy.join("instances");
+    for root in [&legacy, &active] {
+        fs::create_dir_all(root.join("objects/aa")).await.unwrap();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(root.join("backup.db"))
+                    .create_if_missing(true),
+            )
+            .await
+            .unwrap();
+        sqlx::raw_sql("CREATE TABLE repository_meta(id INTEGER); CREATE TABLE backup_objects(id INTEGER); CREATE TABLE backup_snapshots(id INTEGER);").execute(&pool).await.unwrap();
+        pool.close().await;
+    }
+    for (path, size) in [
+        (legacy.join("objects/aa/old-blob"), 100),
+        (active.join("objects/aa/new-blob"), 200),
+        (directories.settings_dir.join("caches/old-cache"), 13),
+        (directories.config_dir.join("caches/new-cache"), 17),
+        (directories.settings_dir.join("hongshi/component"), 19),
+        (directories.settings_dir.join("backgrounds/image.png"), 23),
+        (
+            directories
+                .settings_dir
+                .join("instance-shortcut-icons/icon.ico"),
+            29,
+        ),
+        (directories.settings_dir.join("unknown.txt"), 31),
+        (directories.settings_dir.join("beta old/app.db"), 37),
+    ] {
+        fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+        fs::write(path, vec![0; size]).await.unwrap();
+    }
+    let expected_backup =
+        fs::metadata(legacy.join("backup.db")).await.unwrap().len()
+            + fs::metadata(active.join("backup.db")).await.unwrap().len()
+            + 300;
+    let tree = scan_with_directories(&directories, &active, vec![])
+        .await
+        .unwrap();
+    let category_bytes = |kind| {
+        tree.categories
+            .iter()
+            .find(|node| node.node_type == kind)
+            .unwrap()
+            .size
+            .actual
+    };
+    assert_eq!(category_bytes(StorageNodeType::Backups), expected_backup);
+    assert_eq!(category_bytes(StorageNodeType::Cache), 30);
+    assert_eq!(category_bytes(StorageNodeType::Components), 19);
+    assert_eq!(category_bytes(StorageNodeType::LauncherData), 23);
+    assert_eq!(category_bytes(StorageNodeType::Icons), 29);
+    assert_eq!(
+        tree.total.actual,
+        expected_backup + 30 + 19 + 23 + 29 + 31 + 37
+    );
+    let other = tree.root_other.unwrap();
+    assert_eq!(other.size.actual, 68);
+    let names: HashSet<_> = other
+        .children
+        .unwrap()
+        .into_iter()
+        .filter_map(|node| node.name)
+        .collect();
+    assert_eq!(
+        names,
+        HashSet::from(["unknown.txt".into(), "beta old".into()])
+    );
+    assert!(tree.warnings.is_empty());
+}
+
+#[tokio::test]
+async fn backup_directory_name_alone_does_not_claim_unrecognized_files() {
+    let temp = tempfile::tempdir().unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: temp.path().into(),
+        config_dir: temp.path().into(),
+        app_identifier: "test".into(),
+    };
+    let root = temp.path().join("Backups");
+    fs::create_dir_all(&root).await.unwrap();
+    fs::write(root.join("backup.db"), b"not a backup database")
+        .await
+        .unwrap();
+    fs::write(root.join("user.txt"), b"keep").await.unwrap();
+    assert!(!is_backup_repository(&root).await);
+    let tree =
+        scan_with_directories(&directories, &root.join("instances"), vec![])
+            .await
+            .unwrap();
+    assert!(
+        tree.categories
+            .iter()
+            .all(|node| node.node_type != StorageNodeType::Backups)
+    );
+    assert_eq!(tree.root_other.unwrap().size.actual, 25);
 }

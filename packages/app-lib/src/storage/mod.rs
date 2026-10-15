@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::state::DirectoryInfo;
 
-pub const STORAGE_CACHE_VERSION: u32 = 3;
+pub const STORAGE_CACHE_VERSION: u32 = 4;
 const STORAGE_CACHE_FILE: &str = "launcher-storage.cbor";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,6 +23,7 @@ pub enum StorageNodeType {
     SyncedOptions,
     Components,
     LauncherLogs,
+    LauncherData,
     Icons,
     InstallRollbacks,
     ContentStore,
@@ -545,7 +546,7 @@ async fn scan_with_directories_progress(
     progress: &(dyn Fn(StorageScanEvent) + Send + Sync),
 ) -> crate::Result<StorageTree> {
     let mut warnings = Vec::new();
-    let targets = vec![
+    let mut targets = vec![
         (directories.instances_dir(), StorageNodeType::Instances, 3),
         (directories.caches_dir(), StorageNodeType::Cache, 2),
         (directories.metadata_dir(), StorageNodeType::Meta, 1),
@@ -593,6 +594,40 @@ async fn scan_with_directories_progress(
             1,
         ),
     ];
+    for root in [&directories.settings_dir, &directories.config_dir] {
+        for (name, kind, depth) in [
+            ("caches", StorageNodeType::Cache, 2),
+            ("hongshi", StorageNodeType::Components, 1),
+            ("terracotta", StorageNodeType::Components, 1),
+            ("install-rollbacks", StorageNodeType::InstallRollbacks, 1),
+            ("icons", StorageNodeType::Icons, 0),
+            ("instance-shortcut-icons", StorageNodeType::Icons, 0),
+            ("backgrounds", StorageNodeType::LauncherData, 1),
+            ("app-window-state.json", StorageNodeType::LauncherData, 0),
+            ("instance_groups.json", StorageNodeType::LauncherData, 0),
+            (
+                "native-download-reputation.json",
+                StorageNodeType::LauncherData,
+                0,
+            ),
+            ("update-channel.json", StorageNodeType::LauncherData, 0),
+            ("download.log", StorageNodeType::LauncherLogs, 0),
+        ] {
+            let path = root.join(name);
+            if !targets.iter().any(|(existing, _, _)| *existing == path) {
+                targets.push((path, kind, depth));
+            }
+        }
+        for candidate in
+            [root.join("Backups"), root.join("Backups").join("instances")]
+        {
+            if !targets.iter().any(|(path, _, _)| *path == candidate)
+                && is_backup_repository(&candidate).await
+            {
+                targets.push((candidate, StorageNodeType::Backups, 1));
+            }
+        }
+    }
     let mut categories: Vec<StorageNode> = Vec::new();
     let mut claimed = HashSet::new();
     let total_sections = targets.len() + 2;
@@ -646,12 +681,22 @@ async fn scan_with_directories_progress(
             {
                 if existing.id.starts_with("category-") {
                     existing.paths.extend(node.paths.clone());
+                    if node.name.is_none() {
+                        node.name = Some(path.to_string_lossy().into_owned());
+                    }
                     let mut children =
                         existing.children.take().unwrap_or_default();
                     children.push(node);
                     aggregate(existing, children);
                 } else {
-                    let old = existing.clone();
+                    let mut old = existing.clone();
+                    if old.name.is_none() {
+                        old.name =
+                            old.paths.first().map(|path| path.path.clone());
+                    }
+                    if node.name.is_none() {
+                        node.name = Some(path.to_string_lossy().into_owned());
+                    }
                     let mut parent = folder(path, kind.clone());
                     parent.id = format!("category-{kind:?}");
                     parent.paths =
@@ -676,9 +721,9 @@ async fn scan_with_directories_progress(
         directories.config_dir.clone(),
         backup.to_path_buf(),
     ]) {
-        if let Some(node) = scan(&root, 1, &claimed, &mut warnings).await {
+        if let Some(node) = scan(&root, 2, &claimed, &mut warnings).await {
             if node.size.total() > 0 {
-                remainder.push(node);
+                remainder.extend(node.children.unwrap_or_default());
             }
         }
     }
@@ -756,4 +801,27 @@ async fn scan_with_directories_progress(
         external,
         warnings,
     })
+}
+
+async fn is_backup_repository(root: &Path) -> bool {
+    use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+    let path = root.join("backup.db");
+    if !fs::try_exists(&path).await.unwrap_or(false) {
+        return false;
+    }
+    let Ok(pool) = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .read_only(true)
+                .create_if_missing(false),
+        )
+        .await
+    else {
+        return false;
+    };
+    let result: Result<i64, _> = sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('repository_meta', 'backup_objects', 'backup_snapshots')").fetch_one(&pool).await;
+    pool.close().await;
+    matches!(result, Ok(3))
 }

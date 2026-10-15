@@ -7,6 +7,7 @@ export type StorageNodeType =
     | 'synced_options'
     | 'components'
     | 'launcher_logs'
+    | 'launcher_data'
     | 'icons'
     | 'install_rollbacks'
     | 'content_store'

@@ -14286,7 +14286,7 @@
     "message": "已释放 {freed}，剩余缓存 {remaining}。"
   },
   "app.settings.storage.cacheRetainedHelp": {
-    "message": "实例图标、原生库归档和仍被引用的内容文件会保留，以支持离线使用和恢复；缓存数据库自身也会占用少量空间。"
+    "message": "实例图标、原生库归档和仍被引用的内容文件会保留，以支持离线使用和恢复。旧数据位置的缓存也会保留，缓存数据库自身仍会占用一些空间。"
   },
   "app.settings.storage.cachePartialFailure": {
     "message": "部分缓存未能清理，请查看详情后重试。"
@@ -14305,5 +14305,8 @@
   },
   "app.settings.storage.openFolder": {
     "message": "在文件管理器中打开文件夹"
+  },
+  "app.settings.storage.launcherData": {
+    "message": "启动器设置与界面"
   }
 }

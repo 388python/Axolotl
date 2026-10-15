@@ -14274,7 +14274,7 @@
     "message": "Freed {freed}. Remaining cache: {remaining}."
   },
   "app.settings.storage.cacheRetainedHelp": {
-    "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache database files also retain a small amount of space."
+    "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache files in previous data locations are kept. Cache database files also occupy some space."
   },
   "app.settings.storage.cachePartialFailure": {
     "message": "Some cache files could not be cleared. See the details before trying again."
@@ -14293,5 +14293,8 @@
   },
   "app.settings.storage.openFolder": {
     "message": "Open folder in file manager"
+  },
+  "app.settings.storage.launcherData": {
+    "message": "Launcher settings and appearance"
   }
 }

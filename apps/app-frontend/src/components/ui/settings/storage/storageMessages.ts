@@ -28,7 +28,7 @@ export const storageMessages = defineMessages({
     cacheRetainedHelp: {
         id: 'app.settings.storage.cacheRetainedHelp',
         defaultMessage:
-            'Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache database files also retain a small amount of space.',
+            'Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache files in previous data locations are kept. Cache database files also occupy some space.',
     },
     cachePartialFailure: {
         id: 'app.settings.storage.cachePartialFailure',
@@ -174,6 +174,10 @@ export const storageMessages = defineMessages({
     },
     components: { id: 'app.settings.storage.components', defaultMessage: 'Multiplayer components' },
     launcherLogs: { id: 'app.settings.storage.launcherLogs', defaultMessage: 'Launcher logs' },
+    launcherData: {
+        id: 'app.settings.storage.launcherData',
+        defaultMessage: 'Launcher settings and appearance',
+    },
     icons: { id: 'app.settings.storage.icons', defaultMessage: 'Icons' },
     installRollbacks: {
         id: 'app.settings.storage.installRollbacks',
@@ -452,6 +456,7 @@ export const storageLabels = {
     synced_options: storageMessages.syncedOptions,
     components: storageMessages.components,
     launcher_logs: storageMessages.launcherLogs,
+    launcher_data: storageMessages.launcherData,
     icons: storageMessages.icons,
     install_rollbacks: storageMessages.installRollbacks,
     content_store: storageMessages.contentStore,

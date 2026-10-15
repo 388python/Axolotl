@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn cache_totals_include_previous_location_without_counting_shared_roots_twice()
+{
+    let temp = tempfile::tempdir().unwrap();
+    let mut directories = DirectoryInfo {
+        settings_dir: temp.path().join("settings"),
+        config_dir: temp.path().join("data"),
+        app_identifier: "test".into(),
+    };
+    for (root, size) in [
+        (&directories.settings_dir, 11),
+        (&directories.config_dir, 13),
+    ] {
+        std::fs::create_dir_all(root.join("caches")).unwrap();
+        std::fs::write(root.join("caches/file"), vec![0; size]).unwrap();
+    }
+    assert_eq!(cache_bytes(&directories, &mut vec![]).unwrap(), 24);
+    directories.config_dir = directories.settings_dir.clone();
+    assert_eq!(cache_bytes(&directories, &mut vec![]).unwrap(), 11);
+}
+
+#[test]
 fn download_cleanup_keeps_runtime_files_and_referenced_content() {
     let temp = tempfile::tempdir().unwrap();
     let digest = "a".repeat(128);

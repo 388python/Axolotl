@@ -98,6 +98,36 @@ fn cache_root(directories: &DirectoryInfo) -> std::io::Result<Dir> {
     .open_dir_nofollow("caches")
 }
 
+fn cache_bytes(
+    directories: &DirectoryInfo,
+    failures: &mut Vec<String>,
+) -> std::io::Result<u64> {
+    let mut paths = vec![
+        directories.caches_dir(),
+        directories.settings_dir.join("caches"),
+    ];
+    paths.sort_by_key(|path| path.components().count());
+    let mut roots = Vec::<PathBuf>::new();
+    let mut bytes = 0;
+    for path in paths {
+        if roots.iter().any(|root| path.starts_with(root)) {
+            continue;
+        }
+        roots.push(path.clone());
+        let opened = Dir::open_ambient_dir(
+            path.parent().unwrap(),
+            cap_std::ambient_authority(),
+        )
+        .and_then(|parent| parent.open_dir_nofollow("caches"));
+        match opened {
+            Ok(root) => bytes += walk(&root, "", None, failures)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => failures.push(format!("{}: {error}", path.display())),
+        }
+    }
+    Ok(bytes)
+}
+
 fn verify_resource_cache(
     directories: &DirectoryInfo,
     path: &Path,
@@ -176,14 +206,10 @@ pub async fn clear_cache() -> crate::Result<CacheCleanupResult> {
     let state = crate::State::get().await?;
     let directories = dirs()?;
     let retained = retained_content(&directories).await?;
-    let root = cache_root(&directories);
+    let measure_directories = dirs()?;
     let (before, mut failures) = tokio::task::spawn_blocking(move || {
         let mut failures = Vec::new();
-        let before = match root {
-            Ok(root) => walk(&root, "", None, &mut failures)?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
-            Err(error) => return Err(error),
-        };
+        let before = cache_bytes(&measure_directories, &mut failures)?;
         Ok::<_, std::io::Error>((before, failures))
     })
     .await
@@ -269,7 +295,7 @@ pub async fn clear_cache() -> crate::Result<CacheCleanupResult> {
             Err(error) => return Err(error),
         };
         walk(&root, "", Some(&retained), &mut failures)?;
-        let remaining_bytes = walk(&root, "", None, &mut failures)?;
+        let remaining_bytes = cache_bytes(&directories, &mut failures)?;
         Ok::<_, std::io::Error>(CacheCleanupResult {
             removed_bytes: before.saturating_sub(remaining_bytes),
             remaining_bytes,
