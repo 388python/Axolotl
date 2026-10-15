@@ -6,12 +6,36 @@
         {
             "id": "placefeature",
             "name": "placefeature",
-            "description": "放置已配置的地物（1.18.2+）",
+            "descriptionKey": "command-generator.cmd.placefeature.desc",
             "category": "world",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "id", "displayName": "地物 ID", "type": "string", "required": true, "description": "地物标识符", "placeholder": "minecraft:oak" },
-                { "name": "pos", "displayName": "坐标", "type": "coordinates", "required": false, "description": "放置坐标", "presets": [{ "label": "当前位置", "value": "~ ~ ~" }] }
+                {
+                    "name": "id",
+                    "displayNameKey": "command-generator.arg.placefeature.id.display",
+                    "type": "string",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.placefeature.id.desc",
+                    "placeholder": "minecraft:oak",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.feature.oak", "value": "minecraft:oak" },
+                        { "labelKey": "command-generator.preset.feature.spruce", "value": "minecraft:spruce" },
+                        { "labelKey": "command-generator.preset.feature.birch", "value": "minecraft:birch" },
+                        { "labelKey": "command-generator.preset.feature.grass", "value": "minecraft:grass" },
+                        { "labelKey": "command-generator.preset.feature.flower", "value": "minecraft:flower" }
+                    ]
+                },
+                {
+                    "name": "pos",
+                    "displayNameKey": "command-generator.arg.placefeature.pos.display",
+                    "type": "coordinates",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.placefeature.pos.desc",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.coord.current", "value": "~ ~ ~" },
+                        { "labelKey": "command-generator.preset.coord.world-center", "value": "0 64 0" }
+                    ]
+                }
             ]
         }
     ],

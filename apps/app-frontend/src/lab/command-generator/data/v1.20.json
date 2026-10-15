@@ -6,24 +6,83 @@
         {
             "id": "random",
             "name": "random",
-            "description": "抽取随机值或控制随机数序列（1.20.2+）",
+            "descriptionKey": "command-generator.cmd.random.desc",
             "category": "misc",
             "permissionLevel": 0,
             "arguments": [
-                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "value 抽值 / roll 掷骰 / reset 重置", "enumValues": ["value", "roll", "reset"], "presets": [{ "label": "抽值", "value": "value" }, { "label": "掷骰", "value": "roll" }, { "label": "重置", "value": "reset" }] },
-                { "name": "range", "displayName": "范围", "type": "string", "required": false, "description": "取值范围，如 1..100", "placeholder": "1..100", "presets": [{ "label": "1 到 100", "value": "1..100" }, { "label": "1 到 6", "value": "1..6" }, { "label": "0 到 1", "value": "0..1" }] },
-                { "name": "sequence", "displayName": "序列", "type": "string", "required": false, "description": "随机序列 ID", "placeholder": "minecraft:my_sequence" }
+                {
+                    "name": "action",
+                    "displayNameKey": "command-generator.arg.random.action.display",
+                    "type": "enum",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.random.action.desc",
+                    "enumValues": ["value", "roll", "reset"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.random-action.value", "value": "value" },
+                        { "labelKey": "command-generator.preset.random-action.roll", "value": "roll" },
+                        { "labelKey": "command-generator.preset.random-action.reset", "value": "reset" }
+                    ]
+                },
+                {
+                    "name": "range",
+                    "displayNameKey": "command-generator.arg.random.range.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.random.range.desc",
+                    "placeholder": "1..100",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.range.1-100", "value": "1..100" },
+                        { "labelKey": "command-generator.preset.range.1-6", "value": "1..6" },
+                        { "labelKey": "command-generator.preset.range.0-1", "value": "0..1" },
+                        { "labelKey": "command-generator.preset.range.1-10", "value": "1..10" }
+                    ]
+                },
+                {
+                    "name": "sequence",
+                    "displayNameKey": "command-generator.arg.random.sequence.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.random.sequence.desc",
+                    "placeholder": "minecraft:my_sequence"
+                }
             ]
         },
         {
             "id": "tick",
             "name": "tick",
-            "description": "控制游戏刻速率（1.20.3+）",
+            "descriptionKey": "command-generator.cmd.tick.desc",
             "category": "server",
             "permissionLevel": 3,
             "arguments": [
-                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "freeze/unfreeze/rate/sprint/step/query", "enumValues": ["freeze", "unfreeze", "rate", "sprint", "step", "query"], "presets": [{ "label": "冻结", "value": "freeze" }, { "label": "解冻", "value": "unfreeze" }, { "label": "设置速率", "value": "rate" }, { "label": "查询", "value": "query" }] },
-                { "name": "value", "displayName": "值", "type": "string", "required": false, "description": "具体参数值", "placeholder": "20" }
+                {
+                    "name": "action",
+                    "displayNameKey": "command-generator.arg.tick.action.display",
+                    "type": "enum",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.tick.action.desc",
+                    "enumValues": ["freeze", "unfreeze", "rate", "sprint", "step", "query"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.tick-action.freeze", "value": "freeze" },
+                        { "labelKey": "command-generator.preset.tick-action.unfreeze", "value": "unfreeze" },
+                        { "labelKey": "command-generator.preset.tick-action.rate", "value": "rate" },
+                        { "labelKey": "command-generator.preset.tick-action.sprint", "value": "sprint" },
+                        { "labelKey": "command-generator.preset.tick-action.step", "value": "step" },
+                        { "labelKey": "command-generator.preset.tick-action.query", "value": "query" }
+                    ]
+                },
+                {
+                    "name": "value",
+                    "displayNameKey": "command-generator.arg.tick.value.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.tick.value.desc",
+                    "placeholder": "20",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.tick-rate.1", "value": "1" },
+                        { "labelKey": "command-generator.preset.tick-rate.20", "value": "20" },
+                        { "labelKey": "command-generator.preset.tick-rate.100", "value": "100" }
+                    ]
+                }
             ]
         }
     ],

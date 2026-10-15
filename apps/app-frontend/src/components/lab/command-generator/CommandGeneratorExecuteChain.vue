@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ChevronDownIcon, ChevronUpIcon, PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
-import { defineMessages, useVIntl } from '@modrinth/ui'
+import {
+    ChevronDownIcon,
+    ChevronUpIcon,
+    PlusIcon,
+    SparklesIcon,
+    XIcon,
+} from '@modrinth/assets'
+import { useVIntl } from '@modrinth/ui'
 import { computed, ref, watch } from 'vue'
 
 import type {
     ExecuteChainCategory,
     ExecuteChainSubcommand,
 } from '@/lab/command-generator/commands/types.ts'
+import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 
 import CommandGeneratorArgument from './CommandGeneratorArgument.vue'
 
@@ -36,40 +43,10 @@ const emit = defineEmits<{
 
 const { formatMessage } = useVIntl()
 
-const messages = defineMessages({
-    chainTitle: {
-        id: 'app.lab.execute-chain.chain-title',
-        defaultMessage: 'Subcommand chain',
-    },
-    chainEmpty: {
-        id: 'app.lab.execute-chain.chain-empty',
-        defaultMessage: 'Click a subcommand below to add it to the chain.',
-    },
-    pickerTitle: {
-        id: 'app.lab.execute-chain.picker-title',
-        defaultMessage: 'Available subcommands',
-    },
-    finalTitle: {
-        id: 'app.lab.execute-chain.final-title',
-        defaultMessage: 'Command to run',
-    },
-    finalPlaceholder: {
-        id: 'app.lab.execute-chain.final-placeholder',
-        defaultMessage: 'say hello',
-    },
-    finalHint: {
-        id: 'app.lab.execute-chain.final-hint',
-        defaultMessage: 'Type the actual command without the leading slash.',
-    },
-    presetTitle: {
-        id: 'app.lab.execute-chain.preset-title',
-        defaultMessage: 'Quick examples',
-    },
-    quickCommands: {
-        id: 'app.lab.execute-chain.quick-commands',
-        defaultMessage: 'Common commands',
-    },
-})
+/** 动态 key 查表；找不到就用 key 本身作为 fallback */
+function t(key: string, fallback?: string): string {
+    return formatMessage({ id: key, defaultMessage: fallback ?? key })
+}
 
 let nextId = 1
 
@@ -80,7 +57,7 @@ const finalInputRef = ref<HTMLInputElement | null>(null)
 /** 快速预设（整条链） */
 const QUICK_PRESETS = [
     {
-        label: '所有玩家说 hello',
+        labelKey: messages.quickPresetAllSayHello,
         build: () => {
             chain.value = [
                 { id: nextId++, subcommandId: 'as', values: { target: '@a' }, expanded: false },
@@ -90,7 +67,7 @@ const QUICK_PRESETS = [
         },
     },
     {
-        label: '检测僵尸并广播',
+        labelKey: messages.quickPresetCheckZombies,
         build: () => {
             chain.value = [
                 {
@@ -100,11 +77,11 @@ const QUICK_PRESETS = [
                     expanded: false,
                 },
             ]
-            finalCommand.value = 'say 有僵尸'
+            finalCommand.value = 'say zombies'
         },
     },
     {
-        label: '击杀附近僵尸并记录击杀数',
+        labelKey: messages.quickPresetKillNearbyZombies,
         build: () => {
             chain.value = [
                 {
@@ -118,7 +95,7 @@ const QUICK_PRESETS = [
         },
     },
     {
-        label: '脚下是草方块时提示',
+        labelKey: messages.quickPresetGrassBelow,
         build: () => {
             chain.value = [
                 { id: nextId++, subcommandId: 'as', values: { target: '@s' }, expanded: false },
@@ -130,11 +107,11 @@ const QUICK_PRESETS = [
                     expanded: false,
                 },
             ]
-            finalCommand.value = 'say 脚下是草方块'
+            finalCommand.value = 'say grass below'
         },
     },
     {
-        label: '所有实体向前移动一格',
+        labelKey: messages.quickPresetMoveForward,
         build: () => {
             chain.value = [
                 { id: nextId++, subcommandId: 'as', values: { target: '@e' }, expanded: false },
@@ -145,22 +122,22 @@ const QUICK_PRESETS = [
     },
 ]
 
-/** 最终命令的快捷前缀 */
+/** 最终命令的快捷前缀（label 本身就是命令名，不需要 i18n） */
 const QUICK_FINAL_COMMANDS = [
-    { label: 'say', prefix: 'say ', hint: '广播消息' },
-    { label: 'tellraw', prefix: 'tellraw ', hint: 'JSON 消息' },
-    { label: 'title', prefix: 'title ', hint: '屏幕标题' },
-    { label: 'tp', prefix: 'tp ', hint: '传送实体' },
-    { label: 'kill', prefix: 'kill ', hint: '清除实体' },
-    { label: 'give', prefix: 'give ', hint: '给予物品' },
-    { label: 'summon', prefix: 'summon ', hint: '生成实体' },
-    { label: 'setblock', prefix: 'setblock ', hint: '放置方块' },
-    { label: 'fill', prefix: 'fill ', hint: '填充区域' },
-    { label: 'effect', prefix: 'effect ', hint: '状态效果' },
-    { label: 'playsound', prefix: 'playsound ', hint: '播放声音' },
-    { label: 'particle', prefix: 'particle ', hint: '粒子效果' },
-    { label: 'scoreboard', prefix: 'scoreboard ', hint: '计分板' },
-    { label: 'tag', prefix: 'tag ', hint: '实体标签' },
+    { label: 'say' },
+    { label: 'tellraw' },
+    { label: 'title' },
+    { label: 'tp' },
+    { label: 'kill' },
+    { label: 'give' },
+    { label: 'summon' },
+    { label: 'setblock' },
+    { label: 'fill' },
+    { label: 'effect' },
+    { label: 'playsound' },
+    { label: 'particle' },
+    { label: 'scoreboard' },
+    { label: 'tag' },
 ]
 
 /** 所有子命令的 id → 定义 */
@@ -245,7 +222,7 @@ function clearChain() {
 
 /** 点击常用命令芯片 → 填入前缀，聚焦输入框 */
 function applyQuickFinalCommand(prefix: string) {
-    finalCommand.value = prefix
+    finalCommand.value = prefix + ' '
     queueMicrotask(() => {
         finalInputRef.value?.focus()
     })
@@ -282,17 +259,17 @@ defineExpose({ getState, setState })
         <div class="chain-presets">
             <span class="chain-presets-label">
                 <SparklesIcon />
-                {{ formatMessage(messages.presetTitle) }}
+                {{ formatMessage(messages.executeQuickExamples) }}
             </span>
             <div class="chain-preset-list">
                 <button
                     v-for="preset in QUICK_PRESETS"
-                    :key="preset.label"
+                    :key="preset.labelKey.id"
                     type="button"
                     class="preset-btn"
                     @click="applyQuickPreset(preset)"
                 >
-                    {{ preset.label }}
+                    {{ formatMessage(preset.labelKey) }}
                 </button>
                 <button
                     v-if="chain.length || finalCommand"
@@ -300,7 +277,7 @@ defineExpose({ getState, setState })
                     class="preset-btn preset-btn--clear"
                     @click="clearChain"
                 >
-                    清空
+                    {{ formatMessage(messages.executeClear) }}
                 </button>
             </div>
         </div>
@@ -309,13 +286,13 @@ defineExpose({ getState, setState })
         <div class="chain-section">
             <div class="chain-section-head">
                 <span class="chain-section-title">
-                    {{ formatMessage(messages.chainTitle) }}
+                    {{ formatMessage(messages.executeChainTitle) }}
                 </span>
                 <span class="chain-count">{{ chain.length }}</span>
             </div>
 
             <p v-if="!chain.length" class="chain-empty">
-                {{ formatMessage(messages.chainEmpty) }}
+                {{ formatMessage(messages.executeChainEmpty) }}
             </p>
 
             <div v-else class="chain-steps">
@@ -328,7 +305,11 @@ defineExpose({ getState, setState })
                     <div class="chain-step-head">
                         <span class="chain-step-index">{{ index + 1 }}</span>
                         <span class="chain-step-label">
-                            {{ getSubcommand(step.subcommandId)?.label ?? step.subcommandId }}
+                            {{
+                                getSubcommand(step.subcommandId)
+                                    ? t(getSubcommand(step.subcommandId)!.labelKey)
+                                    : step.subcommandId
+                            }}
                         </span>
                         <div class="chain-step-actions">
                             <button
@@ -354,7 +335,9 @@ defineExpose({ getState, setState })
                             >
                                 <ChevronDownIcon
                                     :style="{
-                                        transform: step.expanded ? 'rotate(180deg)' : 'none',
+                                        transform: step.expanded
+                                            ? 'rotate(180deg)'
+                                            : 'none',
                                         transition: 'transform 0.15s ease',
                                     }"
                                 />
@@ -387,24 +370,28 @@ defineExpose({ getState, setState })
         <div class="chain-section">
             <div class="chain-section-head">
                 <span class="chain-section-title">
-                    {{ formatMessage(messages.pickerTitle) }}
+                    {{ formatMessage(messages.executePickerTitle) }}
                 </span>
             </div>
 
             <div class="picker-categories">
-                <div v-for="cat in categories" :key="cat.id" class="picker-category">
-                    <span class="picker-category-label">{{ cat.label }}</span>
+                <div
+                    v-for="cat in categories"
+                    :key="cat.id"
+                    class="picker-category"
+                >
+                    <span class="picker-category-label">{{ t(cat.labelKey) }}</span>
                     <div class="picker-category-grid">
                         <button
                             v-for="sub in cat.subcommands"
                             :key="sub.id"
                             type="button"
                             class="picker-btn"
-                            :title="sub.description"
+                            :title="t(sub.descriptionKey)"
                             @click="addSubcommand(sub)"
                         >
                             <PlusIcon />
-                            <span>{{ sub.label }}</span>
+                            <span>{{ t(sub.labelKey) }}</span>
                         </button>
                     </div>
                 </div>
@@ -415,14 +402,13 @@ defineExpose({ getState, setState })
         <div class="chain-section">
             <div class="chain-section-head">
                 <span class="chain-section-title">
-                    {{ formatMessage(messages.finalTitle) }}
+                    {{ formatMessage(messages.executeFinalTitle) }}
                 </span>
             </div>
 
-            <!-- 常用命令快捷芯片 -->
             <div class="quick-commands">
                 <span class="quick-commands-label">
-                    {{ formatMessage(messages.quickCommands) }}
+                    {{ formatMessage(messages.executeCommonCommands) }}
                 </span>
                 <div class="quick-commands-list">
                     <button
@@ -430,8 +416,7 @@ defineExpose({ getState, setState })
                         :key="qc.label"
                         type="button"
                         class="quick-command-chip"
-                        :title="qc.hint"
-                        @click="applyQuickFinalCommand(qc.prefix)"
+                        @click="applyQuickFinalCommand(qc.label)"
                     >
                         /{{ qc.label }}
                     </button>
@@ -442,10 +427,10 @@ defineExpose({ getState, setState })
                 ref="finalInputRef"
                 v-model="finalCommand"
                 class="final-input"
-                :placeholder="formatMessage(messages.finalPlaceholder)"
+                :placeholder="formatMessage(messages.executeFinalPlaceholder)"
                 spellcheck="false"
             />
-            <p class="final-hint">{{ formatMessage(messages.finalHint) }}</p>
+            <p class="final-hint">{{ formatMessage(messages.executeFinalHint) }}</p>
         </div>
     </div>
 </template>
@@ -457,7 +442,6 @@ defineExpose({ getState, setState })
     gap: 1rem;
 }
 
-/* ========== 快速预设 ========== */
 .chain-presets {
     display: flex;
     flex-direction: column;
@@ -516,7 +500,6 @@ defineExpose({ getState, setState })
     color: var(--color-red);
 }
 
-/* ========== 通用 section ========== */
 .chain-section {
     display: flex;
     flex-direction: column;
@@ -564,7 +547,6 @@ defineExpose({ getState, setState })
     color: var(--color-text-tertiary);
 }
 
-/* ========== 链中的步骤 ========== */
 .chain-steps {
     display: flex;
     flex-direction: column;
@@ -636,7 +618,6 @@ defineExpose({ getState, setState })
     border-top: 1px solid var(--color-divider);
 }
 
-/* ========== 图标按钮 ========== */
 .icon-btn {
     display: inline-flex;
     width: 1.5rem;
@@ -672,7 +653,6 @@ defineExpose({ getState, setState })
     height: 0.75rem;
 }
 
-/* ========== 子命令选择器 ========== */
 .picker-categories {
     display: flex;
     flex-direction: column;
@@ -733,7 +713,6 @@ defineExpose({ getState, setState })
     white-space: nowrap;
 }
 
-/* ========== 最终命令区 ========== */
 .quick-commands {
     display: flex;
     flex-direction: column;

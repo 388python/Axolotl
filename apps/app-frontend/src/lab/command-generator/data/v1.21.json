@@ -6,48 +6,167 @@
         {
             "id": "swing",
             "name": "swing",
-            "description": "挥舞实体的手（1.21.4+）",
+            "descriptionKey": "command-generator.cmd.swing.desc",
             "category": "entity",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "目标选择器", "selector": true, "placeholder": "@s", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }] },
-                { "name": "hand", "displayName": "手", "type": "enum", "required": false, "description": "mainhand 主手 / offhand 副手", "enumValues": ["mainhand", "offhand"], "presets": [{ "label": "主手", "value": "mainhand" }, { "label": "副手", "value": "offhand" }] }
+                {
+                    "name": "target",
+                    "displayNameKey": "command-generator.arg.swing.target.display",
+                    "type": "entity-selector",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.swing.target.desc",
+                    "selector": true,
+                    "placeholder": "@s",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
+                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" }
+                    ]
+                },
+                {
+                    "name": "hand",
+                    "displayNameKey": "command-generator.arg.swing.hand.display",
+                    "type": "enum",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.swing.hand.desc",
+                    "enumValues": ["mainhand", "offhand"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.hand.mainhand", "value": "mainhand" },
+                        { "labelKey": "command-generator.preset.hand.offhand", "value": "offhand" }
+                    ]
+                }
             ]
         },
         {
             "id": "waypoint",
             "name": "waypoint",
-            "description": "管理定位条上显示的路标（1.21.6+）",
+            "descriptionKey": "command-generator.cmd.waypoint.desc",
             "category": "world",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "list/add/remove/modify", "enumValues": ["list", "add", "remove", "modify"] },
-                { "name": "name", "displayName": "名称", "type": "string", "required": false, "description": "路标名称" },
-                { "name": "pos", "displayName": "坐标", "type": "coordinates", "required": false, "description": "路标坐标" },
-                { "name": "color", "displayName": "颜色", "type": "string", "required": false, "description": "颜色值（命名颜色或 #RRGGBB）", "placeholder": "#FFAA00", "presets": [{ "label": "金色", "value": "#FFAA00" }, { "label": "红色", "value": "#FF5555" }, { "label": "绿色", "value": "#55FF55" }, { "label": "蓝色", "value": "#5555FF" }] }
+                {
+                    "name": "action",
+                    "displayNameKey": "command-generator.arg.waypoint.action.display",
+                    "type": "enum",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.waypoint.action.desc",
+                    "enumValues": ["list", "add", "remove", "modify"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.waypoint-action.list", "value": "list" },
+                        { "labelKey": "command-generator.preset.waypoint-action.add", "value": "add" },
+                        { "labelKey": "command-generator.preset.waypoint-action.remove", "value": "remove" },
+                        { "labelKey": "command-generator.preset.waypoint-action.modify", "value": "modify" }
+                    ]
+                },
+                {
+                    "name": "name",
+                    "displayNameKey": "command-generator.arg.waypoint.name.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.waypoint.name.desc",
+                    "placeholder": "home"
+                },
+                {
+                    "name": "pos",
+                    "displayNameKey": "command-generator.arg.waypoint.pos.display",
+                    "type": "coordinates",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.waypoint.pos.desc",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.coord.current", "value": "~ ~ ~" },
+                        { "labelKey": "command-generator.preset.coord.world-center", "value": "0 64 0" }
+                    ]
+                },
+                {
+                    "name": "color",
+                    "displayNameKey": "command-generator.arg.waypoint.color.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.waypoint.color.desc",
+                    "placeholder": "#FFAA00",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.color.gold", "value": "#FFAA00" },
+                        { "labelKey": "command-generator.preset.color.red", "value": "#FF5555" },
+                        { "labelKey": "command-generator.preset.color.green", "value": "#55FF55" },
+                        { "labelKey": "command-generator.preset.color.blue", "value": "#5555FF" },
+                        { "labelKey": "command-generator.preset.color.white", "value": "#FFFFFF" }
+                    ]
+                }
             ]
         },
         {
             "id": "dialog",
             "name": "dialog",
-            "description": "向客户端显示对话界面（1.21.6+）",
+            "descriptionKey": "command-generator.cmd.dialog.desc",
             "category": "communication",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "目标选择器", "selector": true, "placeholder": "@a", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }] },
-                { "name": "dialog", "displayName": "对话 ID", "type": "string", "required": true, "description": "对话标识符", "placeholder": "minecraft:custom_dialog" }
+                {
+                    "name": "target",
+                    "displayNameKey": "command-generator.arg.dialog.target.display",
+                    "type": "entity-selector",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.dialog.target.desc",
+                    "selector": true,
+                    "placeholder": "@a",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
+                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" },
+                        { "labelKey": "command-generator.preset.common.nearest-player", "value": "@p" }
+                    ]
+                },
+                {
+                    "name": "dialog",
+                    "displayNameKey": "command-generator.arg.dialog.dialog.display",
+                    "type": "string",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.dialog.dialog.desc",
+                    "placeholder": "minecraft:custom_dialog"
+                }
             ]
         },
         {
             "id": "stopwatch",
             "name": "stopwatch",
-            "description": "创建或修改实时秒表（1.21.11+）",
+            "descriptionKey": "command-generator.cmd.stopwatch.desc",
             "category": "misc",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "create/query/restart/remove", "enumValues": ["create", "query", "restart", "remove"], "presets": [{ "label": "创建", "value": "create" }, { "label": "查询", "value": "query" }, { "label": "重启", "value": "restart" }, { "label": "移除", "value": "remove" }] },
-                { "name": "id", "displayName": "ID", "type": "string", "required": true, "description": "秒表标识符", "placeholder": "minecraft:my_stopwatch" },
-                { "name": "scale", "displayName": "缩放", "type": "number", "required": false, "description": "缩放因子，如 0.05 将刻转换为秒", "defaultValue": 1 }
+                {
+                    "name": "action",
+                    "displayNameKey": "command-generator.arg.stopwatch.action.display",
+                    "type": "enum",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.stopwatch.action.desc",
+                    "enumValues": ["create", "query", "restart", "remove"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.stopwatch-action.create", "value": "create" },
+                        { "labelKey": "command-generator.preset.stopwatch-action.query", "value": "query" },
+                        { "labelKey": "command-generator.preset.stopwatch-action.restart", "value": "restart" },
+                        { "labelKey": "command-generator.preset.stopwatch-action.remove", "value": "remove" }
+                    ]
+                },
+                {
+                    "name": "id",
+                    "displayNameKey": "command-generator.arg.stopwatch.id.display",
+                    "type": "string",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.stopwatch.id.desc",
+                    "placeholder": "minecraft:my_stopwatch"
+                },
+                {
+                    "name": "scale",
+                    "displayNameKey": "command-generator.arg.stopwatch.scale.display",
+                    "type": "number",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.stopwatch.scale.desc",
+                    "defaultValue": 1,
+                    "presets": [
+                        { "labelKey": "command-generator.preset.scale.1", "value": 1 },
+                        { "labelKey": "command-generator.preset.scale.0-05", "value": 0.05 },
+                        { "labelKey": "command-generator.preset.scale.20", "value": 20 }
+                    ]
+                }
             ]
         }
     ],
@@ -59,46 +178,741 @@
             "chainCategories": [
                 {
                     "id": "modifiers",
-                    "label": "修饰子命令 · 改变执行上下文",
+                    "labelKey": "command-generator.execute.category.modifiers",
                     "subcommands": [
-                        { "id": "as", "label": "as · 改变执行者", "description": "以指定实体作为执行者，位置和朝向不变", "template": "as {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "新的执行者", "placeholder": "@a", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }, { "label": "最近玩家", "value": "@p" }, { "label": "所有实体", "value": "@e" }] }] },
-                        { "id": "at", "label": "at · 改变位置和朝向", "description": "把执行位置和朝向设为目标的当前位置", "template": "at {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "位置参照实体", "placeholder": "@s", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }] }] },
-                        { "id": "positioned", "label": "positioned · 改变位置", "description": "改变执行位置，执行者和朝向不变", "template": "positioned {pos}", "arguments": [{ "name": "pos", "displayName": "坐标", "type": "coordinates", "required": true, "description": "新的执行位置", "placeholder": "0 64 0", "presets": [{ "label": "世界中心", "value": "0 64 0" }, { "label": "当前位置", "value": "~ ~ ~" }] }] },
-                        { "id": "positioned-as", "label": "positioned as · 以目标为位置", "description": "把执行位置设为目标的当前位置", "template": "positioned as {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "位置参照实体", "placeholder": "@s" }] },
-                        { "id": "rotated", "label": "rotated · 改变朝向", "description": "改变执行朝向，位置和执行者不变", "template": "rotated {yaw} {pitch}", "arguments": [{ "name": "yaw", "displayName": "水平角（yaw）", "type": "number", "required": true, "description": "水平旋转角度", "defaultValue": 0, "presets": [{ "label": "北 0", "value": 0 }, { "label": "东 90", "value": 90 }, { "label": "南 180", "value": 180 }, { "label": "西 -90", "value": -90 }] }, { "name": "pitch", "displayName": "垂直角（pitch）", "type": "number", "required": true, "description": "垂直旋转角度", "defaultValue": 0, "presets": [{ "label": "水平 0", "value": 0 }, { "label": "朝上 -90", "value": -90 }, { "label": "朝下 90", "value": 90 }] }] },
-                        { "id": "rotated-as", "label": "rotated as · 以目标为朝向", "description": "把执行朝向设为目标当前的朝向", "template": "rotated as {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "朝向参照实体", "placeholder": "@s" }] },
-                        { "id": "facing", "label": "facing · 面向坐标", "description": "把执行朝向设为面向某个坐标", "template": "facing {pos}", "arguments": [{ "name": "pos", "displayName": "坐标", "type": "coordinates", "required": true, "description": "要面向的坐标", "placeholder": "0 64 0" }] },
-                        { "id": "facing-entity", "label": "facing entity · 面向实体", "description": "把执行朝向设为面向某个实体", "template": "facing entity {target} {anchor}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "要面向的实体", "placeholder": "@p" }, { "name": "anchor", "displayName": "基准点", "type": "enum", "required": true, "description": "eyes 眼睛 / feet 脚", "enumValues": ["eyes", "feet"], "defaultValue": "eyes" }] },
-                        { "id": "in", "label": "in · 切换维度", "description": "切换执行维度，位置坐标不变", "template": "in {dimension}", "arguments": [{ "name": "dimension", "displayName": "维度", "type": "enum", "required": true, "description": "目标维度", "enumValues": ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"], "presets": [{ "label": "主世界", "value": "minecraft:overworld" }, { "label": "下界", "value": "minecraft:the_nether" }, { "label": "末地", "value": "minecraft:the_end" }] }] },
-                        { "id": "anchored", "label": "anchored · 改变基准点", "description": "改变执行基准点（脚或眼睛）", "template": "anchored {anchor}", "arguments": [{ "name": "anchor", "displayName": "基准点", "type": "enum", "required": true, "description": "eyes 眼睛 / feet 脚", "enumValues": ["eyes", "feet"], "defaultValue": "eyes" }] },
-                        { "id": "align", "label": "align · 对齐坐标", "description": "把执行坐标对齐到方块网格", "template": "align {axes}", "arguments": [{ "name": "axes", "displayName": "对齐轴", "type": "enum", "required": true, "description": "要对齐的坐标轴", "enumValues": ["x", "y", "z", "xy", "xz", "yz", "xyz"], "defaultValue": "xyz" }] }
+                        {
+                            "id": "as",
+                            "labelKey": "command-generator.execute.as.label",
+                            "descriptionKey": "command-generator.execute.as.desc",
+                            "template": "as {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.as.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.as.target.desc",
+                                    "placeholder": "@a",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
+                                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" },
+                                        { "labelKey": "command-generator.preset.common.nearest-player", "value": "@p" },
+                                        { "labelKey": "command-generator.preset.common.all-entities", "value": "@e" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "at",
+                            "labelKey": "command-generator.execute.at.label",
+                            "descriptionKey": "command-generator.execute.at.desc",
+                            "template": "at {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.at.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.at.target.desc",
+                                    "placeholder": "@s",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
+                                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "positioned",
+                            "labelKey": "command-generator.execute.positioned.label",
+                            "descriptionKey": "command-generator.execute.positioned.desc",
+                            "template": "positioned {pos}",
+                            "arguments": [
+                                {
+                                    "name": "pos",
+                                    "displayNameKey": "command-generator.arg.execute.positioned.pos.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.positioned.pos.desc",
+                                    "placeholder": "0 64 0",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.coord.world-center", "value": "0 64 0" },
+                                        { "labelKey": "command-generator.preset.coord.current", "value": "~ ~ ~" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "positioned-as",
+                            "labelKey": "command-generator.execute.positioned-as.label",
+                            "descriptionKey": "command-generator.execute.positioned-as.desc",
+                            "template": "positioned as {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.positioned-as.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.positioned-as.target.desc",
+                                    "placeholder": "@s"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "rotated",
+                            "labelKey": "command-generator.execute.rotated.label",
+                            "descriptionKey": "command-generator.execute.rotated.desc",
+                            "template": "rotated {yaw} {pitch}",
+                            "arguments": [
+                                {
+                                    "name": "yaw",
+                                    "displayNameKey": "command-generator.arg.execute.rotated.yaw.display",
+                                    "type": "number",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.rotated.yaw.desc",
+                                    "defaultValue": 0,
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.rotation.north", "value": 0 },
+                                        { "labelKey": "command-generator.preset.rotation.east", "value": 90 },
+                                        { "labelKey": "command-generator.preset.rotation.south", "value": 180 },
+                                        { "labelKey": "command-generator.preset.rotation.west", "value": -90 }
+                                    ]
+                                },
+                                {
+                                    "name": "pitch",
+                                    "displayNameKey": "command-generator.arg.execute.rotated.pitch.display",
+                                    "type": "number",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.rotated.pitch.desc",
+                                    "defaultValue": 0,
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.pitch.horizontal", "value": 0 },
+                                        { "labelKey": "command-generator.preset.pitch.up", "value": -90 },
+                                        { "labelKey": "command-generator.preset.pitch.down", "value": 90 }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "rotated-as",
+                            "labelKey": "command-generator.execute.rotated-as.label",
+                            "descriptionKey": "command-generator.execute.rotated-as.desc",
+                            "template": "rotated as {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.rotated-as.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.rotated-as.target.desc",
+                                    "placeholder": "@s"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "facing",
+                            "labelKey": "command-generator.execute.facing.label",
+                            "descriptionKey": "command-generator.execute.facing.desc",
+                            "template": "facing {pos}",
+                            "arguments": [
+                                {
+                                    "name": "pos",
+                                    "displayNameKey": "command-generator.arg.execute.facing.pos.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.facing.pos.desc",
+                                    "placeholder": "0 64 0"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "facing-entity",
+                            "labelKey": "command-generator.execute.facing-entity.label",
+                            "descriptionKey": "command-generator.execute.facing-entity.desc",
+                            "template": "facing entity {target} {anchor}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.facing-entity.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.facing-entity.target.desc",
+                                    "placeholder": "@p"
+                                },
+                                {
+                                    "name": "anchor",
+                                    "displayNameKey": "command-generator.arg.execute.facing-entity.anchor.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.facing-entity.anchor.desc",
+                                    "enumValues": ["eyes", "feet"],
+                                    "defaultValue": "eyes",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.anchor.eyes", "value": "eyes" },
+                                        { "labelKey": "command-generator.preset.anchor.feet", "value": "feet" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "in",
+                            "labelKey": "command-generator.execute.in.label",
+                            "descriptionKey": "command-generator.execute.in.desc",
+                            "template": "in {dimension}",
+                            "arguments": [
+                                {
+                                    "name": "dimension",
+                                    "displayNameKey": "command-generator.arg.execute.in.dimension.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.in.dimension.desc",
+                                    "enumValues": ["minecraft:overworld", "minecraft:the_nether", "minecraft:the_end"],
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.dimension.overworld", "value": "minecraft:overworld" },
+                                        { "labelKey": "command-generator.preset.dimension.nether", "value": "minecraft:the_nether" },
+                                        { "labelKey": "command-generator.preset.dimension.end", "value": "minecraft:the_end" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "anchored",
+                            "labelKey": "command-generator.execute.anchored.label",
+                            "descriptionKey": "command-generator.execute.anchored.desc",
+                            "template": "anchored {anchor}",
+                            "arguments": [
+                                {
+                                    "name": "anchor",
+                                    "displayNameKey": "command-generator.arg.execute.anchored.anchor.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.anchored.anchor.desc",
+                                    "enumValues": ["eyes", "feet"],
+                                    "defaultValue": "eyes",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.anchor.eyes", "value": "eyes" },
+                                        { "labelKey": "command-generator.preset.anchor.feet", "value": "feet" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "align",
+                            "labelKey": "command-generator.execute.align.label",
+                            "descriptionKey": "command-generator.execute.align.desc",
+                            "template": "align {axes}",
+                            "arguments": [
+                                {
+                                    "name": "axes",
+                                    "displayNameKey": "command-generator.arg.execute.align.axes.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.align.axes.desc",
+                                    "enumValues": ["x", "y", "z", "xy", "xz", "yz", "xyz"],
+                                    "defaultValue": "xyz",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.align.xyz", "value": "xyz" },
+                                        { "labelKey": "command-generator.preset.align.x", "value": "x" },
+                                        { "labelKey": "command-generator.preset.align.y", "value": "y" },
+                                        { "labelKey": "command-generator.preset.align.z", "value": "z" }
+                                    ]
+                                }
+                            ]
+                        }
                     ]
                 },
                 {
                     "id": "conditions",
-                    "label": "条件子命令 · 判断是否继续",
+                    "labelKey": "command-generator.execute.category.conditions",
                     "subcommands": [
-                        { "id": "if-entity", "label": "if entity · 检测实体存在", "description": "如果指定实体存在则继续", "template": "if entity {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "要检测存在的实体", "placeholder": "@e[type=zombie]" }] },
-                        { "id": "unless-entity", "label": "unless entity · 检测实体不存在", "description": "如果指定实体不存在则继续", "template": "unless entity {target}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "要检测不存在的实体", "placeholder": "@e[type=zombie]" }] },
-                        { "id": "if-block", "label": "if block · 检测方块", "description": "如果指定位置是指定方块则继续", "template": "if block {pos} {block}", "arguments": [{ "name": "pos", "displayName": "坐标", "type": "coordinates", "required": true, "description": "要检测的位置", "placeholder": "~ ~-1 ~" }, { "name": "block", "displayName": "方块", "type": "block", "required": true, "description": "方块 ID", "placeholder": "minecraft:grass_block" }] },
-                        { "id": "if-blocks", "label": "if blocks · 检测区域", "description": "如果两个区域的方块匹配则继续", "template": "if blocks {begin} {end} {destination} {mode}", "arguments": [{ "name": "begin", "displayName": "起始坐标", "type": "coordinates", "required": true, "description": "源区域起始坐标" }, { "name": "end", "displayName": "结束坐标", "type": "coordinates", "required": true, "description": "源区域结束坐标" }, { "name": "destination", "displayName": "目标坐标", "type": "coordinates", "required": true, "description": "目标区域起始坐标" }, { "name": "mode", "displayName": "匹配模式", "type": "enum", "required": true, "description": "all 完全匹配 / masked 忽略空气", "enumValues": ["all", "masked"], "defaultValue": "all" }] },
-                        { "id": "if-score", "label": "if score · 比较分数", "description": "如果两个记分比较成立则继续", "template": "if score {target} {objective} {operator} {source} {sourceObjective}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "左侧记分持有者", "placeholder": "@s" }, { "name": "objective", "displayName": "记分项", "type": "objective", "required": true, "description": "左侧记分项", "placeholder": "kills" }, { "name": "operator", "displayName": "运算符", "type": "enum", "required": true, "description": "比较运算符", "enumValues": ["<", "<=", "=", ">=", ">"], "defaultValue": "=" }, { "name": "source", "displayName": "源目标", "type": "entity-selector", "required": true, "description": "右侧记分持有者", "placeholder": "@p" }, { "name": "sourceObjective", "displayName": "源记分项", "type": "objective", "required": true, "description": "右侧记分项", "placeholder": "deaths" }] },
-                        { "id": "if-score-matches", "label": "if score matches · 检测分数范围", "description": "如果分数在指定范围内则继续", "template": "if score {target} {objective} matches {range}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "记分持有者", "placeholder": "@s" }, { "name": "objective", "displayName": "记分项", "type": "objective", "required": true, "description": "记分项名称", "placeholder": "kills" }, { "name": "range", "displayName": "范围", "type": "string", "required": true, "description": "数值范围，如 1..10", "placeholder": "1..10", "presets": [{ "label": "1 到 10", "value": "1..10" }, { "label": "正好 5", "value": "5" }, { "label": "至少 10", "value": "10.." }, { "label": "最多 5", "value": "..5" }] }] },
-                        { "id": "if-biome", "label": "if biome · 检测生物群系", "description": "如果指定位置的生物群系匹配则继续", "template": "if biome {pos} {biome}", "arguments": [{ "name": "pos", "displayName": "坐标", "type": "coordinates", "required": true, "description": "要检测的位置", "placeholder": "~ ~ ~" }, { "name": "biome", "displayName": "生物群系", "type": "biome", "required": true, "description": "生物群系 ID", "placeholder": "minecraft:plains" }] },
-                        { "id": "if-data", "label": "if data · 检测 NBT 数据", "description": "如果指定 NBT 路径存在则继续", "template": "if data {targetType} {target} {path}", "arguments": [{ "name": "targetType", "displayName": "目标类型", "type": "enum", "required": true, "description": "block/entity/storage", "enumValues": ["block", "entity", "storage"], "defaultValue": "entity" }, { "name": "target", "displayName": "目标", "type": "string", "required": true, "description": "方块坐标、实体选择器或存储 ID", "placeholder": "@s" }, { "name": "path", "displayName": "NBT 路径", "type": "nbt", "required": true, "description": "要检测的 NBT 路径", "placeholder": "Health", "supportsNbtEditor": true, "nbtKind": "generic" }] },
-                        { "id": "if-items", "label": "if items · 检测物品（1.21+）", "description": "如果指定槽位有指定物品则继续", "template": "if items {source} {target} {slot} {item}", "arguments": [{ "name": "source", "displayName": "来源", "type": "enum", "required": true, "description": "block / entity", "enumValues": ["block", "entity"], "defaultValue": "entity" }, { "name": "target", "displayName": "目标", "type": "string", "required": true, "description": "方块坐标或实体选择器", "placeholder": "@s" }, { "name": "slot", "displayName": "槽位", "type": "slot", "required": true, "description": "槽位名称", "placeholder": "container.*", "presets": [{ "label": "主手", "value": "weapon.mainhand" }, { "label": "所有容器", "value": "container.*" }, { "label": "全部", "value": "*" }] }, { "name": "item", "displayName": "物品", "type": "item", "required": true, "description": "物品 ID", "placeholder": "minecraft:diamond" }] },
-                        { "id": "if-function", "label": "if function · 检测函数返回", "description": "如果函数返回成功则继续", "template": "if function {name}", "arguments": [{ "name": "name", "displayName": "函数名", "type": "string", "required": true, "description": "函数标识符", "placeholder": "mypack:check" }] },
-                        { "id": "unless-block", "label": "unless block · 检测方块（反向）", "description": "如果指定位置不是指定方块则继续", "template": "unless block {pos} {block}", "arguments": [{ "name": "pos", "displayName": "坐标", "type": "coordinates", "required": true, "description": "要检测的位置", "placeholder": "~ ~-1 ~" }, { "name": "block", "displayName": "方块", "type": "block", "required": true, "description": "方块 ID", "placeholder": "minecraft:bedrock" }] },
-                        { "id": "unless-score", "label": "unless score · 比较分数（反向）", "description": "如果两个记分比较不成立则继续", "template": "unless score {target} {objective} {operator} {source} {sourceObjective}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "左侧记分持有者", "placeholder": "@s" }, { "name": "objective", "displayName": "记分项", "type": "objective", "required": true, "description": "左侧记分项" }, { "name": "operator", "displayName": "运算符", "type": "enum", "required": true, "description": "比较运算符", "enumValues": ["<", "<=", "=", ">=", ">"], "defaultValue": "=" }, { "name": "source", "displayName": "源目标", "type": "entity-selector", "required": true, "description": "右侧记分持有者", "placeholder": "@p" }, { "name": "sourceObjective", "displayName": "源记分项", "type": "objective", "required": true, "description": "右侧记分项" }] }
+                        {
+                            "id": "if-entity",
+                            "labelKey": "command-generator.execute.if-entity.label",
+                            "descriptionKey": "command-generator.execute.if-entity.desc",
+                            "template": "if entity {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.if-entity.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-entity.target.desc",
+                                    "placeholder": "@e[type=zombie]",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.entity.all-zombies", "value": "@e[type=zombie]" },
+                                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" },
+                                        { "labelKey": "command-generator.preset.entity.all-items", "value": "@e[type=item]" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "unless-entity",
+                            "labelKey": "command-generator.execute.unless-entity.label",
+                            "descriptionKey": "command-generator.execute.unless-entity.desc",
+                            "template": "unless entity {target}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.unless-entity.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-entity.target.desc",
+                                    "placeholder": "@e[type=zombie]"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-block",
+                            "labelKey": "command-generator.execute.if-block.label",
+                            "descriptionKey": "command-generator.execute.if-block.desc",
+                            "template": "if block {pos} {block}",
+                            "arguments": [
+                                {
+                                    "name": "pos",
+                                    "displayNameKey": "command-generator.arg.execute.if-block.pos.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-block.pos.desc",
+                                    "placeholder": "~ ~-1 ~",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.coord.below", "value": "~ ~-1 ~" },
+                                        { "labelKey": "command-generator.preset.coord.current", "value": "~ ~ ~" }
+                                    ]
+                                },
+                                {
+                                    "name": "block",
+                                    "displayNameKey": "command-generator.arg.execute.if-block.block.display",
+                                    "type": "block",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-block.block.desc",
+                                    "placeholder": "minecraft:grass_block",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.block.grass", "value": "minecraft:grass_block" },
+                                        { "labelKey": "command-generator.preset.block.stone", "value": "minecraft:stone" },
+                                        { "labelKey": "command-generator.preset.block.air", "value": "minecraft:air" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-blocks",
+                            "labelKey": "command-generator.execute.if-blocks.label",
+                            "descriptionKey": "command-generator.execute.if-blocks.desc",
+                            "template": "if blocks {begin} {end} {destination} {mode}",
+                            "arguments": [
+                                {
+                                    "name": "begin",
+                                    "displayNameKey": "command-generator.arg.execute.if-blocks.begin.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-blocks.begin.desc"
+                                },
+                                {
+                                    "name": "end",
+                                    "displayNameKey": "command-generator.arg.execute.if-blocks.end.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-blocks.end.desc"
+                                },
+                                {
+                                    "name": "destination",
+                                    "displayNameKey": "command-generator.arg.execute.if-blocks.destination.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-blocks.destination.desc"
+                                },
+                                {
+                                    "name": "mode",
+                                    "displayNameKey": "command-generator.arg.execute.if-blocks.mode.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-blocks.mode.desc",
+                                    "enumValues": ["all", "masked"],
+                                    "defaultValue": "all",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.blocks-mode.all", "value": "all" },
+                                        { "labelKey": "command-generator.preset.blocks-mode.masked", "value": "masked" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-score",
+                            "labelKey": "command-generator.execute.if-score.label",
+                            "descriptionKey": "command-generator.execute.if-score.desc",
+                            "template": "if score {target} {objective} {operator} {source} {sourceObjective}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.if-score.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "objective",
+                                    "displayNameKey": "command-generator.arg.execute.if-score.objective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score.objective.desc",
+                                    "placeholder": "kills"
+                                },
+                                {
+                                    "name": "operator",
+                                    "displayNameKey": "command-generator.arg.execute.if-score.operator.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score.operator.desc",
+                                    "enumValues": ["<", "<=", "=", ">=", ">"],
+                                    "defaultValue": "="
+                                },
+                                {
+                                    "name": "source",
+                                    "displayNameKey": "command-generator.arg.execute.if-score.source.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score.source.desc",
+                                    "placeholder": "@p"
+                                },
+                                {
+                                    "name": "sourceObjective",
+                                    "displayNameKey": "command-generator.arg.execute.if-score.sourceObjective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score.sourceObjective.desc",
+                                    "placeholder": "deaths"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-score-matches",
+                            "labelKey": "command-generator.execute.if-score-matches.label",
+                            "descriptionKey": "command-generator.execute.if-score-matches.desc",
+                            "template": "if score {target} {objective} matches {range}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.if-score-matches.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score-matches.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "objective",
+                                    "displayNameKey": "command-generator.arg.execute.if-score-matches.objective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score-matches.objective.desc",
+                                    "placeholder": "kills"
+                                },
+                                {
+                                    "name": "range",
+                                    "displayNameKey": "command-generator.arg.execute.if-score-matches.range.display",
+                                    "type": "string",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-score-matches.range.desc",
+                                    "placeholder": "1..10",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.range.1-10", "value": "1..10" },
+                                        { "labelKey": "command-generator.preset.range.exact-5", "value": "5" },
+                                        { "labelKey": "command-generator.preset.range.min-10", "value": "10.." },
+                                        { "labelKey": "command-generator.preset.range.max-5", "value": "..5" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-biome",
+                            "labelKey": "command-generator.execute.if-biome.label",
+                            "descriptionKey": "command-generator.execute.if-biome.desc",
+                            "template": "if biome {pos} {biome}",
+                            "arguments": [
+                                {
+                                    "name": "pos",
+                                    "displayNameKey": "command-generator.arg.execute.if-biome.pos.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-biome.pos.desc",
+                                    "placeholder": "~ ~ ~"
+                                },
+                                {
+                                    "name": "biome",
+                                    "displayNameKey": "command-generator.arg.execute.if-biome.biome.display",
+                                    "type": "biome",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-biome.biome.desc",
+                                    "placeholder": "minecraft:plains",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.biome.plains", "value": "minecraft:plains" },
+                                        { "labelKey": "command-generator.preset.biome.desert", "value": "minecraft:desert" },
+                                        { "labelKey": "command-generator.preset.biome.forest", "value": "minecraft:forest" },
+                                        { "labelKey": "command-generator.preset.biome.ocean", "value": "minecraft:ocean" }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-data",
+                            "labelKey": "command-generator.execute.if-data.label",
+                            "descriptionKey": "command-generator.execute.if-data.desc",
+                            "template": "if data {targetType} {target} {path}",
+                            "arguments": [
+                                {
+                                    "name": "targetType",
+                                    "displayNameKey": "command-generator.arg.execute.if-data.targetType.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-data.targetType.desc",
+                                    "enumValues": ["block", "entity", "storage"],
+                                    "defaultValue": "entity",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.data-target.block", "value": "block" },
+                                        { "labelKey": "command-generator.preset.data-target.entity", "value": "entity" },
+                                        { "labelKey": "command-generator.preset.data-target.storage", "value": "storage" }
+                                    ]
+                                },
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.if-data.target.display",
+                                    "type": "string",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-data.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "path",
+                                    "displayNameKey": "command-generator.arg.execute.if-data.path.display",
+                                    "type": "nbt",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-data.path.desc",
+                                    "placeholder": "Health",
+                                    "supportsNbtEditor": true,
+                                    "nbtKind": "generic"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-items",
+                            "labelKey": "command-generator.execute.if-items.label",
+                            "descriptionKey": "command-generator.execute.if-items.desc",
+                            "template": "if items {source} {target} {slot} {item}",
+                            "arguments": [
+                                {
+                                    "name": "source",
+                                    "displayNameKey": "command-generator.arg.execute.if-items.source.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-items.source.desc",
+                                    "enumValues": ["block", "entity"],
+                                    "defaultValue": "entity"
+                                },
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.if-items.target.display",
+                                    "type": "string",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-items.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "slot",
+                                    "displayNameKey": "command-generator.arg.execute.if-items.slot.display",
+                                    "type": "slot",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-items.slot.desc",
+                                    "placeholder": "container.*",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.slot.mainhand", "value": "weapon.mainhand" },
+                                        { "labelKey": "command-generator.preset.slot.container-all", "value": "container.*" },
+                                        { "labelKey": "command-generator.preset.slot.all", "value": "*" }
+                                    ]
+                                },
+                                {
+                                    "name": "item",
+                                    "displayNameKey": "command-generator.arg.execute.if-items.item.display",
+                                    "type": "item",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-items.item.desc",
+                                    "placeholder": "minecraft:diamond"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "if-function",
+                            "labelKey": "command-generator.execute.if-function.label",
+                            "descriptionKey": "command-generator.execute.if-function.desc",
+                            "template": "if function {name}",
+                            "arguments": [
+                                {
+                                    "name": "name",
+                                    "displayNameKey": "command-generator.arg.execute.if-function.name.display",
+                                    "type": "string",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.if-function.name.desc",
+                                    "placeholder": "mypack:check"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "unless-block",
+                            "labelKey": "command-generator.execute.unless-block.label",
+                            "descriptionKey": "command-generator.execute.unless-block.desc",
+                            "template": "unless block {pos} {block}",
+                            "arguments": [
+                                {
+                                    "name": "pos",
+                                    "displayNameKey": "command-generator.arg.execute.unless-block.pos.display",
+                                    "type": "coordinates",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-block.pos.desc",
+                                    "placeholder": "~ ~-1 ~"
+                                },
+                                {
+                                    "name": "block",
+                                    "displayNameKey": "command-generator.arg.execute.unless-block.block.display",
+                                    "type": "block",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-block.block.desc",
+                                    "placeholder": "minecraft:bedrock"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "unless-score",
+                            "labelKey": "command-generator.execute.unless-score.label",
+                            "descriptionKey": "command-generator.execute.unless-score.desc",
+                            "template": "unless score {target} {objective} {operator} {source} {sourceObjective}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.unless-score.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-score.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "objective",
+                                    "displayNameKey": "command-generator.arg.execute.unless-score.objective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-score.objective.desc"
+                                },
+                                {
+                                    "name": "operator",
+                                    "displayNameKey": "command-generator.arg.execute.unless-score.operator.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-score.operator.desc",
+                                    "enumValues": ["<", "<=", "=", ">=", ">"],
+                                    "defaultValue": "="
+                                },
+                                {
+                                    "name": "source",
+                                    "displayNameKey": "command-generator.arg.execute.unless-score.source.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-score.source.desc",
+                                    "placeholder": "@p"
+                                },
+                                {
+                                    "name": "sourceObjective",
+                                    "displayNameKey": "command-generator.arg.execute.unless-score.sourceObjective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.unless-score.sourceObjective.desc"
+                                }
+                            ]
+                        }
                     ]
                 },
                 {
                     "id": "store",
-                    "label": "存储子命令 · 保存结果（Java 版）",
+                    "labelKey": "command-generator.execute.category.store",
                     "subcommands": [
-                        { "id": "store-result-score", "label": "store result score · 存入记分板", "description": "把命令的实际结果值存入记分板", "template": "store result score {target} {objective}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "记分持有者", "placeholder": "@s", "presets": [{ "label": "自己", "value": "@s" }] }, { "name": "objective", "displayName": "记分项", "type": "objective", "required": true, "description": "记分项名称", "placeholder": "kills" }] },
-                        { "id": "store-success-score", "label": "store success score · 存入成功状态", "description": "把命令是否成功（1 或 0）存入记分板", "template": "store success score {target} {objective}", "arguments": [{ "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "记分持有者", "placeholder": "@s" }, { "name": "objective", "displayName": "记分项", "type": "objective", "required": true, "description": "记分项名称", "placeholder": "found" }] },
-                        { "id": "store-result-bossbar", "label": "store result bossbar · 存入 Boss 栏", "description": "把结果值存入 Boss 栏的当前值或最大值", "template": "store result bossbar {id} {valueOrMax}", "arguments": [{ "name": "id", "displayName": "Boss 栏 ID", "type": "string", "required": true, "description": "Boss 栏标识符", "placeholder": "minecraft:my_boss" }, { "name": "valueOrMax", "displayName": "存储位置", "type": "enum", "required": true, "description": "value 当前值 / max 最大值", "enumValues": ["value", "max"], "defaultValue": "value" }] }
+                        {
+                            "id": "store-result-score",
+                            "labelKey": "command-generator.execute.store-result-score.label",
+                            "descriptionKey": "command-generator.execute.store-result-score.desc",
+                            "template": "store result score {target} {objective}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.store-result-score.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-result-score.target.desc",
+                                    "placeholder": "@s",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.common.self", "value": "@s" }
+                                    ]
+                                },
+                                {
+                                    "name": "objective",
+                                    "displayNameKey": "command-generator.arg.execute.store-result-score.objective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-result-score.objective.desc",
+                                    "placeholder": "kills"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "store-success-score",
+                            "labelKey": "command-generator.execute.store-success-score.label",
+                            "descriptionKey": "command-generator.execute.store-success-score.desc",
+                            "template": "store success score {target} {objective}",
+                            "arguments": [
+                                {
+                                    "name": "target",
+                                    "displayNameKey": "command-generator.arg.execute.store-success-score.target.display",
+                                    "type": "entity-selector",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-success-score.target.desc",
+                                    "placeholder": "@s"
+                                },
+                                {
+                                    "name": "objective",
+                                    "displayNameKey": "command-generator.arg.execute.store-success-score.objective.display",
+                                    "type": "objective",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-success-score.objective.desc",
+                                    "placeholder": "found"
+                                }
+                            ]
+                        },
+                        {
+                            "id": "store-result-bossbar",
+                            "labelKey": "command-generator.execute.store-result-bossbar.label",
+                            "descriptionKey": "command-generator.execute.store-result-bossbar.desc",
+                            "template": "store result bossbar {id} {valueOrMax}",
+                            "arguments": [
+                                {
+                                    "name": "id",
+                                    "displayNameKey": "command-generator.arg.execute.store-result-bossbar.id.display",
+                                    "type": "string",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-result-bossbar.id.desc",
+                                    "placeholder": "minecraft:my_boss"
+                                },
+                                {
+                                    "name": "valueOrMax",
+                                    "displayNameKey": "command-generator.arg.execute.store-result-bossbar.valueOrMax.display",
+                                    "type": "enum",
+                                    "required": true,
+                                    "descriptionKey": "command-generator.arg.execute.store-result-bossbar.valueOrMax.desc",
+                                    "enumValues": ["value", "max"],
+                                    "defaultValue": "value",
+                                    "presets": [
+                                        { "labelKey": "command-generator.preset.bossbar-value.value", "value": "value" },
+                                        { "labelKey": "command-generator.preset.bossbar-value.max", "value": "max" }
+                                    ]
+                                }
+                            ]
+                        }
                     ]
                 }
             ]

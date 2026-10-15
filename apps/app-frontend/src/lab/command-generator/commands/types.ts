@@ -26,17 +26,17 @@ export type ArgumentType =
 export type NbtKind = 'item' | 'entity' | 'generic'
 
 export interface ArgumentPreset {
-    label: string
+    labelKey: string
     value: string | number | boolean
-    description?: string
+    descriptionKey?: string
 }
 
 export interface CommandArgument {
     name: string
-    displayName: string
+    displayNameKey: string
     type: ArgumentType
     required: boolean
-    description: string
+    descriptionKey: string
     enumValues?: string[]
     defaultValue?: string | number | boolean
     selector?: boolean
@@ -46,51 +46,65 @@ export interface CommandArgument {
     presets?: ArgumentPreset[]
 }
 
-// ============ Execute 链式构建器专用 ============
-
 export interface ExecuteChainSubcommand {
     id: string
-    label: string
-    description: string
-    /** 命令模板，使用 {argName} 引用参数值 */
+    labelKey: string
+    descriptionKey: string
     template: string
     arguments: CommandArgument[]
 }
 
 export interface ExecuteChainCategory {
     id: string
-    label: string
+    labelKey: string
     subcommands: ExecuteChainSubcommand[]
 }
 
 export interface CommandDefinition {
     id: string
     name: string
-    description: string
+    descriptionKey: string
     category: CommandCategory
     permissionLevel: 0 | 1 | 2 | 3 | 4
     arguments: CommandArgument[]
     aliases?: string[]
     sinceVersion?: string
     removedVersion?: string
-    /** 是否为链式构建命令（如 execute） */
     isChainCommand?: boolean
-    /** 链式子命令分类（仅 isChainCommand 时有效） */
     chainCategories?: ExecuteChainCategory[]
 }
 
 export type CommandCategory =
-    'player' | 'world' | 'entity' | 'block' | 'item' | 'communication' | 'server' | 'data' | 'misc'
+    | 'player'
+    | 'world'
+    | 'entity'
+    | 'block'
+    | 'item'
+    | 'communication'
+    | 'server'
+    | 'data'
+    | 'misc'
 
-export interface CommandDataFile {
+export interface BaseDataFile {
     version: string
     generatedAt: string
     commands: CommandDefinition[]
 }
 
+export interface PatchDataFile {
+    version: string
+    base: string
+    generatedAt: string
+    added?: CommandDefinition[]
+    removed?: string[]
+    patched?: Record<string, Partial<CommandDefinition>>
+}
+
+export type CommandDataFile = BaseDataFile | PatchDataFile
+
 export interface VersionManifest {
     versions: VersionEntry[]
-    default: string
+    defaultVersion: string
 }
 
 export interface VersionEntry {

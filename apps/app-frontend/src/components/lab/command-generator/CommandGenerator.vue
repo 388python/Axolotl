@@ -9,7 +9,7 @@ import {
     VANILLA_COMMANDS,
     findCommand,
 } from '@/lab/command-generator/commands/registry.ts'
-import { findGuide } from '@/lab/command-generator/commands/chinese-guide.ts'
+import { findGuide } from '@/lab/command-generator/command-guides'
 import {
     buildCommand,
     getDefaultValues,

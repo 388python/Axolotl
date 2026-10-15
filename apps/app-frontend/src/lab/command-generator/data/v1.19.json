@@ -6,38 +6,148 @@
         {
             "id": "damage",
             "name": "damage",
-            "description": "对实体造成伤害（1.19.4+）",
+            "descriptionKey": "command-generator.cmd.damage.desc",
             "category": "entity",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "目标选择器", "selector": true, "placeholder": "@e[type=zombie]", "presets": [{ "label": "所有僵尸", "value": "@e[type=zombie]" }, { "label": "所有玩家", "value": "@a" }, { "label": "自己", "value": "@s" }] },
-                { "name": "amount", "displayName": "伤害量", "type": "number", "required": true, "description": "造成的伤害值", "presets": [{ "label": "1", "value": 1 }, { "label": "5", "value": 5 }, { "label": "10", "value": 10 }, { "label": "致死", "value": 1000 }] },
-                { "name": "damageType", "displayName": "伤害类型", "type": "string", "required": false, "description": "伤害类型 ID", "placeholder": "minecraft:generic", "presets": [{ "label": "通用", "value": "minecraft:generic" }, { "label": "火焰", "value": "minecraft:in_fire" }, { "label": "摔落", "value": "minecraft:fall" }, { "label": "虚空", "value": "minecraft:out_of_world" }] },
-                { "name": "source", "displayName": "伤害来源", "type": "string", "required": false, "description": "来源实体选择器", "placeholder": "@p" }
+                {
+                    "name": "target",
+                    "displayNameKey": "command-generator.arg.damage.target.display",
+                    "type": "entity-selector",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.damage.target.desc",
+                    "selector": true,
+                    "placeholder": "@e[type=zombie]",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.entity.all-zombies", "value": "@e[type=zombie]" },
+                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" },
+                        { "labelKey": "command-generator.preset.common.self", "value": "@s" }
+                    ]
+                },
+                {
+                    "name": "amount",
+                    "displayNameKey": "command-generator.arg.damage.amount.display",
+                    "type": "number",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.damage.amount.desc",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.damage-amount.1", "value": 1 },
+                        { "labelKey": "command-generator.preset.damage-amount.5", "value": 5 },
+                        { "labelKey": "command-generator.preset.damage-amount.10", "value": 10 },
+                        { "labelKey": "command-generator.preset.damage-amount.fatal", "value": 1000 }
+                    ]
+                },
+                {
+                    "name": "damageType",
+                    "displayNameKey": "command-generator.arg.damage.damageType.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.damage.damageType.desc",
+                    "placeholder": "minecraft:generic",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.damage-type.generic", "value": "minecraft:generic" },
+                        { "labelKey": "command-generator.preset.damage-type.fire", "value": "minecraft:in_fire" },
+                        { "labelKey": "command-generator.preset.damage-type.fall", "value": "minecraft:fall" },
+                        { "labelKey": "command-generator.preset.damage-type.void", "value": "minecraft:out_of_world" },
+                        { "labelKey": "command-generator.preset.damage-type.drowning", "value": "minecraft:drown" }
+                    ]
+                },
+                {
+                    "name": "source",
+                    "displayNameKey": "command-generator.arg.damage.source.display",
+                    "type": "string",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.damage.source.desc",
+                    "placeholder": "@p"
+                }
             ]
         },
         {
             "id": "ride",
             "name": "ride",
-            "description": "使实体骑乘/被骑乘（1.19.4+）",
+            "descriptionKey": "command-generator.cmd.ride.desc",
             "category": "entity",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "target", "displayName": "目标", "type": "entity-selector", "required": true, "description": "要骑乘的实体", "selector": true, "placeholder": "@s", "presets": [{ "label": "自己", "value": "@s" }, { "label": "所有玩家", "value": "@a" }] },
-                { "name": "action", "displayName": "操作", "type": "enum", "required": true, "description": "mount 骑乘 / dismount 下马", "enumValues": ["mount", "dismount"], "presets": [{ "label": "骑乘", "value": "mount" }, { "label": "下马", "value": "dismount" }] },
-                { "name": "vehicle", "displayName": "载体", "type": "entity-selector", "required": false, "description": "被骑乘的实体", "selector": true, "placeholder": "@e[type=pig]", "presets": [{ "label": "猪", "value": "@e[type=pig]" }, { "label": "船", "value": "@e[type=boat]" }, { "label": "矿车", "value": "@e[type=minecart]" }] }
+                {
+                    "name": "target",
+                    "displayNameKey": "command-generator.arg.ride.target.display",
+                    "type": "entity-selector",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.ride.target.desc",
+                    "selector": true,
+                    "placeholder": "@s",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
+                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" }
+                    ]
+                },
+                {
+                    "name": "action",
+                    "displayNameKey": "command-generator.arg.ride.action.display",
+                    "type": "enum",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.ride.action.desc",
+                    "enumValues": ["mount", "dismount"],
+                    "presets": [
+                        { "labelKey": "command-generator.preset.ride-action.mount", "value": "mount" },
+                        { "labelKey": "command-generator.preset.ride-action.dismount", "value": "dismount" }
+                    ]
+                },
+                {
+                    "name": "vehicle",
+                    "displayNameKey": "command-generator.arg.ride.vehicle.display",
+                    "type": "entity-selector",
+                    "required": false,
+                    "descriptionKey": "command-generator.arg.ride.vehicle.desc",
+                    "selector": true,
+                    "placeholder": "@e[type=pig]",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.entity-type.pig", "value": "@e[type=pig]" },
+                        { "labelKey": "command-generator.preset.entity-type.boat", "value": "@e[type=boat]" },
+                        { "labelKey": "command-generator.preset.entity-type.minecart", "value": "@e[type=minecart]" },
+                        { "labelKey": "command-generator.preset.entity-type.horse", "value": "@e[type=horse]" }
+                    ]
+                }
             ]
         },
         {
             "id": "fillbiome",
             "name": "fillbiome",
-            "description": "填充生物群系区域（1.19+）",
+            "descriptionKey": "command-generator.cmd.fillbiome.desc",
             "category": "world",
             "permissionLevel": 2,
             "arguments": [
-                { "name": "from", "displayName": "起始坐标", "type": "coordinates", "required": true, "description": "起始坐标" },
-                { "name": "to", "displayName": "结束坐标", "type": "coordinates", "required": true, "description": "结束坐标" },
-                { "name": "biome", "displayName": "生物群系", "type": "biome", "required": true, "description": "生物群系 ID", "placeholder": "minecraft:plains", "presets": [{ "label": "平原", "value": "minecraft:plains" }, { "label": "沙漠", "value": "minecraft:desert" }, { "label": "森林", "value": "minecraft:forest" }, { "label": "海洋", "value": "minecraft:ocean" }, { "label": "雪原", "value": "minecraft:snowy_plains" }] }
+                {
+                    "name": "from",
+                    "displayNameKey": "command-generator.arg.fillbiome.from.display",
+                    "type": "coordinates",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.fillbiome.from.desc"
+                },
+                {
+                    "name": "to",
+                    "displayNameKey": "command-generator.arg.fillbiome.to.display",
+                    "type": "coordinates",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.fillbiome.to.desc"
+                },
+                {
+                    "name": "biome",
+                    "displayNameKey": "command-generator.arg.fillbiome.biome.display",
+                    "type": "biome",
+                    "required": true,
+                    "descriptionKey": "command-generator.arg.fillbiome.biome.desc",
+                    "placeholder": "minecraft:plains",
+                    "presets": [
+                        { "labelKey": "command-generator.preset.biome.plains", "value": "minecraft:plains" },
+                        { "labelKey": "command-generator.preset.biome.desert", "value": "minecraft:desert" },
+                        { "labelKey": "command-generator.preset.biome.forest", "value": "minecraft:forest" },
+                        { "labelKey": "command-generator.preset.biome.ocean", "value": "minecraft:ocean" },
+                        { "labelKey": "command-generator.preset.biome.snowy-plains", "value": "minecraft:snowy_plains" },
+                        { "labelKey": "command-generator.preset.biome.jungle", "value": "minecraft:jungle" }
+                    ]
+                }
             ]
         }
     ],

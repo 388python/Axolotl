@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { BlocksIcon, BookmarkIcon, CheckCircleIcon, SparklesIcon, XIcon } from '@modrinth/assets'
-import { Button, Combobox, type ComboboxOption, defineMessages, useVIntl } from '@modrinth/ui'
+import { Button, Combobox, type ComboboxOption, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
 import CommandGeneratorExecuteChain, {
     type ExecuteChainState,
 } from '@/components/lab/command-generator/CommandGeneratorExecuteChain.vue'
-import { findGuide } from '@/lab/command-generator/commands/chinese-guide.ts'
+import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
-    CATEGORY_LABELS,
+    CATEGORY_KEYS,
+    PERMISSION_KEYS,
     getAllCommands,
     findCommand,
     getCurrentVersion,
@@ -22,6 +23,7 @@ import {
     getDefaultValues,
     validateCommand,
 } from '@/lab/command-generator/generator.ts'
+import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 import { loadManifest } from '@/lab/command-generator/loader.ts'
 import {
     applyPresetToValues,
@@ -34,96 +36,14 @@ import {
 
 const { formatMessage } = useVIntl()
 
-const messages = defineMessages({
-    title: { id: 'app.lab.command-generator.title', defaultMessage: 'Command generator' },
-    subtitle: {
-        id: 'app.lab.command-generator.subtitle',
-        defaultMessage: 'Build Minecraft Java Edition commands visually.',
-    },
-    selectVersion: {
-        id: 'app.lab.command-generator.select-version',
-        defaultMessage: 'Game version',
-    },
-    selectCommand: {
-        id: 'app.lab.command-generator.select-command',
-        defaultMessage: 'Choose a command',
-    },
-    selectPlaceholder: {
-        id: 'app.lab.command-generator.select-placeholder',
-        defaultMessage: 'Search a command…',
-    },
-    guideTitle: { id: 'app.lab.command-generator.guide-title', defaultMessage: 'How to use' },
-    guideExamples: {
-        id: 'app.lab.command-generator.guide-examples',
-        defaultMessage: 'Examples',
-    },
-    guideTips: { id: 'app.lab.command-generator.guide-tips', defaultMessage: 'Tips' },
-    parametersTitle: {
-        id: 'app.lab.command-generator.parameters-title',
-        defaultMessage: 'Parameters',
-    },
-    parametersEmpty: {
-        id: 'app.lab.command-generator.parameters-empty',
-        defaultMessage: 'This command takes no arguments.',
-    },
-    generate: { id: 'app.lab.command-generator.generate', defaultMessage: 'Generate' },
-    copy: { id: 'app.lab.command-generator.copy', defaultMessage: 'Copy' },
-    copied: { id: 'app.lab.command-generator.copied', defaultMessage: 'Copied' },
-    result: {
-        id: 'app.lab.command-generator.result',
-        defaultMessage: 'Generated command',
-    },
-    savePreset: {
-        id: 'app.lab.command-generator.save-preset',
-        defaultMessage: 'Save as preset',
-    },
-    presetName: {
-        id: 'app.lab.command-generator.preset-name',
-        defaultMessage: 'Preset name',
-    },
-    myPresets: {
-        id: 'app.lab.command-generator.my-presets',
-        defaultMessage: 'My presets',
-    },
-    filterCategory: {
-        id: 'app.lab.command-generator.filter-category',
-        defaultMessage: 'Category',
-    },
-    filterPermission: {
-        id: 'app.lab.command-generator.filter-permission',
-        defaultMessage: 'Permission level',
-    },
-    filterAll: {
-        id: 'app.lab.command-generator.filter-all',
-        defaultMessage: 'All',
-    },
-    globalPresets: {
-        id: 'app.lab.command-generator.global-presets',
-        defaultMessage: 'All presets',
-    },
-    globalPresetsEmpty: {
-        id: 'app.lab.command-generator.global-presets-empty',
-        defaultMessage: 'No saved presets yet.',
-    },
-    globalPresetsHint: {
-        id: 'app.lab.command-generator.global-presets-hint',
-        defaultMessage: 'Click a preset to jump to its version and command.',
-    },
-})
-
-const PERMISSION_NAMES: Record<number, string> = {
-    0: '所有人',
-    1: '管理员',
-    2: 'OP',
-    3: '服务器控制台',
-    4: '仅单人',
+function t(key: string, fallback?: string): string {
+    return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
 // ============= 状态 =============
 const versionOptions = ref<ComboboxOption[]>([])
 const selectedVersion = ref('')
 const selectedCommandId = ref('')
-const searchQuery = ref('')
 const filterCategory = ref<string>('')
 const filterPermission = ref<string>('')
 const values = ref<Record<string, string | number | boolean>>({})
@@ -142,19 +62,19 @@ const userPresets = ref<UserPreset[]>([])
 // ============= 筛选器选项 =============
 const categoryOptions = computed<ComboboxOption[]>(() => [
     { value: '', label: formatMessage(messages.filterAll) },
-    ...(Object.keys(CATEGORY_LABELS) as CommandCategory[]).map((key) => ({
+    ...(Object.keys(CATEGORY_KEYS) as CommandCategory[]).map((key) => ({
         value: key,
-        label: CATEGORY_LABELS[key],
+        label: t(CATEGORY_KEYS[key]),
     })),
 ])
 
 const permissionOptions = computed<ComboboxOption[]>(() => [
     { value: '', label: formatMessage(messages.filterAll) },
-    { value: '0', label: `0 · ${PERMISSION_NAMES[0]}` },
-    { value: '1', label: `1 · ${PERMISSION_NAMES[1]}` },
-    { value: '2', label: `2 · ${PERMISSION_NAMES[2]}` },
-    { value: '3', label: `3 · ${PERMISSION_NAMES[3]}` },
-    { value: '4', label: `4 · ${PERMISSION_NAMES[4]}` },
+    { value: '0', label: `0 · ${t(PERMISSION_KEYS[0])}` },
+    { value: '1', label: `1 · ${t(PERMISSION_KEYS[1])}` },
+    { value: '2', label: `2 · ${t(PERMISSION_KEYS[2])}` },
+    { value: '3', label: `3 · ${t(PERMISSION_KEYS[3])}` },
+    { value: '4', label: `4 · ${t(PERMISSION_KEYS[4])}` },
 ])
 
 const versionLabelMap = computed<Record<string, string>>(() => {
@@ -181,8 +101,8 @@ const commandOptions = computed<ComboboxOption[]>(() =>
     filteredCommands.value.map((cmd) => ({
         value: cmd.id,
         label: cmd.name,
-        description: cmd.description,
-        category: CATEGORY_LABELS[cmd.category],
+        description: t(cmd.descriptionKey),
+        category: t(CATEGORY_KEYS[cmd.category]),
     })),
 )
 
@@ -196,7 +116,9 @@ const currentGuide = computed(() =>
 )
 
 const permissionName = computed(() =>
-    currentCommand.value ? PERMISSION_NAMES[currentCommand.value.permissionLevel] : '',
+    currentCommand.value
+        ? t(PERMISSION_KEYS[currentCommand.value.permissionLevel])
+        : '',
 )
 
 const currentPresets = computed<UserPreset[]>(() => {
@@ -218,8 +140,8 @@ onMounted(() => {
         value: v.id,
         label: v.label,
     }))
-    selectedVersion.value = manifest.default
-    initializeRegistry(manifest.default)
+    selectedVersion.value = manifest.defaultVersion
+    initializeRegistry(manifest.defaultVersion)
     userPresets.value = getUserPresets()
 })
 
@@ -263,11 +185,10 @@ function generate() {
     if (!selectedCommandId.value || !currentCommand.value) return
     copied.value = false
 
-    // 链式命令（execute）单独处理
     if (isChainCommand.value) {
         const output = executeChainOutput.value.trim()
         if (!output) {
-            errors.value = ['请先构建子命令链']
+            errors.value = [formatMessage(messages.executeBuildFirst)]
             result.value = ''
             return
         }
@@ -308,15 +229,14 @@ function saveCurrentAsPreset() {
     if (!selectedCommandId.value || !currentCommand.value) return
     const name = presetNameInput.value.trim()
     if (!name) {
-        showToast('请输入预设名称')
+        showToast(formatMessage(messages.toastPresetNameRequired))
         return
     }
 
     if (isChainCommand.value) {
-        // 链式命令：保存完整的结构化状态
         const state = executeChainRef.value?.getState()
         if (!state) {
-            showToast('链式构建器未就绪')
+            showToast('Chain builder not ready')
             return
         }
         saveUserPreset(
@@ -330,7 +250,6 @@ function saveCurrentAsPreset() {
             },
         )
     } else {
-        // 普通命令
         const snapshot: Record<string, string | number | boolean> = {}
         for (const arg of currentCommand.value.arguments) {
             snapshot[arg.name] = values.value[arg.name] ?? ''
@@ -342,24 +261,22 @@ function saveCurrentAsPreset() {
 
     presetNameInput.value = ''
     showPresetInput.value = false
-    showToast(`已保存预设「${name}」`)
+    showToast(formatMessage(messages.toastPresetSaved, { name }))
 }
 
 function loadPreset(preset: UserPreset) {
     if (!currentCommand.value) return
 
     if (isChainCommand.value) {
-        // 优先使用结构化状态
         if (preset.executeState) {
             executeChainRef.value?.setState(preset.executeState)
         } else if (preset.chainString) {
-            // 兼容旧预设：只有字符串
             executeChainOutput.value = preset.chainString
         }
     } else {
         values.value = applyPresetToValues(preset, currentCommand.value)
     }
-    showToast(`已加载预设「${preset.name}」`)
+    showToast(formatMessage(messages.toastPresetLoaded, { name: preset.name }))
 }
 
 function removePreset(id: string) {
@@ -369,31 +286,31 @@ function removePreset(id: string) {
     deleteUserPreset(id)
     userPresets.value = getUserPresets()
 
-    showToast(`已删除预设「${preset.name}」`)
+    showToast(formatMessage(messages.toastPresetDeleted, { name: preset.name }))
 }
 
-/** 从全局预设面板跳转：切换版本 → 切换命令 → 加载数据 → 关闭面板 */
 async function jumpToPreset(preset: UserPreset) {
-    // 1. 切换版本（如果不同）
     if (selectedVersion.value !== preset.versionId) {
         selectedVersion.value = preset.versionId
         switchVersion(preset.versionId)
     }
 
-    // 2. 清空筛选，保证目标命令在下拉列表里可见
     filterCategory.value = ''
     filterPermission.value = ''
 
-    // 3. 切换命令
     selectedCommandId.value = preset.commandId
     const cmd = findCommand(preset.commandId)
     if (!cmd) {
-        showToast(`预设「${preset.name}」的命令 ${preset.commandId} 在当前版本不存在`)
+        showToast(
+            formatMessage(messages.toastPresetCommandMissing, {
+                name: preset.name,
+                command: preset.commandId,
+            }),
+        )
         showGlobalPresets.value = false
         return
     }
 
-    // 4. 加载预设值（等 DOM 更新后 ref 才能拿到）
     await nextTick()
     if (cmd.isChainCommand) {
         if (preset.executeState) {
@@ -407,15 +324,14 @@ async function jumpToPreset(preset: UserPreset) {
     result.value = ''
     errors.value = []
 
-    // 5. 关闭面板
     showGlobalPresets.value = false
-    showToast(`已加载预设「${preset.name}」`)
+    showToast(formatMessage(messages.toastPresetLoaded, { name: preset.name }))
 }
 
 function presetCategoryLabel(commandId: string): string {
     const cmd = findCommand(commandId)
     if (!cmd) return commandId
-    return `${CATEGORY_LABELS[cmd.category]} · /${cmd.name}`
+    return `${t(CATEGORY_KEYS[cmd.category])} · /${cmd.name}`
 }
 </script>
 
@@ -450,7 +366,11 @@ function presetCategoryLabel(commandId: string): string {
                     <span class="global-presets-hint">
                         {{ formatMessage(messages.globalPresetsHint) }}
                     </span>
-                    <button type="button" class="close-btn" @click="showGlobalPresets = false">
+                    <button
+                        type="button"
+                        class="close-btn"
+                        @click="showGlobalPresets = false"
+                    >
                         <XIcon />
                     </button>
                 </header>
@@ -558,22 +478,32 @@ function presetCategoryLabel(commandId: string): string {
         <section v-if="currentGuide" class="guide-card">
             <div class="guide-head">
                 <SparklesIcon />
-                <span>{{ formatMessage(messages.guideTitle) }}</span>
+                <span>{{ t('command-generator.guide-title') }}</span>
             </div>
-            <p class="guide-summary">{{ currentGuide.summary }}</p>
+            <p class="guide-summary">{{ t(currentGuide.summaryKey) }}</p>
             <div class="guide-block">
-                <span class="guide-label">{{ formatMessage(messages.guideExamples) }}</span>
+                <span class="guide-label">
+                    {{ t('command-generator.guide-examples') }}
+                </span>
                 <div class="example-list">
-                    <div v-for="ex in currentGuide.examples" :key="ex.command" class="example-row">
+                    <div
+                        v-for="ex in currentGuide.examples"
+                        :key="ex.command"
+                        class="example-row"
+                    >
                         <code class="example-code">{{ ex.command }}</code>
-                        <span class="example-desc">{{ ex.explanation }}</span>
+                        <span class="example-desc">{{ t(ex.explanationKey) }}</span>
                     </div>
                 </div>
             </div>
-            <div v-if="currentGuide.tips?.length" class="guide-block">
-                <span class="guide-label">{{ formatMessage(messages.guideTips) }}</span>
+            <div v-if="currentGuide.tipKeys?.length" class="guide-block">
+                <span class="guide-label">
+                    {{ t('command-generator.guide-tips') }}
+                </span>
                 <ul class="tip-list">
-                    <li v-for="tip in currentGuide.tips" :key="tip">{{ tip }}</li>
+                    <li v-for="tipKey in currentGuide.tipKeys" :key="tipKey">
+                        {{ t(tipKey) }}
+                    </li>
                 </ul>
             </div>
         </section>
@@ -582,7 +512,6 @@ function presetCategoryLabel(commandId: string): string {
         <section v-if="currentCommand" class="parameters-section">
             <h2 class="section-title">{{ formatMessage(messages.parametersTitle) }}</h2>
 
-            <!-- 链式命令（execute）：走专用构建器 -->
             <CommandGeneratorExecuteChain
                 v-if="isChainCommand && currentCommand.chainCategories"
                 ref="executeChainRef"
@@ -590,10 +519,13 @@ function presetCategoryLabel(commandId: string): string {
                 v-model="executeChainOutput"
             />
 
-            <!-- 普通命令：参数表单 + 预设 -->
             <template v-else>
                 <div class="preset-toolbar">
-                    <Button type="outlined" size="2xs" @click="showPresetInput = !showPresetInput">
+                    <Button
+                        type="outlined"
+                        size="2xs"
+                        @click="showPresetInput = !showPresetInput"
+                    >
                         <BookmarkIcon />
                         {{ formatMessage(messages.savePreset) }}
                     </Button>
@@ -628,7 +560,10 @@ function presetCategoryLabel(commandId: string): string {
                             @click="loadPreset(preset)"
                         >
                             {{ preset.name }}
-                            <span class="preset-delete" @click.stop="removePreset(preset.id)">
+                            <span
+                                class="preset-delete"
+                                @click.stop="removePreset(preset.id)"
+                            >
                                 <XIcon />
                             </span>
                         </button>
@@ -648,10 +583,13 @@ function presetCategoryLabel(commandId: string): string {
                 </p>
             </template>
 
-            <!-- 链式命令的预设工具栏（放在链式构建器下方） -->
             <template v-if="isChainCommand">
                 <div class="preset-toolbar">
-                    <Button type="outlined" size="2xs" @click="showPresetInput = !showPresetInput">
+                    <Button
+                        type="outlined"
+                        size="2xs"
+                        @click="showPresetInput = !showPresetInput"
+                    >
                         <BookmarkIcon />
                         {{ formatMessage(messages.savePreset) }}
                     </Button>
@@ -686,7 +624,10 @@ function presetCategoryLabel(commandId: string): string {
                             @click="loadPreset(preset)"
                         >
                             {{ preset.name }}
-                            <span class="preset-delete" @click.stop="removePreset(preset.id)">
+                            <span
+                                class="preset-delete"
+                                @click.stop="removePreset(preset.id)"
+                            >
                                 <XIcon />
                             </span>
                         </button>
@@ -727,7 +668,6 @@ function presetCategoryLabel(commandId: string): string {
 </template>
 
 <style scoped>
-/* ========== 布局 ========== */
 .command-generator {
     display: flex;
     flex-direction: column;
@@ -738,7 +678,6 @@ function presetCategoryLabel(commandId: string): string {
     padding: 1rem 1.25rem 3rem;
 }
 
-/* ========== 标题栏 ========== */
 .page-header {
     display: flex;
     align-items: center;
@@ -795,7 +734,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-brand);
 }
 
-/* ========== 全局预设按钮 ========== */
 .global-presets-button {
     display: inline-flex;
     align-items: center;
@@ -834,7 +772,6 @@ function presetCategoryLabel(commandId: string): string {
     font-weight: 800;
 }
 
-/* ========== 全局预设面板 ========== */
 .global-presets-panel {
     display: flex;
     flex-direction: column;
@@ -979,7 +916,6 @@ function presetCategoryLabel(commandId: string): string {
     height: 0.7rem;
 }
 
-/* ========== 面板 ========== */
 .panel {
     display: flex;
     flex-direction: column;
@@ -1000,7 +936,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-text-tertiary);
 }
 
-/* ========== 筛选器 ========== */
 .filter-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1014,7 +949,6 @@ function presetCategoryLabel(commandId: string): string {
     min-width: 0;
 }
 
-/* ========== 选项行 ========== */
 .option-row {
     display: flex;
     min-width: 0;
@@ -1053,7 +987,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-text-tertiary);
 }
 
-/* ========== 汉化指导 ========== */
 .guide-card {
     display: flex;
     flex-direction: column;
@@ -1140,7 +1073,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-text-tertiary);
 }
 
-/* ========== 参数区 ========== */
 .parameters-section {
     display: flex;
     flex-direction: column;
@@ -1172,7 +1104,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-text-tertiary);
 }
 
-/* ========== 预设工具 ========== */
 .preset-toolbar {
     display: flex;
     align-items: center;
@@ -1265,7 +1196,6 @@ function presetCategoryLabel(commandId: string): string {
     height: 0.6rem;
 }
 
-/* ========== 错误 / 操作 / 结果 ========== */
 .error-panel {
     display: flex;
     align-items: flex-start;
@@ -1355,7 +1285,6 @@ function presetCategoryLabel(commandId: string): string {
     color: var(--color-text-primary);
 }
 
-/* ========== Toast ========== */
 .toast {
     position: fixed;
     bottom: 2rem;
