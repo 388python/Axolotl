@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
+import { Channel, invoke } from '@tauri-apps/api/core'
 
 export type StorageNodeType =
     | 'instances'
@@ -122,8 +122,17 @@ export interface CacheCleanupResult {
     failures: string[]
 }
 
-export function scanStorage(force: boolean): Promise<StorageTree> {
-    return invoke('plugin:storage|storage_scan', { force })
+export type StorageScanEvent =
+    | { kind: 'cached'; tree: StorageTree }
+    | { kind: 'progress'; completed: number; total: number; category: StorageNodeType }
+
+export function scanStorage(
+    force: boolean,
+    progress?: (event: StorageScanEvent) => void,
+): Promise<StorageTree> {
+    const onProgress = new Channel<StorageScanEvent>()
+    onProgress.onmessage = progress ?? (() => {})
+    return invoke('plugin:storage|storage_scan', { force, onProgress })
 }
 
 export function analyzeMeta(): Promise<MetaAnalysis> {

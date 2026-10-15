@@ -14296,5 +14296,11 @@
   },
   "app.settings.storage.close": {
     "message": "关闭"
+  },
+  "app.settings.storage.scanSections": {
+    "message": "{completed} / {total} 个扫描区域"
+  },
+  "app.settings.storage.cachedScanHelp": {
+    "message": "正在刷新占用，当前显示上次扫描结果。"
   }
 }

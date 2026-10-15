@@ -548,10 +548,8 @@ const pageTitle: MessageDescriptor = settingsPageTitle
                                 aria-hidden="true"
                             >
                                 <div class="settings-content-skeleton-inner">
-                                    <div class="h-6 w-40 animate-pulse rounded bg-surface-3" />
-                                    <div
-                                        class="h-3 w-72 max-w-full animate-pulse rounded bg-surface-2"
-                                    />
+                                    <div class="h-6 w-40 rounded bg-surface-3" />
+                                    <div class="h-3 w-72 max-w-full rounded bg-surface-2" />
                                     <div class="mt-2 flex flex-col gap-3">
                                         <div
                                             v-for="row in 5"
@@ -565,15 +563,13 @@ const pageTitle: MessageDescriptor = settingsPageTitle
                                         >
                                             <div class="flex min-w-0 flex-1 flex-col gap-2">
                                                 <div
-                                                    class="h-4 animate-pulse rounded bg-surface-3"
+                                                    class="h-4 rounded bg-surface-3"
                                                     :class="row % 2 === 0 ? 'w-2/5' : 'w-1/3'"
                                                 />
-                                                <div
-                                                    class="h-3 w-3/5 animate-pulse rounded bg-surface-2"
-                                                />
+                                                <div class="h-3 w-3/5 rounded bg-surface-2" />
                                             </div>
                                             <div
-                                                class="h-8 w-16 shrink-0 animate-pulse rounded-lg bg-surface-3"
+                                                class="h-8 w-16 shrink-0 rounded-lg bg-surface-3"
                                             />
                                         </div>
                                     </div>
@@ -959,9 +955,7 @@ const pageTitle: MessageDescriptor = settingsPageTitle
 }
 
 .settings-content-body {
-    transition:
-        opacity 180ms ease,
-        transform 180ms ease;
+    transition: opacity 180ms ease;
 
     /* Programmatic focus target after category changes. Clicking the panel
 	   focuses it; Tab/Shift/Esc then paint the UA ring as a full-panel black
@@ -974,26 +968,21 @@ const pageTitle: MessageDescriptor = settingsPageTitle
 
 .settings-content-body.is-loading {
     opacity: 0;
-    transform: translateY(4px);
     pointer-events: none;
 }
 
 .settings-content-body.is-ready {
     opacity: 1;
-    transform: none;
 }
 
 .settings-content-skeleton-enter-active,
 .settings-content-skeleton-leave-active {
-    transition:
-        opacity 160ms ease,
-        transform 160ms ease;
+    transition: opacity 160ms ease;
 }
 
 .settings-content-skeleton-enter-from,
 .settings-content-skeleton-leave-to {
     opacity: 0;
-    transform: translateY(4px);
 }
 
 .settings-content-header-enter-active,

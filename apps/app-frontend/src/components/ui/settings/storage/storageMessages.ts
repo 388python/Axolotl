@@ -3,6 +3,14 @@ import { defineMessages } from '@modrinth/ui'
 import type { StorageNodeType } from '@/helpers/storage'
 
 export const storageMessages = defineMessages({
+    scanSections: {
+        id: 'app.settings.storage.scanSections',
+        defaultMessage: '{completed} / {total} areas',
+    },
+    cachedScanHelp: {
+        id: 'app.settings.storage.cachedScanHelp',
+        defaultMessage: 'Showing the previous scan while storage usage is refreshed.',
+    },
     clearCache: { id: 'app.settings.storage.clearCache', defaultMessage: 'Clear cache' },
     clearCacheHelp: {
         id: 'app.settings.storage.clearCacheHelp',

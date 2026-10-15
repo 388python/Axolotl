@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { useVIntl } from '@modrinth/ui'
-import { defineAsyncComponent } from 'vue'
 
 import BackupRepositorySettings from './BackupRepositorySettings.vue'
 import ResourceManagementSettings from './ResourceManagementSettings.vue'
 import SettingsSection from './SettingsSection.vue'
 import { storageMessages } from './storage/storageMessages'
+import StorageSettings from './StorageSettings.vue'
 
-const StorageSettings = defineAsyncComponent(() => import('./StorageSettings.vue'))
 const { formatMessage } = useVIntl()
 </script>
 

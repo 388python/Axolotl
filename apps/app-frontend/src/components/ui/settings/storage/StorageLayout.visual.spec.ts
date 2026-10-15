@@ -79,6 +79,14 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
         external: [],
         warnings: [],
     })
+    const initialSnapshot = await vi.mocked(scanStorage).getMockImplementation()!(false)
+    let finishInitial!: (tree: typeof initialSnapshot) => void
+    vi.mocked(scanStorage).mockImplementationOnce((_force, report) => {
+        report?.({ kind: 'progress', completed: 0, total: 16, category: 'instances' })
+        return new Promise((resolve) => {
+            finishInitial = resolve
+        })
+    })
     vi.mocked(analyzeMeta).mockResolvedValue({
         id: 'plan',
         scanned_at: '2026-10-15T00:00:00Z',
@@ -157,10 +165,54 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     })
     mounted.push(wrapper)
     await flushPromises()
+    expect(wrapper.find('strong').exists()).toBe(false)
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(true)
+    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/scan-initial-${width}.png`,
+            element: wrapper.element,
+        })
+    finishInitial(initialSnapshot)
+    await flushPromises()
     await waitFor(() => wrapper.find('strong').exists())
     const categoryRows = wrapper.findAll('.tree-row')
     const cacheRow = categoryRows.find((row) => row.text().includes('缓存数据'))!
     const referenceRow = categoryRows.find((row) => row.text().includes('实例数据'))!
+    for (const row of categoryRows.filter(
+        (row) => row.element.getBoundingClientRect().height > 0,
+    )) {
+        const category = row.element.closest('details') ?? row.element.parentElement!
+        expect(getComputedStyle(category).borderLeftWidth).toBe('0px')
+        expect(getComputedStyle(category).borderRightWidth).toBe('0px')
+        expect(row.element.getBoundingClientRect().left).toBe(
+            referenceRow.element.getBoundingClientRect().left,
+        )
+    }
+    const previous = await vi.mocked(scanStorage).mock.results[0].value
+    let finishScan!: (tree: typeof previous) => void
+    vi.mocked(scanStorage).mockImplementationOnce((_force, report) => {
+        report?.({ kind: 'progress', completed: 3, total: 16, category: 'meta' })
+        return new Promise((resolve) => {
+            finishScan = resolve
+        })
+    })
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '更新')!
+        .trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('19')
+    expect(wrapper.findAll('.tree-row').length).toBe(categoryRows.length)
+    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/scan-progress-${width}.png`,
+            element: wrapper.element,
+        })
+    finishScan(previous)
+    await flushPromises()
+    expect(wrapper.find('[role="progressbar"]').exists()).toBe(false)
     expect(cacheRow.element.getBoundingClientRect().height).toBe(
         referenceRow.element.getBoundingClientRect().height,
     )

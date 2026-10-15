@@ -14284,5 +14284,11 @@
   },
   "app.settings.storage.close": {
     "message": "Close"
+  },
+  "app.settings.storage.scanSections": {
+    "message": "{completed} / {total} areas"
+  },
+  "app.settings.storage.cachedScanHelp": {
+    "message": "Showing the previous scan while storage usage is refreshed."
   }
 }

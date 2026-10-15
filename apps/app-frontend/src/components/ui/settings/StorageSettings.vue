@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { RefreshCwIcon } from '@modrinth/assets'
-import { Button, useFormatBytes, useVIntl } from '@modrinth/ui'
+import { Button, ProgressBar, useFormatBytes, useVIntl } from '@modrinth/ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { type MetaCleanupResult, openStoragePaths, scanStorage } from '@/helpers/storage'
+import {
+    type MetaCleanupResult,
+    openStoragePaths,
+    scanStorage,
+    type StorageScanEvent,
+} from '@/helpers/storage'
 import { previewCacheUsage } from '@/helpers/storage/preview-cache-usage'
 
 import SettingsSection from './SettingsSection.vue'
 import CacheCleanupButton from './storage/CacheCleanupButton.vue'
 import MetaStorageCleanup from './storage/MetaStorageCleanup.vue'
 import type { StorageNode, StorageSize, StorageTree } from './storage/storageData'
-import { storageMessages } from './storage/storageMessages'
+import { storageLabels, storageMessages } from './storage/storageMessages'
 import StorageTreeNode from './storage/StorageTreeNode.vue'
 import StorageUsageChart from './storage/StorageUsageChart.vue'
 
@@ -24,6 +29,8 @@ const loading = ref(true)
 const lastUpdated = ref<Date | null>(null)
 const scanError = ref(false)
 const previewBytes = ref<number | null>(null)
+const scanProgress = ref<Extract<StorageScanEvent, { kind: 'progress' }> | null>(null)
+const showingCache = ref(false)
 let requestId = 0
 
 const categories = computed(() => tree.value?.categories ?? [])
@@ -48,14 +55,24 @@ async function loadStorage(force: boolean) {
     const current = ++requestId
     loading.value = true
     scanError.value = false
+    scanProgress.value = null
+    showingCache.value = false
     try {
         const [snapshot, previews] = await Promise.all([
-            scanStorage(force),
+            scanStorage(force, (event) => {
+                if (current !== requestId) return
+                if (event.kind === 'cached') {
+                    tree.value = event.tree
+                    showingCache.value = true
+                    lastUpdated.value = event.tree.scannedAt ? new Date(event.tree.scannedAt) : null
+                } else scanProgress.value = event
+            }),
             previewCacheUsage().catch(() => null),
         ])
         if (current !== requestId) return false
         previewBytes.value = previews
         tree.value = snapshot
+        showingCache.value = false
         lastUpdated.value = snapshot.scannedAt ? new Date(snapshot.scannedAt) : new Date()
         return true
     } catch (error) {
@@ -172,9 +189,60 @@ function formatDateTime(date: Date) {
         tabindex="-1"
         class="flex w-full flex-col gap-3 text-[var(--color-text-primary)]"
     >
-        <div v-if="loading && !tree" class="flex flex-col gap-3" aria-busy="true">
-            <span>{{ formatMessage(storageMessages.scanning) }}</span>
-            <div v-for="i in 4" :key="i" class="h-8 animate-pulse rounded-lg bg-surface-3" />
+        <div v-if="loading" class="flex flex-col gap-2" aria-busy="true">
+            <div
+                class="flex flex-wrap justify-between gap-2 text-sm text-[var(--color-text-tertiary)]"
+            >
+                <span
+                    >{{ formatMessage(storageMessages.scanning)
+                    }}<template v-if="scanProgress">
+                        · {{ formatMessage(storageLabels[scanProgress.category]) }}</template
+                    ></span
+                >
+                <span v-if="scanProgress" class="tabular-nums">{{
+                    formatMessage(storageMessages.scanSections, {
+                        completed: scanProgress.completed,
+                        total: scanProgress.total,
+                    })
+                }}</span>
+            </div>
+            <ProgressBar
+                :progress="scanProgress?.completed ?? 0"
+                :max="scanProgress?.total ?? 1"
+                full-width
+                :gradient-border="false"
+                :aria-label="formatMessage(storageMessages.scanning)"
+            />
+            <span v-if="showingCache" class="text-xs text-[var(--color-text-tertiary)]">{{
+                formatMessage(storageMessages.cachedScanHelp)
+            }}</span>
+        </div>
+        <div v-if="loading && !tree" class="flex flex-col gap-4" aria-hidden="true">
+            <div
+                class="flex items-center justify-between gap-4 border-0 border-b border-solid border-surface-4 pb-4"
+            >
+                <div class="flex flex-col gap-2">
+                    <div class="h-4 w-16 rounded bg-surface-3" />
+                    <div class="h-8 w-32 rounded bg-surface-3" />
+                </div>
+                <div class="size-28 shrink-0 rounded-full bg-surface-3" />
+            </div>
+            <SettingsSection>
+                <div
+                    class="flex justify-between border-0 border-b border-solid border-surface-4 px-3 py-2 text-xs text-[var(--color-text-tertiary)]"
+                >
+                    <span>{{ formatMessage(storageMessages.dataType) }}</span>
+                    <span>{{ formatMessage(storageMessages.fileSize) }}</span>
+                </div>
+                <div
+                    v-for="row in 6"
+                    :key="row"
+                    class="flex min-h-10 items-center justify-between px-3 py-2"
+                >
+                    <div class="h-4 w-24 rounded bg-surface-4" />
+                    <div class="h-4 w-16 rounded bg-surface-4" />
+                </div>
+            </SettingsSection>
         </div>
         <div v-if="scanError" class="flex items-center justify-between gap-3" role="alert">
             <span>{{ formatMessage(storageMessages.scanFailed) }}</span>
@@ -207,7 +275,7 @@ function formatDateTime(date: Date) {
                 </div>
                 <StorageUsageChart :categories="mainCategories" />
                 <div class="flex flex-col items-end gap-2">
-                    <Button :loading="loading" @click="updateStorage"
+                    <Button :disabled="loading" @click="updateStorage"
                         ><RefreshCwIcon />{{
                             formatMessage(
                                 loading ? storageMessages.updating : storageMessages.update,
@@ -226,7 +294,7 @@ function formatDateTime(date: Date) {
                     <span>{{ formatMessage(storageMessages.dataType) }}</span>
                     <span>{{ formatMessage(storageMessages.fileSize) }}</span>
                 </div>
-                <div class="divide-y divide-solid divide-surface-4">
+                <div class="divide-y divide-solid divide-surface-4 [&>*]:border-x-0">
                     <StorageTreeNode
                         v-for="category in mainCategories"
                         :key="category.id"

@@ -2,7 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 
-import { scanStorage, type StorageTree } from '@/helpers/storage'
+import { scanStorage, type StorageScanEvent, type StorageTree } from '@/helpers/storage'
 
 import StorageSettings from '../StorageSettings.vue'
 
@@ -23,6 +23,10 @@ vi.mock('@modrinth/ui', () => ({
             (_, { attrs, slots }) =>
             () =>
                 h('button', attrs, slots.default?.()),
+    }),
+    ProgressBar: defineComponent({
+        props: ['progress', 'max'],
+        setup: (props) => () => h('progress', { value: props.progress, max: props.max }),
     }),
 }))
 vi.mock('../SettingsSection.vue', () => ({
@@ -96,4 +100,31 @@ it('keeps the cleanup result surface mounted when the metadata category disappea
         'cleanup result',
     )
     expect(wrapper.text()).toContain('0 bytes')
+})
+
+it('shows cached results and actual scan progress while refresh is pending', async () => {
+    let notify!: (event: StorageScanEvent) => void
+    let finish!: (tree: StorageTree) => void
+    vi.mocked(scanStorage).mockImplementationOnce((_force, progress) => {
+        notify = progress!
+        return new Promise((resolve) => {
+            finish = resolve
+        })
+    })
+    const wrapper = mount(StorageSettings, { global: { directives: { tooltip: {} } } })
+    mounted.push(wrapper)
+    await flushPromises()
+    expect(wrapper.find('.animate-pulse').exists()).toBe(false)
+    notify({ kind: 'cached', tree: snapshot() })
+    notify({ kind: 'progress', completed: 3, total: 16, category: 'meta' })
+    await flushPromises()
+    expect(wrapper.text()).toContain('12 bytes')
+    expect(wrapper.text()).toContain('Showing the previous scan')
+    expect(wrapper.get('progress').attributes('value')).toBe('3')
+    expect(wrapper.get('progress').attributes('max')).toBe('16')
+    finish({ ...snapshot(), total: { actual: 20, symlink: 0 } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('20 bytes')
+    expect(wrapper.find('progress').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Showing the previous scan')
 })
