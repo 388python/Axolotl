@@ -4,14 +4,16 @@ import { Button, useFormatBytes, useVIntl } from '@modrinth/ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { openStoragePaths, scanStorage } from '@/helpers/storage'
+import { type MetaCleanupResult, openStoragePaths, scanStorage } from '@/helpers/storage'
 import { previewCacheUsage } from '@/helpers/storage/preview-cache-usage'
 
 import SettingsSection from './SettingsSection.vue'
+import CacheCleanupButton from './storage/CacheCleanupButton.vue'
 import MetaStorageCleanup from './storage/MetaStorageCleanup.vue'
 import type { StorageNode, StorageSize, StorageTree } from './storage/storageData'
-import { storageLabels, storageMessages } from './storage/storageMessages'
+import { storageMessages } from './storage/storageMessages'
 import StorageTreeNode from './storage/StorageTreeNode.vue'
+import StorageUsageChart from './storage/StorageUsageChart.vue'
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
@@ -37,29 +39,9 @@ const mainCategories = computed<StorageNode[]>(() => {
     return list
 })
 
-const categoryLabels = storageLabels
-const palette = [
-    '--color-green',
-    '--color-orange',
-    '--color-purple',
-    '--color-blue',
-    '--color-red',
-    '--color-text-tertiary',
-]
-function categoryColor(index: number) {
-    return `var(${palette[index % palette.length]})`
-}
-
-const hoveredId = ref<string | null>(null)
-
+const overviewSize = computed(() => tree.value?.total.actual ?? 0)
 function sizeTotal(size: StorageSize) {
     return size.actual + size.symlink
-}
-
-function formatSize(size: StorageSize) {
-    const actual = formatBytes(size.actual)
-    if (size.symlink <= 0) return actual
-    return `${actual} + ${formatBytes(size.symlink)}`
 }
 
 async function loadStorage(force: boolean) {
@@ -83,6 +65,40 @@ async function loadStorage(force: boolean) {
         return false
     } finally {
         if (current === requestId) loading.value = false
+    }
+}
+
+function applyCleanup(result: MetaCleanupResult) {
+    if (!tree.value) return
+    const removedByType = new Map<string, number>()
+    for (const [group, removed] of Object.entries(result.removed_groups)) {
+        const category = group.split('/')[0].replaceAll('-', '_')
+        removedByType.set(category, (removedByType.get(category) ?? 0) + removed.bytes)
+    }
+    const categories = tree.value.categories.map((category) => {
+        if (category.type !== 'meta') return category
+        return {
+            ...category,
+            size: {
+                ...category.size,
+                actual: Math.max(0, category.size.actual - result.removed_bytes),
+            },
+            children: category.children?.map((child) => ({
+                ...child,
+                size: {
+                    ...child.size,
+                    actual: Math.max(0, child.size.actual - (removedByType.get(child.type) ?? 0)),
+                },
+            })),
+        }
+    })
+    tree.value = {
+        ...tree.value,
+        categories,
+        total: {
+            ...tree.value.total,
+            actual: Math.max(0, tree.value.total.actual - result.removed_bytes),
+        },
     }
 }
 
@@ -142,116 +158,6 @@ async function handleAction(node: StorageNode) {
     await openNodePaths(node)
 }
 
-interface ChartItem {
-    id: string
-    category: StorageNode
-    label: string
-    sizeBytes: number
-    formattedSize: string
-    color: string
-    isSymlink: boolean
-    startAngle: number
-    endAngle: number
-    pathData: string
-    percentText: string
-}
-
-// 极其精准的 SVG Path 圆弧/环形生成算法（彻底解决 SVG circle dashoffset 错位乱套问题）
-function getRingPath(
-    cx: number,
-    cy: number,
-    rInner: number,
-    rOuter: number,
-    startAngle: number,
-    endAngle: number,
-) {
-    // 防止 100% 比例下起点终点重合导致无法绘制
-    const angleDiff = endAngle - startAngle
-    const safeEndAngle = angleDiff >= 360 ? startAngle + 359.999 : endAngle
-
-    const rad = (deg: number) => (deg - 90) * (Math.PI / 180)
-
-    const x1 = cx + rOuter * Math.cos(rad(startAngle))
-    const y1 = cy + rOuter * Math.sin(rad(startAngle))
-    const x2 = cx + rOuter * Math.cos(rad(safeEndAngle))
-    const y2 = cy + rOuter * Math.sin(rad(safeEndAngle))
-
-    const x3 = cx + rInner * Math.cos(rad(safeEndAngle))
-    const y3 = cy + rInner * Math.sin(rad(safeEndAngle))
-    const x4 = cx + rInner * Math.cos(rad(startAngle))
-    const y4 = cy + rInner * Math.sin(rad(startAngle))
-
-    const largeArc = angleDiff > 180 ? 1 : 0
-
-    return [
-        `M ${x1} ${y1}`,
-        `A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2} ${y2}`,
-        `L ${x3} ${y3}`,
-        `A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4} ${y4}`,
-        'Z',
-    ].join(' ')
-}
-
-const chartSlices = computed(() => {
-    const items: {
-        id: string
-        category: StorageNode
-        label: string
-        sizeBytes: number
-        formattedSize: string
-        color: string
-        isSymlink: boolean
-    }[] = []
-
-    // 拆分实体与软链接
-    for (const [index, cat] of mainCategories.value.entries()) {
-        const baseLabel = formatMessage(categoryLabels[cat.type])
-
-        if (cat.size.actual > 0) {
-            items.push({
-                id: `${cat.id}-actual`,
-                category: cat,
-                label: baseLabel,
-                sizeBytes: cat.size.actual,
-                formattedSize: formatBytes(cat.size.actual),
-                color: categoryColor(index),
-                isSymlink: false,
-            })
-        }
-
-        if (cat.size.symlink > 0) {
-            items.push({
-                id: `${cat.id}-symlink`,
-                category: cat,
-                label: `${baseLabel} (${formatMessage(storageMessages.symlinkLabel)})`,
-                sizeBytes: cat.size.symlink,
-                formattedSize: formatBytes(cat.size.symlink),
-                color: categoryColor(index),
-                isSymlink: true,
-            })
-        }
-    }
-
-    const total = items.reduce((acc, item) => acc + item.sizeBytes, 0) || 1
-    let currentAngle = 0
-
-    return items.map((item) => {
-        const ratio = item.sizeBytes / total
-        const angle = ratio * 360
-        const startAngle = currentAngle
-        const endAngle = currentAngle + angle
-        currentAngle = endAngle
-
-        return {
-            ...item,
-            startAngle,
-            endAngle,
-            percentText: `${(ratio * 100).toFixed(1)}%`,
-            pathData: getRingPath(50, 50, 26, 48, startAngle, endAngle), // 外径48，内径26，加粗环形
-        } as ChartItem
-    })
-})
-
 function formatDateTime(date: Date) {
     return new Intl.DateTimeFormat(undefined, {
         dateStyle: 'medium',
@@ -280,149 +186,93 @@ function formatDateTime(date: Date) {
         <template v-if="tree">
             <!-- 顶部面板：总览 + 更新按钮 + 饼图 -->
             <section
-                class="flex flex-wrap items-center justify-between gap-6 overflow-hidden rounded-[var(--radius-md)] border border-solid border-surface-4 bg-surface-3 p-4"
+                class="flex flex-wrap items-center justify-between gap-4 border-0 border-b border-solid border-surface-4 pb-4"
             >
-                <div class="flex shrink-0 flex-col gap-1">
-                    <h2 class="m-0 text-sm font-medium text-[var(--color-text-tertiary)]">
-                        {{ formatMessage(storageMessages.total) }}
-                    </h2>
-
-                    <div class="flex flex-col gap-1 tabular-nums">
-                        <span
-                            class="text-3xl font-bold leading-[1.1] text-[var(--color-text-primary)]"
-                            >{{ formatBytes(tree.total.actual) }}</span
-                        >
-                        <span
-                            v-if="tree.total.symlink > 0"
-                            class="text-sm font-medium text-[var(--color-text-tertiary)]"
-                        >
-                            + {{ formatBytes(tree.total.symlink) }} ({{
-                                formatMessage(storageMessages.symlinkLabel)
-                            }})
-                        </span>
-                    </div>
-
-                    <div class="mt-2 flex flex-col items-start gap-1">
-                        <Button :loading="loading" @click="updateStorage">
-                            <RefreshCwIcon />
-                            {{
-                                formatMessage(
-                                    loading ? storageMessages.updating : storageMessages.update,
-                                )
-                            }}
-                        </Button>
-                        <span
-                            v-if="lastUpdated"
-                            class="flex flex-col text-xs text-[var(--color-text-tertiary)]"
-                        >
-                            <span>{{ formatMessage(storageMessages.lastUpdatedLabel) }}</span>
-                            <span class="tabular-nums">{{ formatDateTime(lastUpdated) }}</span>
-                        </span>
-                    </div>
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm text-[var(--color-text-tertiary)]">{{
+                        formatMessage(storageMessages.total)
+                    }}</span>
+                    <strong class="text-3xl font-semibold leading-tight tabular-nums">{{
+                        formatBytes(overviewSize)
+                    }}</strong>
+                    <span
+                        v-if="tree.total.symlink > 0"
+                        class="text-sm text-[var(--color-text-tertiary)]"
+                        >{{
+                            formatMessage(storageMessages.linkedSize, {
+                                size: formatBytes(tree.total.symlink),
+                            })
+                        }}</span
+                    >
                 </div>
-
-                <div
-                    v-if="mainCategories.length > 0"
-                    class="flex min-w-0 flex-wrap items-center gap-6"
-                >
-                    <div class="relative size-32 shrink-0">
-                        <svg class="h-full w-full overflow-visible" viewBox="0 0 100 100">
-                            <path
-                                v-for="slice in chartSlices"
-                                :key="slice.id"
-                                :d="slice.pathData"
-                                :fill="slice.color"
-                                class="pie-path"
-                                :class="{
-                                    'is-hovered': hoveredId === slice.id,
-                                    'is-dimmed': hoveredId !== null && hoveredId !== slice.id,
-                                }"
-                                @mouseenter="hoveredId = slice.id"
-                                @mouseleave="hoveredId = null"
-                                @click="handleAction(slice.category)"
-                            />
-                        </svg>
-                    </div>
-
-                    <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                        <button
-                            v-for="slice in chartSlices"
-                            :key="slice.id"
-                            type="button"
-                            class="legend-item flex cursor-pointer items-start gap-2 rounded-md border-0 bg-transparent px-2 py-1 text-left text-inherit focus-visible:outline-brand"
-                            :class="{
-                                'is-hovered': hoveredId === slice.id,
-                                'is-dimmed': hoveredId !== null && hoveredId !== slice.id,
-                            }"
-                            @mouseenter="hoveredId = slice.id"
-                            @mouseleave="hoveredId = null"
-                            @click="handleAction(slice.category)"
-                        >
-                            <span
-                                class="legend-dot mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                                :class="{ 'is-symlink-dot': slice.isSymlink }"
-                                :style="{ backgroundColor: slice.color }"
-                            />
-
-                            <div class="flex min-w-0 flex-col leading-tight">
-                                <span
-                                    class="break-words text-sm font-semibold text-[var(--color-text-primary)]"
-                                >
-                                    {{ slice.label }}
-                                </span>
-                                <span
-                                    class="whitespace-nowrap text-xs tabular-nums text-[var(--color-text-tertiary)]"
-                                    >{{ slice.formattedSize }}</span
-                                >
-                                <span
-                                    class="text-xs tabular-nums text-[var(--color-text-tertiary)]"
-                                    >{{ slice.percentText }}</span
-                                >
-                            </div>
-                        </button>
-                    </div>
+                <StorageUsageChart :categories="mainCategories" />
+                <div class="flex flex-col items-end gap-2">
+                    <Button :loading="loading" @click="updateStorage"
+                        ><RefreshCwIcon />{{
+                            formatMessage(
+                                loading ? storageMessages.updating : storageMessages.update,
+                            )
+                        }}</Button
+                    >
+                    <span v-if="lastUpdated" class="text-xs text-[var(--color-text-tertiary)]">{{
+                        formatDateTime(lastUpdated)
+                    }}</span>
                 </div>
             </section>
-
-            <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
-                {{ formatMessage(storageMessages.measurementHelp) }}
-            </p>
-            <details v-if="tree.warnings.length" class="mt-3 text-sm">
-                <summary>{{ formatMessage(storageMessages.incompleteScan) }}</summary>
-                <ul>
+            <SettingsSection>
+                <div
+                    class="flex items-center justify-between border-0 border-b border-solid border-surface-4 px-3 py-2 text-xs font-semibold text-[var(--color-text-tertiary)]"
+                >
+                    <span>{{ formatMessage(storageMessages.dataType) }}</span>
+                    <span>{{ formatMessage(storageMessages.fileSize) }}</span>
+                </div>
+                <div class="divide-y divide-solid divide-surface-4">
+                    <StorageTreeNode
+                        v-for="category in mainCategories"
+                        :key="category.id"
+                        :node="{ ...category, name: undefined }"
+                        :depth="0"
+                        :parent-total="sizeTotal(tree.total)"
+                        @action="handleAction"
+                        ><template v-if="category.type === 'cache'" #actions
+                            ><CacheCleanupButton compact @cleared="updateStorage" /></template
+                    ></StorageTreeNode>
+                    <div
+                        v-if="previewBytes !== null"
+                        v-tooltip="formatMessage(storageMessages.previewCacheHelp)"
+                        class="flex min-h-10 items-center justify-between gap-3 px-3 py-2 text-sm"
+                    >
+                        <span>{{ formatMessage(storageMessages.previewCache) }}</span>
+                        <span class="shrink-0 tabular-nums">{{ formatBytes(previewBytes) }}</span>
+                    </div>
+                </div>
+            </SettingsSection>
+            <details class="text-xs text-[var(--color-text-tertiary)]">
+                <summary class="cursor-pointer">
+                    {{
+                        formatMessage(
+                            tree.warnings.length
+                                ? storageMessages.incompleteScan
+                                : storageMessages.measurementTitle,
+                        )
+                    }}
+                </summary>
+                <p>{{ formatMessage(storageMessages.measurementHelp) }}</p>
+                <ul v-if="tree.warnings.length">
                     <li v-for="warning in tree.warnings" :key="warning" class="break-all">
                         {{ warning }}
                     </li>
                 </ul>
             </details>
-            <SettingsSection v-for="category in mainCategories" :key="category.id" class="mt-6">
-                <template #header>
-                    <div class="flex w-full items-center justify-between gap-3">
-                        <span>{{ formatMessage(categoryLabels[category.type]) }}</span>
-                        <span class="text-sm tabular-nums">{{ formatSize(category.size) }}</span>
-                    </div>
-                </template>
-                <div class="p-4">
-                    <StorageTreeNode
-                        :node="category"
-                        :depth="0"
-                        :parent-total="sizeTotal(tree.total)"
-                        @action="handleAction"
-                    />
-                </div>
-            </SettingsSection>
-            <SettingsSection v-if="previewBytes !== null">
-                <template #header>{{ formatMessage(storageMessages.previewCache) }}</template>
-                <div class="flex flex-col gap-2 p-4">
-                    <span class="font-semibold tabular-nums">{{ formatBytes(previewBytes) }}</span>
-                    <p class="m-0 text-sm text-[var(--color-text-tertiary)]">
-                        {{ formatMessage(storageMessages.previewCacheHelp) }}
-                    </p>
-                </div>
-            </SettingsSection>
             <SettingsSection>
-                <template #header>{{ formatMessage(storageMessages.metaData) }}</template>
-                <div class="p-4"><MetaStorageCleanup :refresh-storage="updateStorage" /></div>
+                <template #header
+                    ><h2 class="m-0 text-lg font-semibold">
+                        {{ formatMessage(storageMessages.metaData) }}
+                    </h2></template
+                >
+                <div class="p-4">
+                    <MetaStorageCleanup :refresh-storage="updateStorage" @cleaned="applyCleanup" />
+                </div>
             </SettingsSection>
             <SettingsSection v-if="tree.external.length" class="mt-6">
                 <template #header>{{ formatMessage(storageMessages.externalData) }}</template>
@@ -443,33 +293,3 @@ function formatDateTime(date: Date) {
         </template>
     </div>
 </template>
-
-<style scoped>
-.pie-path {
-    cursor: pointer;
-    transition: opacity 150ms ease;
-}
-.pie-path.is-dimmed {
-    opacity: 0.3;
-}
-.legend-item {
-    transition:
-        background-color 120ms ease,
-        opacity 150ms ease;
-}
-.legend-item.is-hovered {
-    background: var(--surface-4);
-}
-.legend-item.is-dimmed {
-    opacity: 0.3;
-}
-.legend-dot.is-symlink-dot {
-    border-radius: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-    .pie-path,
-    .legend-item {
-        transition: none;
-    }
-}
-</style>

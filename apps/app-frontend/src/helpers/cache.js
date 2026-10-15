@@ -143,3 +143,29 @@ export async function purge_cache_types(cacheTypes) {
 export async function get_project_versions(projectId, cacheBehaviour) {
     return readCache('plugin:cache|get_project_versions', { projectId, cacheBehaviour })
 }
+
+/** Clears the launcher's rebuildable API and content metadata caches. */
+export async function purgeLauncherCache() {
+    await invoke('plugin:axolotl-resources|resource_cache_clear')
+    await purge_cache_types([
+        'project',
+        'project_v3',
+        'curseforge_project',
+        'version',
+        'user',
+        'team',
+        'organization',
+        'file',
+        'loader_manifest',
+        'minecraft_manifest',
+        'categories',
+        'report_types',
+        'loaders',
+        'game_versions',
+        'donation_platforms',
+        'file_hash',
+        'file_update',
+        'search_results',
+        'search_results_v3',
+    ])
+}

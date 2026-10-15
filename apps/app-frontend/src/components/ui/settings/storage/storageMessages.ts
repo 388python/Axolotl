@@ -3,10 +3,130 @@ import { defineMessages } from '@modrinth/ui'
 import type { StorageNodeType } from '@/helpers/storage'
 
 export const storageMessages = defineMessages({
+    clearCache: { id: 'app.settings.storage.clearCache', defaultMessage: 'Clear cache' },
+    clearCacheHelp: {
+        id: 'app.settings.storage.clearCacheHelp',
+        defaultMessage:
+            'Clears cached resource information, search results and version indexes. Game files, saves and backups are kept. Resource pages may load more slowly until the cache is rebuilt.',
+    },
+    cacheCleared: { id: 'app.settings.storage.cacheCleared', defaultMessage: 'Cache cleared' },
+    cacheClearFailed: {
+        id: 'app.settings.storage.cacheClearFailed',
+        defaultMessage: 'Could not clear the cache. Please try again.',
+    },
+    clearingCache: {
+        id: 'app.settings.storage.clearingCache',
+        defaultMessage: 'Clearing cache\u2026',
+    },
+
+    usageChart: {
+        id: 'app.settings.storage.usageChart',
+        defaultMessage: 'Storage usage by data type',
+    },
+    retainedAmount: {
+        id: 'app.settings.storage.retainedAmount',
+        defaultMessage: '{size} kept until usage can be verified',
+    },
+    unreadablePath: {
+        id: 'app.settings.storage.unreadablePath',
+        defaultMessage: 'Some files could not be read or are links. They are kept.',
+    },
+    externalMetadata: {
+        id: 'app.settings.storage.externalMetadata',
+        defaultMessage:
+            'Linked instances also use this folder. Files with uncertain usage are kept.',
+    },
+    customArguments: {
+        id: 'app.settings.storage.customArguments',
+        defaultMessage: 'Custom launch arguments may use these files, so they are kept.',
+    },
+    activeOperation: {
+        id: 'app.settings.storage.activeOperation',
+        defaultMessage: 'Finish the current installation or recovery before cleaning shared files.',
+    },
+    databaseUnavailable: {
+        id: 'app.settings.storage.databaseUnavailable',
+        defaultMessage: 'Some launcher records could not be read. Unverified files are kept.',
+    },
+    processorUnresolved: {
+        id: 'app.settings.storage.processorUnresolved',
+        defaultMessage:
+            'Some loader installation paths could not be read. Related shared files are kept. Versions: {names}.',
+    },
+    versionUnavailable: {
+        id: 'app.settings.storage.versionUnavailable',
+        defaultMessage:
+            'Some installed versions are missing local version information. Shared files that may be needed are kept. Versions: {names}.',
+    },
+    legacyHelp: {
+        id: 'app.settings.storage.legacyHelp',
+        defaultMessage:
+            'Copies of sounds, textures and other assets for older Minecraft versions. Unused copies can be cleaned after matching them to a local asset index.',
+    },
+    logConfigsHelp: {
+        id: 'app.settings.storage.logConfigsHelp',
+        defaultMessage: 'Files that control how Minecraft writes logs.',
+    },
+    localesHelp: {
+        id: 'app.settings.storage.localesHelp',
+        defaultMessage: 'Language indexes used by synced game settings.',
+    },
+    javaHelp: {
+        id: 'app.settings.storage.javaHelp',
+        defaultMessage: 'Java runtimes are kept because games can select them automatically.',
+    },
+    nativesHelp: {
+        id: 'app.settings.storage.nativesHelp',
+        defaultMessage: 'Platform files extracted for game versions.',
+    },
+    assetsHelp: {
+        id: 'app.settings.storage.assetsHelp',
+        defaultMessage: 'Sounds, textures and other game assets.',
+    },
+    librariesHelp: {
+        id: 'app.settings.storage.librariesHelp',
+        defaultMessage: 'Shared files needed to run Minecraft and its loaders.',
+    },
+    versionsHelp: {
+        id: 'app.settings.storage.versionsHelp',
+        defaultMessage:
+            'Minecraft versions and their loaders. Expand to choose individual versions.',
+    },
+    metaItemCount: { id: 'app.settings.storage.metaItemCount', defaultMessage: '{count} items' },
+    refreshingTotals: {
+        id: 'app.settings.storage.refreshingTotals',
+        defaultMessage: 'Refreshing storage totals…',
+    },
+    availableSpace: {
+        id: 'app.settings.storage.availableSpace',
+        defaultMessage: '{size} can be cleaned',
+    },
+    linkedSize: { id: 'app.settings.storage.linkedSize', defaultMessage: 'Linked files: {size}' },
+    measurementTitle: {
+        id: 'app.settings.storage.measurementTitle',
+        defaultMessage: 'How sizes are counted',
+    },
+    fileSize: { id: 'app.settings.storage.fileSize', defaultMessage: 'Size' },
+    dataType: { id: 'app.settings.storage.dataType', defaultMessage: 'Data type' },
+    analysisTitle: { id: 'app.settings.storage.analysisTitle', defaultMessage: 'Storage analysis' },
+    analysisDescription: {
+        id: 'app.settings.storage.analysisDescription',
+        defaultMessage:
+            'Inspect launcher and game storage, then analyze unused metadata for cleanup.',
+    },
+    openAnalysis: { id: 'app.settings.storage.openAnalysis', defaultMessage: 'Open analysis' },
+    backToStorage: {
+        id: 'app.settings.storage.backToStorage',
+        defaultMessage: 'Back to storage & backups',
+    },
+    unknownUsage: {
+        id: 'app.settings.storage.unknownUsage',
+        defaultMessage: 'Files whose usage cannot be verified are kept.',
+    },
+
     refreshFailed: {
         id: 'app.settings.storage.refresh-failed',
-        defaultMessage:
-            'Cleanup finished, but storage totals could not be refreshed. Retry to update the totals without deleting again.',
+        defaultMessage: 'Files were deleted, but the storage total could not be refreshed.',
     },
     resourceBackups: {
         id: 'app.settings.storage.resource-backups',
@@ -81,22 +201,19 @@ export const storageMessages = defineMessages({
         defaultMessage:
             'These directories are managed outside Axolotl and are excluded from the launcher total. Overlapping directories are listed once.',
     },
-    analyzeMeta: {
-        id: 'app.settings.storage.analyzeMeta',
-        defaultMessage: 'Analyze unused metadata',
-    },
+    analyzeMeta: { id: 'app.settings.storage.analyzeMeta', defaultMessage: 'Check unused files' },
     analyzingMeta: {
         id: 'app.settings.storage.analyzingMeta',
-        defaultMessage: 'Analyzing local references…',
+        defaultMessage: 'Checking file usage…',
     },
     metaHelp: {
         id: 'app.settings.storage.metaHelp',
         defaultMessage:
-            'Checks local references from Release and Beta. Only confirmed unused files can be selected. Java runtimes, language indexes and unrecognized files are kept when their usage cannot be established.',
+            'These files are shared across instances. Check their usage before choosing what to clean.',
     },
     used: { id: 'app.settings.storage.used', defaultMessage: 'In use' },
-    unused: { id: 'app.settings.storage.unused', defaultMessage: 'Unused' },
-    unknown: { id: 'app.settings.storage.unknown', defaultMessage: 'Unconfirmed' },
+    unused: { id: 'app.settings.storage.unused', defaultMessage: 'Can be cleaned' },
+    unknown: { id: 'app.settings.storage.unknown', defaultMessage: 'Kept' },
     metaGroup: { id: 'app.settings.storage.metaGroup', defaultMessage: 'Metadata group' },
     analyzeFailed: {
         id: 'app.settings.storage.analyzeFailed',
@@ -111,18 +228,21 @@ export const storageMessages = defineMessages({
         id: 'app.settings.storage.cleanSelected',
         defaultMessage: 'Clean selected files',
     },
-    cleanTitle: { id: 'app.settings.storage.cleanTitle', defaultMessage: 'Clean unused metadata' },
+    cleanTitle: {
+        id: 'app.settings.storage.cleanTitle',
+        defaultMessage: 'Clean shared game files',
+    },
     cleanConfirm: {
         id: 'app.settings.storage.cleanConfirm',
         defaultMessage:
-            'Delete {size} of unused files from the selected groups? Existing references and file changes will be checked again before deletion.',
+            'Permanently delete {size} of unused files? Files that are still needed will be kept.',
     },
-    cleaning: { id: 'app.settings.storage.cleaning', defaultMessage: 'Cleaning…' },
+    cleaning: { id: 'app.settings.storage.cleaning', defaultMessage: 'Deleting files…' },
     cancel: { id: 'app.settings.storage.cancel', defaultMessage: 'Cancel' },
     cleanResult: {
         id: 'app.settings.storage.cleanResult',
         defaultMessage:
-            'Deleted {count} files ({size}); skipped {skipped} changed or newly referenced files.',
+            'Freed {size} by deleting {count} files. {skipped} changed or referenced files were kept.',
     },
     cleanFailures: {
         id: 'app.settings.storage.cleanFailures',
@@ -130,11 +250,11 @@ export const storageMessages = defineMessages({
     },
     noUnused: {
         id: 'app.settings.storage.noUnused',
-        defaultMessage: 'No confirmed unused metadata was found.',
+        defaultMessage: 'No files are currently available to clean.',
     },
     metaWarnings: {
         id: 'app.settings.storage.metaWarnings',
-        defaultMessage: 'Some references could not be confirmed. Affected files are kept.',
+        defaultMessage: 'Why some files are kept',
     },
     selectGroup: {
         id: 'app.settings.storage.selectGroup',
@@ -142,7 +262,7 @@ export const storageMessages = defineMessages({
     },
     selectedSize: {
         id: 'app.settings.storage.selectedSize',
-        defaultMessage: '{count} groups selected · {size} unused files',
+        defaultMessage: '{count} items selected · {size}',
     },
     refreshRequired: {
         id: 'app.settings.storage.refreshRequired',
@@ -167,10 +287,7 @@ export const storageMessages = defineMessages({
         id: 'app.settings.storage.cache-data',
         defaultMessage: 'Cache data',
     },
-    metaData: {
-        id: 'app.settings.storage.meta-data',
-        defaultMessage: 'Meta data',
-    },
+    metaData: { id: 'app.settings.storage.meta-data', defaultMessage: 'Shared game files' },
     database: {
         id: 'app.settings.storage.database',
         defaultMessage: 'Database',

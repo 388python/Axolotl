@@ -102,7 +102,7 @@ async function analyzed() {
     const refreshStorage = vi.fn().mockResolvedValue(true)
     const wrapper = mount(MetaStorageCleanup, { props: { refreshStorage } })
     mounted.push(wrapper)
-    await button(wrapper, 'Analyze unused metadata').trigger('click')
+    await button(wrapper, 'Check unused files').trigger('click')
     await flushPromises()
     return { wrapper, refreshStorage }
 }
@@ -126,11 +126,17 @@ it('selects only unused groups and keeps confirmation open through deletion and 
     await flushPromises()
     expect(cleanMeta).toHaveBeenCalledWith('plan', ['libraries'])
     expect(wrapper.getComponent({ name: 'NewModal' }).props('disableClose')).toBe(true)
-    finish({ removed_files: 2, removed_bytes: 12, skipped_files: 1, failures: [] })
+    finish({
+        removed_files: 2,
+        removed_bytes: 12,
+        removed_groups: { libraries: { files: 2, bytes: 12 } },
+        skipped_files: 1,
+        failures: [],
+    })
     await flushPromises()
     expect(refreshStorage).toHaveBeenCalledOnce()
     expect(wrapper.find('section').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Deleted 2 files (12 bytes)')
+    expect(wrapper.text()).toContain('Freed 12 bytes by deleting 2 files')
 })
 
 it('keeps the reviewed selection and modal after a cleanup failure', async () => {
@@ -149,14 +155,20 @@ it('keeps the reviewed selection and modal after a cleanup failure', async () =>
     expect(wrapper.getComponent({ name: 'NewModal' }).props('disableClose')).toBe(false)
 })
 
-it('retries only the totals refresh after cleanup has already succeeded', async () => {
+it('closes after deletion while a slow totals refresh continues separately', async () => {
     const { wrapper, refreshStorage } = await analyzed()
     await wrapper.get('[role="checkbox"]').trigger('click')
     await button(wrapper, 'Clean selected files').trigger('click')
-    refreshStorage.mockResolvedValueOnce(false)
+    let finishRefresh!: (value: boolean) => void
+    refreshStorage.mockReturnValueOnce(
+        new Promise<boolean>((resolve) => {
+            finishRefresh = resolve
+        }),
+    )
     vi.mocked(cleanMeta).mockResolvedValue({
         removed_files: 2,
         removed_bytes: 12,
+        removed_groups: { libraries: { files: 2, bytes: 12 } },
         skipped_files: 0,
         failures: [],
     })
@@ -165,12 +177,55 @@ it('retries only the totals refresh after cleanup has already succeeded', async 
         .filter((element) => element.text() === 'Clean selected files')[1]
         .trigger('click')
     await flushPromises()
-    expect(wrapper.find('section').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Cleanup finished, but storage totals could not be refreshed')
+    expect(wrapper.find('section').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Refreshing storage totals')
+    expect(wrapper.text()).toContain('Freed 12 bytes')
     expect(cleanMeta).toHaveBeenCalledOnce()
+    finishRefresh(false)
+    await flushPromises()
+    expect(wrapper.text()).toContain('storage total could not be refreshed')
+    refreshStorage.mockResolvedValueOnce(true)
     await button(wrapper, 'Retry').trigger('click')
     await flushPromises()
     expect(refreshStorage).toHaveBeenCalledTimes(2)
     expect(cleanMeta).toHaveBeenCalledOnce()
-    expect(wrapper.find('section').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('storage total could not be refreshed')
+})
+
+it('shows unknown usage reasons without implying that every file is in use', async () => {
+    vi.mocked(analyzeMeta).mockResolvedValue({
+        id: 'partial',
+        scanned_at: '2026-10-15T00:00:00Z',
+        warnings: [
+            {
+                kind: 'version_unavailable',
+                subject: 'missing-version',
+                detail: 'local JSON is missing',
+            },
+        ],
+        groups: [
+            {
+                id: 'libraries',
+                category: 'libraries',
+                name: '',
+                used: 30,
+                unused: 0,
+                unknown: 12,
+                files: 3,
+            },
+        ],
+    })
+    const wrapper = mount(MetaStorageCleanup, {
+        props: { refreshStorage: vi.fn().mockResolvedValue(true) },
+    })
+    mounted.push(wrapper)
+    await button(wrapper, 'Check unused files').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('details').text()).toContain('Versions: missing-version')
+    expect(wrapper.text()).not.toContain('local JSON is missing')
+    expect(wrapper.text()).toContain(
+        'Some installed versions are missing local version information',
+    )
+    expect(wrapper.text()).toContain('No files are currently available to clean.')
+    expect(wrapper.findAll('[role="checkbox"]')).toHaveLength(0)
 })

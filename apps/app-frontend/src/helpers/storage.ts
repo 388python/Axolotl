@@ -88,16 +88,30 @@ export interface MetaGroup {
     files: number
 }
 
+export interface MetaWarning {
+    kind:
+        | 'version_unavailable'
+        | 'processor_unresolved'
+        | 'database_unavailable'
+        | 'active_operation'
+        | 'custom_arguments'
+        | 'external_metadata'
+        | 'unreadable_path'
+    subject: string
+    detail: string
+}
+
 export interface MetaAnalysis {
     id: string
     scanned_at: string
     groups: MetaGroup[]
-    warnings: string[]
+    warnings: MetaWarning[]
 }
 
 export interface MetaCleanupResult {
     removed_files: number
     removed_bytes: number
+    removed_groups: Record<string, { files: number; bytes: number }>
     skipped_files: number
     failures: string[]
 }

@@ -36,6 +36,9 @@ vi.mock('../SettingsSection.vue', () => ({
 vi.mock('./StorageTreeNode.vue', () => ({
     default: defineComponent({ props: ['node'], setup: (props) => () => h('div', props.node.id) }),
 }))
+vi.mock('./CacheCleanupButton.vue', () => ({
+    default: defineComponent({ setup: () => () => h('button', 'Clear cache') }),
+}))
 vi.mock('./MetaStorageCleanup.vue', () => ({
     default: defineComponent({ setup: () => () => h('input', { 'data-test': 'cleanup' }) }),
 }))
@@ -56,7 +59,7 @@ const snapshot = (): StorageTree => ({
 
 it('keeps the last complete snapshot and cleanup state when refresh fails', async () => {
     vi.mocked(scanStorage).mockResolvedValueOnce(snapshot())
-    const wrapper = mount(StorageSettings)
+    const wrapper = mount(StorageSettings, { global: { directives: { tooltip: {} } } })
     mounted.push(wrapper)
     await flushPromises()
     await wrapper.get('[data-test="cleanup"]').setValue('selection context')
@@ -75,7 +78,7 @@ it('keeps the last complete snapshot and cleanup state when refresh fails', asyn
 
 it('keeps the cleanup result surface mounted when the metadata category disappears', async () => {
     vi.mocked(scanStorage).mockResolvedValueOnce(snapshot())
-    const wrapper = mount(StorageSettings)
+    const wrapper = mount(StorageSettings, { global: { directives: { tooltip: {} } } })
     mounted.push(wrapper)
     await flushPromises()
     await wrapper.get('[data-test="cleanup"]').setValue('cleanup result')

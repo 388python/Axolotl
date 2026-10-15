@@ -9642,7 +9642,7 @@
     "message": "上次更新："
   },
   "app.settings.storage.meta-data": {
-    "message": "Meta 数据"
+    "message": "游戏共享文件"
   },
   "app.settings.storage.minimap": {
     "message": "小地图"
@@ -14106,22 +14106,22 @@
     "message": "这些目录由 Axolotl 之外的程序管理，不计入启动器总量。重叠目录只列出一次。"
   },
   "app.settings.storage.analyzeMeta": {
-    "message": "分析闲置 meta 文件"
+    "message": "检查可清理文件"
   },
   "app.settings.storage.analyzingMeta": {
-    "message": "正在分析本地引用…"
+    "message": "正在检查使用情况…"
   },
   "app.settings.storage.metaHelp": {
-    "message": "检查 Release 和 Beta 的本地引用，仅允许选择确认闲置的文件。Java 运行环境、语言索引和无法确定用途的文件会保留。"
+    "message": "这些文件由多个实例共用。先检查使用情况，再选择要清理的内容。"
   },
   "app.settings.storage.used": {
     "message": "正在使用"
   },
   "app.settings.storage.unused": {
-    "message": "确认闲置"
+    "message": "可清理"
   },
   "app.settings.storage.unknown": {
-    "message": "无法确认"
+    "message": "已保留"
   },
   "app.settings.storage.metaGroup": {
     "message": "meta 分组"
@@ -14136,34 +14136,34 @@
     "message": "清理所选文件"
   },
   "app.settings.storage.cleanTitle": {
-    "message": "清理闲置 meta 文件"
+    "message": "清理游戏共享文件"
   },
   "app.settings.storage.cleanConfirm": {
-    "message": "将删除所选分组中共 {size} 的闲置文件。删除前会再次检查引用和文件变化。"
+    "message": "将永久删除 {size} 的闲置文件。仍被使用的文件会保留。"
   },
   "app.settings.storage.cleaning": {
-    "message": "正在清理…"
+    "message": "正在删除文件，请稍候…"
   },
   "app.settings.storage.cancel": {
     "message": "取消"
   },
   "app.settings.storage.cleanResult": {
-    "message": "已删除 {count} 个文件（{size}），跳过 {skipped} 个发生变化或新增引用的文件。"
+    "message": "已删除 {count} 个文件，释放 {size}；保留了 {skipped} 个发生变化或仍被引用的文件。"
   },
   "app.settings.storage.cleanFailures": {
     "message": "部分文件未能删除。"
   },
   "app.settings.storage.noUnused": {
-    "message": "未发现确认闲置的 meta 文件。"
+    "message": "目前没有可清理的文件。"
   },
   "app.settings.storage.metaWarnings": {
-    "message": "部分引用无法确认，受影响的文件已保留。"
+    "message": "为什么部分文件被保留"
   },
   "app.settings.storage.selectGroup": {
     "message": "选择 {name} 中的闲置文件"
   },
   "app.settings.storage.selectedSize": {
-    "message": "已选择 {count} 个分组 · 闲置文件共 {size}"
+    "message": "已选择 {count} 项，共 {size}"
   },
   "app.settings.storage.refreshRequired": {
     "message": "分析结果是一次快照。安装、删除或修改实例后，请重新分析。"
@@ -14181,6 +14181,108 @@
     "message": "此 WebView 保存的图片数据大小，不含数据库额外开销，与启动器文件总量分开统计。"
   },
   "app.settings.storage.refresh-failed": {
-    "message": "清理已完成，但未能刷新占用统计。重试只会刷新统计，不会再次删除文件。"
+    "message": "文件已删除，但占用统计刷新失败。"
+  },
+  "app.settings.storage.analysisTitle": {
+    "message": "存储分析"
+  },
+  "app.settings.storage.analysisDescription": {
+    "message": "查看启动器与游戏的占用明细，并分析和清理闲置 meta 文件。"
+  },
+  "app.settings.storage.openAnalysis": {
+    "message": "打开分析"
+  },
+  "app.settings.storage.backToStorage": {
+    "message": "返回存储与备份"
+  },
+  "app.settings.storage.unknownUsage": {
+    "message": "无法确认用途的文件已保留。"
+  },
+  "app.settings.storage.dataType": {
+    "message": "数据类型"
+  },
+  "app.settings.storage.fileSize": {
+    "message": "占用"
+  },
+  "app.settings.storage.measurementTitle": {
+    "message": "统计说明"
+  },
+  "app.settings.storage.linkedSize": {
+    "message": "链接引用：{size}"
+  },
+  "app.settings.storage.availableSpace": {
+    "message": "可清理 {size}"
+  },
+  "app.settings.storage.refreshingTotals": {
+    "message": "正在刷新占用统计…"
+  },
+  "app.settings.storage.metaItemCount": {
+    "message": "{count} 项"
+  },
+  "app.settings.storage.versionsHelp": {
+    "message": "Minecraft 版本与加载器，展开可选择具体版本。"
+  },
+  "app.settings.storage.librariesHelp": {
+    "message": "Minecraft 和加载器共用的运行文件。"
+  },
+  "app.settings.storage.assetsHelp": {
+    "message": "游戏使用的声音、纹理等资源。"
+  },
+  "app.settings.storage.nativesHelp": {
+    "message": "各游戏版本解压出的系统运行库。"
+  },
+  "app.settings.storage.javaHelp": {
+    "message": "游戏可能自动选择 Java，本次保留这些运行环境。"
+  },
+  "app.settings.storage.localesHelp": {
+    "message": "同步游戏设置时使用的语言索引。"
+  },
+  "app.settings.storage.logConfigsHelp": {
+    "message": "控制 Minecraft 日志输出的配置。"
+  },
+  "app.settings.storage.legacyHelp": {
+    "message": "为旧版 Minecraft 保留的音效、材质等资源副本。与本地资源索引核对一致且未被使用的副本可以清理。"
+  },
+  "app.settings.storage.versionUnavailable": {
+    "message": "部分实例缺少本地版本信息，可能被引用的共享文件已保留。涉及版本：{names}。"
+  },
+  "app.settings.storage.processorUnresolved": {
+    "message": "部分加载器的安装路径无法解析，相关共享文件已保留。涉及版本：{names}。"
+  },
+  "app.settings.storage.databaseUnavailable": {
+    "message": "部分启动器记录无法读取，未能确认用途的文件已保留。"
+  },
+  "app.settings.storage.activeOperation": {
+    "message": "请等待当前安装或恢复任务完成后再清理。"
+  },
+  "app.settings.storage.customArguments": {
+    "message": "自定义启动参数可能使用这些文件，本次已保留。"
+  },
+  "app.settings.storage.externalMetadata": {
+    "message": "关联的外部实例也使用此目录，未能确认用途的文件已保留。"
+  },
+  "app.settings.storage.unreadablePath": {
+    "message": "部分文件无法读取或是链接，本次已保留。"
+  },
+  "app.settings.storage.retainedAmount": {
+    "message": "另有 {size} 因用途未确认而保留"
+  },
+  "app.settings.storage.usageChart": {
+    "message": "各数据类型的占用比例"
+  },
+  "app.settings.storage.clearCache": {
+    "message": "清理缓存"
+  },
+  "app.settings.storage.clearCacheHelp": {
+    "message": "清除资源信息、搜索结果和版本索引等缓存。游戏文件、存档和备份会保留；重新获取缓存前，资源页面可能加载较慢。"
+  },
+  "app.settings.storage.cacheCleared": {
+    "message": "缓存已清理"
+  },
+  "app.settings.storage.cacheClearFailed": {
+    "message": "缓存清理失败，请重试。"
+  },
+  "app.settings.storage.clearingCache": {
+    "message": "正在清理缓存…"
   }
 }

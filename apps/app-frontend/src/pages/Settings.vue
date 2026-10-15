@@ -232,8 +232,9 @@ function selectCategory(categoryId: string) {
     contentContainer.value?.scrollTo({ top: 0 })
     // Keep the URL hash in sync so a remount (error recovery, HMR) restores
     // this tab instead of falling back to the default category.
-    if (route.hash !== `#${categoryId}`) {
-        void router.replace({ hash: `#${categoryId}` })
+    if (route.hash !== `#${categoryId}` || route.query.page) {
+        const { page: _page, ...query } = route.query
+        void router.replace({ query, hash: `#${categoryId}` })
     }
 }
 
@@ -245,6 +246,11 @@ async function selectSearchResult(result: SettingsSearchResult) {
     selectedCategoryId.value = result.category.id
     expandedGroups.value[result.category.group] = true
     searchQuery.value = ''
+    const { page: _page, ...query } = route.query
+    await router.replace({
+        query: { ...query, page: result.entry?.page },
+        hash: `#${result.category.id}`,
+    })
     contentContainer.value?.scrollTo({ top: 0 })
 
     if (!result.entry) return

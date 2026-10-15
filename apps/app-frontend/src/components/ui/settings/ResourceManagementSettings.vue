@@ -2,7 +2,6 @@
 import { BoxIcon, FolderOpenIcon, FolderSearchIcon, PlusIcon, TrashIcon } from '@modrinth/assets'
 import {
     Combobox,
-    ConfirmModal,
     defineMessages,
     IconButton,
     injectNotificationManager,
@@ -15,7 +14,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { computed, ref, watch } from 'vue'
 
-import { purge_cache_types } from '@/helpers/cache.js'
 import { configureCurseForgeManualDownloadWatcher } from '@/helpers/curseforge'
 import { syncConfiguredDirectLinks } from '@/helpers/direct-link-sync'
 import {
@@ -26,10 +24,10 @@ import { resourcePreferredSource, resourceSetPreferredSource } from '@/helpers/r
 import { get, getProxyConfig, setProxyConfig, testProxyConfig, update } from '@/helpers/settings.ts'
 import { createSettingsPatchSaver } from '@/helpers/settings-patch'
 import { showAppDbBackupsFolder } from '@/helpers/utils.js'
-import { useTheming } from '@/store/state'
 
 import SettingsRow from './SettingsRow.vue'
 import SettingsSection from './SettingsSection.vue'
+import CacheCleanupButton from './storage/CacheCleanupButton.vue'
 
 const props = defineProps({
     scope: {
@@ -41,13 +39,11 @@ const props = defineProps({
 })
 
 const { handleError } = injectNotificationManager()
-const themeStore = useTheming()
 const settings = ref(await get())
 const saveDraft = createSettingsPatchSaver(settings.value, update)
 const missingContentScannerSettings = ref(getMissingContentScannerSettings())
 const minecraftDirectories = ref(loadMinecraftDirectories())
 const minecraftDirectoryError = ref(null)
-const purgeCacheConfirmModal = ref(null)
 const { formatMessage } = useVIntl()
 const preferredResourceSource = ref('modrinth')
 try {
@@ -246,17 +242,7 @@ const messages = defineMessages({
         id: 'app.settings.resources.minecraft-directory-mode.automatic',
         defaultMessage: 'Automatic',
     },
-    purgeConfirmTitle: {
-        id: 'app.settings.resources.purge-confirm-title',
-        defaultMessage: 'Are you sure you want to purge the cache?',
-    },
-    purgeConfirmDescription: {
-        id: 'app.settings.resources.purge-confirm-description',
-        defaultMessage:
-            'If you proceed, your entire cache will be purged. This may slow down the app temporarily.',
-    },
     appCache: { id: 'app.settings.resources.app-cache', defaultMessage: 'App cache' },
-    purgeCache: { id: 'app.settings.resources.purge-cache', defaultMessage: 'Purge cache' },
     appCacheDescription: {
         id: 'app.settings.resources.app-cache-description',
         defaultMessage:
@@ -713,44 +699,6 @@ watch(
     { deep: true },
 )
 
-async function purgeCache() {
-    try {
-        await invoke('plugin:axolotl-resources|resource_cache_clear')
-        await purge_cache_types([
-            'project',
-            'project_v3',
-            'curseforge_project',
-            'version',
-            'user',
-            'team',
-            'organization',
-            'file',
-            'loader_manifest',
-            'minecraft_manifest',
-            'categories',
-            'report_types',
-            'loaders',
-            'game_versions',
-            'donation_platforms',
-            'file_hash',
-            'file_update',
-            'search_results',
-            'search_results_v3',
-        ])
-    } catch (error) {
-        handleError(error)
-    }
-}
-
-function handlePurgeCacheClick() {
-    if (themeStore.getFeatureFlag('skip_non_essential_warnings')) {
-        void purgeCache()
-        return
-    }
-
-    purgeCacheConfirmModal.value?.show()
-}
-
 async function openDbBackupsFolder() {
     await showAppDbBackupsFolder().catch(handleError)
 }
@@ -810,15 +758,6 @@ function validateMinecraftDirectory(_value) {
 
 <template>
     <div class="flex flex-col gap-6">
-        <ConfirmModal
-            ref="purgeCacheConfirmModal"
-            :title="formatMessage(messages.purgeConfirmTitle)"
-            :description="formatMessage(messages.purgeConfirmDescription)"
-            :has-to-type="false"
-            :proceed-label="formatMessage(messages.purgeCache)"
-            @proceed="purgeCache"
-        />
-
         <SettingsSection
             v-if="props.scope === 'storage-backups'"
             :title="formatMessage(messages.dataStorageSectionTitle)"
@@ -910,10 +849,7 @@ function validateMinecraftDirectory(_value) {
                 </template>
                 <template #description>{{ formatMessage(messages.appCacheDescription) }}</template>
                 <template #control>
-                    <button id="purge-cache" class="btn min-w-max" @click="handlePurgeCacheClick">
-                        <TrashIcon />
-                        {{ formatMessage(messages.purgeCache) }}
-                    </button>
+                    <CacheCleanupButton />
                 </template>
             </SettingsRow>
             <SettingsRow>

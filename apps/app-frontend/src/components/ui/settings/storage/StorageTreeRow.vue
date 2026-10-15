@@ -27,18 +27,6 @@ const typeLabels = storageLabels
 const hasChildren = computed(() => (props.node.children?.length ?? 0) > 0)
 const isDirectory = computed(() => (props.node.paths[0]?.kind ?? 'directory') !== 'file')
 
-const actualShare = computed(() =>
-    props.parentTotal > 0 ? props.node.size.actual / props.parentTotal : 0,
-)
-
-const symShare = computed(() =>
-    props.parentTotal > 0 ? props.node.size.symlink / props.parentTotal : 0,
-)
-
-const totalShare = computed(() => Math.min(1, actualShare.value + symShare.value))
-
-const percent = computed(() => Math.round(totalShare.value * 100))
-
 const displayLabel = computed(() => props.node.name ?? formatMessage(typeLabels[props.node.type]))
 
 const tooltipText = computed(() => props.node.paths.map((path) => path.path).join('\n'))
@@ -60,23 +48,6 @@ const symlinkSizeTooltip = computed(() =>
     }),
 )
 
-const progressTitle = computed(() =>
-    props.node.size.symlink > 0
-        ? `${actualSizeTooltip.value}\n${symlinkSizeTooltip.value}`
-        : actualSizeTooltip.value,
-)
-
-const progressTooltip = computed(() => ({
-    content: progressTitle.value,
-    popperClass: 'storage-tooltip',
-}))
-
-const progressLabel = computed(() =>
-    props.node.size.symlink > 0
-        ? `${actualSizeTooltip.value} ${symlinkSizeTooltip.value}`
-        : actualSizeTooltip.value,
-)
-
 const actualSizeText = computed(() => formatBytes(props.node.size.actual))
 const symlinkSizeText = computed(() => formatBytes(props.node.size.symlink))
 
@@ -85,8 +56,8 @@ const openActionLabel = computed(() => formatMessage(storageMessages.openAction)
 
 <template>
     <div
-        class="tree-row flex min-h-8 select-none items-center justify-between border-0 bg-transparent px-2 py-1 hover:bg-surface-3"
-        :class="{ clickable: hasChildren, 'is-expanded': expanded }"
+        class="tree-row flex min-h-10 select-none items-center justify-between border-0 bg-transparent px-3 py-2 hover:bg-surface-4"
+        :class="{ 'cursor-pointer': hasChildren, 'is-expanded': expanded }"
     >
         <!-- 左侧树层级与名称部分 -->
         <div class="flex h-full min-w-0 flex-1 items-center">
@@ -136,28 +107,19 @@ const openActionLabel = computed(() => formatMessage(storageMessages.openAction)
 
         <!-- 右侧数据与进度列 -->
         <div class="ml-4 flex shrink-0 items-center gap-4">
+            <slot name="actions" />
             <div
                 class="min-w-20 whitespace-nowrap text-right text-sm tabular-nums text-[var(--color-text-default)]"
             >
-                {{ actualSizeText }}
-                <span v-if="node.size.symlink > 0" class="text-[var(--color-text-tertiary)]">
+                <span v-tooltip="actualSizeTooltip">{{ actualSizeText }}</span>
+                <span
+                    v-if="node.size.symlink > 0"
+                    v-tooltip="symlinkSizeTooltip"
+                    class="text-[var(--color-text-tertiary)]"
+                >
                     + {{ symlinkSizeText }}
                 </span>
             </div>
-
-            <div
-                class="w-9 max-sm:hidden text-right text-xs tabular-nums text-[var(--color-text-tertiary)]"
-            >
-                {{ percent }}%
-            </div>
-
-            <progress
-                v-tooltip="progressTooltip"
-                class="storage-progress h-1 w-24 shrink-0 appearance-none overflow-hidden rounded-full border-0 bg-surface-3"
-                :value="totalShare"
-                :max="1"
-                :aria-label="progressLabel"
-            />
         </div>
     </div>
 </template>
@@ -165,9 +127,6 @@ const openActionLabel = computed(() => formatMessage(storageMessages.openAction)
 <style scoped>
 .tree-row {
     transition: background-color 0.1s ease;
-}
-.tree-row.clickable {
-    cursor: pointer;
 }
 .guide-line::before {
     content: '';
@@ -190,23 +149,6 @@ const openActionLabel = computed(() => formatMessage(storageMessages.openAction)
 .node-type-btn:focus-visible {
     outline: 2px solid var(--color-brand);
     outline-offset: -1px;
-}
-.storage-progress::-webkit-progress-bar {
-    background: var(--surface-3);
-    border-radius: 9999px;
-}
-.storage-progress::-webkit-progress-value {
-    background: var(--color-brand);
-    border-radius: 9999px;
-}
-.storage-progress::-moz-progress-bar {
-    background: var(--color-brand);
-    border-radius: 9999px;
-}
-@media (max-width: 900px) {
-    .storage-progress {
-        display: none;
-    }
 }
 @media (prefers-reduced-motion: reduce) {
     .tree-row,

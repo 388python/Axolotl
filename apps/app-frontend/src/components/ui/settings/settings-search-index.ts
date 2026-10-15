@@ -9,6 +9,7 @@ export interface SettingsSearchEntry {
     id: string
     categoryId: SettingsCategoryId
     targetId?: string
+    page?: string
     label: MessageDescriptor
     description?: MessageDescriptor
     keywords?: MessageDescriptor[]
@@ -739,8 +740,13 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
     {
         id: 'storage-overview',
         categoryId: 'storage-backups',
+        page: 'storage-analysis',
         targetId: 'settings-target-storage-overview',
-        label: message('app.settings.storage.total', 'Storage usage'),
+        label: message('app.settings.storage.analysisTitle', 'Storage analysis'),
+        description: message(
+            'app.settings.storage.analysisDescription',
+            'Inspect launcher and game storage, then analyze unused metadata for cleanup.',
+        ),
     },
     {
         id: 'updates-history',
