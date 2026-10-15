@@ -1,5 +1,69 @@
 use super::*;
 
+#[cfg(windows)]
+#[tokio::test]
+async fn lowercase_backup_directory_is_not_counted_again_as_other() {
+    let temp = tempfile::tempdir().unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: temp.path().join("settings"),
+        config_dir: temp.path().join("data"),
+        app_identifier: "test".into(),
+    };
+    let actual_root = directories.config_dir.join("backups");
+    let actual_active = actual_root.join("instances");
+    fs::create_dir_all(actual_root.join("objects/aa"))
+        .await
+        .unwrap();
+    fs::create_dir_all(&actual_active).await.unwrap();
+    fs::create_dir_all(&directories.settings_dir).await.unwrap();
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(actual_root.join("backup.db"))
+                .create_if_missing(true),
+        )
+        .await
+        .unwrap();
+    sqlx::raw_sql("CREATE TABLE repository_meta(id INTEGER); CREATE TABLE backup_objects(id INTEGER); CREATE TABLE backup_snapshots(id INTEGER);").execute(&pool).await.unwrap();
+    pool.close().await;
+    fs::write(actual_root.join("objects/aa/blob"), [0; 100])
+        .await
+        .unwrap();
+    fs::write(actual_active.join("backup.db"), [0; 19])
+        .await
+        .unwrap();
+    fs::write(directories.config_dir.join("unclassified.txt"), [0; 7])
+        .await
+        .unwrap();
+    let expected = fs::metadata(actual_root.join("backup.db"))
+        .await
+        .unwrap()
+        .len()
+        + 119;
+    let tree = scan_with_directories(
+        &directories,
+        &directories.config_dir.join("Backups/instances"),
+        vec![],
+    )
+    .await
+    .unwrap();
+    let backups = tree
+        .categories
+        .iter()
+        .find(|node| node.node_type == StorageNodeType::Backups)
+        .unwrap();
+    assert_eq!(backups.size.actual, expected);
+    assert_eq!(tree.total.actual, expected + 7);
+    let other = tree.root_other.unwrap();
+    assert_eq!(other.size.actual, 7);
+    assert_eq!(
+        other.children.unwrap()[0].name.as_deref(),
+        Some("unclassified.txt")
+    );
+    assert!(tree.warnings.is_empty());
+}
+
 #[tokio::test]
 async fn scan_reports_completed_areas_and_cache_retains_stale_results_for_display()
  {

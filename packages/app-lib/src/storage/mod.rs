@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::state::DirectoryInfo;
 
-pub const STORAGE_CACHE_VERSION: u32 = 4;
+pub const STORAGE_CACHE_VERSION: u32 = 5;
 const STORAGE_CACHE_FILE: &str = "launcher-storage.cbor";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -235,13 +235,24 @@ fn identity(path: &Path) -> PathBuf {
     crate::util::io::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn ownership_key(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(path.to_string_lossy().to_lowercase())
+    } else {
+        path.to_path_buf()
+    }
+}
+
 fn minimal_roots(paths: Vec<PathBuf>) -> Vec<PathBuf> {
     let mut paths: Vec<_> =
         paths.into_iter().map(|path| identity(&path)).collect();
     paths.sort_by_key(|path| path.components().count());
     let mut roots: Vec<PathBuf> = Vec::new();
     for path in paths {
-        if !roots.iter().any(|root| path.starts_with(root)) {
+        if !roots
+            .iter()
+            .any(|root| ownership_key(&path).starts_with(ownership_key(root)))
+        {
             roots.push(path);
         }
     }
@@ -259,7 +270,7 @@ async fn scan_entry(
     visited: &mut HashSet<PathBuf>,
     warnings: &mut Vec<String>,
 ) -> Option<StorageNode> {
-    if excluded.contains(path) {
+    if excluded.contains(&ownership_key(path)) {
         return None;
     }
     let metadata = match fs::symlink_metadata(path).await {
@@ -284,7 +295,7 @@ async fn scan_entry(
                 return Some(node);
             }
         };
-        if !visited.insert(target.clone()) {
+        if !visited.insert(ownership_key(&target)) {
             return Some(node);
         }
         if let Some(target_node) =
@@ -292,7 +303,7 @@ async fn scan_entry(
         {
             node.size.symlink = target_node.size.total();
         }
-        visited.remove(&target);
+        visited.remove(&ownership_key(&target));
         return Some(node);
     }
     if metadata.is_file() {
@@ -357,7 +368,8 @@ async fn scan(
     excluded: &HashSet<PathBuf>,
     warnings: &mut Vec<String>,
 ) -> Option<StorageNode> {
-    scan_entry(path, depth, excluded, false, &mut HashSet::new(), warnings)
+    let excluded = excluded.iter().map(|path| ownership_key(path)).collect();
+    scan_entry(path, depth, &excluded, false, &mut HashSet::new(), warnings)
         .await
 }
 
@@ -614,15 +626,18 @@ async fn scan_with_directories_progress(
             ("download.log", StorageNodeType::LauncherLogs, 0),
         ] {
             let path = root.join(name);
-            if !targets.iter().any(|(existing, _, _)| *existing == path) {
+            if !targets.iter().any(|(existing, _, _)| {
+                ownership_key(existing) == ownership_key(&path)
+            }) {
                 targets.push((path, kind, depth));
             }
         }
         for candidate in
             [root.join("Backups"), root.join("Backups").join("instances")]
         {
-            if !targets.iter().any(|(path, _, _)| *path == candidate)
-                && is_backup_repository(&candidate).await
+            if !targets.iter().any(|(path, _, _)| {
+                ownership_key(path) == ownership_key(&candidate)
+            }) && is_backup_repository(&candidate).await
             {
                 targets.push((candidate, StorageNodeType::Backups, 1));
             }
@@ -637,12 +652,15 @@ async fn scan_with_directories_progress(
             total: total_sections,
             category: kind.clone(),
         });
-        if !claimed.insert(path.clone()) {
+        if !claimed.insert(ownership_key(path)) {
             continue;
         }
         let excluded = targets
             .iter()
-            .filter(|(other, _, _)| other != path && other.starts_with(path))
+            .filter(|(other, _, _)| {
+                ownership_key(other) != ownership_key(path)
+                    && ownership_key(other).starts_with(ownership_key(path))
+            })
             .map(|(other, _, _)| other.clone())
             .collect();
         if let Some(mut node) =
