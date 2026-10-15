@@ -52,6 +52,7 @@ import {
 import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
+import { createProjectDetailsQuery } from '@/helpers/project-links'
 import {
     getLastBrowseContentDisplayMode,
     setLastBrowseContentDisplayMode,
@@ -619,7 +620,7 @@ function getProjectLink(project: FavoriteProject) {
     if (project.favorite.resource_id)
         return {
             path: `/resource/${project.favorite.resource_id}`,
-            query: { ...route.query, b: route.fullPath },
+            query: createProjectDetailsQuery(route.query, route.fullPath),
         }
     return {
         path:
@@ -630,7 +631,7 @@ function getProjectLink(project: FavoriteProject) {
                   : project.provider === 'planet_minecraft'
                     ? `/project/planet-minecraft/${project.projectId}`
                     : `/project/${project.slug ?? project.projectId}`,
-        query: { ...route.query, b: route.fullPath },
+        query: createProjectDetailsQuery(route.query, route.fullPath),
     }
 }
 

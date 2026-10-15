@@ -481,11 +481,18 @@ fn history_is_self_contained_and_keeps_the_original_source_and_path() {
         backup_relative_path: Some("mods/中文-old.jar.disabled.old".into()),
         backup_integrity: Some(previous.integrity.clone()),
         backup_available: true,
+        backup_retired: false,
     };
     let restored: ResourceHistoryEntry =
         serde_json::from_value(serde_json::to_value(&history).unwrap())
             .unwrap();
     assert_eq!(restored, history);
+    let mut legacy = serde_json::to_value(&history).unwrap();
+    legacy.as_object_mut().unwrap().remove("backupRetired");
+    assert_eq!(
+        serde_json::from_value::<ResourceHistoryEntry>(legacy).unwrap(),
+        history
+    );
     assert_eq!(restored.previous, previous);
     assert_eq!(restored.previous.entry_id, restored.target.entry_id);
     assert_eq!(

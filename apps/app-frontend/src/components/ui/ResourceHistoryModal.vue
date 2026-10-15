@@ -21,7 +21,7 @@ const messages = defineMessages({
     loading: { id: 'app.resources.history.loading', defaultMessage: 'Checking rollback backups…' },
     empty: {
         id: 'app.resources.history.empty',
-        defaultMessage: 'No recorded installation history.',
+        defaultMessage: 'No rollback backups remain.',
     },
     retry: { id: 'app.resources.history.retry', defaultMessage: 'Retry' },
     cancel: { id: 'app.resources.history.cancel', defaultMessage: 'Close' },
@@ -55,7 +55,10 @@ function show(instanceId: string, entryId: string): Promise<InstallJobSnapshot |
         error.value = null
         try {
             const value = await resourceListHistory(instanceId, entryId)
-            if (current === generation) entries.value = value
+            if (current === generation)
+                entries.value = value.filter(
+                    (entry) => !entry.backupRetired && entry.backupRelativePath !== null,
+                )
         } catch (failure) {
             if (current === generation) error.value = resourceOperationError(failure, formatMessage)
         } finally {

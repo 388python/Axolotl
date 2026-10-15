@@ -1285,6 +1285,71 @@ async fn exact_cross_source_replace_and_rollback_preserve_entry_disabled_path_an
     assert_eq!(restored.artifact, original.artifact);
     assert_eq!(restored.ownership, original.ownership);
     assert!(!restored.enabled);
+    let histories =
+        history::list_with_state("instance", Some(&original.entry_id), &state)
+            .await
+            .unwrap();
+    assert_eq!(histories.len(), 2);
+    let consumed = histories
+        .iter()
+        .find(|history| !history.backup_available)
+        .unwrap();
+    assert!(consumed.backup_retired);
+    assert!(consumed.backup_relative_path.is_some());
+    assert!(consumed.backup_integrity.is_some());
+    assert!(histories.iter().any(|history| history.backup_available));
+    let mut legacy_payload = serde_json::to_value(consumed).unwrap();
+    legacy_payload
+        .as_object_mut()
+        .unwrap()
+        .remove("backupRetired");
+    sqlx::query("UPDATE resource_history SET payload = ? WHERE id = ?")
+        .bind(legacy_payload.to_string())
+        .bind(consumed.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    let backups = super::history_cleanup::scan_with_state("instance", &state)
+        .await
+        .unwrap();
+    let retired = backups
+        .iter()
+        .find(|backup| backup.id == consumed.id)
+        .unwrap();
+    assert_eq!(retired.history_id.as_ref(), Some(&consumed.id));
+    assert!(retired.exists);
+    assert!(!retired.rollback_available);
+    let cleanup = super::history_cleanup::prepare_with_state(
+        "instance",
+        vec![consumed.id.clone()],
+        &state,
+    )
+    .await
+    .unwrap();
+    super::history_cleanup::execute_with_state(
+        cleanup.id,
+        cleanup.revision,
+        &state,
+    )
+    .await
+    .unwrap();
+    assert!(
+        !root
+            .join(consumed.backup_relative_path.as_ref().unwrap())
+            .exists()
+    );
+    let retained: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM store_retained_refs WHERE reason = ?",
+    )
+    .bind(format!("resource-history:{}", consumed.id.as_str()))
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(retained, 0);
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
     let entry = content_rows::get_content_entry_by_id(
         original.entry_id.as_str(),
         &state.pool,

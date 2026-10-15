@@ -50,6 +50,24 @@ test('toggle updates survive recomputing an icon-bearing display clone', () => {
     assert.equal(rendered.file_path, 'mods/content.jar.disabled')
 })
 
+test('operation completion clears busy state on backing rows and a replacement row with the same entry', () => {
+    const source = contentItem('mods/content.jar')
+    source.instanceEntryId = 'entry'
+    const rendered = { ...source }
+    applyContentItemUpdates([source], rendered, source.file_name, source.file_path, {
+        installing: true,
+    })
+    assert.equal(source.installing, true)
+    const refreshed = { ...source, file_path: 'mods/restored.jar' }
+    const other = { ...source, instanceEntryId: 'other' }
+    applyContentItemUpdates([refreshed, other], rendered, source.file_name, source.file_path, {
+        installing: false,
+    })
+    assert.equal(refreshed.installing, false)
+    assert.equal(rendered.installing, false)
+    assert.equal(other.installing, true)
+})
+
 test('single-entry toggles never mutate another copy with the same project, version, hash or filename', () => {
     for (const stableIds of [false, true]) {
         const source = contentItem('mods/one/content.jar')

@@ -1365,14 +1365,11 @@ onUnmounted(() => {
     unlistenProcesses?.()
 })
 
-watch(
-    () => [route.params.id, route.query.i],
-    () => {
-        if (route.params.id && route.path.startsWith('/project')) {
-            void loadProjectPage()
-        }
-    },
-)
+watch([() => route.params.id, () => route.query.i], () => {
+    if (route.params.id && route.path.startsWith('/project')) {
+        void loadProjectPage()
+    }
+})
 
 async function install(version) {
     if (serverProjectInstallContext.value && data.value) {

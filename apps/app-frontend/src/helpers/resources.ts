@@ -468,6 +468,7 @@ export type ResourceHistoryEntry = {
     target: InstalledResource
     backupRelativePath: string | null
     backupAvailable: boolean
+    backupRetired?: boolean
 }
 
 export function resourceListHistory(instanceId: string, entryId?: string | null) {

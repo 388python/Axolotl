@@ -7479,7 +7479,7 @@
     "message": "Close"
   },
   "app.resources.history.empty": {
-    "message": "No recorded installation history."
+    "message": "No rollback backups remain."
   },
   "app.resources.history.header": {
     "message": "Installation history"

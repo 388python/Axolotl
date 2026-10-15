@@ -1418,7 +1418,13 @@ function contentUpdateId(item: ContentItem): string | null {
 }
 
 function setContentItemBusy(item: ContentItem, busy: boolean, _originalFileName = item.file_name) {
-    item.installing = busy
+    applyContentItemUpdates(
+        [...projects.value, ...linkedModpackContentItems.value, ...worldDatapackItems.value],
+        item,
+        _originalFileName,
+        item.file_path,
+        { installing: busy },
+    )
 }
 
 function beginContentOperation(item: ContentItem) {
@@ -2379,6 +2385,7 @@ async function handleRollbackContent(mod: ContentItem) {
     const operation = beginContentOperation(mod)
     if (!operation) return
 
+    let changed = false
     try {
         const history = mod.instanceEntryId
             ? await resourceListHistory(props.instance.id, mod.instanceEntryId)
@@ -2388,9 +2395,11 @@ async function handleRollbackContent(mod: ContentItem) {
                 props.instance.id,
                 mod.instanceEntryId,
             )
-            if (job) downloadManager.trackJob(job)
+            if (!job) return
+            downloadManager.trackJob(job)
         } else {
             await rollback_project(props.instance.id, mod.file_path)
+            changed = true
         }
         trackEvent('InstanceProjectRollback', {
             loader: props.instance.loader,
@@ -2402,8 +2411,11 @@ async function handleRollbackContent(mod: ContentItem) {
     } catch (err) {
         handleError(err as Error)
     } finally {
-        await refreshContentState('bypass')
-        finishContentOperation(mod, operation)
+        try {
+            if (changed) await refreshContentState('bypass')
+        } finally {
+            finishContentOperation(mod, operation)
+        }
     }
 }
 

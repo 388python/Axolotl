@@ -3200,6 +3200,9 @@
   "project.versions.table.version": {
     "defaultMessage": "版本"
   },
+  "project.versions.no-matching-versions": {
+    "defaultMessage": "没有符合所选筛选条件的版本。"
+  },
   "project.versions.version.withheld": {
     "defaultMessage": "保留"
   },

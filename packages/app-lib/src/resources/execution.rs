@@ -1076,6 +1076,7 @@ async fn persist_plan(
     }
     if let (Some(id), Some(mut payload)) = (&draft.restore_history, restore) {
         payload["backupAvailable"] = serde_json::Value::Bool(false);
+        payload["backupRetired"] = serde_json::Value::Bool(true);
         let previous: ResourceHistoryEntry =
             serde_json::from_value(payload.clone())?;
         if let Some(member) = payload

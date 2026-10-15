@@ -100,6 +100,7 @@ import { getMcArchiveGameVersions, type McArchiveGameVersion } from '@/helpers/m
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { planetMinecraftConnectorAvailable } from '@/helpers/planet-minecraft'
+import { createProjectDetailsQuery } from '@/helpers/project-links'
 import {
     isResourceOperationError,
     resourceOperationError,
@@ -2397,10 +2398,7 @@ onUnmounted(() => {
 })
 
 function getProjectBrowseQuery() {
-    return {
-        ...route.query,
-        b: route.fullPath,
-    }
+    return createProjectDetailsQuery(route.query, route.fullPath)
 }
 
 const advancedFiltersCollapsed = computed({

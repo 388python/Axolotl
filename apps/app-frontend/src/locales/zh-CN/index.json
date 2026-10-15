@@ -13491,7 +13491,7 @@
     "message": "正在核验回滚备份…"
   },
   "app.resources.history.empty": {
-    "message": "没有已记录的安装历史。"
+    "message": "没有可供回滚的备份。"
   },
   "app.resources.history.cancel": {
     "message": "关闭"

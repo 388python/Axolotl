@@ -61,6 +61,7 @@ async fn read_history(
         else {
             continue;
         };
+        entry.backup_retired = row.get::<i64, _>("backup_available") == 0;
         entry.backup_available =
             match (&entry.backup_relative_path, &entry.backup_integrity) {
                 (Some(path), Some(integrity))
@@ -351,6 +352,7 @@ pub(crate) fn history_entry(
         target_dependencies: edges,
         backup_integrity: Some(current.integrity.clone()),
         backup_available: backup_relative_path.is_some(),
+        backup_retired: false,
         backup_relative_path,
     }
 }

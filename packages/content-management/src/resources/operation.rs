@@ -284,6 +284,8 @@ pub struct ResourceHistoryEntry {
     pub backup_relative_path: Option<String>,
     pub backup_integrity: Option<ArtifactIntegrity>,
     pub backup_available: bool,
+    #[serde(default)]
+    pub backup_retired: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
