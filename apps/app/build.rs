@@ -833,7 +833,13 @@ fn main() {
             .plugin(
                 "storage",
                 InlinedPlugin::new()
-                    .commands(&["storage_scan_start", "storage_open_paths"])
+                    .commands(&[
+                        "storage_scan",
+                        "storage_cache_clear",
+                        "storage_meta_analyze",
+                        "storage_meta_clean",
+                        "storage_open_paths",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),

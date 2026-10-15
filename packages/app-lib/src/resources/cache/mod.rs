@@ -285,6 +285,24 @@ impl ResourceCache {
         Ok(())
     }
 
+    /// Explicit storage maintenance returns free database pages to the filesystem.
+    pub(crate) async fn compact(&self) -> ResourceResult<()> {
+        let _guard = self.gate.write().await;
+        let pool = self
+            .pool
+            .as_ref()
+            .ok_or_else(|| ResourceError::Cache("pool disabled".into()))?;
+        sqlx::query("VACUUM")
+            .execute(pool)
+            .await
+            .map_err(cache_error)?;
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(pool)
+            .await
+            .map_err(cache_error)?;
+        Ok(())
+    }
+
     pub async fn info(&self) -> ResourceResult<ResourceCacheInfo> {
         let _guard = self.gate.read().await;
         let pool = self

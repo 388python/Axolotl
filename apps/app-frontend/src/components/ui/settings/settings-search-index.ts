@@ -727,7 +727,7 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
     {
         id: 'storage-cache',
         categoryId: 'storage-backups',
-        targetId: 'settings-target-storage-cache',
+        targetId: 'settings-target-storage-overview',
         label: message('app.settings.resources.app-cache', 'App cache'),
     },
     {
@@ -740,7 +740,11 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         id: 'storage-overview',
         categoryId: 'storage-backups',
         targetId: 'settings-target-storage-overview',
-        label: message('app.settings.storage.total', 'Storage usage'),
+        label: message('app.settings.storage.analysisTitle', 'Storage analysis'),
+        description: message(
+            'app.settings.storage.analysisDescription',
+            'Inspect launcher and game storage, then analyze unused metadata for cleanup.',
+        ),
     },
     {
         id: 'updates-history',

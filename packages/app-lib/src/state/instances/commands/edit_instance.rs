@@ -136,6 +136,7 @@ pub(crate) async fn edit_instance(
     patch: EditInstance,
     pool: &SqlitePool,
 ) -> crate::Result<Instance> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     let mut instance = instance_rows::get_instance_by_id(instance_id, pool)
         .await?
         .ok_or_else(|| {

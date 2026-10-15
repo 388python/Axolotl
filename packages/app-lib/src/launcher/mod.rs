@@ -61,6 +61,7 @@ pub(crate) async fn read_game_version_metadata_from_jar(
 use winreg::{RegKey, enums::HKEY_CURRENT_USER};
 
 mod args;
+pub(crate) use args::get_processor_arguments;
 mod direct_ensure;
 mod direct_link;
 pub(crate) mod external_version;
@@ -1023,6 +1024,7 @@ async fn install_minecraft_with_local_source(
     local_source: Option<&LocalRuntimeSource>,
     completion_policy: InstanceCompletionPolicy,
 ) -> crate::Result<()> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     let instance = &context.instance;
     let content_set = &context.applied_content_set;
     let phase_details = InstallPhaseDetails::Minecraft {
@@ -1854,6 +1856,7 @@ pub async fn launch_minecraft(
     mut quick_play_type: QuickPlayType,
     offline_mode: bool,
 ) -> crate::Result<ProcessMetadata> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     let instance = &context.instance;
     let content_set = &context.applied_content_set;
 

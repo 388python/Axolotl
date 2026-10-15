@@ -10109,12 +10109,6 @@
   "app.settings.resources.add-minecraft-directory": {
     "message": "Add .minecraft directory"
   },
-  "app.settings.resources.app-cache": {
-    "message": "App cache"
-  },
-  "app.settings.resources.app-cache-description": {
-    "message": "Axolotl Launcher caches data to speed up loading. Purging it forces the app to reload data and may temporarily slow the app down."
-  },
   "app.settings.resources.app-directory": {
     "message": "App directory"
   },
@@ -10304,15 +10298,6 @@
   "app.settings.resources.proxy-username-placeholder": {
     "message": "Username (optional)"
   },
-  "app.settings.resources.purge-cache": {
-    "message": "Purge cache"
-  },
-  "app.settings.resources.purge-confirm-description": {
-    "message": "If you proceed, your entire cache will be purged. This may slow down the app temporarily."
-  },
-  "app.settings.resources.purge-confirm-title": {
-    "message": "Are you sure you want to purge the cache?"
-  },
   "app.settings.resources.remove-minecraft-directory": {
     "message": "Remove .minecraft directory"
   },
@@ -10388,14 +10373,116 @@
   "app.settings.search.results": {
     "message": "Search results"
   },
+  "app.settings.storage.activeOperation": {
+    "message": "Finish the current installation or recovery before cleaning shared files."
+  },
   "app.settings.storage.actual-size-tooltip": {
-    "message": "Actual size: {size}"
+    "message": "File size: {size}"
+  },
+  "app.settings.storage.analysisDescription": {
+    "message": "Inspect launcher and game storage, then analyze unused metadata for cleanup."
+  },
+  "app.settings.storage.analysisTitle": {
+    "message": "Storage analysis"
+  },
+  "app.settings.storage.analyzeFailed": {
+    "message": "Metadata could not be analyzed. Try again after current operations finish."
+  },
+  "app.settings.storage.analyzeMeta": {
+    "message": "Check unused files"
+  },
+  "app.settings.storage.analyzingMeta": {
+    "message": "Checking file usage…"
+  },
+  "app.settings.storage.assets": {
+    "message": "Game assets"
+  },
+  "app.settings.storage.assetsHelp": {
+    "message": "Sounds, textures and other game assets."
+  },
+  "app.settings.storage.availableSpace": {
+    "message": "{size} can be cleaned"
+  },
+  "app.settings.storage.backups": {
+    "message": "Instance backups"
   },
   "app.settings.storage.cache-data": {
     "message": "Cache data"
   },
+  "app.settings.storage.cacheCleanupResult": {
+    "message": "Freed {freed}. Remaining cache: {remaining}."
+  },
+  "app.settings.storage.cacheClearFailed": {
+    "message": "Could not clear the cache. Please try again."
+  },
+  "app.settings.storage.cacheFailureDetails": {
+    "message": "Files that could not be cleared"
+  },
+  "app.settings.storage.cachePartialFailure": {
+    "message": "Some cache files could not be cleared. See the details before trying again."
+  },
+  "app.settings.storage.cacheRetainedHelp": {
+    "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache files in previous data locations are kept. Cache database files also occupy some space."
+  },
+  "app.settings.storage.cachedScanHelp": {
+    "message": "Showing the previous scan while storage usage is refreshed."
+  },
+  "app.settings.storage.cancel": {
+    "message": "Cancel"
+  },
+  "app.settings.storage.cleanConfirm": {
+    "message": "Permanently delete {size} of unused files? Files that are still needed will be kept."
+  },
+  "app.settings.storage.cleanFailed": {
+    "message": "Cleanup could not finish. Refresh the analysis before retrying."
+  },
+  "app.settings.storage.cleanFailures": {
+    "message": "Some files could not be deleted."
+  },
+  "app.settings.storage.cleanResult": {
+    "message": "Freed {size} by deleting {count} files. {skipped} changed or referenced files were kept."
+  },
+  "app.settings.storage.cleanSelected": {
+    "message": "Clean selected files"
+  },
+  "app.settings.storage.cleanTitle": {
+    "message": "Clean shared game files"
+  },
+  "app.settings.storage.cleaning": {
+    "message": "Deleting files…"
+  },
+  "app.settings.storage.clearCache": {
+    "message": "Clear cache"
+  },
+  "app.settings.storage.clearCacheHelp": {
+    "message": "Deletes downloaded mod and modpack caches, unused content objects and cached resource information. Installed games, saves and backups are kept. Files needed for offline use or recovery are kept. Downloads may be needed again."
+  },
+  "app.settings.storage.clearingCache": {
+    "message": "Clearing cache…"
+  },
+  "app.settings.storage.close": {
+    "message": "Close"
+  },
+  "app.settings.storage.components": {
+    "message": "Multiplayer components"
+  },
+  "app.settings.storage.contentStore": {
+    "message": "Shared content files"
+  },
+  "app.settings.storage.crashReports": {
+    "message": "Crash reports"
+  },
+  "app.settings.storage.customArguments": {
+    "message": "Custom launch arguments may use these files, so they are kept."
+  },
+  "app.settings.storage.dataType": {
+    "message": "Data type"
+  },
   "app.settings.storage.database": {
     "message": "Database"
+  },
+  "app.settings.storage.databaseUnavailable": {
+    "message": "Some launcher records could not be read. Unverified files are kept."
   },
   "app.settings.storage.db-backup": {
     "message": "Database backups"
@@ -10403,8 +10490,38 @@
   "app.settings.storage.db-file": {
     "message": "App database"
   },
+  "app.settings.storage.details": {
+    "message": "Details"
+  },
   "app.settings.storage.distant-horizons": {
     "message": "Distant Horizons cache"
+  },
+  "app.settings.storage.externalData": {
+    "message": "External game directories"
+  },
+  "app.settings.storage.externalHelp": {
+    "message": "These directories are managed outside Axolotl and are excluded from the launcher total. Overlapping directories are listed once."
+  },
+  "app.settings.storage.externalMetadata": {
+    "message": "Linked instances also use this folder. Files with uncertain usage are kept."
+  },
+  "app.settings.storage.fileSize": {
+    "message": "Size"
+  },
+  "app.settings.storage.folder": {
+    "message": "Files"
+  },
+  "app.settings.storage.gameLocales": {
+    "message": "Game setting language indexes"
+  },
+  "app.settings.storage.icons": {
+    "message": "Icons"
+  },
+  "app.settings.storage.incompleteScan": {
+    "message": "Some paths could not be read; these totals are incomplete."
+  },
+  "app.settings.storage.installRollbacks": {
+    "message": "Installation rollback data"
   },
   "app.settings.storage.instance": {
     "message": "Instance"
@@ -10418,11 +10535,65 @@
   "app.settings.storage.item-count": {
     "message": "{count} items"
   },
+  "app.settings.storage.javaHelp": {
+    "message": "Java runtimes are kept because games can select them automatically."
+  },
+  "app.settings.storage.javaVersions": {
+    "message": "Java runtimes"
+  },
   "app.settings.storage.last-updated-label": {
     "message": "Last updated:"
   },
+  "app.settings.storage.launcherData": {
+    "message": "Launcher settings and appearance"
+  },
+  "app.settings.storage.launcherLogs": {
+    "message": "Launcher logs"
+  },
+  "app.settings.storage.legacyHelp": {
+    "message": "Copies of sounds, textures and other assets for older Minecraft versions. Unused copies can be cleaned after matching them to a local asset index."
+  },
+  "app.settings.storage.libraries": {
+    "message": "Shared libraries"
+  },
+  "app.settings.storage.librariesHelp": {
+    "message": "Shared files needed to run Minecraft and its loaders."
+  },
+  "app.settings.storage.linkedSize": {
+    "message": "Linked files: {size}"
+  },
+  "app.settings.storage.localesHelp": {
+    "message": "Language indexes used by synced game settings."
+  },
+  "app.settings.storage.logConfigs": {
+    "message": "Logging configurations"
+  },
+  "app.settings.storage.logConfigsHelp": {
+    "message": "Files that control how Minecraft writes logs."
+  },
+  "app.settings.storage.logs": {
+    "message": "Game logs"
+  },
+  "app.settings.storage.measurementHelp": {
+    "message": "Sizes are file lengths, not allocated disk space. Linked files are shown separately and may also be referenced elsewhere."
+  },
+  "app.settings.storage.measurementTitle": {
+    "message": "How sizes are counted"
+  },
   "app.settings.storage.meta-data": {
-    "message": "Meta data"
+    "message": "Shared game files"
+  },
+  "app.settings.storage.metaGroup": {
+    "message": "Metadata group"
+  },
+  "app.settings.storage.metaHelp": {
+    "message": "These files are shared across instances. Check their usage before choosing what to clean."
+  },
+  "app.settings.storage.metaItemCount": {
+    "message": "{count} items"
+  },
+  "app.settings.storage.metaWarnings": {
+    "message": "Why some files are kept"
   },
   "app.settings.storage.minimap": {
     "message": "Minimap data"
@@ -10430,20 +10601,71 @@
   "app.settings.storage.mods": {
     "message": "Mods"
   },
+  "app.settings.storage.natives": {
+    "message": "Native libraries"
+  },
+  "app.settings.storage.nativesHelp": {
+    "message": "Platform files extracted for game versions."
+  },
+  "app.settings.storage.noUnused": {
+    "message": "No files are currently available to clean."
+  },
   "app.settings.storage.open-action": {
     "message": "Open in launcher or open location"
+  },
+  "app.settings.storage.openFolder": {
+    "message": "Open folder in file manager"
   },
   "app.settings.storage.other": {
     "message": "Other"
   },
+  "app.settings.storage.preview-cache": {
+    "message": "Avatar and skin preview cache"
+  },
+  "app.settings.storage.preview-cache-help": {
+    "message": "Image payload sizes stored by this WebView. Database overhead is excluded; this value is separate from the launcher file total."
+  },
+  "app.settings.storage.processorUnresolved": {
+    "message": "Some loader installation paths could not be read. Related shared files are kept. Versions: {names}."
+  },
+  "app.settings.storage.refresh-failed": {
+    "message": "Files were deleted, but the storage total could not be refreshed."
+  },
+  "app.settings.storage.refreshRequired": {
+    "message": "The analysis is a snapshot. Analyze again after installing, removing or changing instances."
+  },
+  "app.settings.storage.refreshingTotals": {
+    "message": "Refreshing storage totals…"
+  },
   "app.settings.storage.replay": {
     "message": "Replay recordings"
+  },
+  "app.settings.storage.resource-backups": {
+    "message": "Previous resource files"
+  },
+  "app.settings.storage.resourceCache": {
+    "message": "Resource metadata cache"
   },
   "app.settings.storage.resourcepacks": {
     "message": "Resource packs"
   },
+  "app.settings.storage.resources": {
+    "message": "Legacy game resources"
+  },
+  "app.settings.storage.retainedAmount": {
+    "message": "{size} kept until usage can be verified"
+  },
+  "app.settings.storage.retry": {
+    "message": "Retry"
+  },
   "app.settings.storage.saves": {
     "message": "Saves"
+  },
+  "app.settings.storage.scanFailed": {
+    "message": "Storage could not be scanned. The last complete snapshot is kept when available."
+  },
+  "app.settings.storage.scanSections": {
+    "message": "{completed} / {total} areas"
   },
   "app.settings.storage.scanning": {
     "message": "Scanning storage…"
@@ -10454,8 +10676,20 @@
   "app.settings.storage.screenshots": {
     "message": "Screenshots"
   },
+  "app.settings.storage.selectGroup": {
+    "message": "Select unused files in {name}"
+  },
+  "app.settings.storage.selectedSize": {
+    "message": "{count} items selected · {size}"
+  },
+  "app.settings.storage.servers": {
+    "message": "Managed servers"
+  },
   "app.settings.storage.shaderpacks": {
     "message": "Shader packs"
+  },
+  "app.settings.storage.staging": {
+    "message": "Operation staging"
   },
   "app.settings.storage.symlink-help": {
     "message": "What is a symlink?"
@@ -10469,17 +10703,47 @@
   "app.settings.storage.symlink-size-tooltip": {
     "message": "Symbolic link or junction referenced size: {size}"
   },
+  "app.settings.storage.syncedOptions": {
+    "message": "Synced settings and files"
+  },
   "app.settings.storage.total": {
     "message": "Total size"
   },
   "app.settings.storage.total-description": {
     "message": "Total size including symbolic links and junctions"
   },
+  "app.settings.storage.unknown": {
+    "message": "Kept"
+  },
+  "app.settings.storage.unknownUsage": {
+    "message": "Files whose usage cannot be verified are kept."
+  },
+  "app.settings.storage.unreadablePath": {
+    "message": "Some files could not be read or are links. They are kept."
+  },
+  "app.settings.storage.unused": {
+    "message": "Can be cleaned"
+  },
   "app.settings.storage.update": {
     "message": "Update"
   },
   "app.settings.storage.updating": {
     "message": "Updating…"
+  },
+  "app.settings.storage.usageChart": {
+    "message": "Storage usage by data type"
+  },
+  "app.settings.storage.used": {
+    "message": "In use"
+  },
+  "app.settings.storage.versionUnavailable": {
+    "message": "Some installed versions are missing local version information. Shared files that may be needed are kept. Versions: {names}."
+  },
+  "app.settings.storage.versions": {
+    "message": "Game versions"
+  },
+  "app.settings.storage.versionsHelp": {
+    "message": "Minecraft versions and their loaders. Expand to choose individual versions."
   },
   "app.settings.storage.world": {
     "message": "World"
