@@ -38,6 +38,7 @@ pub(crate) async fn create_instance(
     input: CreateInstance,
     state: &State,
 ) -> crate::Result<Instance> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     trace!("Creating new instance. {}", input.name);
 
     let (path, full_path) =
