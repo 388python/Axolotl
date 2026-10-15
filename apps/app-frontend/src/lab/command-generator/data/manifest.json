@@ -1,0 +1,15 @@
+{
+  "default": "1.21",
+  "versions": [
+    {
+      "id": "1.21",
+      "label": "1.21.x",
+      "dataFile": "v1.21.json"
+    },
+    {
+      "id": "1.20",
+      "label": "1.20.x",
+      "dataFile": "v1.20.json"
+    }
+  ]
+}

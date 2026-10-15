@@ -1,0 +1,3400 @@
+{
+  "version": "1.20",
+  "generatedAt": "2026-10-15",
+  "commands": [
+    {
+      "id": "advancement",
+      "name": "advancement",
+      "description": "给予/移除/检测玩家的进度",
+      "category": "player",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "grant 给予 / revoke 移除",
+          "enumValues": ["grant", "revoke"],
+          "presets": [
+            { "label": "给予", "value": "grant" },
+            { "label": "移除", "value": "revoke" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" },
+            { "label": "最近玩家", "value": "@p" }
+          ]
+        },
+        {
+          "name": "advancement",
+          "displayName": "进度",
+          "type": "string",
+          "required": true,
+          "description": "进度标识符",
+          "placeholder": "minecraft:story/root"
+        },
+        {
+          "name": "criterion",
+          "displayName": "准则",
+          "type": "string",
+          "required": false,
+          "description": "进度准则，留空表示全部",
+          "placeholder": "*"
+        }
+      ]
+    },
+    {
+      "id": "defaultgamemode",
+      "name": "defaultgamemode",
+      "description": "设置新玩家的默认游戏模式",
+      "category": "player",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "mode",
+          "displayName": "模式",
+          "type": "gamemode",
+          "required": true,
+          "description": "survival/creative/adventure/spectator",
+          "enumValues": ["survival", "creative", "adventure", "spectator"],
+          "presets": [
+            { "label": "生存模式", "value": "survival" },
+            { "label": "创造模式", "value": "creative" },
+            { "label": "冒险模式", "value": "adventure" },
+            { "label": "旁观模式", "value": "spectator" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "experience",
+      "name": "experience",
+      "description": "给予或移除玩家经验（/xp 的别名）",
+      "category": "player",
+      "permissionLevel": 2,
+      "aliases": ["xp"],
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add 增加 / set 设置",
+          "enumValues": ["add", "set"],
+          "presets": [
+            { "label": "增加", "value": "add" },
+            { "label": "设置", "value": "set" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "amount",
+          "displayName": "数量",
+          "type": "integer",
+          "required": true,
+          "description": "经验数量",
+          "presets": [
+            { "label": "10", "value": 10 },
+            { "label": "30", "value": 30 },
+            { "label": "100", "value": 100 }
+          ]
+        },
+        {
+          "name": "unit",
+          "displayName": "单位",
+          "type": "enum",
+          "required": false,
+          "description": "points 点数 / levels 等级",
+          "enumValues": ["points", "levels"],
+          "presets": [
+            { "label": "等级", "value": "levels" },
+            { "label": "点数", "value": "points" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "gamemode",
+      "name": "gamemode",
+      "description": "设置玩家游戏模式",
+      "category": "player",
+      "permissionLevel": 2,
+      "aliases": ["gm"],
+      "arguments": [
+        {
+          "name": "mode",
+          "displayName": "模式",
+          "type": "gamemode",
+          "required": true,
+          "description": "survival/creative/adventure/spectator",
+          "enumValues": ["survival", "creative", "adventure", "spectator"],
+          "presets": [
+            { "label": "生存模式", "value": "survival" },
+            { "label": "创造模式", "value": "creative" },
+            { "label": "冒险模式", "value": "adventure" },
+            { "label": "旁观模式", "value": "spectator" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" },
+            { "label": "最近玩家", "value": "@p" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spawnpoint",
+      "name": "spawnpoint",
+      "description": "设置玩家的重生点",
+      "category": "player",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "重生点坐标",
+          "placeholder": "~ ~ ~",
+          "presets": [
+            { "label": "当前位置", "value": "~ ~ ~" },
+            { "label": "世界中心", "value": "0 64 0" }
+          ]
+        },
+        {
+          "name": "angle",
+          "displayName": "角度",
+          "type": "number",
+          "required": false,
+          "description": "重生视角角度",
+          "placeholder": "~"
+        }
+      ]
+    },
+    {
+      "id": "spectate",
+      "name": "spectate",
+      "description": "使旁观模式玩家旁观某个实体",
+      "category": "player",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "要旁观的目标实体",
+          "selector": true,
+          "placeholder": "@e[type=player]"
+        },
+        {
+          "name": "player",
+          "displayName": "旁观者",
+          "type": "entity-selector",
+          "required": false,
+          "description": "旁观模式的玩家",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "xp",
+      "name": "xp",
+      "description": "给予或移除玩家经验（experience 的别名）",
+      "category": "player",
+      "permissionLevel": 2,
+      "aliases": ["experience"],
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/set",
+          "enumValues": ["add", "set"],
+          "presets": [
+            { "label": "增加", "value": "add" },
+            { "label": "设置", "value": "set" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "amount",
+          "displayName": "数量",
+          "type": "integer",
+          "required": true,
+          "description": "经验数量"
+        },
+        {
+          "name": "unit",
+          "displayName": "单位",
+          "type": "enum",
+          "required": false,
+          "description": "points/levels",
+          "enumValues": ["points", "levels"],
+          "presets": [
+            { "label": "等级", "value": "levels" },
+            { "label": "点数", "value": "points" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bossbar",
+      "name": "bossbar",
+      "description": "创建或修改 Boss 血量条",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/get/set/list",
+          "enumValues": ["add", "remove", "get", "set", "list"]
+        },
+        {
+          "name": "id",
+          "displayName": "ID",
+          "type": "string",
+          "required": true,
+          "description": "Boss 栏标识符",
+          "placeholder": "minecraft:my_boss"
+        },
+        {
+          "name": "property",
+          "displayName": "属性",
+          "type": "enum",
+          "required": false,
+          "description": "name/color/style/value/max/visible/players",
+          "enumValues": ["name", "color", "style", "value", "max", "visible", "players"]
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "string",
+          "required": false,
+          "description": "属性值"
+        }
+      ]
+    },
+    {
+      "id": "difficulty",
+      "name": "difficulty",
+      "description": "设置游戏难度",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "difficulty",
+          "displayName": "难度",
+          "type": "difficulty",
+          "required": true,
+          "description": "peaceful/easy/normal/hard",
+          "enumValues": ["peaceful", "easy", "normal", "hard"],
+          "presets": [
+            { "label": "和平", "value": "peaceful" },
+            { "label": "简单", "value": "easy" },
+            { "label": "普通", "value": "normal" },
+            { "label": "困难", "value": "hard" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fillbiome",
+      "name": "fillbiome",
+      "description": "填充生物群系区域",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "from",
+          "displayName": "起始坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "起始坐标"
+        },
+        {
+          "name": "to",
+          "displayName": "结束坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "结束坐标"
+        },
+        {
+          "name": "biome",
+          "displayName": "生物群系",
+          "type": "biome",
+          "required": true,
+          "description": "生物群系 ID",
+          "placeholder": "minecraft:plains",
+          "presets": [
+            { "label": "平原", "value": "minecraft:plains" },
+            { "label": "沙漠", "value": "minecraft:desert" },
+            { "label": "森林", "value": "minecraft:forest" },
+            { "label": "海洋", "value": "minecraft:ocean" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forceload",
+      "name": "forceload",
+      "description": "强制加载/卸载区块",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/query",
+          "enumValues": ["add", "remove", "query"]
+        },
+        {
+          "name": "from",
+          "displayName": "起始坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "起始坐标"
+        },
+        {
+          "name": "to",
+          "displayName": "结束坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "结束坐标"
+        }
+      ]
+    },
+    {
+      "id": "locate",
+      "name": "locate",
+      "description": "定位最近的建筑或生物群系",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "type",
+          "displayName": "类型",
+          "type": "enum",
+          "required": true,
+          "description": "structure 建筑 / biome 生物群系 / poi 兴趣点",
+          "enumValues": ["structure", "biome", "poi"]
+        },
+        {
+          "name": "id",
+          "displayName": "标识符",
+          "type": "string",
+          "required": true,
+          "description": "要定位的目标 ID",
+          "placeholder": "minecraft:village_plains"
+        }
+      ]
+    },
+    {
+      "id": "particle",
+      "name": "particle",
+      "description": "生成粒子效果",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "name",
+          "displayName": "粒子",
+          "type": "particle",
+          "required": true,
+          "description": "粒子 ID",
+          "placeholder": "minecraft:flame",
+          "presets": [
+            { "label": "火焰", "value": "minecraft:flame" },
+            { "label": "爱心", "value": "minecraft:heart" },
+            { "label": "爆炸", "value": "minecraft:explosion" },
+            { "label": "末影", "value": "minecraft:portal" }
+          ]
+        },
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "坐标",
+          "presets": [{ "label": "当前位置", "value": "~ ~ ~" }]
+        },
+        {
+          "name": "delta",
+          "displayName": "扩散",
+          "type": "coordinates",
+          "required": false,
+          "description": "扩散范围"
+        },
+        {
+          "name": "speed",
+          "displayName": "速度",
+          "type": "number",
+          "required": false,
+          "description": "速度"
+        },
+        {
+          "name": "count",
+          "displayName": "数量",
+          "type": "integer",
+          "required": false,
+          "description": "数量",
+          "presets": [
+            { "label": "1", "value": 1 },
+            { "label": "10", "value": 10 },
+            { "label": "100", "value": 100 }
+          ]
+        },
+        {
+          "name": "mode",
+          "displayName": "模式",
+          "type": "enum",
+          "required": false,
+          "description": "normal/force",
+          "enumValues": ["normal", "force"]
+        }
+      ]
+    },
+    {
+      "id": "place",
+      "name": "place",
+      "description": "放置已配置的地物、拼图、模板或结构",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "feature",
+          "displayName": "类型",
+          "type": "enum",
+          "required": true,
+          "description": "feature/jigsaw/template/structure",
+          "enumValues": ["feature", "jigsaw", "template", "structure"]
+        },
+        {
+          "name": "id",
+          "displayName": "标识符",
+          "type": "string",
+          "required": true,
+          "description": "要放置的目标 ID"
+        },
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "放置坐标"
+        }
+      ]
+    },
+    {
+      "id": "seed",
+      "name": "seed",
+      "description": "显示世界种子",
+      "category": "world",
+      "permissionLevel": 0,
+      "arguments": []
+    },
+    {
+      "id": "setworldspawn",
+      "name": "setworldspawn",
+      "description": "设置世界出生点",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "出生点坐标",
+          "presets": [{ "label": "当前位置", "value": "~ ~ ~" }]
+        },
+        {
+          "name": "angle",
+          "displayName": "角度",
+          "type": "number",
+          "required": false,
+          "description": "出生视角角度",
+          "placeholder": "~"
+        }
+      ]
+    },
+    {
+      "id": "time",
+      "name": "time",
+      "description": "设置/查询游戏时间",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "set 设置 / add 增加 / query 查询",
+          "enumValues": ["set", "add", "query"],
+          "presets": [
+            { "label": "设置", "value": "set" },
+            { "label": "增加", "value": "add" },
+            { "label": "查询", "value": "query" }
+          ]
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "time",
+          "required": true,
+          "description": "时间值（day/noon/night/midnight 或数字）",
+          "placeholder": "day",
+          "presets": [
+            { "label": "白天", "value": "day" },
+            { "label": "正午", "value": "noon" },
+            { "label": "夜晚", "value": "night" },
+            { "label": "午夜", "value": "midnight" },
+            { "label": "快进 1000 刻", "value": "1000" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "weather",
+      "name": "weather",
+      "description": "设置天气",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "type",
+          "displayName": "天气",
+          "type": "enum",
+          "required": true,
+          "description": "clear/rain/thunder",
+          "enumValues": ["clear", "rain", "thunder"],
+          "presets": [
+            { "label": "晴天", "value": "clear" },
+            { "label": "雨天", "value": "rain" },
+            { "label": "雷暴", "value": "thunder" }
+          ]
+        },
+        {
+          "name": "duration",
+          "displayName": "持续时间（秒）",
+          "type": "integer",
+          "required": false,
+          "description": "天气持续时间",
+          "presets": [
+            { "label": "5 分钟", "value": 300 },
+            { "label": "10 分钟", "value": 600 },
+            { "label": "30 分钟", "value": 1800 },
+            { "label": "1 小时", "value": 3600 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "worldborder",
+      "name": "worldborder",
+      "description": "管理世界边界",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/set/center/damage/get/warning",
+          "enumValues": ["add", "set", "center", "damage", "get", "warning"]
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "string",
+          "required": false,
+          "description": "具体参数值"
+        }
+      ]
+    },
+    {
+      "id": "attribute",
+      "name": "attribute",
+      "description": "修改/查询实体属性",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "attribute",
+          "displayName": "属性",
+          "type": "attribute",
+          "required": true,
+          "description": "属性 ID",
+          "placeholder": "minecraft:generic.max_health",
+          "presets": [
+            { "label": "最大生命", "value": "minecraft:generic.max_health" },
+            { "label": "移动速度", "value": "minecraft:generic.movement_speed" },
+            { "label": "攻击伤害", "value": "minecraft:generic.attack_damage" }
+          ]
+        },
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "get/base/get_modifier/value",
+          "enumValues": ["get", "base", "get_modifier", "value"]
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "number",
+          "required": false,
+          "description": "属性值"
+        }
+      ]
+    },
+    {
+      "id": "damage",
+      "name": "damage",
+      "description": "对实体造成伤害",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@e[type=zombie]"
+        },
+        {
+          "name": "amount",
+          "displayName": "伤害量",
+          "type": "number",
+          "required": true,
+          "description": "造成的伤害值",
+          "presets": [
+            { "label": "1", "value": 1 },
+            { "label": "5", "value": 5 },
+            { "label": "10", "value": 10 },
+            { "label": "致死", "value": 1000 }
+          ]
+        },
+        {
+          "name": "damageType",
+          "displayName": "伤害类型",
+          "type": "string",
+          "required": false,
+          "description": "伤害类型 ID",
+          "placeholder": "minecraft:generic"
+        },
+        {
+          "name": "source",
+          "displayName": "伤害来源",
+          "type": "string",
+          "required": false,
+          "description": "来源实体选择器"
+        }
+      ]
+    },
+    {
+      "id": "effect",
+      "name": "effect",
+      "description": "给予/移除状态效果",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "give 给予 / clear 移除",
+          "enumValues": ["give", "clear"],
+          "presets": [
+            { "label": "给予", "value": "give" },
+            { "label": "移除", "value": "clear" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "effect",
+          "displayName": "效果",
+          "type": "effect",
+          "required": true,
+          "description": "状态效果 ID",
+          "placeholder": "minecraft:speed",
+          "presets": [
+            { "label": "速度", "value": "minecraft:speed" },
+            { "label": "力量", "value": "minecraft:strength" },
+            { "label": "跳跃提升", "value": "minecraft:jump_boost" },
+            { "label": "生命恢复", "value": "minecraft:regeneration" },
+            { "label": "夜视", "value": "minecraft:night_vision" },
+            { "label": "中毒", "value": "minecraft:poison" }
+          ]
+        },
+        {
+          "name": "duration",
+          "displayName": "持续时间（秒）",
+          "type": "integer",
+          "required": false,
+          "description": "效果持续时间",
+          "defaultValue": 30,
+          "presets": [
+            { "label": "10 秒", "value": 10 },
+            { "label": "30 秒", "value": 30 },
+            { "label": "1 分钟", "value": 60 },
+            { "label": "10 分钟", "value": 600 },
+            { "label": "无限", "value": 1000000 }
+          ]
+        },
+        {
+          "name": "amplifier",
+          "displayName": "等级",
+          "type": "integer",
+          "required": false,
+          "description": "效果等级（0 为 I 级）",
+          "defaultValue": 0,
+          "presets": [
+            { "label": "I 级", "value": 0 },
+            { "label": "II 级", "value": 1 },
+            { "label": "III 级", "value": 2 },
+            { "label": "V 级", "value": 4 }
+          ]
+        },
+        {
+          "name": "hideParticles",
+          "displayName": "隐藏粒子",
+          "type": "boolean",
+          "required": false,
+          "description": "是否隐藏粒子效果"
+        }
+      ]
+    },
+    {
+      "id": "enchant",
+      "name": "enchant",
+      "description": "附魔手持物品",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "enchantment",
+          "displayName": "附魔",
+          "type": "enchantment",
+          "required": true,
+          "description": "附魔 ID",
+          "placeholder": "minecraft:sharpness",
+          "presets": [
+            { "label": "锋利", "value": "minecraft:sharpness" },
+            { "label": "耐久", "value": "minecraft:unbreaking" },
+            { "label": "经验修补", "value": "minecraft:mending" },
+            { "label": "保护", "value": "minecraft:protection" },
+            { "label": "时运", "value": "minecraft:fortune" }
+          ]
+        },
+        {
+          "name": "level",
+          "displayName": "等级",
+          "type": "integer",
+          "required": false,
+          "description": "附魔等级",
+          "defaultValue": 1,
+          "presets": [
+            { "label": "I 级", "value": 1 },
+            { "label": "III 级", "value": 3 },
+            { "label": "V 级", "value": 5 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kill",
+      "name": "kill",
+      "description": "清除实体",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@e[type=zombie]",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有实体", "value": "@e" },
+            { "label": "所有僵尸", "value": "@e[type=zombie]" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ride",
+      "name": "ride",
+      "description": "使实体骑乘/被骑乘",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "要骑乘的实体",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "mount 骑乘 / dismount 下马",
+          "enumValues": ["mount", "dismount"]
+        },
+        {
+          "name": "vehicle",
+          "displayName": "载体",
+          "type": "entity-selector",
+          "required": false,
+          "description": "被骑乘的实体",
+          "selector": true,
+          "placeholder": "@e[type=pig]"
+        }
+      ]
+    },
+    {
+      "id": "rotate",
+      "name": "rotate",
+      "description": "更改实体的朝向",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "rotation",
+          "displayName": "朝向",
+          "type": "coordinates",
+          "required": true,
+          "description": "水平/垂直朝向",
+          "placeholder": "~ ~"
+        }
+      ]
+    },
+    {
+      "id": "spreadplayers",
+      "name": "spreadplayers",
+      "description": "将实体随机传送",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "center",
+          "displayName": "中心坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "传送中心点",
+          "placeholder": "0 0"
+        },
+        {
+          "name": "spreadDistance",
+          "displayName": "扩散距离",
+          "type": "number",
+          "required": true,
+          "description": "最小扩散距离",
+          "presets": [
+            { "label": "10", "value": 10 },
+            { "label": "50", "value": 50 },
+            { "label": "100", "value": 100 }
+          ]
+        },
+        {
+          "name": "maxRange",
+          "displayName": "最大范围",
+          "type": "number",
+          "required": true,
+          "description": "最大范围",
+          "presets": [
+            { "label": "100", "value": 100 },
+            { "label": "500", "value": 500 },
+            { "label": "1000", "value": 1000 }
+          ]
+        },
+        {
+          "name": "respectTeams",
+          "displayName": "尊重队伍",
+          "type": "boolean",
+          "required": false,
+          "description": "是否以队伍为单位传送"
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a",
+          "presets": [
+            { "label": "所有玩家", "value": "@a" },
+            { "label": "自己", "value": "@s" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "summon",
+      "name": "summon",
+      "description": "生成实体",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "entity",
+          "displayName": "实体类型",
+          "type": "string",
+          "required": true,
+          "description": "实体 ID",
+          "placeholder": "minecraft:axolotl",
+          "presets": [
+            { "label": "美西螈", "value": "minecraft:axolotl" },
+            { "label": "僵尸", "value": "minecraft:zombie" },
+            { "label": "苦力怕", "value": "minecraft:creeper" },
+            { "label": "末影龙", "value": "minecraft:ender_dragon" },
+            { "label": "凋灵", "value": "minecraft:wither" },
+            { "label": "闪电", "value": "minecraft:lightning_bolt" }
+          ]
+        },
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "生成坐标",
+          "presets": [{ "label": "当前位置", "value": "~ ~ ~" }]
+        },
+        {
+          "name": "nbt",
+          "displayName": "NBT",
+          "type": "nbt",
+          "required": false,
+          "description": "实体 NBT 数据",
+          "placeholder": "{Variant:0}",
+          "supportsNbtEditor": true,
+          "nbtKind": "entity"
+        }
+      ]
+    },
+    {
+      "id": "tag",
+      "name": "tag",
+      "description": "管理实体的标签",
+      "category": "entity",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/list",
+          "enumValues": ["add", "remove", "list"],
+          "presets": [
+            { "label": "添加", "value": "add" },
+            { "label": "移除", "value": "remove" },
+            { "label": "列出", "value": "list" }
+          ]
+        },
+        {
+          "name": "name",
+          "displayName": "标签名",
+          "type": "string",
+          "required": false,
+          "description": "标签名称"
+        }
+      ]
+    },
+    {
+      "id": "teleport",
+      "name": "teleport",
+      "description": "传送实体（/tp 的别名）",
+      "category": "entity",
+      "permissionLevel": 2,
+      "aliases": ["tp"],
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "要传送的实体",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "destination",
+          "displayName": "目标",
+          "type": "string",
+          "required": true,
+          "description": "目标坐标或实体选择器",
+          "placeholder": "~ ~ ~ 或 @p",
+          "presets": [
+            { "label": "当前位置", "value": "~ ~ ~" },
+            { "label": "世界中心", "value": "0 64 0" }
+          ]
+        },
+        {
+          "name": "rotation",
+          "displayName": "朝向",
+          "type": "string",
+          "required": false,
+          "description": "水平/垂直朝向",
+          "placeholder": "~ ~"
+        }
+      ]
+    },
+    {
+      "id": "tp",
+      "name": "tp",
+      "description": "传送实体（teleport 的别名）",
+      "category": "entity",
+      "permissionLevel": 2,
+      "aliases": ["teleport"],
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "destination",
+          "displayName": "目标",
+          "type": "string",
+          "required": true,
+          "description": "目标坐标或实体选择器"
+        }
+      ]
+    },
+    {
+      "id": "clone",
+      "name": "clone",
+      "description": "复制方块区域",
+      "category": "block",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "begin",
+          "displayName": "起始坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "起始坐标"
+        },
+        {
+          "name": "end",
+          "displayName": "结束坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "结束坐标"
+        },
+        {
+          "name": "destination",
+          "displayName": "目标坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "目标坐标"
+        },
+        {
+          "name": "maskMode",
+          "displayName": "遮罩模式",
+          "type": "enum",
+          "required": false,
+          "description": "filtered/replace/masked",
+          "enumValues": ["filtered", "replace", "masked"]
+        }
+      ]
+    },
+    {
+      "id": "fill",
+      "name": "fill",
+      "description": "填充方块区域",
+      "category": "block",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "from",
+          "displayName": "起始坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "起始坐标"
+        },
+        {
+          "name": "to",
+          "displayName": "结束坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "结束坐标"
+        },
+        {
+          "name": "block",
+          "displayName": "方块",
+          "type": "block",
+          "required": true,
+          "description": "要填充的方块 ID",
+          "placeholder": "minecraft:stone",
+          "presets": [
+            { "label": "石头", "value": "minecraft:stone" },
+            { "label": "玻璃", "value": "minecraft:glass" },
+            { "label": "空气", "value": "minecraft:air" },
+            { "label": "钻石块", "value": "minecraft:diamond_block" },
+            { "label": "水", "value": "minecraft:water" }
+          ]
+        },
+        {
+          "name": "mode",
+          "displayName": "模式",
+          "type": "enum",
+          "required": false,
+          "description": "replace/keep/outline/hollow/destroy",
+          "enumValues": ["replace", "keep", "outline", "hollow", "destroy"],
+          "presets": [
+            { "label": "替换", "value": "replace" },
+            { "label": "保留", "value": "keep" },
+            { "label": "轮廓", "value": "outline" },
+            { "label": "空心", "value": "hollow" },
+            { "label": "破坏", "value": "destroy" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "setblock",
+      "name": "setblock",
+      "description": "放置单个方块",
+      "category": "block",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "坐标",
+          "presets": [{ "label": "当前位置", "value": "~ ~ ~" }]
+        },
+        {
+          "name": "block",
+          "displayName": "方块",
+          "type": "block",
+          "required": true,
+          "description": "方块 ID",
+          "placeholder": "minecraft:stone",
+          "presets": [
+            { "label": "石头", "value": "minecraft:stone" },
+            { "label": "箱子", "value": "minecraft:chest" },
+            { "label": "空气", "value": "minecraft:air" }
+          ]
+        },
+        {
+          "name": "mode",
+          "displayName": "模式",
+          "type": "enum",
+          "required": false,
+          "description": "replace/keep/destroy",
+          "enumValues": ["replace", "keep", "destroy"]
+        }
+      ]
+    },
+    {
+      "id": "clear",
+      "name": "clear",
+      "description": "清除玩家物品栏",
+      "category": "item",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "item",
+          "displayName": "物品",
+          "type": "item",
+          "required": false,
+          "description": "要清除的物品 ID",
+          "placeholder": "minecraft:diamond"
+        },
+        {
+          "name": "maxCount",
+          "displayName": "最大数量",
+          "type": "integer",
+          "required": false,
+          "description": "最多清除的数量"
+        }
+      ]
+    },
+    {
+      "id": "give",
+      "name": "give",
+      "description": "给予玩家物品",
+      "category": "item",
+      "permissionLevel": 2,
+      "aliases": ["g"],
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" },
+            { "label": "最近玩家", "value": "@p" }
+          ]
+        },
+        {
+          "name": "item",
+          "displayName": "物品",
+          "type": "item",
+          "required": true,
+          "description": "物品 ID",
+          "placeholder": "minecraft:diamond",
+          "presets": [
+            { "label": "钻石", "value": "minecraft:diamond" },
+            { "label": "下界合金锭", "value": "minecraft:netherite_ingot" },
+            { "label": "钻石剑", "value": "minecraft:diamond_sword" },
+            { "label": "金苹果", "value": "minecraft:golden_apple" },
+            { "label": "附魔金苹果", "value": "minecraft:enchanted_golden_apple" },
+            { "label": "鞘翅", "value": "minecraft:elytra" }
+          ]
+        },
+        {
+          "name": "count",
+          "displayName": "数量",
+          "type": "integer",
+          "required": false,
+          "description": "物品数量",
+          "defaultValue": 1,
+          "presets": [
+            { "label": "1", "value": 1 },
+            { "label": "16", "value": 16 },
+            { "label": "64", "value": 64 }
+          ]
+        },
+        {
+          "name": "nbt",
+          "displayName": "NBT",
+          "type": "nbt",
+          "required": false,
+          "description": "物品 NBT 数据",
+          "placeholder": "{Enchantments:[{id:\"minecraft:sharpness\",lvl:5}]}",
+          "supportsNbtEditor": true,
+          "nbtKind": "item"
+        }
+      ]
+    },
+    {
+      "id": "item",
+      "name": "item",
+      "description": "修改方块中的物品（如容器）",
+      "category": "item",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "replace/modify/block",
+          "enumValues": ["replace", "modify", "block"]
+        },
+        {
+          "name": "pos",
+          "displayName": "容器坐标",
+          "type": "coordinates",
+          "required": true,
+          "description": "容器坐标"
+        },
+        {
+          "name": "slot",
+          "displayName": "槽位",
+          "type": "slot",
+          "required": true,
+          "description": "槽位名称，如 container.0",
+          "placeholder": "container.0"
+        },
+        {
+          "name": "item",
+          "displayName": "物品",
+          "type": "item",
+          "required": false,
+          "description": "物品 ID"
+        },
+        {
+          "name": "count",
+          "displayName": "数量",
+          "type": "integer",
+          "required": false,
+          "description": "物品数量"
+        },
+        {
+          "name": "nbt",
+          "displayName": "NBT",
+          "type": "nbt",
+          "required": false,
+          "description": "物品 NBT 数据",
+          "supportsNbtEditor": true,
+          "nbtKind": "item"
+        }
+      ]
+    },
+    {
+      "id": "loot",
+      "name": "loot",
+      "description": "掉落战利品",
+      "category": "item",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "give/insert/spawn",
+          "enumValues": ["give", "insert", "spawn"]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s"
+        },
+        {
+          "name": "source",
+          "displayName": "来源",
+          "type": "string",
+          "required": false,
+          "description": "战利品来源",
+          "placeholder": "minecraft:blocks/stone"
+        }
+      ]
+    },
+    {
+      "id": "recipe",
+      "name": "recipe",
+      "description": "给予/移除合成配方",
+      "category": "item",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "give/take",
+          "enumValues": ["give", "take"],
+          "presets": [
+            { "label": "给予", "value": "give" },
+            { "label": "移除", "value": "take" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@s",
+          "presets": [
+            { "label": "自己", "value": "@s" },
+            { "label": "所有玩家", "value": "@a" }
+          ]
+        },
+        {
+          "name": "recipe",
+          "displayName": "配方",
+          "type": "string",
+          "required": false,
+          "description": "配方 ID，留空表示全部",
+          "placeholder": "*"
+        }
+      ]
+    },
+    {
+      "id": "dialog",
+      "name": "dialog",
+      "description": "向客户端显示对话界面",
+      "category": "communication",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "dialog",
+          "displayName": "对话 ID",
+          "type": "string",
+          "required": true,
+          "description": "对话标识符",
+          "placeholder": "minecraft:custom_dialog"
+        }
+      ]
+    },
+    {
+      "id": "me",
+      "name": "me",
+      "description": "发送第三人称消息",
+      "category": "communication",
+      "permissionLevel": 0,
+      "arguments": [
+        {
+          "name": "message",
+          "displayName": "消息",
+          "type": "message",
+          "required": true,
+          "description": "要发送的消息内容"
+        }
+      ]
+    },
+    {
+      "id": "msg",
+      "name": "msg",
+      "description": "私聊玩家",
+      "category": "communication",
+      "permissionLevel": 0,
+      "aliases": ["tell", "w"],
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@p"
+        },
+        {
+          "name": "message",
+          "displayName": "消息",
+          "type": "message",
+          "required": true,
+          "description": "要发送的私聊内容"
+        }
+      ]
+    },
+    {
+      "id": "say",
+      "name": "say",
+      "description": "向所有玩家广播消息",
+      "category": "communication",
+      "permissionLevel": 1,
+      "arguments": [
+        {
+          "name": "message",
+          "displayName": "消息",
+          "type": "message",
+          "required": true,
+          "description": "要广播的消息"
+        }
+      ]
+    },
+    {
+      "id": "teammsg",
+      "name": "teammsg",
+      "description": "向队伍发送消息（/tm 的别名）",
+      "category": "communication",
+      "permissionLevel": 0,
+      "aliases": ["tm"],
+      "arguments": [
+        {
+          "name": "message",
+          "displayName": "消息",
+          "type": "message",
+          "required": true,
+          "description": "要发送给队伍的消息"
+        }
+      ]
+    },
+    {
+      "id": "tell",
+      "name": "tell",
+      "description": "私聊玩家（/msg 的别名）",
+      "category": "communication",
+      "permissionLevel": 0,
+      "aliases": ["msg", "w"],
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@p"
+        },
+        {
+          "name": "message",
+          "displayName": "消息",
+          "type": "message",
+          "required": true,
+          "description": "要发送的私聊内容"
+        }
+      ]
+    },
+    {
+      "id": "tellraw",
+      "name": "tellraw",
+      "description": "向玩家发送原始 JSON 消息",
+      "category": "communication",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "message",
+          "displayName": "JSON 消息",
+          "type": "string",
+          "required": true,
+          "description": "JSON 格式的消息内容",
+          "placeholder": "{\"text\":\"Hello\"}"
+        }
+      ]
+    },
+    {
+      "id": "title",
+      "name": "title",
+      "description": "管理屏幕标题",
+      "category": "communication",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "title/subtitle/actionbar/times/reset",
+          "enumValues": ["title", "subtitle", "actionbar", "times", "reset"],
+          "presets": [
+            { "label": "主标题", "value": "title" },
+            { "label": "副标题", "value": "subtitle" },
+            { "label": "动作栏", "value": "actionbar" },
+            { "label": "时间设置", "value": "times" },
+            { "label": "重置", "value": "reset" }
+          ]
+        },
+        {
+          "name": "value",
+          "displayName": "内容",
+          "type": "string",
+          "required": false,
+          "description": "标题内容或时间值（JSON 文本）",
+          "placeholder": "{\"text\":\"欢迎\"}"
+        }
+      ]
+    },
+    {
+      "id": "ban",
+      "name": "ban",
+      "description": "封禁玩家",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "玩家名",
+          "type": "string",
+          "required": true,
+          "description": "要封禁的玩家名称",
+          "placeholder": "Steve"
+        },
+        {
+          "name": "reason",
+          "displayName": "原因",
+          "type": "message",
+          "required": false,
+          "description": "封禁原因"
+        }
+      ]
+    },
+    {
+      "id": "ban-ip",
+      "name": "ban-ip",
+      "description": "封禁 IP 地址",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "IP",
+          "type": "string",
+          "required": true,
+          "description": "要封禁的 IP 地址",
+          "placeholder": "127.0.0.1"
+        },
+        {
+          "name": "reason",
+          "displayName": "原因",
+          "type": "message",
+          "required": false,
+          "description": "封禁原因"
+        }
+      ]
+    },
+    {
+      "id": "banlist",
+      "name": "banlist",
+      "description": "查看封禁列表",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "type",
+          "displayName": "类型",
+          "type": "enum",
+          "required": false,
+          "description": "players 或 ips",
+          "enumValues": ["players", "ips"],
+          "presets": [
+            { "label": "玩家", "value": "players" },
+            { "label": "IP", "value": "ips" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "datapack",
+      "name": "datapack",
+      "description": "控制数据包加载",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "enable/disable/list",
+          "enumValues": ["enable", "disable", "list"]
+        },
+        {
+          "name": "name",
+          "displayName": "数据包名",
+          "type": "string",
+          "required": false,
+          "description": "数据包标识符"
+        }
+      ]
+    },
+    {
+      "id": "deop",
+      "name": "deop",
+      "description": "撤销玩家的 OP 权限",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "玩家名",
+          "type": "string",
+          "required": true,
+          "description": "要撤销 OP 的玩家名称",
+          "placeholder": "Steve"
+        }
+      ]
+    },
+    {
+      "id": "kick",
+      "name": "kick",
+      "description": "踢出玩家",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "reason",
+          "displayName": "原因",
+          "type": "message",
+          "required": false,
+          "description": "踢出原因"
+        }
+      ]
+    },
+    {
+      "id": "list",
+      "name": "list",
+      "description": "列出在线玩家",
+      "category": "server",
+      "permissionLevel": 0,
+      "arguments": [
+        {
+          "name": "uuids",
+          "displayName": "显示 UUID",
+          "type": "boolean",
+          "required": false,
+          "description": "是否显示 UUID"
+        }
+      ]
+    },
+    {
+      "id": "op",
+      "name": "op",
+      "description": "授予玩家 OP 权限",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "玩家名",
+          "type": "string",
+          "required": true,
+          "description": "要授予 OP 的玩家名称",
+          "placeholder": "Steve"
+        }
+      ]
+    },
+    {
+      "id": "pardon",
+      "name": "pardon",
+      "description": "解除玩家封禁",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "玩家名",
+          "type": "string",
+          "required": true,
+          "description": "要解除封禁的玩家名称",
+          "placeholder": "Steve"
+        }
+      ]
+    },
+    {
+      "id": "pardon-ip",
+      "name": "pardon-ip",
+      "description": "解除 IP 封禁",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "IP",
+          "type": "string",
+          "required": true,
+          "description": "要解除封禁的 IP 地址",
+          "placeholder": "127.0.0.1"
+        }
+      ]
+    },
+    {
+      "id": "publish",
+      "name": "publish",
+      "description": "将本地世界发布到局域网",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": [
+        {
+          "name": "port",
+          "displayName": "端口",
+          "type": "integer",
+          "required": false,
+          "description": "局域网端口",
+          "placeholder": "25565",
+          "defaultValue": 25565,
+          "presets": [
+            { "label": "25565", "value": 25565 },
+            { "label": "25566", "value": 25566 }
+          ]
+        },
+        {
+          "name": "allowCheats",
+          "displayName": "允许作弊",
+          "type": "boolean",
+          "required": false,
+          "description": "是否允许作弊"
+        },
+        {
+          "name": "gamemode",
+          "displayName": "游戏模式",
+          "type": "gamemode",
+          "required": false,
+          "description": "默认游戏模式",
+          "enumValues": ["survival", "creative", "adventure", "spectator"]
+        }
+      ]
+    },
+    {
+      "id": "reload",
+      "name": "reload",
+      "description": "重新加载数据包",
+      "category": "server",
+      "permissionLevel": 2,
+      "arguments": []
+    },
+    {
+      "id": "save-all",
+      "name": "save-all",
+      "description": "将服务器保存到磁盘",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": [
+        {
+          "name": "flush",
+          "displayName": "立即刷新",
+          "type": "boolean",
+          "required": false,
+          "description": "是否立即刷新"
+        }
+      ]
+    },
+    {
+      "id": "save-off",
+      "name": "save-off",
+      "description": "禁用自动保存",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": []
+    },
+    {
+      "id": "save-on",
+      "name": "save-on",
+      "description": "启用自动保存",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": []
+    },
+    {
+      "id": "setidletimeout",
+      "name": "setidletimeout",
+      "description": "设置空闲玩家被踢出前的时间",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "minutes",
+          "displayName": "分钟",
+          "type": "integer",
+          "required": true,
+          "description": "空闲超时时间（分钟）",
+          "presets": [
+            { "label": "5 分钟", "value": 5 },
+            { "label": "15 分钟", "value": 15 },
+            { "label": "30 分钟", "value": 30 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stop",
+      "name": "stop",
+      "description": "停止服务器",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": []
+    },
+    {
+      "id": "tick",
+      "name": "tick",
+      "description": "控制游戏刻速率",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "freeze/unfreeze/rate/sprint/step/query",
+          "enumValues": ["freeze", "unfreeze", "rate", "sprint", "step", "query"]
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "string",
+          "required": false,
+          "description": "具体参数值"
+        }
+      ]
+    },
+    {
+      "id": "transfer",
+      "name": "transfer",
+      "description": "将玩家转移到另一个服务器",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "host",
+          "displayName": "主机",
+          "type": "string",
+          "required": true,
+          "description": "目标服务器地址",
+          "placeholder": "play.example.com"
+        },
+        {
+          "name": "port",
+          "displayName": "端口",
+          "type": "integer",
+          "required": false,
+          "description": "目标服务器端口",
+          "defaultValue": 25565
+        }
+      ]
+    },
+    {
+      "id": "unpublish",
+      "name": "unpublish",
+      "description": "取消发布本地世界",
+      "category": "server",
+      "permissionLevel": 4,
+      "arguments": []
+    },
+    {
+      "id": "version",
+      "name": "version",
+      "description": "显示服务器的游戏版本",
+      "category": "server",
+      "permissionLevel": 2,
+      "arguments": []
+    },
+    {
+      "id": "whitelist",
+      "name": "whitelist",
+      "description": "管理服务器白名单",
+      "category": "server",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/list/on/off/reload",
+          "enumValues": ["add", "remove", "list", "on", "off", "reload"],
+          "presets": [
+            { "label": "添加", "value": "add" },
+            { "label": "移除", "value": "remove" },
+            { "label": "列出", "value": "list" },
+            { "label": "启用", "value": "on" },
+            { "label": "禁用", "value": "off" },
+            { "label": "重载", "value": "reload" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "玩家名",
+          "type": "string",
+          "required": false,
+          "description": "要添加/移除的玩家名称"
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "name": "data",
+      "description": "读写方块/实体/存储的 NBT 数据",
+      "category": "data",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "get/merge/modify/remove",
+          "enumValues": ["get", "merge", "modify", "remove"]
+        },
+        {
+          "name": "targetType",
+          "displayName": "目标类型",
+          "type": "enum",
+          "required": true,
+          "description": "block/entity/storage",
+          "enumValues": ["block", "entity", "storage"]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "string",
+          "required": true,
+          "description": "方块坐标、实体选择器或存储 ID",
+          "placeholder": "@e[type=pig]"
+        },
+        {
+          "name": "path",
+          "displayName": "NBT 路径",
+          "type": "nbt",
+          "required": false,
+          "description": "要操作的 NBT 路径",
+          "placeholder": "Health",
+          "supportsNbtEditor": true,
+          "nbtKind": "generic"
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "nbt",
+          "required": false,
+          "description": "要写入的 NBT 值",
+          "supportsNbtEditor": true,
+          "nbtKind": "generic"
+        }
+      ]
+    },
+    {
+      "id": "function",
+      "name": "function",
+      "description": "运行函数",
+      "category": "data",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "name",
+          "displayName": "函数名",
+          "type": "string",
+          "required": true,
+          "description": "函数标识符",
+          "placeholder": "mypack:my_function"
+        }
+      ]
+    },
+    {
+      "id": "return",
+      "name": "return",
+      "description": "控制函数内部的执行流并更改返回值",
+      "category": "data",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "value",
+          "displayName": "返回值",
+          "type": "string",
+          "required": true,
+          "description": "要返回的值"
+        }
+      ]
+    },
+    {
+      "id": "schedule",
+      "name": "schedule",
+      "description": "调度函数执行",
+      "category": "data",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "clear/function",
+          "enumValues": ["clear", "function"]
+        },
+        {
+          "name": "name",
+          "displayName": "名称",
+          "type": "string",
+          "required": true,
+          "description": "调度名称或函数 ID"
+        },
+        {
+          "name": "time",
+          "displayName": "时间",
+          "type": "string",
+          "required": false,
+          "description": "延迟时间，如 10s、1d",
+          "placeholder": "10s",
+          "presets": [
+            { "label": "1 秒", "value": "1s" },
+            { "label": "10 秒", "value": "10s" },
+            { "label": "1 分钟", "value": "1m" },
+            { "label": "1 天", "value": "1d" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "debug",
+      "name": "debug",
+      "description": "调试命令",
+      "category": "misc",
+      "permissionLevel": 3,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "start/stop/function",
+          "enumValues": ["start", "stop", "function"]
+        }
+      ]
+    },
+    {
+      "id": "execute",
+      "name": "execute",
+      "description": "以特定上下文执行命令（最复杂的指令）",
+      "category": "misc",
+      "permissionLevel": 2,
+      "isChainCommand": true,
+      "arguments": [],
+      "chainCategories": [
+        {
+          "id": "modifiers",
+          "label": "修饰子命令 · 改变执行上下文",
+          "subcommands": [
+            {
+              "id": "as",
+              "label": "as · 改变执行者",
+              "description": "以指定实体作为执行者，位置和朝向不变",
+              "template": "as {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "新的执行者",
+                  "placeholder": "@a",
+                  "presets": [
+                    { "label": "自己", "value": "@s" },
+                    { "label": "所有玩家", "value": "@a" },
+                    { "label": "最近玩家", "value": "@p" },
+                    { "label": "所有实体", "value": "@e" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "at",
+              "label": "at · 改变位置和朝向",
+              "description": "把执行位置和朝向设为目标的当前位置",
+              "template": "at {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "位置参照实体",
+                  "placeholder": "@s",
+                  "presets": [
+                    { "label": "自己", "value": "@s" },
+                    { "label": "所有玩家", "value": "@a" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "positioned",
+              "label": "positioned · 改变位置",
+              "description": "改变执行位置，执行者和朝向不变",
+              "template": "positioned {pos}",
+              "arguments": [
+                {
+                  "name": "pos",
+                  "displayName": "坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "新的执行位置",
+                  "placeholder": "0 64 0",
+                  "presets": [
+                    { "label": "世界中心", "value": "0 64 0" },
+                    { "label": "当前位置", "value": "~ ~ ~" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "positioned-as",
+              "label": "positioned as · 以目标为位置",
+              "description": "把执行位置设为目标的当前位置",
+              "template": "positioned as {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "位置参照实体",
+                  "placeholder": "@s",
+                  "presets": [
+                    { "label": "自己", "value": "@s" },
+                    { "label": "所有玩家", "value": "@a" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "rotated",
+              "label": "rotated · 改变朝向",
+              "description": "改变执行朝向，位置和执行者不变",
+              "template": "rotated {yaw} {pitch}",
+              "arguments": [
+                {
+                  "name": "yaw",
+                  "displayName": "水平角（yaw）",
+                  "type": "number",
+                  "required": true,
+                  "description": "水平旋转角度，-180 到 180",
+                  "defaultValue": 0,
+                  "presets": [
+                    { "label": "北 0", "value": 0 },
+                    { "label": "东 90", "value": 90 },
+                    { "label": "南 180", "value": 180 },
+                    { "label": "西 -90", "value": -90 }
+                  ]
+                },
+                {
+                  "name": "pitch",
+                  "displayName": "垂直角（pitch）",
+                  "type": "number",
+                  "required": true,
+                  "description": "垂直旋转角度，-90 到 90",
+                  "defaultValue": 0,
+                  "presets": [
+                    { "label": "水平 0", "value": 0 },
+                    { "label": "朝上 -90", "value": -90 },
+                    { "label": "朝下 90", "value": 90 }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "rotated-as",
+              "label": "rotated as · 以目标为朝向",
+              "description": "把执行朝向设为目标当前的朝向",
+              "template": "rotated as {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "朝向参照实体",
+                  "placeholder": "@s"
+                }
+              ]
+            },
+            {
+              "id": "facing",
+              "label": "facing · 面向坐标",
+              "description": "把执行朝向设为面向某个坐标",
+              "template": "facing {pos}",
+              "arguments": [
+                {
+                  "name": "pos",
+                  "displayName": "坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "要面向的坐标",
+                  "placeholder": "0 64 0"
+                }
+              ]
+            },
+            {
+              "id": "facing-entity",
+              "label": "facing entity · 面向实体",
+              "description": "把执行朝向设为面向某个实体",
+              "template": "facing entity {target} {anchor}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "要面向的实体",
+                  "placeholder": "@p"
+                },
+                {
+                  "name": "anchor",
+                  "displayName": "基准点",
+                  "type": "enum",
+                  "required": true,
+                  "description": "看向实体的哪个部位",
+                  "enumValues": ["eyes", "feet"],
+                  "defaultValue": "eyes",
+                  "presets": [
+                    { "label": "眼睛", "value": "eyes" },
+                    { "label": "脚部", "value": "feet" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "in",
+              "label": "in · 切换维度",
+              "description": "切换执行维度，位置坐标不变",
+              "template": "in {dimension}",
+              "arguments": [
+                {
+                  "name": "dimension",
+                  "displayName": "维度",
+                  "type": "enum",
+                  "required": true,
+                  "description": "目标维度",
+                  "enumValues": [
+                    "minecraft:overworld",
+                    "minecraft:the_nether",
+                    "minecraft:the_end"
+                  ],
+                  "presets": [
+                    { "label": "主世界", "value": "minecraft:overworld" },
+                    { "label": "下界", "value": "minecraft:the_nether" },
+                    { "label": "末地", "value": "minecraft:the_end" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "anchored",
+              "label": "anchored · 改变基准点",
+              "description": "改变执行基准点（脚或眼睛），影响 ^ 局部坐标计算",
+              "template": "anchored {anchor}",
+              "arguments": [
+                {
+                  "name": "anchor",
+                  "displayName": "基准点",
+                  "type": "enum",
+                  "required": true,
+                  "description": "以脚还是以眼睛为基准",
+                  "enumValues": ["eyes", "feet"],
+                  "defaultValue": "eyes",
+                  "presets": [
+                    { "label": "眼睛", "value": "eyes" },
+                    { "label": "脚部", "value": "feet" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "align",
+              "label": "align · 对齐坐标",
+              "description": "把执行坐标对齐到方块网格",
+              "template": "align {axes}",
+              "arguments": [
+                {
+                  "name": "axes",
+                  "displayName": "对齐轴",
+                  "type": "enum",
+                  "required": true,
+                  "description": "要对齐的坐标轴",
+                  "enumValues": ["x", "y", "z", "xy", "xz", "yz", "xyz"],
+                  "defaultValue": "xyz",
+                  "presets": [
+                    { "label": "全部", "value": "xyz" },
+                    { "label": "仅 X", "value": "x" },
+                    { "label": "仅 Y", "value": "y" },
+                    { "label": "仅 Z", "value": "z" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "conditions",
+          "label": "条件子命令 · 判断是否继续",
+          "subcommands": [
+            {
+              "id": "if-entity",
+              "label": "if entity · 检测实体存在",
+              "description": "如果指定实体存在则继续",
+              "template": "if entity {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "要检测存在的实体",
+                  "placeholder": "@e[type=zombie]",
+                  "presets": [
+                    { "label": "有僵尸", "value": "@e[type=zombie]" },
+                    { "label": "有玩家", "value": "@a" },
+                    { "label": "有掉落物", "value": "@e[type=item]" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "unless-entity",
+              "label": "unless entity · 检测实体不存在",
+              "description": "如果指定实体不存在则继续",
+              "template": "unless entity {target}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "要检测不存在的实体",
+                  "placeholder": "@e[type=zombie]"
+                }
+              ]
+            },
+            {
+              "id": "if-block",
+              "label": "if block · 检测方块",
+              "description": "如果指定位置是指定方块则继续",
+              "template": "if block {pos} {block}",
+              "arguments": [
+                {
+                  "name": "pos",
+                  "displayName": "坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "要检测的位置",
+                  "placeholder": "~ ~-1 ~",
+                  "presets": [{ "label": "脚下方块", "value": "~ ~-1 ~" }]
+                },
+                {
+                  "name": "block",
+                  "displayName": "方块",
+                  "type": "block",
+                  "required": true,
+                  "description": "方块 ID",
+                  "placeholder": "minecraft:grass_block",
+                  "presets": [
+                    { "label": "草方块", "value": "minecraft:grass_block" },
+                    { "label": "石头", "value": "minecraft:stone" },
+                    { "label": "空气", "value": "minecraft:air" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "if-blocks",
+              "label": "if blocks · 检测区域",
+              "description": "如果两个区域的方块匹配则继续",
+              "template": "if blocks {begin} {end} {destination} {mode}",
+              "arguments": [
+                {
+                  "name": "begin",
+                  "displayName": "起始坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "源区域起始坐标"
+                },
+                {
+                  "name": "end",
+                  "displayName": "结束坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "源区域结束坐标"
+                },
+                {
+                  "name": "destination",
+                  "displayName": "目标坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "目标区域起始坐标"
+                },
+                {
+                  "name": "mode",
+                  "displayName": "匹配模式",
+                  "type": "enum",
+                  "required": true,
+                  "description": "all 完全匹配 / masked 忽略空气",
+                  "enumValues": ["all", "masked"],
+                  "defaultValue": "all",
+                  "presets": [
+                    { "label": "完全匹配", "value": "all" },
+                    { "label": "忽略空气", "value": "masked" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "if-score",
+              "label": "if score · 比较分数",
+              "description": "如果两个记分比较成立则继续",
+              "template": "if score {target} {objective} {operator} {source} {sourceObjective}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "左侧记分持有者",
+                  "placeholder": "@s",
+                  "presets": [{ "label": "自己", "value": "@s" }]
+                },
+                {
+                  "name": "objective",
+                  "displayName": "记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "左侧记分项",
+                  "placeholder": "kills"
+                },
+                {
+                  "name": "operator",
+                  "displayName": "运算符",
+                  "type": "enum",
+                  "required": true,
+                  "description": "比较运算符",
+                  "enumValues": ["<", "<=", "=", ">=", ">"],
+                  "defaultValue": "=",
+                  "presets": [
+                    { "label": "等于", "value": "=" },
+                    { "label": "大于", "value": ">" },
+                    { "label": "大于等于", "value": ">=" },
+                    { "label": "小于", "value": "<" },
+                    { "label": "小于等于", "value": "<=" }
+                  ]
+                },
+                {
+                  "name": "source",
+                  "displayName": "源目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "右侧记分持有者",
+                  "placeholder": "@p"
+                },
+                {
+                  "name": "sourceObjective",
+                  "displayName": "源记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "右侧记分项",
+                  "placeholder": "deaths"
+                }
+              ]
+            },
+            {
+              "id": "if-score-matches",
+              "label": "if score matches · 检测分数范围",
+              "description": "如果分数在指定范围内则继续",
+              "template": "if score {target} {objective} matches {range}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "记分持有者",
+                  "placeholder": "@s"
+                },
+                {
+                  "name": "objective",
+                  "displayName": "记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "记分项名称",
+                  "placeholder": "kills"
+                },
+                {
+                  "name": "range",
+                  "displayName": "范围",
+                  "type": "string",
+                  "required": true,
+                  "description": "数值范围，如 1..10、5、..20",
+                  "placeholder": "1..10",
+                  "presets": [
+                    { "label": "1 到 10", "value": "1..10" },
+                    { "label": "正好 5", "value": "5" },
+                    { "label": "至少 10", "value": "10.." },
+                    { "label": "最多 5", "value": "..5" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "if-biome",
+              "label": "if biome · 检测生物群系",
+              "description": "如果指定位置的生物群系匹配则继续",
+              "template": "if biome {pos} {biome}",
+              "arguments": [
+                {
+                  "name": "pos",
+                  "displayName": "坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "要检测的位置",
+                  "placeholder": "~ ~ ~"
+                },
+                {
+                  "name": "biome",
+                  "displayName": "生物群系",
+                  "type": "biome",
+                  "required": true,
+                  "description": "生物群系 ID",
+                  "placeholder": "minecraft:plains",
+                  "presets": [
+                    { "label": "平原", "value": "minecraft:plains" },
+                    { "label": "沙漠", "value": "minecraft:desert" },
+                    { "label": "森林", "value": "minecraft:forest" },
+                    { "label": "海洋", "value": "minecraft:ocean" }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "if-data",
+              "label": "if data · 检测 NBT 数据",
+              "description": "如果指定 NBT 路径存在则继续",
+              "template": "if data {targetType} {target} {path}",
+              "arguments": [
+                {
+                  "name": "targetType",
+                  "displayName": "目标类型",
+                  "type": "enum",
+                  "required": true,
+                  "description": "block / entity / storage",
+                  "enumValues": ["block", "entity", "storage"],
+                  "defaultValue": "entity"
+                },
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "string",
+                  "required": true,
+                  "description": "方块坐标、实体选择器或存储 ID",
+                  "placeholder": "@s"
+                },
+                {
+                  "name": "path",
+                  "displayName": "NBT 路径",
+                  "type": "nbt",
+                  "required": true,
+                  "description": "要检测的 NBT 路径",
+                  "placeholder": "Health",
+                  "supportsNbtEditor": true,
+                  "nbtKind": "generic"
+                }
+              ]
+            },
+            {
+              "id": "if-items",
+              "label": "if items · 检测物品（1.21+）",
+              "description": "如果指定槽位有指定物品则继续",
+              "template": "if items {source} {target} {slot} {item}",
+              "arguments": [
+                {
+                  "name": "source",
+                  "displayName": "来源",
+                  "type": "enum",
+                  "required": true,
+                  "description": "block / entity",
+                  "enumValues": ["block", "entity"],
+                  "defaultValue": "entity"
+                },
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "string",
+                  "required": true,
+                  "description": "方块坐标或实体选择器",
+                  "placeholder": "@s"
+                },
+                {
+                  "name": "slot",
+                  "displayName": "槽位",
+                  "type": "slot",
+                  "required": true,
+                  "description": "槽位名称",
+                  "placeholder": "container.*",
+                  "presets": [
+                    { "label": "主手", "value": "weapon.mainhand" },
+                    { "label": "所有容器", "value": "container.*" },
+                    { "label": "全部", "value": "*" }
+                  ]
+                },
+                {
+                  "name": "item",
+                  "displayName": "物品",
+                  "type": "item",
+                  "required": true,
+                  "description": "物品 ID",
+                  "placeholder": "minecraft:diamond"
+                }
+              ]
+            },
+            {
+              "id": "if-function",
+              "label": "if function · 检测函数返回",
+              "description": "如果函数返回成功则继续",
+              "template": "if function {name}",
+              "arguments": [
+                {
+                  "name": "name",
+                  "displayName": "函数名",
+                  "type": "string",
+                  "required": true,
+                  "description": "函数标识符",
+                  "placeholder": "mypack:check"
+                }
+              ]
+            },
+            {
+              "id": "unless-block",
+              "label": "unless block · 检测方块（反向）",
+              "description": "如果指定位置不是指定方块则继续",
+              "template": "unless block {pos} {block}",
+              "arguments": [
+                {
+                  "name": "pos",
+                  "displayName": "坐标",
+                  "type": "coordinates",
+                  "required": true,
+                  "description": "要检测的位置",
+                  "placeholder": "~ ~-1 ~"
+                },
+                {
+                  "name": "block",
+                  "displayName": "方块",
+                  "type": "block",
+                  "required": true,
+                  "description": "方块 ID",
+                  "placeholder": "minecraft:bedrock"
+                }
+              ]
+            },
+            {
+              "id": "unless-score",
+              "label": "unless score · 比较分数（反向）",
+              "description": "如果两个记分比较不成立则继续",
+              "template": "unless score {target} {objective} {operator} {source} {sourceObjective}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "左侧记分持有者",
+                  "placeholder": "@s"
+                },
+                {
+                  "name": "objective",
+                  "displayName": "记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "左侧记分项"
+                },
+                {
+                  "name": "operator",
+                  "displayName": "运算符",
+                  "type": "enum",
+                  "required": true,
+                  "description": "比较运算符",
+                  "enumValues": ["<", "<=", "=", ">=", ">"],
+                  "defaultValue": "="
+                },
+                {
+                  "name": "source",
+                  "displayName": "源目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "右侧记分持有者",
+                  "placeholder": "@p"
+                },
+                {
+                  "name": "sourceObjective",
+                  "displayName": "源记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "右侧记分项"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "store",
+          "label": "存储子命令 · 保存结果（Java 版）",
+          "subcommands": [
+            {
+              "id": "store-result-score",
+              "label": "store result score · 存入记分板",
+              "description": "把命令的实际结果值存入记分板",
+              "template": "store result score {target} {objective}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "记分持有者",
+                  "placeholder": "@s",
+                  "presets": [{ "label": "自己", "value": "@s" }]
+                },
+                {
+                  "name": "objective",
+                  "displayName": "记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "记分项名称",
+                  "placeholder": "kills"
+                }
+              ]
+            },
+            {
+              "id": "store-success-score",
+              "label": "store success score · 存入成功状态",
+              "description": "把命令是否成功（1 或 0）存入记分板",
+              "template": "store success score {target} {objective}",
+              "arguments": [
+                {
+                  "name": "target",
+                  "displayName": "目标",
+                  "type": "entity-selector",
+                  "required": true,
+                  "description": "记分持有者",
+                  "placeholder": "@s"
+                },
+                {
+                  "name": "objective",
+                  "displayName": "记分项",
+                  "type": "objective",
+                  "required": true,
+                  "description": "记分项名称",
+                  "placeholder": "found"
+                }
+              ]
+            },
+            {
+              "id": "store-result-bossbar",
+              "label": "store result bossbar · 存入 Boss 栏",
+              "description": "把结果值存入 Boss 栏的当前值或最大值",
+              "template": "store result bossbar {id} {valueOrMax}",
+              "arguments": [
+                {
+                  "name": "id",
+                  "displayName": "Boss 栏 ID",
+                  "type": "string",
+                  "required": true,
+                  "description": "Boss 栏标识符",
+                  "placeholder": "minecraft:my_boss"
+                },
+                {
+                  "name": "valueOrMax",
+                  "displayName": "存储位置",
+                  "type": "enum",
+                  "required": true,
+                  "description": "value 当前值 / max 最大值",
+                  "enumValues": ["value", "max"],
+                  "defaultValue": "value"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "help",
+      "name": "help",
+      "description": "显示命令帮助",
+      "category": "misc",
+      "permissionLevel": 0,
+      "arguments": [
+        {
+          "name": "command",
+          "displayName": "命令名",
+          "type": "string",
+          "required": false,
+          "description": "要查询的命令名称"
+        }
+      ]
+    },
+    {
+      "id": "jfr",
+      "name": "jfr",
+      "description": "Java Flight Recorder 性能分析",
+      "category": "misc",
+      "permissionLevel": 4,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "start/stop",
+          "enumValues": ["start", "stop"]
+        }
+      ]
+    },
+    {
+      "id": "perf",
+      "name": "perf",
+      "description": "性能分析",
+      "category": "misc",
+      "permissionLevel": 4,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "start/stop",
+          "enumValues": ["start", "stop"]
+        }
+      ]
+    },
+    {
+      "id": "playsound",
+      "name": "playsound",
+      "description": "播放声音",
+      "category": "misc",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "sound",
+          "displayName": "声音",
+          "type": "sound",
+          "required": true,
+          "description": "声音 ID",
+          "placeholder": "minecraft:block.note_block.pling"
+        },
+        {
+          "name": "source",
+          "displayName": "来源",
+          "type": "enum",
+          "required": true,
+          "description": "声音来源",
+          "enumValues": [
+            "master",
+            "music",
+            "record",
+            "weather",
+            "block",
+            "hostile",
+            "neutral",
+            "player",
+            "ambient",
+            "voice"
+          ],
+          "presets": [
+            { "label": "主音量", "value": "master" },
+            { "label": "方块", "value": "block" },
+            { "label": "玩家", "value": "player" }
+          ]
+        },
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": false,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "pos",
+          "displayName": "坐标",
+          "type": "coordinates",
+          "required": false,
+          "description": "坐标"
+        },
+        {
+          "name": "volume",
+          "displayName": "音量",
+          "type": "number",
+          "required": false,
+          "description": "音量",
+          "defaultValue": 1
+        },
+        {
+          "name": "pitch",
+          "displayName": "音调",
+          "type": "number",
+          "required": false,
+          "description": "音调",
+          "defaultValue": 1
+        },
+        {
+          "name": "minVolume",
+          "displayName": "最小音量",
+          "type": "number",
+          "required": false,
+          "description": "最小音量"
+        }
+      ]
+    },
+    {
+      "id": "random",
+      "name": "random",
+      "description": "抽取随机值或控制随机数序列",
+      "category": "misc",
+      "permissionLevel": 0,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "value/roll/reset",
+          "enumValues": ["value", "roll", "reset"]
+        },
+        {
+          "name": "range",
+          "displayName": "范围",
+          "type": "string",
+          "required": false,
+          "description": "取值范围，如 1..100",
+          "placeholder": "1..100"
+        },
+        {
+          "name": "sequence",
+          "displayName": "序列",
+          "type": "string",
+          "required": false,
+          "description": "随机序列 ID"
+        }
+      ]
+    },
+    {
+      "id": "scoreboard",
+      "name": "scoreboard",
+      "description": "管理计分板",
+      "category": "misc",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "category",
+          "displayName": "类别",
+          "type": "enum",
+          "required": true,
+          "description": "objectives/players",
+          "enumValues": ["objectives", "players"],
+          "presets": [
+            { "label": "计分项", "value": "objectives" },
+            { "label": "玩家", "value": "players" }
+          ]
+        },
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/list/set/get/reset/operation",
+          "enumValues": ["add", "remove", "list", "set", "get", "reset", "operation"]
+        },
+        {
+          "name": "objective",
+          "displayName": "计分项",
+          "type": "objective",
+          "required": false,
+          "description": "计分项名称"
+        }
+      ]
+    },
+    {
+      "id": "stopsound",
+      "name": "stopsound",
+      "description": "停止声音",
+      "category": "misc",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "target",
+          "displayName": "目标",
+          "type": "entity-selector",
+          "required": true,
+          "description": "目标选择器",
+          "selector": true,
+          "placeholder": "@a"
+        },
+        {
+          "name": "source",
+          "displayName": "来源",
+          "type": "enum",
+          "required": false,
+          "description": "声音来源",
+          "enumValues": [
+            "master",
+            "music",
+            "record",
+            "weather",
+            "block",
+            "hostile",
+            "neutral",
+            "player",
+            "ambient",
+            "voice"
+          ]
+        },
+        {
+          "name": "sound",
+          "displayName": "声音",
+          "type": "sound",
+          "required": false,
+          "description": "声音 ID"
+        }
+      ]
+    },
+    {
+      "id": "team",
+      "name": "team",
+      "description": "管理计分板队伍",
+      "category": "misc",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "add/remove/empty/join/leave/list/modify",
+          "enumValues": ["add", "remove", "empty", "join", "leave", "list", "modify"],
+          "presets": [
+            { "label": "创建", "value": "add" },
+            { "label": "删除", "value": "remove" },
+            { "label": "清空", "value": "empty" },
+            { "label": "加入", "value": "join" },
+            { "label": "离开", "value": "leave" },
+            { "label": "列出", "value": "list" },
+            { "label": "修改", "value": "modify" }
+          ]
+        },
+        {
+          "name": "team",
+          "displayName": "队伍名",
+          "type": "team",
+          "required": true,
+          "description": "队伍名称"
+        },
+        {
+          "name": "members",
+          "displayName": "成员",
+          "type": "entity-selector",
+          "required": false,
+          "description": "队员选择器",
+          "selector": true,
+          "placeholder": "@a"
+        }
+      ]
+    },
+    {
+      "id": "test",
+      "name": "test",
+      "description": "管理和执行 GameTest",
+      "category": "misc",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "action",
+          "displayName": "操作",
+          "type": "enum",
+          "required": true,
+          "description": "run/runthis/runthese/runfailed/create/clear/all/import/export",
+          "enumValues": [
+            "run",
+            "runthis",
+            "runthese",
+            "runfailed",
+            "create",
+            "clear",
+            "all",
+            "import",
+            "export"
+          ]
+        },
+        {
+          "name": "test",
+          "displayName": "测试名",
+          "type": "string",
+          "required": false,
+          "description": "GameTest 名称"
+        }
+      ]
+    },
+    {
+      "id": "trigger",
+      "name": "trigger",
+      "description": "触发计分板触发器",
+      "category": "misc",
+      "permissionLevel": 0,
+      "arguments": [
+        {
+          "name": "objective",
+          "displayName": "触发器",
+          "type": "objective",
+          "required": true,
+          "description": "触发器目标名称"
+        },
+        {
+          "name": "value",
+          "displayName": "值",
+          "type": "integer",
+          "required": false,
+          "description": "要设置的值"
+        }
+      ]
+    }
+  ]
+}
