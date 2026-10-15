@@ -439,32 +439,33 @@ fn classify_children(node: &mut StorageNode, category: &StorageNodeType) {
             StorageNodeType::Mods
                 | StorageNodeType::Resourcepacks
                 | StorageNodeType::Shaderpacks
-        ) {
-            if let Some(entries) = child.children.take() {
-                let (previous, current): (Vec<_>, Vec<_>) =
-                    entries.into_iter().partition(|entry| {
-                        entry.paths.first().is_some_and(|path| {
-                            path.kind == StoragePathKind::File
-                        }) && entry.name.as_deref().is_some_and(
+        ) && let Some(entries) = child.children.take()
+        {
+            let (previous, current): (Vec<_>, Vec<_>) =
+                entries.into_iter().partition(|entry| {
+                    entry
+                        .paths
+                        .first()
+                        .is_some_and(|path| path.kind == StoragePathKind::File)
+                        && entry.name.as_deref().is_some_and(
                             crate::resources::history_cleanup::recognizable,
                         )
-                    });
-                let mut entries = current;
-                if !previous.is_empty() {
-                    let mut backups = folder(
-                        Path::new(&child.paths[0].path),
-                        StorageNodeType::ResourceBackups,
-                    );
-                    backups.id = format!("{}-previous", child.id);
-                    backups.paths = previous
-                        .iter()
-                        .flat_map(|entry| entry.paths.clone())
-                        .collect();
-                    aggregate(&mut backups, previous);
-                    entries.push(backups);
-                }
-                child.children = Some(entries);
+                });
+            let mut entries = current;
+            if !previous.is_empty() {
+                let mut backups = folder(
+                    Path::new(&child.paths[0].path),
+                    StorageNodeType::ResourceBackups,
+                );
+                backups.id = format!("{}-previous", child.id);
+                backups.paths = previous
+                    .iter()
+                    .flat_map(|entry| entry.paths.clone())
+                    .collect();
+                aggregate(&mut backups, previous);
+                entries.push(backups);
             }
+            child.children = Some(entries);
         }
         if child.node_type == StorageNodeType::Saves {
             for world in child.children.as_mut().into_iter().flatten() {
@@ -499,14 +500,13 @@ pub async fn scan_storage_with_progress(
         identity(&backup).display()
     );
     let cache_path = directories.caches_dir().join(STORAGE_CACHE_FILE);
-    if !force {
-        if let Ok(bytes) = fs::read(&cache_path).await {
-            if let Some(tree) = decode_snapshot(&bytes, &roots) {
-                progress(StorageScanEvent::Cached { tree: tree.clone() });
-                if snapshot_is_fresh(&tree) {
-                    return Ok(tree);
-                }
-            }
+    if !force
+        && let Ok(bytes) = fs::read(&cache_path).await
+        && let Some(tree) = decode_snapshot(&bytes, &roots)
+    {
+        progress(StorageScanEvent::Cached { tree: tree.clone() });
+        if snapshot_is_fresh(&tree) {
+            return Ok(tree);
         }
     }
     let tree = scan_with_directories_progress(
@@ -521,8 +521,8 @@ pub async fn scan_storage_with_progress(
         roots,
         tree: tree.clone(),
     };
-    if let Ok(bytes) = serde_cbor::to_vec(&cache) {
-        if let Err(error) = async {
+    if let Ok(bytes) = serde_cbor::to_vec(&cache)
+        && let Err(error) = async {
             fs::create_dir_all(directories.caches_dir()).await?;
             let temp = cache_path
                 .with_extension(format!("{}.tmp", uuid::Uuid::new_v4()));
@@ -534,9 +534,8 @@ pub async fn scan_storage_with_progress(
             result
         }
         .await
-        {
-            tracing::warn!(%error, "Storage snapshot could not be cached");
-        }
+    {
+        tracing::warn!(%error, "Storage snapshot could not be cached");
     }
     Ok(tree)
 }
@@ -739,10 +738,10 @@ async fn scan_with_directories_progress(
         directories.config_dir.clone(),
         backup.to_path_buf(),
     ]) {
-        if let Some(node) = scan(&root, 2, &claimed, &mut warnings).await {
-            if node.size.total() > 0 {
-                remainder.extend(node.children.unwrap_or_default());
-            }
+        if let Some(node) = scan(&root, 2, &claimed, &mut warnings).await
+            && node.size.total() > 0
+        {
+            remainder.extend(node.children.unwrap_or_default());
         }
     }
     let root_other = if remainder.is_empty() {

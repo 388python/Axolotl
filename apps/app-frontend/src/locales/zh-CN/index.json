@@ -9356,9 +9356,6 @@
   "app.settings.resources.app-cache": {
     "message": "应用缓存"
   },
-  "app.settings.resources.app-cache-description": {
-    "message": "Axolotl Launcher 会缓存数据以加快加载速度。清除缓存会强制应用重新加载数据，并可能暂时降低速度。"
-  },
   "app.settings.resources.app-directory": {
     "message": "应用目录"
   },
@@ -9535,15 +9532,6 @@
   },
   "app.settings.resources.proxy-username-placeholder": {
     "message": "用户名（可选）"
-  },
-  "app.settings.resources.purge-cache": {
-    "message": "清除缓存"
-  },
-  "app.settings.resources.purge-confirm-description": {
-    "message": "继续后将清除全部缓存，这可能导致应用暂时变慢。"
-  },
-  "app.settings.resources.purge-confirm-title": {
-    "message": "确定要清除缓存吗？"
   },
   "app.settings.resources.remove-minecraft-directory": {
     "message": "删除 .minecraft 目录"
@@ -14188,12 +14176,6 @@
   },
   "app.settings.storage.analysisDescription": {
     "message": "查看启动器与游戏的占用明细，并分析和清理闲置 meta 文件。"
-  },
-  "app.settings.storage.openAnalysis": {
-    "message": "打开分析"
-  },
-  "app.settings.storage.backToStorage": {
-    "message": "返回存储与备份"
   },
   "app.settings.storage.unknownUsage": {
     "message": "无法确认用途的文件已保留。"

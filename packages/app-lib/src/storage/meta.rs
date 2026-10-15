@@ -993,7 +993,7 @@ fn remove_candidates(
     selection: &HashSet<String>,
     refs: &References,
 ) -> std::io::Result<MetaCleanupResult> {
-    let root = opened_root(&directories)?;
+    let root = opened_root(directories)?;
     let mut result = MetaCleanupResult::default();
     for file in files
         .into_iter()
