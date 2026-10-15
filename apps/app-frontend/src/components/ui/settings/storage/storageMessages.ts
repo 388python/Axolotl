@@ -1,6 +1,156 @@
 import { defineMessages } from '@modrinth/ui'
 
+import type { StorageNodeType } from '@/helpers/storage'
+
 export const storageMessages = defineMessages({
+    refreshFailed: {
+        id: 'app.settings.storage.refresh-failed',
+        defaultMessage:
+            'Cleanup finished, but storage totals could not be refreshed. Retry to update the totals without deleting again.',
+    },
+    resourceBackups: {
+        id: 'app.settings.storage.resource-backups',
+        defaultMessage: 'Previous resource files',
+    },
+    previewCache: {
+        id: 'app.settings.storage.preview-cache',
+        defaultMessage: 'Avatar and skin preview cache',
+    },
+    previewCacheHelp: {
+        id: 'app.settings.storage.preview-cache-help',
+        defaultMessage:
+            'Image payload sizes stored by this WebView. Database overhead is excluded; this value is separate from the launcher file total.',
+    },
+    backups: { id: 'app.settings.storage.backups', defaultMessage: 'Instance backups' },
+    servers: { id: 'app.settings.storage.servers', defaultMessage: 'Managed servers' },
+    syncedOptions: {
+        id: 'app.settings.storage.syncedOptions',
+        defaultMessage: 'Synced settings and files',
+    },
+    components: { id: 'app.settings.storage.components', defaultMessage: 'Multiplayer components' },
+    launcherLogs: { id: 'app.settings.storage.launcherLogs', defaultMessage: 'Launcher logs' },
+    icons: { id: 'app.settings.storage.icons', defaultMessage: 'Icons' },
+    installRollbacks: {
+        id: 'app.settings.storage.installRollbacks',
+        defaultMessage: 'Installation rollback data',
+    },
+    contentStore: {
+        id: 'app.settings.storage.contentStore',
+        defaultMessage: 'Shared content files',
+    },
+    resourceCache: {
+        id: 'app.settings.storage.resourceCache',
+        defaultMessage: 'Resource metadata cache',
+    },
+    staging: { id: 'app.settings.storage.staging', defaultMessage: 'Operation staging' },
+    folder: { id: 'app.settings.storage.folder', defaultMessage: 'Files' },
+    javaVersions: { id: 'app.settings.storage.javaVersions', defaultMessage: 'Java runtimes' },
+    versions: { id: 'app.settings.storage.versions', defaultMessage: 'Game versions' },
+    libraries: { id: 'app.settings.storage.libraries', defaultMessage: 'Shared libraries' },
+    assets: { id: 'app.settings.storage.assets', defaultMessage: 'Game assets' },
+    natives: { id: 'app.settings.storage.natives', defaultMessage: 'Native libraries' },
+    logConfigs: { id: 'app.settings.storage.logConfigs', defaultMessage: 'Logging configurations' },
+    gameLocales: {
+        id: 'app.settings.storage.gameLocales',
+        defaultMessage: 'Game setting language indexes',
+    },
+    resources: { id: 'app.settings.storage.resources', defaultMessage: 'Legacy game resources' },
+    logs: { id: 'app.settings.storage.logs', defaultMessage: 'Game logs' },
+    crashReports: { id: 'app.settings.storage.crashReports', defaultMessage: 'Crash reports' },
+    scanFailed: {
+        id: 'app.settings.storage.scanFailed',
+        defaultMessage:
+            'Storage could not be scanned. The last complete snapshot is kept when available.',
+    },
+    retry: { id: 'app.settings.storage.retry', defaultMessage: 'Retry' },
+    measurementHelp: {
+        id: 'app.settings.storage.measurementHelp',
+        defaultMessage:
+            'Sizes are file lengths, not allocated disk space. Linked files are shown separately and may also be referenced elsewhere.',
+    },
+    incompleteScan: {
+        id: 'app.settings.storage.incompleteScan',
+        defaultMessage: 'Some paths could not be read; these totals are incomplete.',
+    },
+    externalData: {
+        id: 'app.settings.storage.externalData',
+        defaultMessage: 'External game directories',
+    },
+    externalHelp: {
+        id: 'app.settings.storage.externalHelp',
+        defaultMessage:
+            'These directories are managed outside Axolotl and are excluded from the launcher total. Overlapping directories are listed once.',
+    },
+    analyzeMeta: {
+        id: 'app.settings.storage.analyzeMeta',
+        defaultMessage: 'Analyze unused metadata',
+    },
+    analyzingMeta: {
+        id: 'app.settings.storage.analyzingMeta',
+        defaultMessage: 'Analyzing local references…',
+    },
+    metaHelp: {
+        id: 'app.settings.storage.metaHelp',
+        defaultMessage:
+            'Checks local references from Release and Beta. Only confirmed unused files can be selected. Java runtimes, language indexes and unrecognized files are kept when their usage cannot be established.',
+    },
+    used: { id: 'app.settings.storage.used', defaultMessage: 'In use' },
+    unused: { id: 'app.settings.storage.unused', defaultMessage: 'Unused' },
+    unknown: { id: 'app.settings.storage.unknown', defaultMessage: 'Unconfirmed' },
+    metaGroup: { id: 'app.settings.storage.metaGroup', defaultMessage: 'Metadata group' },
+    analyzeFailed: {
+        id: 'app.settings.storage.analyzeFailed',
+        defaultMessage:
+            'Metadata could not be analyzed. Try again after current operations finish.',
+    },
+    cleanFailed: {
+        id: 'app.settings.storage.cleanFailed',
+        defaultMessage: 'Cleanup could not finish. Refresh the analysis before retrying.',
+    },
+    cleanSelected: {
+        id: 'app.settings.storage.cleanSelected',
+        defaultMessage: 'Clean selected files',
+    },
+    cleanTitle: { id: 'app.settings.storage.cleanTitle', defaultMessage: 'Clean unused metadata' },
+    cleanConfirm: {
+        id: 'app.settings.storage.cleanConfirm',
+        defaultMessage:
+            'Delete {size} of unused files from the selected groups? Existing references and file changes will be checked again before deletion.',
+    },
+    cleaning: { id: 'app.settings.storage.cleaning', defaultMessage: 'Cleaning…' },
+    cancel: { id: 'app.settings.storage.cancel', defaultMessage: 'Cancel' },
+    cleanResult: {
+        id: 'app.settings.storage.cleanResult',
+        defaultMessage:
+            'Deleted {count} files ({size}); skipped {skipped} changed or newly referenced files.',
+    },
+    cleanFailures: {
+        id: 'app.settings.storage.cleanFailures',
+        defaultMessage: 'Some files could not be deleted.',
+    },
+    noUnused: {
+        id: 'app.settings.storage.noUnused',
+        defaultMessage: 'No confirmed unused metadata was found.',
+    },
+    metaWarnings: {
+        id: 'app.settings.storage.metaWarnings',
+        defaultMessage: 'Some references could not be confirmed. Affected files are kept.',
+    },
+    selectGroup: {
+        id: 'app.settings.storage.selectGroup',
+        defaultMessage: 'Select unused files in {name}',
+    },
+    selectedSize: {
+        id: 'app.settings.storage.selectedSize',
+        defaultMessage: '{count} groups selected · {size} unused files',
+    },
+    refreshRequired: {
+        id: 'app.settings.storage.refreshRequired',
+        defaultMessage:
+            'The analysis is a snapshot. Analyze again after installing, removing or changing instances.',
+    },
+    details: { id: 'app.settings.storage.details', defaultMessage: 'Details' },
+
     total: {
         id: 'app.settings.storage.total',
         defaultMessage: 'Total size',
@@ -91,7 +241,7 @@ export const storageMessages = defineMessages({
     },
     actualSizeTooltip: {
         id: 'app.settings.storage.actual-size-tooltip',
-        defaultMessage: 'Actual size: {size}',
+        defaultMessage: 'File size: {size}',
     },
     symlinkSizeTooltip: {
         id: 'app.settings.storage.symlink-size-tooltip',
@@ -135,3 +285,46 @@ export const storageMessages = defineMessages({
         defaultMessage: 'Storage',
     },
 })
+
+export const storageLabels = {
+    instances: storageMessages.instanceData,
+    cache: storageMessages.cacheData,
+    meta: storageMessages.metaData,
+    database: storageMessages.database,
+    other: storageMessages.other,
+    instance: storageMessages.instance,
+    mods: storageMessages.mods,
+    replay: storageMessages.replay,
+    resourcepacks: storageMessages.resourcepacks,
+    saves: storageMessages.saves,
+    world: storageMessages.world,
+    schematics: storageMessages.schematics,
+    screenshots: storageMessages.screenshots,
+    shaderpacks: storageMessages.shaderpacks,
+    minimap: storageMessages.minimap,
+    'distant-horizons': storageMessages.distantHorizons,
+    'db-file': storageMessages.dbFile,
+    'db-backup': storageMessages.dbBackup,
+    backups: storageMessages.backups,
+    servers: storageMessages.servers,
+    synced_options: storageMessages.syncedOptions,
+    components: storageMessages.components,
+    launcher_logs: storageMessages.launcherLogs,
+    icons: storageMessages.icons,
+    install_rollbacks: storageMessages.installRollbacks,
+    content_store: storageMessages.contentStore,
+    resource_backups: storageMessages.resourceBackups,
+    resource_cache: storageMessages.resourceCache,
+    staging: storageMessages.staging,
+    folder: storageMessages.folder,
+    java_versions: storageMessages.javaVersions,
+    versions: storageMessages.versions,
+    libraries: storageMessages.libraries,
+    assets: storageMessages.assets,
+    natives: storageMessages.natives,
+    log_configs: storageMessages.logConfigs,
+    game_locales: storageMessages.gameLocales,
+    resources: storageMessages.resources,
+    logs: storageMessages.logs,
+    crash_reports: storageMessages.crashReports,
+} satisfies Record<StorageNodeType, (typeof storageMessages)['total']>

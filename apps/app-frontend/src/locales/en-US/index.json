@@ -10389,7 +10389,7 @@
     "message": "Search results"
   },
   "app.settings.storage.actual-size-tooltip": {
-    "message": "Actual size: {size}"
+    "message": "File size: {size}"
   },
   "app.settings.storage.cache-data": {
     "message": "Cache data"
@@ -14011,5 +14011,164 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Unknown file warning"
+  },
+  "app.settings.storage.backups": {
+    "message": "Instance backups"
+  },
+  "app.settings.storage.servers": {
+    "message": "Managed servers"
+  },
+  "app.settings.storage.syncedOptions": {
+    "message": "Synced settings and files"
+  },
+  "app.settings.storage.components": {
+    "message": "Multiplayer components"
+  },
+  "app.settings.storage.launcherLogs": {
+    "message": "Launcher logs"
+  },
+  "app.settings.storage.icons": {
+    "message": "Icons"
+  },
+  "app.settings.storage.installRollbacks": {
+    "message": "Installation rollback data"
+  },
+  "app.settings.storage.contentStore": {
+    "message": "Shared content files"
+  },
+  "app.settings.storage.resourceCache": {
+    "message": "Resource metadata cache"
+  },
+  "app.settings.storage.staging": {
+    "message": "Operation staging"
+  },
+  "app.settings.storage.folder": {
+    "message": "Files"
+  },
+  "app.settings.storage.javaVersions": {
+    "message": "Java runtimes"
+  },
+  "app.settings.storage.versions": {
+    "message": "Game versions"
+  },
+  "app.settings.storage.libraries": {
+    "message": "Shared libraries"
+  },
+  "app.settings.storage.assets": {
+    "message": "Game assets"
+  },
+  "app.settings.storage.natives": {
+    "message": "Native libraries"
+  },
+  "app.settings.storage.logConfigs": {
+    "message": "Logging configurations"
+  },
+  "app.settings.storage.gameLocales": {
+    "message": "Game setting language indexes"
+  },
+  "app.settings.storage.resources": {
+    "message": "Legacy game resources"
+  },
+  "app.settings.storage.logs": {
+    "message": "Game logs"
+  },
+  "app.settings.storage.crashReports": {
+    "message": "Crash reports"
+  },
+  "app.settings.storage.scanFailed": {
+    "message": "Storage could not be scanned. The last complete snapshot is kept when available."
+  },
+  "app.settings.storage.retry": {
+    "message": "Retry"
+  },
+  "app.settings.storage.measurementHelp": {
+    "message": "Sizes are file lengths, not allocated disk space. Linked files are shown separately and may also be referenced elsewhere."
+  },
+  "app.settings.storage.incompleteScan": {
+    "message": "Some paths could not be read; these totals are incomplete."
+  },
+  "app.settings.storage.externalData": {
+    "message": "External game directories"
+  },
+  "app.settings.storage.externalHelp": {
+    "message": "These directories are managed outside Axolotl and are excluded from the launcher total. Overlapping directories are listed once."
+  },
+  "app.settings.storage.analyzeMeta": {
+    "message": "Analyze unused metadata"
+  },
+  "app.settings.storage.analyzingMeta": {
+    "message": "Analyzing local references…"
+  },
+  "app.settings.storage.metaHelp": {
+    "message": "Checks local references from Release and Beta. Only confirmed unused files can be selected. Java runtimes, language indexes and unrecognized files are kept when their usage cannot be established."
+  },
+  "app.settings.storage.used": {
+    "message": "In use"
+  },
+  "app.settings.storage.unused": {
+    "message": "Unused"
+  },
+  "app.settings.storage.unknown": {
+    "message": "Unconfirmed"
+  },
+  "app.settings.storage.metaGroup": {
+    "message": "Metadata group"
+  },
+  "app.settings.storage.analyzeFailed": {
+    "message": "Metadata could not be analyzed. Try again after current operations finish."
+  },
+  "app.settings.storage.cleanFailed": {
+    "message": "Cleanup could not finish. Refresh the analysis before retrying."
+  },
+  "app.settings.storage.cleanSelected": {
+    "message": "Clean selected files"
+  },
+  "app.settings.storage.cleanTitle": {
+    "message": "Clean unused metadata"
+  },
+  "app.settings.storage.cleanConfirm": {
+    "message": "Delete {size} of unused files from the selected groups? Existing references and file changes will be checked again before deletion."
+  },
+  "app.settings.storage.cleaning": {
+    "message": "Cleaning…"
+  },
+  "app.settings.storage.cancel": {
+    "message": "Cancel"
+  },
+  "app.settings.storage.cleanResult": {
+    "message": "Deleted {count} files ({size}); skipped {skipped} changed or newly referenced files."
+  },
+  "app.settings.storage.cleanFailures": {
+    "message": "Some files could not be deleted."
+  },
+  "app.settings.storage.noUnused": {
+    "message": "No confirmed unused metadata was found."
+  },
+  "app.settings.storage.metaWarnings": {
+    "message": "Some references could not be confirmed. Affected files are kept."
+  },
+  "app.settings.storage.selectGroup": {
+    "message": "Select unused files in {name}"
+  },
+  "app.settings.storage.selectedSize": {
+    "message": "{count} groups selected · {size} unused files"
+  },
+  "app.settings.storage.refreshRequired": {
+    "message": "The analysis is a snapshot. Analyze again after installing, removing or changing instances."
+  },
+  "app.settings.storage.details": {
+    "message": "Details"
+  },
+  "app.settings.storage.resource-backups": {
+    "message": "Previous resource files"
+  },
+  "app.settings.storage.preview-cache": {
+    "message": "Avatar and skin preview cache"
+  },
+  "app.settings.storage.preview-cache-help": {
+    "message": "Image payload sizes stored by this WebView. Database overhead is excluded; this value is separate from the launcher file total."
+  },
+  "app.settings.storage.refresh-failed": {
+    "message": "Cleanup finished, but storage totals could not be refreshed. Retry to update the totals without deleting again."
   }
 }

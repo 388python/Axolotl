@@ -9609,7 +9609,7 @@
     "message": "搜索结果"
   },
   "app.settings.storage.actual-size-tooltip": {
-    "message": "实际大小：{size}"
+    "message": "文件大小：{size}"
   },
   "app.settings.storage.cache-data": {
     "message": "缓存数据"
@@ -14023,5 +14023,164 @@
   },
   "app.instance.mods.pack-reconciliation-warning.body": {
     "message": "现有文件及其归属已保留，请重新刷新以核验缺失或手动下载的整合包文件。"
+  },
+  "app.settings.storage.backups": {
+    "message": "实例备份"
+  },
+  "app.settings.storage.servers": {
+    "message": "受管服务器"
+  },
+  "app.settings.storage.syncedOptions": {
+    "message": "同步设置与文件"
+  },
+  "app.settings.storage.components": {
+    "message": "联机组件"
+  },
+  "app.settings.storage.launcherLogs": {
+    "message": "启动器日志"
+  },
+  "app.settings.storage.icons": {
+    "message": "图标"
+  },
+  "app.settings.storage.installRollbacks": {
+    "message": "安装回滚数据"
+  },
+  "app.settings.storage.contentStore": {
+    "message": "共享资源文件"
+  },
+  "app.settings.storage.resourceCache": {
+    "message": "资源信息缓存"
+  },
+  "app.settings.storage.staging": {
+    "message": "操作暂存"
+  },
+  "app.settings.storage.folder": {
+    "message": "文件"
+  },
+  "app.settings.storage.javaVersions": {
+    "message": "Java 运行环境"
+  },
+  "app.settings.storage.versions": {
+    "message": "游戏版本"
+  },
+  "app.settings.storage.libraries": {
+    "message": "共享依赖库"
+  },
+  "app.settings.storage.assets": {
+    "message": "游戏资源"
+  },
+  "app.settings.storage.natives": {
+    "message": "本地库"
+  },
+  "app.settings.storage.logConfigs": {
+    "message": "日志配置"
+  },
+  "app.settings.storage.gameLocales": {
+    "message": "游戏设置语言索引"
+  },
+  "app.settings.storage.resources": {
+    "message": "旧版游戏资源"
+  },
+  "app.settings.storage.logs": {
+    "message": "游戏日志"
+  },
+  "app.settings.storage.crashReports": {
+    "message": "崩溃报告"
+  },
+  "app.settings.storage.scanFailed": {
+    "message": "无法完成存储扫描，已有的完整统计结果会保留。"
+  },
+  "app.settings.storage.retry": {
+    "message": "重试"
+  },
+  "app.settings.storage.measurementHelp": {
+    "message": "大小按文件长度统计，不代表磁盘分配空间。链接引用量单独显示，同一文件可能被多处引用。"
+  },
+  "app.settings.storage.incompleteScan": {
+    "message": "部分路径无法读取，统计结果不完整。"
+  },
+  "app.settings.storage.externalData": {
+    "message": "外部游戏目录"
+  },
+  "app.settings.storage.externalHelp": {
+    "message": "这些目录由 Axolotl 之外的程序管理，不计入启动器总量。重叠目录只列出一次。"
+  },
+  "app.settings.storage.analyzeMeta": {
+    "message": "分析闲置 meta 文件"
+  },
+  "app.settings.storage.analyzingMeta": {
+    "message": "正在分析本地引用…"
+  },
+  "app.settings.storage.metaHelp": {
+    "message": "检查 Release 和 Beta 的本地引用，仅允许选择确认闲置的文件。Java 运行环境、语言索引和无法确定用途的文件会保留。"
+  },
+  "app.settings.storage.used": {
+    "message": "正在使用"
+  },
+  "app.settings.storage.unused": {
+    "message": "确认闲置"
+  },
+  "app.settings.storage.unknown": {
+    "message": "无法确认"
+  },
+  "app.settings.storage.metaGroup": {
+    "message": "meta 分组"
+  },
+  "app.settings.storage.analyzeFailed": {
+    "message": "无法分析 meta，请在当前操作完成后重试。"
+  },
+  "app.settings.storage.cleanFailed": {
+    "message": "未能完成清理，请重新分析后重试。"
+  },
+  "app.settings.storage.cleanSelected": {
+    "message": "清理所选文件"
+  },
+  "app.settings.storage.cleanTitle": {
+    "message": "清理闲置 meta 文件"
+  },
+  "app.settings.storage.cleanConfirm": {
+    "message": "将删除所选分组中共 {size} 的闲置文件。删除前会再次检查引用和文件变化。"
+  },
+  "app.settings.storage.cleaning": {
+    "message": "正在清理…"
+  },
+  "app.settings.storage.cancel": {
+    "message": "取消"
+  },
+  "app.settings.storage.cleanResult": {
+    "message": "已删除 {count} 个文件（{size}），跳过 {skipped} 个发生变化或新增引用的文件。"
+  },
+  "app.settings.storage.cleanFailures": {
+    "message": "部分文件未能删除。"
+  },
+  "app.settings.storage.noUnused": {
+    "message": "未发现确认闲置的 meta 文件。"
+  },
+  "app.settings.storage.metaWarnings": {
+    "message": "部分引用无法确认，受影响的文件已保留。"
+  },
+  "app.settings.storage.selectGroup": {
+    "message": "选择 {name} 中的闲置文件"
+  },
+  "app.settings.storage.selectedSize": {
+    "message": "已选择 {count} 个分组 · 闲置文件共 {size}"
+  },
+  "app.settings.storage.refreshRequired": {
+    "message": "分析结果是一次快照。安装、删除或修改实例后，请重新分析。"
+  },
+  "app.settings.storage.details": {
+    "message": "详细信息"
+  },
+  "app.settings.storage.resource-backups": {
+    "message": "资源历史文件"
+  },
+  "app.settings.storage.preview-cache": {
+    "message": "头像与皮肤预览缓存"
+  },
+  "app.settings.storage.preview-cache-help": {
+    "message": "此 WebView 保存的图片数据大小，不含数据库额外开销，与启动器文件总量分开统计。"
+  },
+  "app.settings.storage.refresh-failed": {
+    "message": "清理已完成，但未能刷新占用统计。重试只会刷新统计，不会再次删除文件。"
   }
 }
