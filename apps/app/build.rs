@@ -835,6 +835,7 @@ fn main() {
                 InlinedPlugin::new()
                     .commands(&[
                         "storage_scan",
+                        "storage_cache_clear",
                         "storage_meta_analyze",
                         "storage_meta_clean",
                         "storage_open_paths",

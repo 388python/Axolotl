@@ -116,6 +116,12 @@ export interface MetaCleanupResult {
     failures: string[]
 }
 
+export interface CacheCleanupResult {
+    removed_bytes: number
+    remaining_bytes: number
+    failures: string[]
+}
+
 export function scanStorage(force: boolean): Promise<StorageTree> {
     return invoke('plugin:storage|storage_scan', { force })
 }

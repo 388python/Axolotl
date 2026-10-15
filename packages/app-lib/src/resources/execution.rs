@@ -298,6 +298,7 @@ pub(crate) async fn execute(
     reporter: Option<crate::install::InstallProgressReporter>,
     state: &crate::State,
 ) -> crate::Result<()> {
+    let _cache_usage = crate::storage::usage::lease().await?;
     if plan.instance_id != instance_id
         || plan.issues.iter().any(|issue| issue.blocking)
     {

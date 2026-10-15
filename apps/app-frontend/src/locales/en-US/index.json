@@ -14262,15 +14262,27 @@
     "message": "Clear cache"
   },
   "app.settings.storage.clearCacheHelp": {
-    "message": "Clears cached resource information, search results and version indexes. Game files, saves and backups are kept. Resource pages may load more slowly until the cache is rebuilt."
-  },
-  "app.settings.storage.cacheCleared": {
-    "message": "Cache cleared"
+    "message": "Deletes downloaded mod and modpack caches, unused content objects and cached resource information. Installed games, saves and backups are kept. Files needed for offline use or recovery are kept. Downloads may be needed again."
   },
   "app.settings.storage.cacheClearFailed": {
     "message": "Could not clear the cache. Please try again."
   },
   "app.settings.storage.clearingCache": {
     "message": "Clearing cache…"
+  },
+  "app.settings.storage.cacheCleanupResult": {
+    "message": "Freed {freed}. Remaining cache: {remaining}."
+  },
+  "app.settings.storage.cacheRetainedHelp": {
+    "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache database files also retain a small amount of space."
+  },
+  "app.settings.storage.cachePartialFailure": {
+    "message": "Some cache files could not be cleared. See the details before trying again."
+  },
+  "app.settings.storage.cacheFailureDetails": {
+    "message": "Files that could not be cleared"
+  },
+  "app.settings.storage.close": {
+    "message": "Close"
   }
 }

@@ -27,7 +27,6 @@ import { showAppDbBackupsFolder } from '@/helpers/utils.js'
 
 import SettingsRow from './SettingsRow.vue'
 import SettingsSection from './SettingsSection.vue'
-import CacheCleanupButton from './storage/CacheCleanupButton.vue'
 
 const props = defineProps({
     scope: {
@@ -241,12 +240,6 @@ const messages = defineMessages({
     minecraftDirectoryModeAutomatic: {
         id: 'app.settings.resources.minecraft-directory-mode.automatic',
         defaultMessage: 'Automatic',
-    },
-    appCache: { id: 'app.settings.resources.app-cache', defaultMessage: 'App cache' },
-    appCacheDescription: {
-        id: 'app.settings.resources.app-cache-description',
-        defaultMessage:
-            'Axolotl Launcher caches data to speed up loading. Purging it forces the app to reload data and may temporarily slow the app down.',
     },
     downloadMirrors: {
         id: 'app.settings.resources.download-mirrors',
@@ -839,17 +832,6 @@ function validateMinecraftDirectory(_value) {
                             {{ formatMessage(messages.addMinecraftDirectory) }}
                         </button>
                     </div>
-                </template>
-            </SettingsRow>
-            <SettingsRow>
-                <template #label>
-                    <span id="settings-target-storage-cache" tabindex="-1">
-                        {{ formatMessage(messages.appCache) }}
-                    </span>
-                </template>
-                <template #description>{{ formatMessage(messages.appCacheDescription) }}</template>
-                <template #control>
-                    <CacheCleanupButton />
                 </template>
             </SettingsRow>
             <SettingsRow>

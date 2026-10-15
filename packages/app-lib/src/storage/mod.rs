@@ -147,11 +147,13 @@ pub struct StorageTree {
     pub warnings: Vec<String>,
 }
 
+mod cache;
 mod meta;
 #[cfg(test)]
 mod tests;
 pub(crate) mod usage;
 
+pub use cache::{CacheCleanupResult, clear_cache};
 pub use meta::{MetaAnalysis, MetaCleanupResult, analyze_meta, clean_meta};
 
 static SCAN_LOCK: LazyLock<tokio::sync::Mutex<()>> =

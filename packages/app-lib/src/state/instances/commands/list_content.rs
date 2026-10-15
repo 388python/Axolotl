@@ -2553,6 +2553,7 @@ async fn get_modpack_identifiers(
     pool: &SqlitePool,
     fetch_semaphore: &FetchSemaphore,
 ) -> crate::Result<ModpackIdentifiers> {
+    let _cache_usage = crate::storage::usage::lease().await?;
     if let Some(cached) =
         CachedEntry::get_modpack_files(version_id, pool, fetch_semaphore)
             .await?

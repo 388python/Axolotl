@@ -14274,15 +14274,27 @@
     "message": "清理缓存"
   },
   "app.settings.storage.clearCacheHelp": {
-    "message": "清除资源信息、搜索结果和版本索引等缓存。游戏文件、存档和备份会保留；重新获取缓存前，资源页面可能加载较慢。"
-  },
-  "app.settings.storage.cacheCleared": {
-    "message": "缓存已清理"
+    "message": "清理已下载的模组和整合包缓存、闲置内容文件及资源信息缓存。已安装的游戏、存档和备份会保留，离线使用或恢复所需的文件也会保留。之后可能需要重新下载。"
   },
   "app.settings.storage.cacheClearFailed": {
     "message": "缓存清理失败，请重试。"
   },
   "app.settings.storage.clearingCache": {
     "message": "正在清理缓存…"
+  },
+  "app.settings.storage.cacheCleanupResult": {
+    "message": "已释放 {freed}，剩余缓存 {remaining}。"
+  },
+  "app.settings.storage.cacheRetainedHelp": {
+    "message": "实例图标、原生库归档和仍被引用的内容文件会保留，以支持离线使用和恢复；缓存数据库自身也会占用少量空间。"
+  },
+  "app.settings.storage.cachePartialFailure": {
+    "message": "部分缓存未能清理，请查看详情后重试。"
+  },
+  "app.settings.storage.cacheFailureDetails": {
+    "message": "未能清理的文件"
+  },
+  "app.settings.storage.close": {
+    "message": "关闭"
   }
 }

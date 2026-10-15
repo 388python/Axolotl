@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 
 import { purgeLauncherCache } from '@/helpers/cache.js'
+import type { CacheCleanupResult } from '@/helpers/storage'
 
 import CacheCleanupButton from './CacheCleanupButton.vue'
 const preferences = vi.hoisted(() => ({ skipWarnings: false }))
@@ -79,10 +80,10 @@ it('keeps cache cleanup pending until the shared cleanup operation completes', a
     mounted.push(wrapper)
     await wrapper.get('button').trigger('click')
     expect(purgeLauncherCache).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Game files, saves and backups are kept')
-    let complete!: () => void
+    expect(wrapper.text()).toContain('Installed games, saves and backups are kept')
+    let complete!: (result: CacheCleanupResult) => void
     vi.mocked(purgeLauncherCache).mockReturnValueOnce(
-        new Promise<void>((resolve) => {
+        new Promise<CacheCleanupResult>((resolve) => {
             complete = resolve
         }),
     )
@@ -90,11 +91,17 @@ it('keeps cache cleanup pending until the shared cleanup operation completes', a
     await confirm.trigger('click')
     await flushPromises()
     expect(wrapper.getComponent({ name: 'NewModal' }).props('disableClose')).toBe(true)
-    complete()
+    complete({ removed_bytes: 100, remaining_bytes: 30, failures: [] })
     await flushPromises()
-    expect(wrapper.find('section').exists()).toBe(false)
+    expect(wrapper.find('section').exists()).toBe(true)
     expect(wrapper.emitted('cleared')).toHaveLength(1)
-    expect(wrapper.get('button').text()).toBe('Cache cleared')
+    expect(wrapper.text()).toContain('Freed 100 bytes. Remaining cache: 30 bytes.')
+    expect(wrapper.get('button').text()).toBe('Clear cache')
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Close')!
+        .trigger('click')
+    expect(wrapper.find('section').exists()).toBe(false)
 })
 it('leaves the cache confirmation available for retry after failure', async () => {
     const wrapper = mount(CacheCleanupButton)
@@ -112,12 +119,36 @@ it('leaves the cache confirmation available for retry after failure', async () =
 })
 it('respects the preference to skip optional warnings', async () => {
     preferences.skipWarnings = true
-    vi.mocked(purgeLauncherCache).mockResolvedValueOnce(undefined)
+    vi.mocked(purgeLauncherCache).mockResolvedValueOnce({
+        removed_bytes: 0,
+        remaining_bytes: 30,
+        failures: [],
+    })
     const wrapper = mount(CacheCleanupButton)
     mounted.push(wrapper)
     await wrapper.get('button').trigger('click')
     await flushPromises()
     expect(purgeLauncherCache).toHaveBeenCalledTimes(1)
-    expect(wrapper.find('section').exists()).toBe(false)
+    expect(wrapper.text()).toContain('Freed 0 bytes. Remaining cache: 30 bytes.')
     expect(wrapper.emitted('cleared')).toHaveLength(1)
+})
+
+it('reports partial deletion without claiming the entire cache was cleared', async () => {
+    vi.mocked(purgeLauncherCache).mockResolvedValueOnce({
+        removed_bytes: 10,
+        remaining_bytes: 80,
+        failures: ['content/locked.jar: access denied'],
+    })
+    const wrapper = mount(CacheCleanupButton, { props: { compact: true } })
+    mounted.push(wrapper)
+    await wrapper.get('button').trigger('click')
+    await wrapper
+        .findAll('button')
+        .filter((button) => button.text() === 'Clear cache')[1]
+        .trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Some cache files could not be cleared')
+    expect(wrapper.text()).toContain('access denied')
+    expect(wrapper.emitted('cleared')).toHaveLength(1)
+    expect(wrapper.text()).not.toContain('Cache cleared')
 })

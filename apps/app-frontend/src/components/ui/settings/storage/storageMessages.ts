@@ -7,9 +7,27 @@ export const storageMessages = defineMessages({
     clearCacheHelp: {
         id: 'app.settings.storage.clearCacheHelp',
         defaultMessage:
-            'Clears cached resource information, search results and version indexes. Game files, saves and backups are kept. Resource pages may load more slowly until the cache is rebuilt.',
+            'Deletes downloaded mod and modpack caches, unused content objects and cached resource information. Installed games, saves and backups are kept. Files needed for offline use or recovery are kept. Downloads may be needed again.',
     },
-    cacheCleared: { id: 'app.settings.storage.cacheCleared', defaultMessage: 'Cache cleared' },
+    cacheCleanupResult: {
+        id: 'app.settings.storage.cacheCleanupResult',
+        defaultMessage: 'Freed {freed}. Remaining cache: {remaining}.',
+    },
+    cacheRetainedHelp: {
+        id: 'app.settings.storage.cacheRetainedHelp',
+        defaultMessage:
+            'Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache database files also retain a small amount of space.',
+    },
+    cachePartialFailure: {
+        id: 'app.settings.storage.cachePartialFailure',
+        defaultMessage:
+            'Some cache files could not be cleared. See the details before trying again.',
+    },
+    cacheFailureDetails: {
+        id: 'app.settings.storage.cacheFailureDetails',
+        defaultMessage: 'Files that could not be cleared',
+    },
+    close: { id: 'app.settings.storage.close', defaultMessage: 'Close' },
     cacheClearFailed: {
         id: 'app.settings.storage.cacheClearFailed',
         defaultMessage: 'Could not clear the cache. Please try again.',
@@ -113,11 +131,6 @@ export const storageMessages = defineMessages({
         id: 'app.settings.storage.analysisDescription',
         defaultMessage:
             'Inspect launcher and game storage, then analyze unused metadata for cleanup.',
-    },
-    openAnalysis: { id: 'app.settings.storage.openAnalysis', defaultMessage: 'Open analysis' },
-    backToStorage: {
-        id: 'app.settings.storage.backToStorage',
-        defaultMessage: 'Back to storage & backups',
     },
     unknownUsage: {
         id: 'app.settings.storage.unknownUsage',

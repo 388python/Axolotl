@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { defineComponent, h, ref } from 'vue'
 
+import { purgeLauncherCache } from '@/helpers/cache.js'
 import { analyzeMeta, cleanMeta, scanStorage, type StorageNode } from '@/helpers/storage'
 import zh from '@/locales/zh-CN/index.json'
 import { mountThemed, waitFor } from '@/test/visual-harness'
@@ -19,6 +20,7 @@ vi.mock('@/helpers/storage', () => ({
     cleanMeta: vi.fn(),
 }))
 vi.mock('@/helpers/storage/preview-cache-usage', () => ({ previewCacheUsage: async () => 1200000 }))
+vi.mock('@/helpers/cache.js', () => ({ purgeLauncherCache: vi.fn() }))
 vi.mock('vue-router', async (original) => ({
     ...(await original<typeof import('vue-router')>()),
     useRouter: () => ({ push: vi.fn() }),
@@ -174,10 +176,39 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     expect(cacheRow.element.getBoundingClientRect().height).toBe(
         referenceRow.element.getBoundingClientRect().height,
     )
-    const cancelCache = [
+    vi.mocked(purgeLauncherCache).mockResolvedValueOnce({
+        removed_bytes: 1000000000,
+        remaining_bytes: 200000000,
+        failures: [],
+    })
+    const confirmCache = [
         ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
-    ].find((button) => button.textContent === '取消')!
-    cancelCache.click()
+    ].find((button) => button.textContent === '清理缓存')!
+    confirmCache.click()
+    await flushPromises()
+    await waitFor(() => !!document.querySelector('[role="dialog"] [role="status"]'))
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('已释放')
+    expect(cacheRow.element.getBoundingClientRect().height).toBe(
+        referenceRow.element.getBoundingClientRect().height,
+    )
+    await waitFor(() => {
+        const dialog = document.querySelector('[role="dialog"]')!
+        const container = dialog.closest('.modal-container')!
+        return (
+            container.classList.contains('shown') &&
+            getComputedStyle(container).opacity === '1' &&
+            getComputedStyle(dialog).opacity === '1' &&
+            dialog.getBoundingClientRect().left >= 0
+        )
+    })
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/cache-result-${width}.png`,
+        })
+    const closeCache = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ].find((button) => button.textContent === '关闭')!
+    closeCache.click()
     await waitFor(() => !document.querySelector('[role="dialog"]'))
 
     if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)

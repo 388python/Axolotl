@@ -4,13 +4,15 @@ use std::path::PathBuf;
 use tauri::Runtime;
 use tauri_plugin_opener::OpenerExt;
 use theseus::storage::{
-    MetaAnalysis, MetaCleanupResult, StoragePath, StoragePathKind, StorageTree,
+    CacheCleanupResult, MetaAnalysis, MetaCleanupResult, StoragePath,
+    StoragePathKind, StorageTree,
 };
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("storage")
         .invoke_handler(tauri::generate_handler![
             storage_scan,
+            storage_cache_clear,
             storage_meta_analyze,
             storage_meta_clean,
             storage_open_paths
@@ -35,6 +37,11 @@ pub struct StorageOpenFailure {
 #[tauri::command]
 pub async fn storage_scan(force: bool) -> Result<StorageTree> {
     Ok(theseus::storage::scan_storage(force).await?)
+}
+
+#[tauri::command]
+pub async fn storage_cache_clear() -> Result<CacheCleanupResult> {
+    Ok(theseus::storage::clear_cache().await?)
 }
 
 #[tauri::command]
