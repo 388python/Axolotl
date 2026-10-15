@@ -37,13 +37,11 @@ pub struct StorageOpenFailure {
 #[tauri::command]
 pub async fn storage_scan(
     force: bool,
-    on_progress: Option<tauri::ipc::Channel<StorageScanEvent>>,
+    on_progress: tauri::ipc::Channel<StorageScanEvent>,
 ) -> Result<StorageTree> {
     Ok(
         theseus::storage::scan_storage_with_progress(force, &move |event| {
-            if let Some(channel) = &on_progress {
-                let _ = channel.send(event);
-            }
+            let _ = on_progress.send(event);
         })
         .await?,
     )
