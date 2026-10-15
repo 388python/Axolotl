@@ -241,9 +241,9 @@ test('every settings search result resolves to a category and a scroll target', 
     }
 })
 
-test('storage analysis search opens its secondary page', () => {
+test('storage analysis search targets its inline section', () => {
     const entry = settingsSearchEntries.find((entry) => entry.id === 'storage-overview')!
     assert.equal(entry.categoryId, 'storage-backups')
-    assert.equal(entry.page, 'storage-analysis')
+    assert.equal('page' in entry, false)
     assert.equal(getSettingsSearchTargetId(entry), 'settings-target-storage-overview')
 })

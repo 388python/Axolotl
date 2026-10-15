@@ -58,25 +58,18 @@ async function page(url: string) {
     return { wrapper, router }
 }
 
-it('opens storage analysis on demand and returns to storage and backups', async () => {
+it('shows storage analysis alongside storage and backup settings', async () => {
     const { wrapper, router } = await page('/settings?source=test#storage-backups')
-    expect(wrapper.find('[data-test="analysis"]').exists()).toBe(false)
-    expect(wrapper.find('[data-test="backups"]').exists()).toBe(true)
-    await wrapper.get('button').trigger('click')
-    await flushPromises()
-    expect(router.currentRoute.value.query.page).toBe('storage-analysis')
     await vi.waitFor(() => expect(wrapper.find('[data-test="analysis"]').exists()).toBe(true))
-    expect(wrapper.find('[data-test="backups"]').exists()).toBe(false)
-    await wrapper.get('button').trigger('click')
-    await flushPromises()
+    expect(wrapper.find('[data-test="backups"]').exists()).toBe(true)
     expect(router.currentRoute.value.query).toEqual({ source: 'test' })
     expect(router.currentRoute.value.hash).toBe('#storage-backups')
-    expect(wrapper.find('[data-test="backups"]').exists()).toBe(true)
 })
 
-it('restores the secondary analysis page from a direct settings link', async () => {
+it('keeps old analysis links on the complete storage and backups page', async () => {
     const { wrapper } = await page('/settings?page=storage-analysis#storage-backups')
     await vi.waitFor(() => expect(wrapper.find('[data-test="analysis"]').exists()).toBe(true))
-    expect(wrapper.find('[data-test="resources"]').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Back to storage & backups')
+    expect(wrapper.find('[data-test="resources"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="backups"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Back to storage & backups')
 })

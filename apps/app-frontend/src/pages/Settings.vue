@@ -248,7 +248,7 @@ async function selectSearchResult(result: SettingsSearchResult) {
     searchQuery.value = ''
     const { page: _page, ...query } = route.query
     await router.replace({
-        query: { ...query, page: result.entry?.page },
+        query,
         hash: `#${result.category.id}`,
     })
     contentContainer.value?.scrollTo({ top: 0 })

@@ -9,7 +9,6 @@ export interface SettingsSearchEntry {
     id: string
     categoryId: SettingsCategoryId
     targetId?: string
-    page?: string
     label: MessageDescriptor
     description?: MessageDescriptor
     keywords?: MessageDescriptor[]
@@ -728,7 +727,7 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
     {
         id: 'storage-cache',
         categoryId: 'storage-backups',
-        targetId: 'settings-target-storage-cache',
+        targetId: 'settings-target-storage-overview',
         label: message('app.settings.resources.app-cache', 'App cache'),
     },
     {
@@ -740,7 +739,6 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
     {
         id: 'storage-overview',
         categoryId: 'storage-backups',
-        page: 'storage-analysis',
         targetId: 'settings-target-storage-overview',
         label: message('app.settings.storage.analysisTitle', 'Storage analysis'),
         description: message(
