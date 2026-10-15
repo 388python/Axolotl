@@ -32,13 +32,53 @@ pub struct MetaAnalysis {
     pub id: String,
     pub scanned_at: DateTime<Utc>,
     pub groups: Vec<MetaGroup>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<MetaWarning>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MetaWarningKind {
+    VersionUnavailable,
+    ProcessorUnresolved,
+    DatabaseUnavailable,
+    ActiveOperation,
+    CustomArguments,
+    ExternalMetadata,
+    UnreadablePath,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MetaWarning {
+    pub kind: MetaWarningKind,
+    pub subject: String,
+    pub detail: String,
+}
+
+impl MetaWarning {
+    fn new(
+        kind: MetaWarningKind,
+        subject: impl Into<String>,
+        detail: impl ToString,
+    ) -> Self {
+        Self {
+            kind,
+            subject: subject.into(),
+            detail: detail.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct MetaRemoved {
+    pub files: u64,
+    pub bytes: u64,
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct MetaCleanupResult {
     pub removed_files: u64,
     pub removed_bytes: u64,
+    pub removed_groups: BTreeMap<String, MetaRemoved>,
     pub skipped_files: u64,
     pub failures: Vec<String>,
 }
@@ -62,10 +102,13 @@ struct References {
     paths: HashSet<String>,
     versions: HashSet<String>,
     manifests: HashSet<String>,
+    games: HashMap<String, String>,
     natives: HashSet<String>,
+    legacy_candidates: HashMap<String, Vec<(u64, String)>>,
     blocked: bool,
     busy: bool,
-    warnings: Vec<String>,
+    uncertain_categories: HashSet<&'static str>,
+    warnings: Vec<MetaWarning>,
 }
 
 fn key(value: &str) -> String {
@@ -99,32 +142,29 @@ impl References {
     }
 
     fn used(&self, relative: &str) -> Option<bool> {
-        if self.blocked || self.busy {
-            return None;
+        let parts: Vec<_> = relative.split('/').collect();
+        let referenced = match parts.as_slice() {
+            ["versions", version, ..] => self.versions.contains(&key(version)),
+            ["natives", version, ..] => self.natives.contains(&key(version)),
+            _ => self.paths.contains(&key(relative)),
+        };
+        if referenced {
+            return Some(true);
         }
-        if relative.starts_with("libraries/")
-            && self.paths.contains("libraries/*")
+        if self.blocked
+            || self.busy
+            || parts.first().is_some_and(|category| {
+                self.uncertain_categories.contains(category)
+            })
         {
             return None;
         }
-        let parts: Vec<_> = relative.split('/').collect();
         match parts.as_slice() {
-            ["versions", version, name] => {
-                if self.versions.contains(&key(version)) {
-                    return Some(true);
-                }
-                (name == &format!("{version}.jar")
-                    || name == &format!("{version}.json"))
-                    .then_some(false)
-            }
-            ["natives", version, ..] => {
-                Some(self.natives.contains(&key(version)))
-            }
-            ["libraries" | "assets" | "log_configs" | "resources", ..]
-                if self.paths.contains(&key(relative)) =>
-            {
-                Some(true)
-            }
+            ["versions", version, name] => (name == &format!("{version}.jar")
+                || name == &format!("{version}.json")
+                || name == &format!("{version}.json.axolotl-format"))
+                .then_some(false),
+            ["natives", _, ..] => Some(false),
             ["libraries", ..]
                 if parts.len() >= 5 && relative.ends_with(".jar") =>
             {
@@ -141,6 +181,11 @@ impl References {
                 Some(false)
             }
             ["log_configs", name] if name.ends_with(".xml") => Some(false),
+            ["resources", ..]
+                if self.legacy_candidates.contains_key(&key(relative)) =>
+            {
+                Some(false)
+            }
             _ => None,
         }
     }
@@ -188,7 +233,11 @@ async fn channel_references(
             || value.contains("meta\\")
     }) {
         refs.blocked = true;
-        refs.warnings.push("Custom launch arguments may reference metadata files; their usage cannot be established automatically.".into());
+        refs.warnings.push(MetaWarning::new(
+            MetaWarningKind::CustomArguments,
+            "",
+            "",
+        ));
     }
     let instances = crate::state::instances::adapters::sqlite::instance_rows::list_instances(pool).await?;
     for instance in instances {
@@ -204,7 +253,11 @@ async fn channel_references(
             .any(|path| identity(path).starts_with(&meta_root))
             {
                 refs.blocked = true;
-                refs.warnings.push("An external instance uses the launcher's metadata directory; shared usage cannot be fully confirmed.".into());
+                refs.warnings.push(MetaWarning::new(
+                    MetaWarningKind::ExternalMetadata,
+                    &instance.name,
+                    "",
+                ));
             }
             refs.natives.insert(key(&direct.natives_cache_key()));
             continue;
@@ -234,10 +287,12 @@ async fn channel_references(
                 let combined = format!("{game}-{version}");
                 refs.versions.insert(key(&combined));
                 refs.manifests.insert(key(&combined));
+                refs.games.insert(key(&combined), game.clone());
                 refs.natives.insert(key(&combined));
             } else {
                 refs.natives.insert(key(&game));
                 refs.manifests.insert(key(&game));
+                refs.games.insert(key(&game), game.clone());
             }
         }
     }
@@ -256,7 +311,11 @@ async fn references(directories: &DirectoryInfo) -> References {
             Ok(false) => continue,
             Err(error) => {
                 refs.blocked = true;
-                refs.warnings.push(format!("{}: {error}", path.display()));
+                refs.warnings.push(MetaWarning::new(
+                    MetaWarningKind::DatabaseUnavailable,
+                    path.display().to_string(),
+                    error,
+                ));
                 continue;
             }
             Ok(true) => {}
@@ -276,13 +335,21 @@ async fn references(directories: &DirectoryInfo) -> References {
                     channel_references(&pool, &mut refs, directories).await
                 {
                     refs.blocked = true;
-                    refs.warnings.push(format!("{}: {error}", path.display()));
+                    refs.warnings.push(MetaWarning::new(
+                        MetaWarningKind::DatabaseUnavailable,
+                        path.display().to_string(),
+                        error,
+                    ));
                 }
                 pool.close().await;
             }
             Err(error) => {
                 refs.blocked = true;
-                refs.warnings.push(format!("{}: {error}", path.display()));
+                refs.warnings.push(MetaWarning::new(
+                    MetaWarningKind::DatabaseUnavailable,
+                    path.display().to_string(),
+                    error,
+                ));
             }
         }
     }
@@ -290,20 +357,126 @@ async fn references(directories: &DirectoryInfo) -> References {
     if databases == 0 || crate::State::get().await.is_err() {
         refs.blocked = true;
     }
-    let versions: Vec<_> = refs.manifests.iter().cloned().collect();
-    for version in versions {
-        if let Err(error) =
-            version_references(&directories.metadata_dir(), &version, &mut refs)
-                .await
-        {
-            refs.blocked = true;
-            refs.warnings.push(format!("{version}: {error}"));
-        }
-    }
+    resolve_manifests(&directories.metadata_dir(), &mut refs).await;
     if refs.busy {
-        refs.warnings.push("An installation or rollback is pending. Finish it before cleaning metadata.".into());
+        refs.warnings.push(MetaWarning::new(
+            MetaWarningKind::ActiveOperation,
+            "",
+            "",
+        ));
     }
     refs
+}
+
+/// Unknown loader libraries must not make unrelated legacy copies unclassifiable.
+/// Standard releases from 1.7 onward use assets/objects; snapshots stay conservative.
+fn uses_modern_resources(game: &str) -> bool {
+    let parts: Vec<_> = game.split('.').map(str::parse::<u32>).collect();
+    if parts.len() < 2 || parts.iter().any(Result::is_err) {
+        return false;
+    }
+    let major = parts[0].as_ref().copied().unwrap_or(0);
+    let minor = parts[1].as_ref().copied().unwrap_or(0);
+    major > 1 || (major == 1 && minor >= 7)
+}
+
+async fn resolve_manifests(root: &Path, refs: &mut References) {
+    let versions: Vec<_> = refs.manifests.iter().cloned().collect();
+    for version in versions {
+        if let Err(error) = version_references(root, &version, refs).await {
+            refs.uncertain_categories.insert("libraries");
+            let base = refs
+                .games
+                .get(&version)
+                .filter(|game| **game != version)
+                .cloned();
+            let base_info = if let Some(game) = &base {
+                read_json(
+                    &root
+                        .join("versions")
+                        .join(game)
+                        .join(format!("{game}.json")),
+                )
+                .await
+                .ok()
+                .and_then(|value| {
+                    serde_json::from_value::<daedalus::minecraft::VersionInfo>(
+                        value,
+                    )
+                    .ok()
+                })
+                .filter(|info| info.id == *game)
+            } else {
+                None
+            };
+            if let Some(info) = base_info {
+                if asset_references(root, &info, refs).await.is_err() {
+                    refs.uncertain_categories.extend(["assets", "log_configs"]);
+                    if info.assets == "legacy" {
+                        refs.uncertain_categories.insert("resources");
+                    }
+                }
+            } else {
+                refs.uncertain_categories.extend(["assets", "log_configs"]);
+                if !refs
+                    .games
+                    .get(&version)
+                    .is_some_and(|game| uses_modern_resources(game))
+                {
+                    refs.uncertain_categories.insert("resources");
+                }
+            }
+            refs.warnings.push(MetaWarning::new(
+                MetaWarningKind::VersionUnavailable,
+                version,
+                error,
+            ));
+        }
+    }
+    index_legacy_candidates(root, refs).await;
+}
+
+/// Indexes establish which resource paths are launcher-created copies. Unknown
+/// files in the directory never become cleanup candidates merely by location.
+async fn index_legacy_candidates(root: &Path, refs: &mut References) {
+    let Ok(mut entries) = fs::read_dir(root.join("assets/indexes")).await
+    else {
+        return;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if entry
+            .path()
+            .extension()
+            .is_none_or(|extension| extension != "json")
+        {
+            continue;
+        }
+        let Ok(value) = read_json(&entry.path()).await else {
+            continue;
+        };
+        let Some(objects) = value.get("objects").and_then(Value::as_object)
+        else {
+            continue;
+        };
+        for (name, asset) in objects {
+            let Some(size) = asset.get("size").and_then(Value::as_u64) else {
+                continue;
+            };
+            let Some(hash) = asset.get("hash").and_then(Value::as_str) else {
+                continue;
+            };
+            let relative = format!("resources/{name}");
+            if safe_relative(&relative)
+                && hash.len() == 40
+                && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                refs.legacy_candidates
+                    .entry(key(&relative))
+                    .or_default()
+                    .push((size, hash.to_lowercase()));
+            }
+        }
+    }
 }
 
 async fn version_references(
@@ -359,16 +532,22 @@ async fn version_references(
             }
         }
     }
-    // Processor inputs, outputs and data templates can reference generated JARs.
-    // Until all templates can be resolved locally, retain the shared library tree.
-    if value
-        .get("processors")
-        .and_then(Value::as_array)
-        .is_some_and(|processors| !processors.is_empty())
-    {
-        refs.paths.insert("libraries/*".into());
-        refs.warnings.push(format!("{version}: processor-generated library usage cannot be fully confirmed; shared libraries are kept."));
+    if let Err(error) = processor_references(root, &info, refs) {
+        refs.uncertain_categories.insert("libraries");
+        refs.warnings.push(MetaWarning::new(
+            MetaWarningKind::ProcessorUnresolved,
+            version,
+            error,
+        ));
     }
+    asset_references(root, &info, refs).await
+}
+
+async fn asset_references(
+    root: &Path,
+    info: &daedalus::minecraft::VersionInfo,
+    refs: &mut References,
+) -> crate::Result<()> {
     let index_id = &info.asset_index.id;
     if !component(index_id) {
         return Err(invalid("Invalid asset index ID"));
@@ -403,7 +582,10 @@ async fn version_references(
             refs.keep(format!("resources/{name}"))?;
         }
     }
-    if let Some(logging) = value.get("logging").and_then(Value::as_object) {
+    if let Some(logging) = serde_json::to_value(info)?
+        .get("logging")
+        .and_then(Value::as_object)
+    {
         for config in logging.values() {
             if let Some(id) = config.pointer("/file/id").and_then(Value::as_str)
             {
@@ -411,6 +593,127 @@ async fn version_references(
                     return Err(invalid("Invalid logging filename"));
                 }
                 refs.keep(format!("log_configs/{id}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Resolve the same processor coordinates and data templates used by installation,
+/// without downloading files or running a processor.
+fn processor_references(
+    root: &Path,
+    info: &daedalus::minecraft::VersionInfo,
+    refs: &mut References,
+) -> crate::Result<()> {
+    use daedalus::modded::SidedDataEntry;
+    let Some(processors) = &info.processors else {
+        return Ok(());
+    };
+    let root = identity(root);
+    let libraries = root.join("libraries");
+    let mut data: HashMap<_, _> = info
+        .data
+        .iter()
+        .flat_map(|data| data.iter())
+        .map(|(key, value)| {
+            (
+                key.clone(),
+                SidedDataEntry {
+                    client: value.client.clone(),
+                    server: value.server.clone(),
+                },
+            )
+        })
+        .collect();
+    let game = refs
+        .games
+        .get(&key(&info.id))
+        .cloned()
+        .unwrap_or_else(|| info.id.clone());
+    for (name, value) in [
+        ("SIDE", "client".into()),
+        (
+            "MINECRAFT_JAR",
+            root.join("versions")
+                .join(&info.id)
+                .join(format!("{}.jar", info.id))
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        ("MINECRAFT_VERSION", game),
+        (
+            "ROOT",
+            root.parent()
+                .unwrap_or(&root)
+                .join("__instance_root__")
+                .to_string_lossy()
+                .into_owned(),
+        ),
+        ("LIBRARY_DIR", libraries.to_string_lossy().into_owned()),
+    ] {
+        data.insert(
+            name.into(),
+            SidedDataEntry {
+                client: value,
+                server: String::new(),
+            },
+        );
+    }
+    for value in data.values() {
+        if let Some(coordinate) = value
+            .client
+            .strip_prefix('[')
+            .and_then(|value| value.strip_suffix(']'))
+        {
+            refs.keep(format!(
+                "libraries/{}",
+                daedalus::get_path_from_artifact(coordinate)?
+            ))?;
+        }
+    }
+    for processor in processors {
+        if processor
+            .sides
+            .as_ref()
+            .is_some_and(|sides| !sides.iter().any(|side| side == "client"))
+        {
+            continue;
+        }
+        for coordinate in
+            std::iter::once(&processor.jar).chain(&processor.classpath)
+        {
+            refs.keep(format!(
+                "libraries/{}",
+                daedalus::get_path_from_artifact(coordinate)?
+            ))?;
+        }
+        let templates: Vec<_> = processor
+            .args
+            .iter()
+            .chain(processor.outputs.iter().flat_map(|outputs| outputs.keys()))
+            .collect();
+        let resolved = crate::launcher::get_processor_arguments(
+            &libraries, &templates, &data,
+        )?;
+        for argument in resolved {
+            if argument.contains('{') || argument.contains('}') {
+                return Err(invalid("Unresolved loader installation path"));
+            }
+            let value = argument
+                .strip_prefix("--")
+                .and_then(|option| option.split_once('='))
+                .map_or(argument.as_str(), |(_, value)| value);
+            let path = Path::new(value);
+            if let Ok(relative) = path.strip_prefix(&root) {
+                let relative = relative
+                    .components()
+                    .map(|component| component.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                refs.keep(relative)?;
+            } else if argument.contains(root.to_string_lossy().as_ref()) {
+                return Err(invalid("Ambiguous loader installation path"));
             }
         }
     }
@@ -462,7 +765,7 @@ fn collect(
     refs: &References,
     groups: &mut BTreeMap<String, MetaGroup>,
     files: &mut Vec<Candidate>,
-    warnings: &mut Vec<String>,
+    warnings: &mut Vec<MetaWarning>,
 ) -> std::io::Result<()> {
     let dir = directory(root, relative)?;
     for entry in dir.entries()? {
@@ -474,19 +777,31 @@ fn collect(
             format!("{relative}/{name}")
         };
         if !safe_relative(&path) {
-            warnings.push(path);
+            warnings.push(MetaWarning::new(
+                MetaWarningKind::UnreadablePath,
+                path,
+                "",
+            ));
             continue;
         }
         let metadata = dir.symlink_metadata(entry.file_name())?;
         if metadata.is_symlink() {
-            warnings.push(path);
+            warnings.push(MetaWarning::new(
+                MetaWarningKind::UnreadablePath,
+                path,
+                "",
+            ));
             continue;
         }
         if metadata.is_dir() {
             if let Err(error) =
                 collect(root, &path, refs, groups, files, warnings)
             {
-                warnings.push(format!("{path}: {error}"));
+                warnings.push(MetaWarning::new(
+                    MetaWarningKind::UnreadablePath,
+                    path,
+                    error,
+                ));
             }
             continue;
         }
@@ -505,7 +820,17 @@ fn collect(
         });
         group.files += 1;
         let size = metadata.len();
-        let used = refs.used(&path);
+        let used = if path.starts_with("resources/")
+            && refs.used(&path) == Some(false)
+        {
+            if verified_legacy_copy(root, &path, size, refs)? {
+                Some(false)
+            } else {
+                None
+            }
+        } else {
+            refs.used(&path)
+        };
         match used {
             Some(true) => group.used += size,
             Some(false) => {
@@ -522,6 +847,42 @@ fn collect(
         }
     }
     Ok(())
+}
+
+fn verified_legacy_copy(
+    root: &Dir,
+    relative: &str,
+    size: u64,
+    refs: &References,
+) -> std::io::Result<bool> {
+    use sha1_smol::Sha1;
+    use std::io::Read;
+    let Some(expected) = refs.legacy_candidates.get(&key(relative)) else {
+        return Ok(false);
+    };
+    if !expected.iter().any(|(length, _)| *length == size) {
+        return Ok(false);
+    }
+    let (parent, name) = relative
+        .rsplit_once('/')
+        .ok_or_else(|| std::io::Error::other("Invalid resource path"))?;
+    let dir = directory(root, parent)?;
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let mut file = dir.open_with(name, &options)?;
+    let mut digest = Sha1::new();
+    let mut buffer = [0; 65536];
+    loop {
+        let length = file.read(&mut buffer)?;
+        if length == 0 {
+            break;
+        }
+        digest.update(&buffer[..length]);
+    }
+    let hash = digest.hexdigest();
+    Ok(expected
+        .iter()
+        .any(|(length, expected)| *length == size && *expected == hash))
 }
 
 pub async fn analyze_meta() -> crate::Result<MetaAnalysis> {
@@ -638,14 +999,21 @@ fn remove_candidates(
         .into_iter()
         .filter(|file| selection.contains(&file.group))
     {
-        if refs.used(&file.relative) != Some(false)
-            || (file.relative.starts_with("libraries/")
-                && refs.paths.contains("libraries/*"))
-        {
+        if refs.used(&file.relative) != Some(false) {
             result.skipped_files += 1;
             continue;
         }
         let outcome = (|| {
+            if file.relative.starts_with("resources/")
+                && !verified_legacy_copy(
+                    &root,
+                    &file.relative,
+                    file.size,
+                    refs,
+                )?
+            {
+                return Ok(false);
+            }
             let (parent, name) = file
                 .relative
                 .rsplit_once('/')
@@ -664,12 +1032,20 @@ fn remove_candidates(
             }
             drop(handle);
             dir.remove_file(name)?;
+            drop(dir);
+            prune_empty_parents(&root, parent);
             Ok::<_, std::io::Error>(true)
         })();
         match outcome {
             Ok(true) => {
                 result.removed_files += 1;
                 result.removed_bytes += file.size;
+                let removed = result
+                    .removed_groups
+                    .entry(file.group.clone())
+                    .or_default();
+                removed.files += 1;
+                removed.bytes += file.size;
             }
             Ok(false) => result.skipped_files += 1,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -683,6 +1059,19 @@ fn remove_candidates(
         }
     }
     Ok::<_, std::io::Error>(result)
+}
+
+fn prune_empty_parents(root: &Dir, relative: &str) {
+    let mut path = relative;
+    while let Some((parent, name)) = path.rsplit_once('/') {
+        let Ok(directory) = directory(root, parent) else {
+            break;
+        };
+        if directory.remove_dir(name).is_err() {
+            break;
+        }
+        path = parent;
+    }
 }
 
 #[cfg(test)]

@@ -61,6 +61,7 @@ pub(crate) async fn read_game_version_metadata_from_jar(
 use winreg::{RegKey, enums::HKEY_CURRENT_USER};
 
 mod args;
+pub(crate) use args::get_processor_arguments;
 mod direct_ensure;
 mod direct_link;
 pub(crate) mod external_version;

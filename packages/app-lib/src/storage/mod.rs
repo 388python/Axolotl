@@ -11,7 +11,7 @@ use tokio::fs;
 
 use crate::state::DirectoryInfo;
 
-pub const STORAGE_CACHE_VERSION: u32 = 2;
+pub const STORAGE_CACHE_VERSION: u32 = 3;
 const STORAGE_CACHE_FILE: &str = "launcher-storage.cbor";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -598,25 +598,27 @@ async fn scan_with_directories(
                 .iter_mut()
                 .find(|existing| existing.node_type == *kind)
             {
-                let old = existing.clone();
-                if old.children.as_ref().is_some_and(|children| {
-                    children
-                        .first()
-                        .is_some_and(|child| child.node_type == *kind)
-                }) {
-                    let mut children = old.children.unwrap_or_default();
+                if existing.id.starts_with("category-") {
+                    existing.paths.extend(node.paths.clone());
+                    let mut children =
+                        existing.children.take().unwrap_or_default();
                     children.push(node);
                     aggregate(existing, children);
                 } else {
-                    existing.id = format!("category-{kind:?}");
-                    existing.paths.extend(node.paths.clone());
-                    aggregate(existing, vec![old, node]);
+                    let old = existing.clone();
+                    let mut parent = folder(path, kind.clone());
+                    parent.id = format!("category-{kind:?}");
+                    parent.paths =
+                        old.paths.iter().chain(&node.paths).cloned().collect();
+                    aggregate(&mut parent, vec![old, node]);
+                    *existing = parent;
                 }
             } else {
                 categories.push(node);
             }
         }
     }
+
     let mut remainder = Vec::new();
     for root in minimal_roots(vec![
         directories.settings_dir.clone(),

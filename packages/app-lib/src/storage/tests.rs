@@ -109,3 +109,41 @@ async fn scan_errors_do_not_discard_readable_siblings() {
     #[cfg(unix)]
     assert_eq!(warnings.len(), 1);
 }
+
+#[tokio::test]
+async fn database_category_has_release_and_beta_as_direct_children() {
+    let temp = tempfile::tempdir().unwrap();
+    let directories = DirectoryInfo {
+        settings_dir: temp.path().into(),
+        config_dir: temp.path().into(),
+        app_identifier: "test".into(),
+    };
+    for channel in ["release", "beta"] {
+        fs::create_dir_all(temp.path().join(channel)).await.unwrap();
+        fs::write(temp.path().join(channel).join("app.db"), [0; 9])
+            .await
+            .unwrap();
+    }
+    let tree = scan_with_directories(
+        &directories,
+        &temp.path().join("backups"),
+        vec![],
+    )
+    .await
+    .unwrap();
+    let database = tree
+        .categories
+        .iter()
+        .find(|node| node.node_type == StorageNodeType::Database)
+        .unwrap();
+    assert!(database.name.is_none());
+    let names: HashSet<_> = database
+        .children
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|node| node.name.as_deref().unwrap())
+        .collect();
+    assert_eq!(names, HashSet::from(["release", "beta"]));
+    assert_eq!(database.size.actual, 18);
+}
