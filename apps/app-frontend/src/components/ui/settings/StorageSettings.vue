@@ -302,6 +302,7 @@ function formatDateTime(date: Date) {
                         :depth="0"
                         :parent-total="sizeTotal(tree.total)"
                         @action="handleAction"
+                        @open-folder="openNodePaths"
                         ><template v-if="category.type === 'cache'" #actions
                             ><CacheCleanupButton compact @cleared="updateStorage" /></template
                     ></StorageTreeNode>

@@ -14302,5 +14302,8 @@
   },
   "app.settings.storage.cachedScanHelp": {
     "message": "正在刷新占用，当前显示上次扫描结果。"
+  },
+  "app.settings.storage.openFolder": {
+    "message": "在文件管理器中打开文件夹"
   }
 }

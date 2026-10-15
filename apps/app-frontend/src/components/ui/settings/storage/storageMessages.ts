@@ -3,6 +3,10 @@ import { defineMessages } from '@modrinth/ui'
 import type { StorageNodeType } from '@/helpers/storage'
 
 export const storageMessages = defineMessages({
+    openFolder: {
+        id: 'app.settings.storage.openFolder',
+        defaultMessage: 'Open folder in file manager',
+    },
     scanSections: {
         id: 'app.settings.storage.scanSections',
         defaultMessage: '{completed} / {total} areas',

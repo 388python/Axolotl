@@ -12,10 +12,12 @@ const props = defineProps<{
     node: StorageNode
     depth: number
     parentTotal: number
+    instanceFolders?: boolean
 }>()
 
 const emit = defineEmits<{
     action: [node: StorageNode]
+    openFolder: [node: StorageNode]
 }>()
 
 const hasChildren = computed(() => (props.node.children?.length ?? 0) > 0)
@@ -31,7 +33,9 @@ const visibleChildren = computed(() => sortStorageChildren(props.node.children))
                 :depth="depth"
                 :parent-total="parentTotal"
                 :expanded="open"
+                :show-folder-action="instanceFolders"
                 @action="emit('action', $event)"
+                @open-folder="emit('openFolder', $event)"
                 ><template #actions><slot name="actions" /></template
             ></StorageTreeRow>
         </template>
@@ -42,7 +46,9 @@ const visibleChildren = computed(() => sortStorageChildren(props.node.children))
                 :node="child"
                 :depth="depth + 1"
                 :parent-total="totalSize"
+                :instance-folders="instanceFolders || node.type === 'instances'"
                 @action="emit('action', $event)"
+                @open-folder="emit('openFolder', $event)"
             />
         </div>
     </StorageDisclosure>

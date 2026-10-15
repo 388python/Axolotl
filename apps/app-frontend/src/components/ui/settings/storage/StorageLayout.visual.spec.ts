@@ -7,7 +7,13 @@ import { page } from 'vitest/browser'
 import { defineComponent, h, ref } from 'vue'
 
 import { purgeLauncherCache } from '@/helpers/cache.js'
-import { analyzeMeta, cleanMeta, scanStorage, type StorageNode } from '@/helpers/storage'
+import {
+    analyzeMeta,
+    cleanMeta,
+    openStoragePaths,
+    scanStorage,
+    type StorageNode,
+} from '@/helpers/storage'
 import zh from '@/locales/zh-CN/index.json'
 import { mountThemed, waitFor } from '@/test/visual-harness'
 
@@ -46,7 +52,17 @@ const node = (
 })
 const categories = () => [
     node('instances', 'instances', 4800000000, undefined, [
-        node('instance-1', 'instance', 4800000000, '红石生存 · Fabric 1.21.1'),
+        {
+            ...node('instance-1', 'instance', 4800000000, '红石生存 · Fabric 1.21.1', [
+                node('mods', 'mods', 1200000000, undefined, [
+                    {
+                        ...node('mod.jar', 'folder', 1000, 'mod.jar'),
+                        paths: [{ path: 'D:/Minecraft/Axolotl/mods/mod.jar', kind: 'file' }],
+                    },
+                ]),
+            ]),
+            instance_id: 'instance-1',
+        },
     ]),
     node('cache', 'cache', 1200000000, undefined, [
         node('store', 'content_store', 900000000),
@@ -213,6 +229,41 @@ it.each([1024, 680])('storage overview and cleanup use real components at %i px'
     finishScan(previous)
     await flushPromises()
     expect(wrapper.find('[role="progressbar"]').exists()).toBe(false)
+    vi.mocked(openStoragePaths).mockResolvedValue({ opened: [], failed: [] })
+    referenceRow.element.click()
+    const instanceRow = wrapper.findAll('.tree-row').find((row) => row.text().includes('红石生存'))!
+    await waitFor(() => instanceRow.element.getBoundingClientRect().height > 0)
+    const openInstance = instanceRow.get('button[aria-label="在文件管理器中打开文件夹"]')
+    const disclosure = instanceRow.element.closest('details')!
+    openInstance.element.click()
+    await flushPromises()
+    expect(disclosure.open).toBe(false)
+    expect(openStoragePaths).toHaveBeenLastCalledWith([
+        { path: 'D:/Minecraft/Axolotl/instance-1', kind: 'directory' },
+    ])
+    expect(instanceRow.element.getBoundingClientRect().height).toBe(
+        referenceRow.element.getBoundingClientRect().height,
+    )
+    instanceRow.element.click()
+    const modsRow = wrapper
+        .findAll('.tree-row')
+        .find((row) => row.text().includes('模组') && !row.text().includes('mod.jar'))!
+    await waitFor(() => modsRow.element.getBoundingClientRect().height > 0)
+    modsRow.get('button[aria-label="在文件管理器中打开文件夹"]').element.click()
+    await flushPromises()
+    expect(openStoragePaths).toHaveBeenLastCalledWith([
+        { path: 'D:/Minecraft/Axolotl/mods', kind: 'directory' },
+    ])
+    const fileRow = wrapper.findAll('.tree-row').find((row) => row.text().includes('mod.jar'))!
+    expect(fileRow.find('button[aria-label="在文件管理器中打开文件夹"]').exists()).toBe(false)
+    expect(cacheRow.find('button[aria-label="在文件管理器中打开文件夹"]').exists()).toBe(false)
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/instance-folders-${width}.png`,
+            element: wrapper.element,
+        })
+    referenceRow.element.click()
+    await waitFor(() => !referenceRow.element.closest('details')!.open)
     expect(cacheRow.element.getBoundingClientRect().height).toBe(
         referenceRow.element.getBoundingClientRect().height,
     )

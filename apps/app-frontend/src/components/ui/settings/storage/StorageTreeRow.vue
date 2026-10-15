@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from '@modrinth/assets'
-import { useFormatBytes, useVIntl } from '@modrinth/ui'
+import { IconButton, useFormatBytes, useVIntl } from '@modrinth/ui'
 import { computed } from 'vue'
 
 import type { StorageNode } from './storageData'
@@ -13,10 +13,12 @@ const props = defineProps<{
     depth: number
     parentTotal: number
     expanded: boolean
+    showFolderAction?: boolean
 }>()
 
 const emit = defineEmits<{
     action: [node: StorageNode]
+    openFolder: [node: StorageNode]
 }>()
 
 const { formatMessage } = useVIntl()
@@ -120,6 +122,16 @@ const openActionLabel = computed(() => formatMessage(storageMessages.openAction)
                     + {{ symlinkSizeText }}
                 </span>
             </div>
+            <IconButton
+                v-if="showFolderAction && node.paths.some((path) => path.kind === 'directory')"
+                v-tooltip="formatMessage(storageMessages.openFolder)"
+                size="2xs"
+                type="quiet"
+                :label="formatMessage(storageMessages.openFolder)"
+                @click.stop="emit('openFolder', node)"
+                @keydown.stop
+                ><FolderOpenIcon
+            /></IconButton>
         </div>
     </div>
 </template>

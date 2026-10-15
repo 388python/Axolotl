@@ -14290,5 +14290,8 @@
   },
   "app.settings.storage.cachedScanHelp": {
     "message": "Showing the previous scan while storage usage is refreshed."
+  },
+  "app.settings.storage.openFolder": {
+    "message": "Open folder in file manager"
   }
 }
