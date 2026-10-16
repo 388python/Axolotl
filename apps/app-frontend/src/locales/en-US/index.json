@@ -6857,6 +6857,72 @@
   "app.lab.command-generator.item-picker.pick": {
     "message": "Pick item"
   },
+  "app.lab.command-generator.preset.advancement.everything": {
+    "message": "Everything"
+  },
+  "app.lab.command-generator.preset.advancement.everything.desc": {
+    "message": "Grant or revoke every loaded advancement"
+  },
+  "app.lab.command-generator.preset.advancement.root": {
+    "message": "Minecraft (root)"
+  },
+  "app.lab.command-generator.preset.advancement.stone-age": {
+    "message": "Stone Age"
+  },
+  "app.lab.command-generator.preset.advancement.diamonds": {
+    "message": "Diamonds!"
+  },
+  "app.lab.command-generator.preset.advancement.enter-nether": {
+    "message": "We Need to Go Deeper"
+  },
+  "app.lab.command-generator.preset.advancement.kill-dragon": {
+    "message": "Free the End"
+  },
+  "app.lab.command-generator.preset.advancement.elytra": {
+    "message": "Sky's the Limit"
+  },
+  "app.lab.command-generator.preset.advancement.hero-village": {
+    "message": "Hero of the Village"
+  },
+  "app.lab.command-generator.preset.advancement.breed-animals": {
+    "message": "The Parrots and the Bats"
+  },
+  "app.lab.command-generator.preset.gamerule.keep-inventory": {
+    "message": "Keep inventory"
+  },
+  "app.lab.command-generator.preset.gamerule.keep-inventory.desc": {
+    "message": "Keep items and XP on death"
+  },
+  "app.lab.command-generator.preset.gamerule.no-mob-griefing": {
+    "message": "Disable mob griefing"
+  },
+  "app.lab.command-generator.preset.gamerule.no-mob-griefing.desc": {
+    "message": "Stop mobs from breaking or changing blocks"
+  },
+  "app.lab.command-generator.preset.gamerule.no-daylight-cycle": {
+    "message": "Lock daylight cycle"
+  },
+  "app.lab.command-generator.preset.gamerule.no-mob-spawning": {
+    "message": "Disable mob spawning"
+  },
+  "app.lab.command-generator.preset.gamerule.no-fire-tick": {
+    "message": "Disable fire spread"
+  },
+  "app.lab.command-generator.preset.gamerule.no-weather-cycle": {
+    "message": "Lock weather"
+  },
+  "app.lab.command-generator.preset.gamerule.no-natural-regen": {
+    "message": "Disable natural regeneration"
+  },
+  "app.lab.command-generator.preset.gamerule.no-insomnia": {
+    "message": "Disable insomnia"
+  },
+  "app.lab.command-generator.preset.gamerule.no-command-feedback": {
+    "message": "Disable command feedback"
+  },
+  "app.lab.command-generator.preset.gamerule.show-death-messages": {
+    "message": "Show death messages"
+  },
   "app.lab.command-generator.preset.common.self": {
     "message": "Self"
   },

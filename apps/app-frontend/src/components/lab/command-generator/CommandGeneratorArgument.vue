@@ -24,6 +24,8 @@ function t(key: string, fallback?: string): string {
     return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
+// ============ 内置预设 ============
+
 const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
     { labelKey: 'app.lab.command-generator.preset.entity.self', value: '@s' },
     { labelKey: 'app.lab.command-generator.preset.entity.nearest-player', value: '@p' },
@@ -43,24 +45,92 @@ const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
     { labelKey: 'app.lab.command-generator.preset.entity.nearby-entities-5', value: '@e[distance=..5]' },
 ]
 
+const ADVANCEMENT_DEFAULT_PRESETS: ArgumentPreset[] = [
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.everything',
+        value: 'everything',
+        descriptionKey: 'app.lab.command-generator.preset.advancement.everything.desc',
+    },
+    { labelKey: 'app.lab.command-generator.preset.advancement.root', value: 'minecraft:story/root' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.stone-age', value: 'minecraft:story/mine_stone' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.diamonds', value: 'minecraft:story/mine_diamond' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.enter-nether', value: 'minecraft:story/enter_the_nether' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.kill-dragon', value: 'minecraft:end/kill_dragon' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.elytra', value: 'minecraft:end/elytra' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.hero-village', value: 'minecraft:adventure/hero_of_the_village' },
+    { labelKey: 'app.lab.command-generator.preset.advancement.breed-animals', value: 'minecraft:husbandry/breed_an_animal' },
+]
+
+const GAMERULE_DEFAULT_PRESETS: ArgumentPreset[] = [
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.keep-inventory',
+        value: 'keepInventory true',
+        descriptionKey: 'app.lab.command-generator.preset.gamerule.keep-inventory.desc',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing',
+        value: 'mobGriefing false',
+        descriptionKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing.desc',
+    },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-daylight-cycle', value: 'doDaylightCycle false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-spawning', value: 'doMobSpawning false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-fire-tick', value: 'doFireTick false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-weather-cycle', value: 'doWeatherCycle false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-natural-regen', value: 'naturalRegeneration false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-insomnia', value: 'doInsomnia false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-command-feedback', value: 'sendCommandFeedback false' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.show-death-messages', value: 'showDeathMessages true' },
+]
+
+// ============ 类型判断 ============
+
 const isNumber = computed(() => props.arg.type === 'number' || props.arg.type === 'integer')
 const isNbt = computed(() => props.arg.supportsNbtEditor === true)
 const isItem = computed(() => props.arg.type === 'item')
-const isEnumDropdown = computed(
-    () => !!props.arg.enumValues && props.arg.enumValues.length > 0,
+
+/**
+ * 这三种类型统一走「普通 input + 下方预设 chip」的路径。
+ * 关键修复：把它们显式排除出 Combobox 分支，
+ * 否则只要数据文件里带了 enumValues，isEnumDropdown 就会为 true，
+ * showPresets 永远为 false，预设按钮永远不显示。
+ */
+const hasInlinePresets = computed(
+    () =>
+        props.arg.type === 'entity-selector' ||
+        props.arg.type === 'advancement' ||
+        props.arg.type === 'gamerule',
 )
 
-const itemPickerRef = useTemplateRef<InstanceType<typeof CommandGeneratorItemPickerModal>>(
-    'itemPickerRef',
+const isEnumDropdown = computed(
+    () =>
+        !hasInlinePresets.value &&
+        !!props.arg.enumValues &&
+        props.arg.enumValues.length > 0,
 )
 
 const enumOptions = computed<ComboboxOption[]>(() =>
     (props.arg.enumValues ?? []).map((value) => ({ value, label: value })),
 )
 
+const itemPickerRef = useTemplateRef<InstanceType<typeof CommandGeneratorItemPickerModal>>(
+    'itemPickerRef',
+)
+
+// ============ 预设合并 ============
+
 const mergedPresets = computed<ArgumentPreset[]>(() => {
     const custom = props.arg.presets ?? []
-    if (props.arg.type !== 'entity-selector') return custom
+
+    const builtin =
+        props.arg.type === 'entity-selector'
+            ? ENTITY_SELECTOR_DEFAULT_PRESETS
+            : props.arg.type === 'advancement'
+              ? ADVANCEMENT_DEFAULT_PRESETS
+              : props.arg.type === 'gamerule'
+                ? GAMERULE_DEFAULT_PRESETS
+                : null
+
+    if (!builtin) return custom
 
     const seen = new Set<string>()
     const result: ArgumentPreset[] = []
@@ -73,7 +143,7 @@ const mergedPresets = computed<ArgumentPreset[]>(() => {
         }
     }
 
-    for (const p of ENTITY_SELECTOR_DEFAULT_PRESETS) {
+    for (const p of builtin) {
         const key = String(p.value)
         if (!seen.has(key)) {
             seen.add(key)
@@ -104,13 +174,14 @@ const hiddenPresetCount = computed(() => {
     return list.length > VISIBLE_PRESET_COUNT ? list.length - VISIBLE_PRESET_COUNT : 0
 })
 
+// ============ 事件处理 ============
+
 function onEnumChange(value: unknown) {
     emit('update:modelValue', String(value))
 }
 
 function onTextInput(value: string) {
     if (isNumber.value) {
-        // 修复：清空输入框时应保持为 ''，而不是被 Number('') 转成 0
         emit('update:modelValue', value === '' ? '' : Number(value))
     } else {
         emit('update:modelValue', value)

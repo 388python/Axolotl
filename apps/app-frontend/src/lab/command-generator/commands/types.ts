@@ -22,6 +22,8 @@ export type ArgumentType =
     | 'slot'
     | 'objective'
     | 'team'
+    | 'advancement'   // ← 新增
+    | 'gamerule'      // ← 新增
 
 export type NbtKind = 'item' | 'entity' | 'generic'
 
