@@ -17,14 +17,18 @@ use crate::{
     util::io::{self, IOError},
 };
 
+mod analysis_settings;
+pub use analysis_settings::{
+    CrashAnalysisAiSettings, get_crash_analysis_ai_settings,
+    update_crash_analysis_ai_settings,
+};
+
 mod crash_analysis;
 pub use crash_analysis::{
-    CrashAnalysis, CrashAnalysisAiExplanation, CrashAnalysisAiSettings,
-    CrashAnalysisEvidence, CrashAnalysisFinding, CrashAnalysisMod,
-    CrashAnalysisSource, CrashModChange, CrashModChangeCounts, analyze_crash,
-    explain_crash_with_ai, get_crash_analysis_ai_settings,
+    CrashAnalysis, CrashAnalysisAiExplanation, CrashAnalysisEvidence,
+    CrashAnalysisFinding, CrashAnalysisMod, CrashAnalysisSource,
+    CrashModChange, CrashModChangeCounts, analyze_crash, explain_crash_with_ai,
     save_successful_mod_snapshot, undo_added_mod,
-    update_crash_analysis_ai_settings,
 };
 
 mod logshare;

@@ -82,7 +82,7 @@ struct UploadBody {
 pub async fn get_log_share_settings() -> crate::Result<LogShareSettings> {
     let state = State::get().await?;
     let row = sqlx::query_as::<_, (String, String, i64, i64, i64, i64)>(
-        "SELECT share_provider, ai_source, auto_upload, multi_file, no_storage, show_progress FROM log_share_settings WHERE id = 0",
+        "SELECT s.share_provider, a.ai_source, s.auto_upload, s.multi_file, s.no_storage, s.show_progress FROM log_share_settings s JOIN crash_analysis_ai_settings a ON a.id = s.id WHERE s.id = 0",
     )
     .fetch_one(&state.pool)
     .await?;
@@ -102,10 +102,9 @@ pub async fn update_log_share_settings(
     let settings = normalize_settings(settings);
     let state = State::get().await?;
     sqlx::query(
-        "UPDATE log_share_settings SET share_provider = ?, ai_source = ?, auto_upload = ?, multi_file = ?, no_storage = ?, show_progress = ? WHERE id = 0",
+        "UPDATE log_share_settings SET share_provider = ?, auto_upload = ?, multi_file = ?, no_storage = ?, show_progress = ? WHERE id = 0",
     )
     .bind(&settings.share_provider)
-    .bind(&settings.ai_source)
     .bind(settings.auto_upload)
     .bind(settings.multi_file)
     .bind(settings.no_storage)

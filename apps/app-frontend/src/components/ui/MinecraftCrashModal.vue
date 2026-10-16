@@ -839,6 +839,7 @@ async function analyzeAndUpdate(
         console.error('Failed to analyze Minecraft crash', error)
         return null
     })
+    if (!mounted || version !== analysisVersion) return null
     lastAnalysis = analysis
     modChangesAvailable.value = !!analysis?.mod_changes.length
     if (mounted && version === analysisVersion) {

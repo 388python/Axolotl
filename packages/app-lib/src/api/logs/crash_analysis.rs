@@ -9,7 +9,10 @@ use sha2::{Digest, Sha256};
 #[cfg(windows)]
 use tokio::process::Command;
 
-use super::{CensoredString, isolated_minecraft_root, resolve_instance_path};
+use super::{
+    CensoredString, get_crash_analysis_ai_settings, isolated_minecraft_root,
+    resolve_instance_path,
+};
 use crate::{State, prelude::Credentials, util::io::IOError};
 
 const MAX_AI_CONTEXT_CHARS: usize = 120_000;
@@ -58,14 +61,6 @@ pub struct WindowsCrashEvent {
     pub provider: String,
     pub time_created: String,
     pub message: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CrashAnalysisAiSettings {
-    pub enabled: bool,
-    pub provider_id: String,
-    pub model_id: String,
-    pub ai_source: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -1026,53 +1021,6 @@ async fn collect_windows_crash_events(
     _anchor: Option<u64>,
 ) -> Vec<WindowsCrashEvent> {
     Vec::new()
-}
-
-pub async fn get_crash_analysis_ai_settings()
--> crate::Result<CrashAnalysisAiSettings> {
-    let state = State::get().await?;
-    let row = sqlx::query_as::<_, (i64, String, String, String)>(
-        "SELECT enabled, provider_id, model_id, ai_source FROM crash_analysis_ai_settings WHERE id = 0",
-    )
-    .fetch_one(&state.pool)
-    .await?;
-    Ok(CrashAnalysisAiSettings {
-        enabled: row.0 != 0,
-        provider_id: row.1,
-        model_id: row.2,
-        ai_source: row.3,
-    })
-}
-
-pub async fn update_crash_analysis_ai_settings(
-    settings: CrashAnalysisAiSettings,
-) -> crate::Result<()> {
-    let state = State::get().await?;
-    let ai_source = normalize_ai_source(&settings.ai_source);
-    sqlx::query(
-        "UPDATE crash_analysis_ai_settings SET enabled = ?, provider_id = ?, model_id = ?, ai_source = ? WHERE id = 0",
-    )
-    .bind(settings.enabled)
-    .bind(settings.provider_id.trim())
-    .bind(settings.model_id.trim())
-    .bind(ai_source)
-    .execute(&state.pool)
-    .await?;
-    // Keep the single source of truth mirrored into the log sharing table so
-    // the crash modal can keep reading one place without the two drifting.
-    sqlx::query("UPDATE log_share_settings SET ai_source = ? WHERE id = 0")
-        .bind(ai_source)
-        .execute(&state.pool)
-        .await?;
-    Ok(())
-}
-
-fn normalize_ai_source(ai_source: &str) -> &str {
-    if ai_source == "custom" {
-        "custom"
-    } else {
-        "logshare"
-    }
 }
 
 pub async fn explain_crash_with_ai(
