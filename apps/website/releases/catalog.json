@@ -1,6 +1,181 @@
 {
-  "updated_at": "2026-10-13T16:03:57.706Z",
+  "updated_at": "2026-10-15T21:46:24.000Z",
   "announcements": [
+    {
+      "id": "launcher-1.10.0-beta.1",
+      "version": "1.10.0-beta.1",
+      "publishedAt": "2026-10-15",
+      "title": {
+        "en-US": "Axolotl Launcher 1.10.0-beta.1",
+        "zh-CN": "Axolotl Launcher 1.10.0-beta.1"
+      },
+      "changes": {
+        "added": [
+          {
+            "en-US": "Added unified resource search and project browsing across Modrinth, CurseForge, MCArchive, and Planet Minecraft.",
+            "zh-CN": "新增跨来源资源搜索与项目浏览，统一展示 Modrinth、CurseForge、MCArchive 和 Planet Minecraft 的内容。"
+          },
+          {
+            "en-US": "Added a preferred resource source setting for default project descriptions and equivalent releases.",
+            "zh-CN": "新增首选资源来源设置，用于选择默认项目描述和等效版本的来源。"
+          },
+          {
+            "en-US": "Added content change previews showing target files, required and optional dependencies, version conflicts, and compatibility warnings.",
+            "zh-CN": "新增内容变更预览，支持查看目标文件、必需与可选依赖、版本冲突和兼容性提示。"
+          },
+          {
+            "en-US": "Added cross-source updates and version switching for installed resources.",
+            "zh-CN": "新增已安装资源的跨来源更新与版本切换。"
+          },
+          {
+            "en-US": "Added resource installation history with restoration from available rollback backups.",
+            "zh-CN": "新增资源安装历史，支持从可用回滚备份恢复此前的安装版本。"
+          },
+          {
+            "en-US": "Added old resource file and rollback backup management with search, filters, and cleanup previews.",
+            "zh-CN": "新增旧资源文件与回滚备份管理，支持搜索、筛选和清理预览。"
+          },
+          {
+            "en-US": "Added expandable duplicate-resource groups in the Content tab, showing individual file states and available updates.",
+            "zh-CN": "内容页新增可展开的重复资源分组，显示各文件状态和可用更新。"
+          },
+          {
+            "en-US": "Added project release changelog translation with an option to view the original text.",
+            "zh-CN": "新增项目版本更新日志翻译，并支持切换回原文。"
+          },
+          {
+            "en-US": "Added options to prefix downloaded filenames with known Chinese project names and preserve local prefixes and suffixes during updates.",
+            "zh-CN": "新增下载文件名附加已知中文项目名，以及更新时保留本地文件名前缀和后缀的选项。"
+          },
+          {
+            "en-US": "Added CurseForge ZIP and generic ZIP export alongside Modrinth .mrpack export.",
+            "zh-CN": "新增 CurseForge ZIP 和通用 ZIP 导出，与 Modrinth .mrpack 一并提供三种导出格式。"
+          },
+          {
+            "en-US": "Added detailed storage categories, live scan progress, and saved scan results.",
+            "zh-CN": "新增存储分类明细、实时扫描进度和上次扫描结果展示。"
+          },
+          {
+            "en-US": "Added unused shared game file analysis and selective cleanup for Java runtimes, game versions, libraries, and assets.",
+            "zh-CN": "新增未使用共享游戏文件分析，可选择清理不再需要的 Java、游戏版本、库和资源文件。"
+          },
+          {
+            "en-US": "Added actions to open instance folders directly from the storage list.",
+            "zh-CN": "新增从存储列表直接打开实例目录的操作。"
+          }
+        ],
+        "changed": [
+          {
+            "en-US": "Redesigned modpack export with category selection, individual file selection, and package information steps.",
+            "zh-CN": "重新设计整合包导出流程，支持按类别选择内容、调整单个文件并填写整合包信息。"
+          },
+          {
+            "en-US": "Improved export matching by verifying source releases against local files and allowing unmatched selected files to be embedded.",
+            "zh-CN": "改进导出来源匹配，校验来源版本是否对应本地文件，并允许直接打包未匹配的选中文件。"
+          },
+          {
+            "en-US": "Improved background export progress and cancellation while preserving previous output files.",
+            "zh-CN": "改进后台导出的进度显示和取消操作，并保留原有输出文件。"
+          },
+          {
+            "en-US": "Improved content change previews to display resolved items progressively.",
+            "zh-CN": "改进内容变更预览，逐步显示已解析完成的条目。"
+          },
+          {
+            "en-US": "Improved instance content loading by showing local files sooner and reducing repeated scans and metadata requests.",
+            "zh-CN": "改进实例内容加载，更早显示本地文件，并减少重复扫描和元数据请求。"
+          },
+          {
+            "en-US": "Improved responsiveness and progress feedback during batch installations and updates.",
+            "zh-CN": "改进批量安装和更新时的响应与进度反馈。"
+          },
+          {
+            "en-US": "Consolidated storage analysis on the main Storage page, distinguishing launcher files, external game directories, and linked files.",
+            "zh-CN": "将存储分析集中到主存储页面，并区分启动器文件、外部游戏目录和链接文件的占用。"
+          },
+          {
+            "en-US": "Improved cache cleanup results to show freed space and retained file usage.",
+            "zh-CN": "改进缓存清理结果，显示实际释放空间及保留文件的占用。"
+          }
+        ],
+        "fixed": [
+          {
+            "en-US": "Fixed cross-source project, release, and file identification selecting incorrect update or version-switch targets.",
+            "zh-CN": "修复跨来源项目、版本和文件识别混淆，导致更新或切换版本时选错目标的问题。"
+          },
+          {
+            "en-US": "Fixed dependency resolution overlooking installed dependencies, misreading declarations, or choosing incorrect versions.",
+            "zh-CN": "修复依赖解析遗漏已安装依赖、错误处理依赖声明或选择不正确版本的问题。"
+          },
+          {
+            "en-US": "Fixed Minecraft version-range and loader compatibility checks, including wildcards, interval boundaries, and Fabric–Quilt compatibility.",
+            "zh-CN": "修复 Minecraft 版本范围与加载器兼容性判断，包括通配符、区间边界和 Fabric、Quilt 的兼容方向。"
+          },
+          {
+            "en-US": "Fixed inconsistent source filters, search pagination, and date sorting that could omit results.",
+            "zh-CN": "修复来源筛选、搜索分页和日期排序不一致，导致遗漏结果的问题。"
+          },
+          {
+            "en-US": "Fixed source fallback and retry handling treating failed requests as unmatched resources.",
+            "zh-CN": "修复来源回退和重试处理将请求失败误判为资源不匹配的问题。"
+          },
+          {
+            "en-US": "Fixed duplicate-resource updates, deletions, and unlinking affecting files outside the selected operation.",
+            "zh-CN": "修复重复资源更新、删除和解除关联操作影响非目标文件的问题。"
+          },
+          {
+            "en-US": "Fixed updates and restores losing local filenames.",
+            "zh-CN": "修复更新和恢复操作丢失本地文件名的问题。"
+          },
+          {
+            "en-US": "Fixed stale requests and background tasks overwriting the current view after switching instances, projects, or releases.",
+            "zh-CN": "修复切换实例、项目或版本后，过期请求和后台任务覆盖当前页面状态的问题。"
+          },
+          {
+            "en-US": "Fixed project navigation losing browsing and operation context.",
+            "zh-CN": "修复项目跳转丢失原有浏览与操作上下文的问题。"
+          },
+          {
+            "en-US": "Fixed recovery of interrupted resource operations and cleanup failures incorrectly affecting completed task states.",
+            "zh-CN": "修复中断资源操作的恢复，以及清理失败错误影响已完成任务状态的问题。"
+          },
+          {
+            "en-US": "Fixed missing cancellation controls in connector installation flows.",
+            "zh-CN": "修复部分外部来源安装流程缺少取消入口的问题。"
+          },
+          {
+            "en-US": "Fixed export category changes losing manual file selections and source references not matching the selected local files.",
+            "zh-CN": "修复切换导出类别时丢失手动文件选择，以及来源引用未对应所选本地文件的问题。"
+          },
+          {
+            "en-US": "Fixed incorrect rollback backup availability and old-file cleanup decisions.",
+            "zh-CN": "修复回滚备份可用状态和旧文件清理判断不准确的问题。"
+          },
+          {
+            "en-US": "Fixed storage totals misclassifying shared files, legacy repositories, and launcher data.",
+            "zh-CN": "修复共享文件、旧版存储目录和启动器数据分类错误导致的存储统计偏差。"
+          },
+          {
+            "en-US": "Fixed Windows path casing differences causing incorrect file ownership detection.",
+            "zh-CN": "修复 Windows 路径大小写差异导致文件归属识别错误的问题。"
+          },
+          {
+            "en-US": "Fixed cache cleanup missing downloaded caches and failing to refresh storage totals correctly.",
+            "zh-CN": "修复缓存清理遗漏已下载缓存，以及清理后占用统计未正确更新的问题。"
+          }
+        ],
+        "security": [
+          {
+            "en-US": "Hardened export file access to prevent symbolic links or replaced directories from exposing files outside the instance.",
+            "zh-CN": "加固导出文件读取，阻止通过符号链接或目录替换读取实例目录之外的文件。"
+          },
+          {
+            "en-US": "Hardened shared-file cleanup with reference and state checks before deletion, preserving files still needed or with unverified usage.",
+            "zh-CN": "加固共享文件清理，在删除前重新检查引用和状态，保留仍需使用或无法确认用途的文件。"
+          }
+        ]
+      }
+    },
     {
       "id": "launcher-1.9.8",
       "version": "1.9.8",
