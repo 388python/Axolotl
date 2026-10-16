@@ -134,7 +134,7 @@ export async function runLocalAgent(
                 { role: 'user', content: `User language: ${session.locale}\n${session.context}` },
             ],
         },
-        { signal, recursionLimit: 100, callbacks: [], maxConcurrency: 1 },
+        { signal, recursionLimit: 100, callbacks: [] },
     )
     const last = result.messages.at(-1)
     if (last && AIMessage.isInstance(last) && last.tool_calls?.length) {

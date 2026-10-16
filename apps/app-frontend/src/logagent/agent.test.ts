@@ -15,6 +15,39 @@ const session = {
     context: 'A crash occurred.',
 }
 
+test('executes three grep calls from the first model turn before requesting a diagnosis', async () => {
+    let turns = 0
+    const queries: string[] = []
+    const output = await runLocalAgent(
+        session,
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: ['error', 'exception', 'caused by'].map((query, index) => ({
+                            id: `grep-${index}`,
+                            name: 'grep_log_file',
+                            args: { file_id: 'log-1', query },
+                        })),
+                    }
+                assert.equal(turn.messages.filter((message) => message.role === 'tool').length, 3)
+                return { role: 'assistant', content: 'Diagnosis after three searches.' }
+            },
+            tool: async (request) => {
+                queries.push(request.query!)
+                return 'evidence'
+            },
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    assert.deepEqual(queries.sort(), ['caused by', 'error', 'exception'])
+    assert.equal(turns, 2)
+    assert.match(output, /Diagnosis/)
+})
+
 test('repeated provider tool-call IDs still execute every investigation round', async () => {
     let turns = 0
     const reads: string[] = []

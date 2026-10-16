@@ -56,6 +56,51 @@ it('reads standard assistant text blocks in the browser', () => {
     expect(diagnosticText(message)).toBe('诊断结果')
 })
 
+it('executes three grep calls from one model response and returns their results to the next turn', async () => {
+    let turns = 0
+    const queries: string[] = []
+    const output = await runLocalAgent(
+        {
+            run_id: 'browser-test',
+            provider_id: 'mock',
+            model_id: 'mock',
+            locale: 'en-US',
+            context: 'Snapshot',
+        },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: ['error', 'exception', 'caused by'].map((query, index) => ({
+                            id: `grep-${index}`,
+                            name: 'grep_log_file',
+                            args: { file_id: 'log-1', query },
+                        })),
+                    }
+                const results = turn.messages.filter((message) => message.role === 'tool')
+                expect(results.map((message) => message.tool_call_id).sort()).toEqual([
+                    'grep-0',
+                    'grep-1',
+                    'grep-2',
+                ])
+                expect(results.every((message) => message.content.includes('evidence'))).toBe(true)
+                return { role: 'assistant', content: 'Diagnosis after all three searches.' }
+            },
+            tool: async (request) => {
+                queries.push(request.query!)
+                return { evidence: request.query }
+            },
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    expect(queries.sort()).toEqual(['caused by', 'error', 'exception'])
+    expect(turns).toBe(2)
+    expect(output).toContain('Diagnosis')
+})
+
 it('recovers when the model asks for a reserved extraction tool instead of giving a diagnosis', async () => {
     let turns = 0
     const tool = vi.fn()
