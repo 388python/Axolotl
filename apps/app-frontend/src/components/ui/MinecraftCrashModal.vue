@@ -28,6 +28,7 @@ import { renderHighlightedString } from '@modrinth/utils/highlightjs'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import CrashModChangesModal from '@/components/ui/CrashModChangesModal.vue'
+import LogAgentActivity from '@/components/ui/LogAgentActivity.vue'
 import {
     clearCrashAnalysis,
     type CrashAnalysisResult,
@@ -48,6 +49,7 @@ import {
     record_shared_log,
 } from '@/helpers/logs'
 import { shouldShowMinecraftCrash } from '@/helpers/process.js'
+import { visibleDraft } from '@/logagent/progress'
 import { parseLogAgentInsight } from '@/logagent/result'
 import type { AnalysisSource } from '@/logagent/types'
 
@@ -136,8 +138,8 @@ const aiStatus = computed(() => {
             : formatMessage(messages.aiQueuedFront)
     }
     if (!logShareSettings.value.show_progress) return formatMessage(messages.aiWorking)
-    if (event?.event_type === 'tool')
-        return formatMessage(messages.aiUsingTool, { name: String(event.data.name ?? '') })
+    if (event?.event_type === 'tool') return formatMessage(messages.aiCheckingLogs)
+    if (event?.event_type === 'model_start') return formatMessage(messages.aiReviewing)
     if (event?.event_type === 'thinking') return formatMessage(messages.aiThinking)
     if (event?.event_type === 'tool_result') return formatMessage(messages.aiToolResult)
     if (event?.event_type === 'limit') return formatMessage(messages.aiReachedLimit)
@@ -178,6 +180,14 @@ const aiTabVisible = ref(false)
 const AI_TAB = 'logagent'
 
 const messages = defineMessages({
+    aiCheckingLogs: {
+        id: 'app.logagent.checking-logs',
+        defaultMessage: 'Checking the relevant log evidence…',
+    },
+    aiReviewing: {
+        id: 'app.logagent.reviewing',
+        defaultMessage: 'Reviewing the evidence and preparing the next step…',
+    },
     sourceLabel: { id: 'app.logagent.source-label', defaultMessage: 'Analysis for this run' },
     sourceLocal: { id: 'app.logagent.source-local', defaultMessage: 'Local LogAgent' },
     sourceCloud: { id: 'app.logagent.source-cloud', defaultMessage: 'Cloud LogShare' },
@@ -502,10 +512,6 @@ const messages = defineMessages({
         id: 'app.log-share.ai.queued-front',
         defaultMessage: 'Queued, waiting for a free slot',
     },
-    aiUsingTool: {
-        id: 'app.log-share.ai.tool',
-        defaultMessage: 'Using tool: {name}',
-    },
     aiToolResult: {
         id: 'app.log-share.ai.tool-result',
         defaultMessage: 'Tool result received',
@@ -580,7 +586,11 @@ const selectedLogLines = computed(() => {
     }))
 })
 
-const logAgentInsight = computed(() => parseLogAgentInsight(aiOutput.value))
+const logAgentInsight = computed(() =>
+    parseLogAgentInsight(
+        agent.status.value === 'ready' ? aiOutput.value : visibleDraft(aiOutput.value),
+    ),
+)
 const renderedAiOutput = computed(() => renderHighlightedString(logAgentInsight.value.markdown))
 const renderedLogShareSummary = computed(() => renderHighlightedString(logShareSummary.value))
 
@@ -1433,6 +1443,12 @@ defineExpose({
                     <p v-if="aiStatus" class="m-0 mb-3 text-sm text-[var(--color-text-tertiary)]">
                         {{ aiStatus }}
                     </p>
+                    <LogAgentActivity
+                        v-if="logShareSettings.show_progress"
+                        :entries="agent.activity.value"
+                        :busy="aiLoading"
+                        :elapsed="agent.elapsed.value"
+                    />
                     <Card v-if="logAgentInsight.insight" class="flex flex-col gap-4 text-sm">
                         <section class="flex flex-col gap-2">
                             <div

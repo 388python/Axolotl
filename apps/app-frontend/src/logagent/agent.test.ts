@@ -48,6 +48,61 @@ test('executes three grep calls from the first model turn before requesting a di
     assert.match(output, /Diagnosis/)
 })
 
+test('forwards live text and factual tool progress while keeping private protocol data hidden', async () => {
+    const events: import('./types.ts').LocalProgress[] = []
+    let turns = 0
+    const output = await runLocalAgent(
+        session,
+        {
+            modelTurn: async (_turn, receive) => {
+                if (++turns === 1) {
+                    receive?.({ event_type: 'thinking', data: { content: '' } })
+                    receive?.({
+                        event_type: 'delta',
+                        data: { content: 'Checking the crash context.' },
+                    })
+                    assert.equal(events.at(-1)?.data.content, 'Checking the crash context.')
+                    return {
+                        role: 'assistant',
+                        content: 'Checking the crash context.',
+                        opaque: { reasoning: 'private' },
+                        tool_calls: [
+                            {
+                                id: 'read',
+                                name: 'read_log_file',
+                                args: { file_id: 'log-1', start_line: 20 },
+                            },
+                        ],
+                    }
+                }
+                receive?.({ event_type: 'delta', data: { content: 'Final diagnosis.' } })
+                return { role: 'assistant', content: 'Final diagnosis.' }
+            },
+            tool: async () => ({ name: 'latest.log', lines: [{ line: 20, text: 'evidence' }] }),
+        },
+        new AbortController().signal,
+        () => {},
+        (event) => events.push(event),
+    )
+    assert.equal(output, 'Final diagnosis.')
+    assert.deepEqual(
+        events.map((event) => event.event_type),
+        [
+            'model_start',
+            'thinking',
+            'delta',
+            'model_end',
+            'tool',
+            'tool_result',
+            'model_start',
+            'delta',
+            'model_end',
+        ],
+    )
+    assert.equal(events.find((event) => event.event_type === 'tool_result')?.data.lines, 1)
+    assert.doesNotMatch(JSON.stringify(events), /private|evidence/)
+})
+
 test('repeated provider tool-call IDs still execute every investigation round', async () => {
     let turns = 0
     const reads: string[] = []

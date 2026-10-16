@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 import { LogAgentModel } from './model.ts'
 import { LOGAGENT_PROMPT } from './prompts.ts'
-import type { AgentGateway, PreparedSession } from './types.ts'
+import type { AgentGateway, LocalProgress, PreparedSession } from './types.ts'
 
 registerHarnessProfile('axolotl-logagent', {
     excludedTools: [
@@ -42,12 +42,36 @@ export async function runLocalAgent(
     gateway: AgentGateway,
     signal: AbortSignal,
     onTool: (name: string) => void,
+    onProgress: (event: LocalProgress) => void = () => {},
 ): Promise<string> {
     const invokeTool = async (name: string, request: Record<string, unknown>) => {
         signal.throwIfAborted()
         onTool(name)
-        const result = await gateway.tool({ name, ...request })
+        const actionId = crypto.randomUUID()
+        onProgress({ event_type: 'tool', data: { name, ...request, action_id: actionId } })
+        let result: unknown
+        try {
+            result = await gateway.tool({ name, ...request })
+        } catch (error) {
+            if (!signal.aborted)
+                onProgress({
+                    event_type: 'tool_result',
+                    data: { name, action_id: actionId, failed: true },
+                })
+            throw error
+        }
         signal.throwIfAborted()
+        const info = result && typeof result === 'object' ? (result as Record<string, unknown>) : {}
+        onProgress({
+            event_type: 'tool_result',
+            data: {
+                name,
+                action_id: actionId,
+                file: info.name,
+                lines: Array.isArray(info.lines) ? info.lines.length : undefined,
+                failed: typeof info.error === 'string',
+            },
+        })
         return JSON.stringify(result)
     }
     const tools = [
@@ -82,9 +106,19 @@ export async function runLocalAgent(
     let modelTurns = 0
     const gatewayWithBudget: AgentGateway = {
         ...gateway,
-        modelTurn: (turn) => {
+        modelTurn: async (turn) => {
             if (++modelTurns > 16) throw new Error('LogAgent reached the 16 model turn limit')
-            return gateway.modelTurn(turn)
+            onProgress({ event_type: 'model_start', data: { turn: modelTurns } })
+            const result = await gateway.modelTurn(turn, (event) => {
+                if (signal.aborted) return
+                if (event.event_type === 'delta' || event.event_type === 'thinking')
+                    onProgress({ ...event, event_type: event.event_type })
+            })
+            onProgress({
+                event_type: 'model_end',
+                data: { content: result.content, has_tools: !!result.tool_calls?.length },
+            })
+            return result
         },
     }
     const diagnosticTools = createMiddleware({

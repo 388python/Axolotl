@@ -5981,9 +5981,6 @@
   "app.log-share.ai.thinking": {
     "message": "Thinking…"
   },
-  "app.log-share.ai.tool": {
-    "message": "Using tool: {name}"
-  },
   "app.log-share.ai.tool-result": {
     "message": "Tool result received"
   },
@@ -6033,7 +6030,7 @@
     "message": "Show AI analysis progress"
   },
   "app.log-share.settings.show-progress-description": {
-    "message": "Display tool and processing status while either analysis source is working."
+    "message": "Show readable investigation steps and keep their history after analysis. Diagnostic text appears as it is generated when the provider supports streaming."
   },
   "app.log-share.settings.title": {
     "message": "Log sharing & AI analysis"
@@ -6083,17 +6080,62 @@
   "app.log-share.summary.title": {
     "message": "LogShare analysis"
   },
+  "app.logagent.activity.done": {
+    "message": "Done"
+  },
+  "app.logagent.activity.elapsed": {
+    "message": "{seconds, number} s elapsed"
+  },
+  "app.logagent.activity.external": {
+    "message": "Checking additional evidence"
+  },
+  "app.logagent.activity.grep": {
+    "message": "Searching logs for related clues"
+  },
+  "app.logagent.activity.lines": {
+    "message": "{count, number} lines returned"
+  },
+  "app.logagent.activity.list": {
+    "message": "Checking which logs are available"
+  },
+  "app.logagent.activity.model": {
+    "message": "Reviewing the available evidence"
+  },
+  "app.logagent.activity.query": {
+    "message": "Search: {query}"
+  },
+  "app.logagent.activity.range": {
+    "message": "From line {line, number}"
+  },
+  "app.logagent.activity.read": {
+    "message": "Reading relevant log context"
+  },
+  "app.logagent.activity.stopped": {
+    "message": "Stopped"
+  },
+  "app.logagent.activity.title": {
+    "message": "Analysis progress"
+  },
+  "app.logagent.activity.working": {
+    "message": "In progress"
+  },
   "app.logagent.cancel": {
     "message": "Cancel analysis"
   },
   "app.logagent.cancelled": {
     "message": "Analysis cancelled in the launcher. A cloud task may continue on the server."
   },
+  "app.logagent.checking-logs": {
+    "message": "Checking the relevant log evidence…"
+  },
   "app.logagent.local-unavailable": {
     "message": "Enable local LogAgent and select a supported model in Settings > Launch defaults."
   },
   "app.logagent.preparing": {
     "message": "Preparing the diagnostic snapshot…"
+  },
+  "app.logagent.reviewing": {
+    "message": "Reviewing the evidence and preparing the next step…"
   },
   "app.logagent.run": {
     "message": "Analyze with LogAgent"
@@ -7029,7 +7071,7 @@
     "message": "Sharing is a separate action"
   },
   "app.onboarding.logagent-source.description": {
-    "message": "Local LogAgent investigates logs in this launcher using your configured model. Relevant excerpts are sent to that model provider. Cloud LogShare analyzes logs on its server. This setting is a default; the crash window can override it for one analysis."
+    "message": "Local LogAgent investigates logs in this launcher using your configured model. Relevant excerpts are sent to that model provider. Cloud LogShare analyzes logs on its server. The crash window shows live progress and keeps the completed steps in a collapsible history. This setting is a default; the crash window can override it for one analysis."
   },
   "app.onboarding.logagent-source.title": {
     "message": "Choose where analysis runs"

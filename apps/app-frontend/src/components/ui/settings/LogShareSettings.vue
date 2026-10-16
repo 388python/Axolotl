@@ -129,7 +129,7 @@ const messages = defineMessages({
     showProgressDescription: {
         id: 'app.log-share.settings.show-progress-description',
         defaultMessage:
-            'Display tool and processing status while either analysis source is working.',
+            'Show readable investigation steps and keep their history after analysis. Diagnostic text appears as it is generated when the provider supports streaming.',
     },
 })
 

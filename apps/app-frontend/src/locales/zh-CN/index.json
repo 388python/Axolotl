@@ -5736,7 +5736,7 @@
     "message": "显示 AI 分析进度"
   },
   "app.log-share.settings.show-progress-description": {
-    "message": "显示本地或云端分析的工具调用与处理状态。"
+    "message": "显示易读的调查步骤，分析后保留进展记录。服务商支持流式响应时，诊断正文会逐步显示。"
   },
   "app.log-share.settings.title": {
     "message": "日志分享与 AI 分析"
@@ -14340,9 +14340,54 @@
     "message": "分享是独立操作"
   },
   "app.onboarding.logagent-source.description": {
-    "message": "本地 LogAgent 在启动器内使用你配置的模型检查日志，相关片段会发送给该模型服务商。云端 LogShare 在服务器上分析日志。这里设置默认来源，崩溃窗口可以为单次分析临时切换。"
+    "message": "本地 LogAgent 在启动器内使用你配置的模型检查日志，相关片段会发送给该模型服务商。云端 LogShare 在服务器上分析日志。崩溃窗口会实时显示进展，并将已完成的步骤保留在可折叠的记录中。这里设置默认来源，仍可为单次分析临时切换。"
   },
   "app.onboarding.logagent-source.title": {
     "message": "选择分析在哪里运行"
+  },
+  "app.logagent.checking-logs": {
+    "message": "正在检查相关日志证据…"
+  },
+  "app.logagent.reviewing": {
+    "message": "正在核对证据并准备下一步…"
+  },
+  "app.logagent.activity.title": {
+    "message": "分析进展"
+  },
+  "app.logagent.activity.elapsed": {
+    "message": "已用时 {seconds, number} 秒"
+  },
+  "app.logagent.activity.model": {
+    "message": "核对已有证据"
+  },
+  "app.logagent.activity.list": {
+    "message": "确认可用日志"
+  },
+  "app.logagent.activity.read": {
+    "message": "读取相关日志上下文"
+  },
+  "app.logagent.activity.grep": {
+    "message": "搜索日志中的相关线索"
+  },
+  "app.logagent.activity.external": {
+    "message": "检查补充证据"
+  },
+  "app.logagent.activity.query": {
+    "message": "搜索：{query}"
+  },
+  "app.logagent.activity.lines": {
+    "message": "已返回 {count, number} 行"
+  },
+  "app.logagent.activity.range": {
+    "message": "从第 {line, number} 行开始"
+  },
+  "app.logagent.activity.done": {
+    "message": "已完成"
+  },
+  "app.logagent.activity.stopped": {
+    "message": "已停止"
+  },
+  "app.logagent.activity.working": {
+    "message": "进行中"
   }
 }

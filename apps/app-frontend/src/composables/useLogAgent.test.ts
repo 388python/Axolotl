@@ -14,6 +14,58 @@ function deferred<T>() {
     return { promise, resolve }
 }
 
+test('live model text updates before completion, tool notes stay in progress, and late deltas are ignored after cancel', async () => {
+    const finish = deferred<string>()
+    let progress!: (event: import('../logagent/types.ts').LocalProgress) => void
+    const started = deferred<void>()
+    const scope = effectScope()
+    const agent = scope.run(() =>
+        useLogAgent({
+            prepare: async (_instance, id) => ({
+                run_id: id,
+                provider_id: 'provider',
+                model_id: 'model',
+                locale: '',
+                context: '',
+            }),
+            cancel: async () => {},
+            cloud: async () => {
+                throw new Error('Must not use cloud')
+            },
+            gateway: () => ({
+                modelTurn: async () => {
+                    throw new Error('unused')
+                },
+                tool: async () => null,
+            }),
+            local: async (_session, _gateway, _signal, _tool, onProgress) => {
+                progress = onProgress!
+                started.resolve()
+                return finish.promise
+            },
+        }),
+    )!
+    const pending = agent.start('instance', 'custom', null, () => {})
+    await started.promise
+    progress({ event_type: 'model_start', data: { turn: 1 } })
+    progress({ event_type: 'delta', data: { content: 'Checking Java.' } })
+    assert.equal(agent.output.value, 'Checking Java.')
+    progress({ event_type: 'model_end', data: { content: 'Checking Java.', has_tools: true } })
+    assert.equal(agent.output.value, '')
+    assert.equal(agent.activity.value[1].text, 'Checking Java.')
+    progress({ event_type: 'model_start', data: { turn: 2 } })
+    progress({ event_type: 'delta', data: { content: 'The cause is' } })
+    agent.cancel()
+    progress({ event_type: 'delta', data: { content: ' stale text' } })
+    assert.equal(agent.output.value, 'The cause is')
+    assert.equal(agent.activity.value.at(-1)?.state, 'error')
+    finish.resolve('old result')
+    await pending
+    assert.equal(agent.status.value, 'cancelled')
+    assert.equal(agent.output.value, 'The cause is')
+    scope.stop()
+})
+
 test('cancelled preparation cannot start cloud work or overwrite a replacement run', async () => {
     const old = deferred<PreparedSession>()
     let prepares = 0
@@ -98,8 +150,15 @@ test('cloud events are run-specific, errors can retry, local has no cloud fallba
     assert.equal(cloudCalls, 0)
     const pending = agent.start('instance', 'logshare', null, () => {})
     await listening.promise
+    receive!({ run_id: runId, event_type: 'queued', data: { position: 2 } })
+    assert.equal(agent.event.value?.event_type, 'queued')
+    receive!({ run_id: runId, event_type: 'thinking', data: { content: 'private' } })
+    assert.equal(agent.event.value?.event_type, 'thinking')
+    assert.deepEqual(agent.event.value?.data, {})
+    receive!({ run_id: runId, event_type: 'queued', data: { position: 1 } })
     receive!({ run_id: 'old-run', event_type: 'delta', data: { content: 'wrong' } })
     receive!({ run_id: runId, event_type: 'delta', data: { content: 'right' } })
+    assert.equal(agent.event.value, null)
     assert.equal(agent.output.value, 'right')
     cloud.resolve({ content: 'complete', ticket: null })
     await pending

@@ -34,7 +34,7 @@ export const onboardingMessages = defineMessages({
     logagentSourceDescription: {
         id: 'app.onboarding.logagent-source.description',
         defaultMessage:
-            'Local LogAgent investigates logs in this launcher using your configured model. Relevant excerpts are sent to that model provider. Cloud LogShare analyzes logs on its server. This setting is a default; the crash window can override it for one analysis.',
+            'Local LogAgent investigates logs in this launcher using your configured model. Relevant excerpts are sent to that model provider. Cloud LogShare analyzes logs on its server. The crash window shows live progress and keeps the completed steps in a collapsible history. This setting is a default; the crash window can override it for one analysis.',
     },
     logagentSharingTitle: {
         id: 'app.onboarding.logagent-sharing.title',
