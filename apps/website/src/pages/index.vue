@@ -10,7 +10,7 @@ import GitGraphIcon from '@modrinth/assets/icons/git-graph.svg?component'
 import IssuesIcon from '@modrinth/assets/icons/issues.svg?component'
 import SearchIcon from '@modrinth/assets/icons/search.svg?component'
 import TrashIcon from '@modrinth/assets/icons/trash.svg?component'
-import { Combobox, type ComboboxOption } from '@modrinth/ui'
+import Combobox, { type ComboboxOption } from '@modrinth/ui/src/components/base/Combobox.vue'
 import Accordion from '@modrinth/ui/src/components/base/Accordion.vue'
 import Avatar from '@modrinth/ui/src/components/base/Avatar.vue'
 import Button from '@modrinth/ui/src/components/base/buttons/Button.vue'
@@ -279,6 +279,54 @@ const scrollToSection = () => {
 const { formatMessage, locale } = useVIntl()
 
 const messages = defineMessages({
+    recentEyebrow: {
+        id: 'axolotl-marketing.recent.eyebrow',
+        defaultMessage: 'Made for everyday play',
+    },
+    recentTitle: {
+        id: 'axolotl-marketing.recent.title',
+        defaultMessage: 'Make room for the way you play',
+    },
+    recentDescription: {
+        id: 'axolotl-marketing.recent.description',
+        defaultMessage: 'Find something new to play, spend less time downloading, and keep a backup to return to. Axolotl helps with the work around your Minecraft worlds.',
+    },
+    recentResourcesTitle: {
+        id: 'axolotl-marketing.recent.resources.title',
+        defaultMessage: 'Find your next favorite mod',
+    },
+    recentResourcesDescription: {
+        id: 'axolotl-marketing.recent.resources.description',
+        defaultMessage:
+            'Browse Modrinth, CurseForge, and other content sources in one place. See what a mod needs before installing, choose the version you want, and export a modpack when you are ready to share.',
+    },
+    recentDownloadsTitle: {
+        id: 'axolotl-marketing.recent.downloads.title',
+        defaultMessage: 'Spend less time on downloads',
+    },
+    recentDownloadsDescription: {
+        id: 'axolotl-marketing.recent.downloads.description',
+        defaultMessage:
+            'Faster downloads, Chinese mirror options, and DoH support help you get ready to play. Check active downloads from the action bar and revisit completed tasks in download history.',
+    },
+    recentBackupsTitle: {
+        id: 'axolotl-marketing.recent.backups.title',
+        defaultMessage: 'Keep a backup to return to',
+    },
+    recentBackupsDescription: {
+        id: 'axolotl-marketing.recent.backups.description',
+        defaultMessage:
+            'Save an instance snapshot before changing your setup. Choose which files to include, keep using the launcher while it backs up, and preview file changes before restoring.',
+    },
+    recentStorageTitle: {
+        id: 'axolotl-marketing.recent.storage.title',
+        defaultMessage: 'Know what takes up space',
+    },
+    recentStorageDescription: {
+        id: 'axolotl-marketing.recent.storage.description',
+        defaultMessage:
+            'See how much space your games, backups, and caches use. Remove download caches and unused resource information while keeping installed games, saves, and backups.',
+    },
     openSourceBadge: {
         id: 'axolotl-marketing.hero.open-source',
         defaultMessage: 'Tauri v2 - Rust - Vue 3',
@@ -306,7 +354,7 @@ const messages = defineMessages({
     description: {
         id: 'app-marketing.hero.description',
         defaultMessage:
-            'Axolotl Launcher is a free, open-source, ad-free, cross-platform Minecraft Java Edition launcher for searching, installing, and updating mods, modpacks, resource packs, and shaders from Modrinth and CurseForge, with Axolotl Labs built in.',
+            'Axolotl Launcher is a free, open-source, ad-free Minecraft Java Edition launcher for Windows, macOS, and Linux. Find mods and modpacks from Modrinth and CurseForge, bring your existing game folders, and keep downloads, updates, and backups in one place.',
     },
     heroScreenshotAlt: {
         id: 'axolotl-marketing.hero.screenshot-alt',
@@ -314,7 +362,7 @@ const messages = defineMessages({
     },
     builtOnModrinth: {
         id: 'axolotl-marketing.highlights.eyebrow',
-        defaultMessage: 'One launcher, two sources',
+        defaultMessage: 'Everything for your next world',
     },
     highlightsTitle: {
         id: 'axolotl-marketing.highlights.title',
@@ -327,7 +375,7 @@ const messages = defineMessages({
     highlightsDescription: {
         id: 'axolotl-marketing.highlights.description',
         defaultMessage:
-            'Search Modrinth and CurseForge, then inspect projects, choose versions, install content, resolve dependencies, and keep it updated from the launcher.',
+            'Find a mod, choose a modpack, or return to a familiar world. Discover content from Modrinth and CurseForge, then let Axolotl handle installation, dependencies, and updates.',
     },
     adFree: {
         id: 'axolotl-marketing.highlights.ad-free.title',
@@ -346,6 +394,33 @@ const messages = defineMessages({
         id: 'axolotl-marketing.highlights.localized.description',
         defaultMessage:
             'Install and manage modpacks alongside individual projects. Some CurseForge files have distribution limits and may require a manual download.',
+    },
+    dohSupport: {
+        id: 'axolotl-marketing.improvements.doh.title',
+        defaultMessage: 'Another way to connect',
+    },
+    dohSupportDescription: {
+        id: 'axolotl-marketing.improvements.doh.description',
+        defaultMessage:
+            'If download domains are difficult to resolve, try DNS over HTTPS (DoH). Enable encrypted DNS in resource settings to use the built-in resolver services.',
+    },
+    mirrorSupport: {
+        id: 'axolotl-marketing.improvements.mirrors.title',
+        defaultMessage: 'Download with Chinese mirrors',
+    },
+    mirrorSupportDescription: {
+        id: 'axolotl-marketing.improvements.mirrors.description',
+        defaultMessage:
+            'Use Chinese mirrors for supported game resources and mod downloads, or choose official sources to suit your connection.',
+    },
+    minecraftSupport: {
+        id: 'axolotl-marketing.improvements.minecraft.title',
+        defaultMessage: 'Your games, right where they are',
+    },
+    minecraftSupportDescription: {
+        id: 'axolotl-marketing.improvements.minecraft.description',
+        defaultMessage:
+            'Add your existing .minecraft folders and manage their game versions in Axolotl. Keep multiple game folders without copying everything into a new location.',
     },
     offlineAccounts: {
         id: 'axolotl-marketing.showcase.offline.title',
@@ -475,21 +550,21 @@ const messages = defineMessages({
     },
     performant: {
         id: 'app-marketing.features.performance.title',
-        defaultMessage: 'Performant',
+        defaultMessage: 'Less time waiting to play',
     },
     performantDescription: {
         id: 'app-marketing.features.performance.description',
         defaultMessage:
-            'Axolotl stays out of your way with a responsive interface and a lightweight desktop core.',
+            'Download game files and modpacks more efficiently, with a lightweight launcher that stays responsive while you get ready to play.',
     },
     profileImporting: {
         id: 'app-marketing.features.importing.title',
-        defaultMessage: 'Profile importing',
+        defaultMessage: 'Bring your games along',
     },
     profileImportingDescription: {
         id: 'app-marketing.features.importing.description',
         defaultMessage:
-            'Import your existing profiles from PCL2, HMCL, or any launcher you like with one click, and keep playing without rebuilding everything by hand.',
+            'Bring instances from PCL2 or HMCL into Axolotl and keep playing. When you want a new Minecraft version, review mod compatibility and choose to upgrade the current instance or a copy.',
     },
     offlineMode: {
         id: 'app-marketing.features.offline.title',
@@ -574,12 +649,12 @@ const messages = defineMessages({
     seoTitle: {
         id: 'axolotl-site.seo.title',
         defaultMessage:
-            'Axolotl Launcher - Free Open-Source Modrinth plus Curseforge Minecraft Launcher',
+            'Axolotl Launcher - Free, Open-Source Minecraft Java Launcher',
     },
     seoDescription: {
         id: 'axolotl-site.seo.description',
         defaultMessage:
-            'Download Axolotl Launcher, a free, open-source Tauri v2 Minecraft launcher for Windows, macOS, and Linux with Modrinth and CurseForge content management, themes, accounts, and more.',
+            'Download Axolotl Launcher for Windows, macOS, and Linux. Manage Minecraft mods and modpacks, use Chinese download mirrors, import existing games, and back up instances.',
     },
     socialImageAlt: {
         id: 'axolotl-site.seo.social-image-alt',
@@ -595,7 +670,7 @@ const messages = defineMessages({
     },
     faqDescription: {
         id: 'axolotl-site.faq.description',
-        defaultMessage: 'Learn about supported platforms, accounts, content, and downloads.',
+        defaultMessage: 'Answers about installing, moving your games, downloading content, and keeping backups.',
     },
     faqPlatformsQuestion: {
         id: 'axolotl-site.faq.platforms.question',
@@ -622,39 +697,86 @@ const messages = defineMessages({
     faqAccountsAnswer: {
         id: 'axolotl-site.faq.accounts.answer',
         defaultMessage:
-            'Yes. Axolotl supports Microsoft Minecraft accounts, local offline accounts, and third-party Yggdrasil authentication, including LittleSkin presets and custom servers.',
+            'Yes. Axolotl supports Microsoft Minecraft accounts, local offline accounts subject to launcher eligibility rules, and third-party Yggdrasil authentication, including LittleSkin presets and custom servers.',
     },
     faqContentQuestion: {
         id: 'axolotl-site.faq.content.question',
-        defaultMessage: 'Where does Axolotl get mods and other Minecraft content?',
+        defaultMessage: 'Where can I find mods and modpacks in Axolotl?',
     },
     faqContentAnswer: {
         id: 'axolotl-site.faq.content.answer',
         defaultMessage:
-            'Axolotl helps you search, inspect, choose versions for, install, update, and manage content from Modrinth and CurseForge. Files with CurseForge distribution restrictions may require a manual download.',
+            'Axolotl brings Modrinth and CurseForge mods, modpacks, resource packs, and shaders into the launcher. You can also browse content from MCArchive and Planet Minecraft. Available content and installation methods vary by source. Before installing, review required mods; afterward, manage updates and versions in the launcher. Some files may require manual download because of distribution restrictions.',
     },
-    faqDownloadQuestion: {
-        id: 'axolotl-site.faq.download.question',
-        defaultMessage: 'Where should I download Axolotl Launcher?',
+    faqNetworkQuestion: {
+        id: 'axolotl-site.faq.network.question',
+        defaultMessage: 'Does Axolotl support Chinese mirrors and DoH?',
     },
-    faqDownloadAnswer: {
-        id: 'axolotl-site.faq.download.answer',
+    faqNetworkAnswer: {
+        id: 'axolotl-site.faq.network.answer',
         defaultMessage:
-            'Use the download section on this official website. Automatic mode uses the Update Server, with GitHub available as a backup source.',
+            'Yes. Resource settings offer Chinese mirrors, including BMCLAPI and MCIM, for supported Minecraft resources and Modrinth or CurseForge downloads. Choose automatic, mirror-preferred, or official-source options as available. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
+    },
+    faqMigrationQuestion: {
+        id: 'axolotl-site.faq.migration.question',
+        defaultMessage: 'Can I move from PCL2 or HMCL and keep my .minecraft folder?',
+    },
+    faqMigrationAnswer: {
+        id: 'axolotl-site.faq.migration.answer',
+        defaultMessage:
+            'You can import existing instances from PCL2, HMCL, and other supported launchers, or directly link existing .minecraft folders. This lets you keep existing game files instead of rebuilding each setup. A version upgrade may still need additional downloads. Before upgrading, review mod compatibility and choose an in-place upgrade or an upgraded copy.',
+    },
+    faqBackupsQuestion: {
+        id: 'axolotl-site.faq.backups.question',
+        defaultMessage: 'How do instance backups work?',
+    },
+    faqBackupsAnswer: {
+        id: 'axolotl-site.faq.backups.answer',
+        defaultMessage:
+            'Yes. For supported local instances, Axolotl creates deduplicated snapshots with optional file and folder exclusions. Backup tasks run in the background, and a restore preview shows which files will change before you confirm. Directly linked instances and instances using external game directories do not currently support snapshot backups.',
+    },
+    faqStorageQuestion: {
+        id: 'axolotl-site.faq.storage.question',
+        defaultMessage: 'What can I clear without deleting my games?',
+    },
+    faqStorageAnswer: {
+        id: 'axolotl-site.faq.storage.answer',
+        defaultMessage:
+            'Storage analysis shows the space used by instances, backups, shared resources, caches, and external game directories. Review the cleanup choices to remove downloaded caches and unused metadata. Cache cleanup keeps installed games, saves, backups, and files required for offline use or recovery; some cleared resources may need downloading again.',
     },
     appScreenshotAlt: {
         id: 'app-marketing.hero.app-screenshot-alt',
         defaultMessage: `Axolotl Launcher instance content preview.`,
     },
+    structuredFeatureDownloads: {
+        id: 'axolotl-site.structured-data.feature.downloads',
+        defaultMessage: 'Concurrent downloads, Chinese mirror support, and DNS over HTTPS (DoH)',
+    },
+    structuredFeatureMigration: {
+        id: 'axolotl-site.structured-data.feature.migration',
+        defaultMessage: 'PCL2 and HMCL instance import, direct .minecraft folder linking, and instance version upgrades',
+    },
+    structuredFeatureBackups: {
+        id: 'axolotl-site.structured-data.feature.backups',
+        defaultMessage: 'Snapshot backups with restore previews for supported local instances',
+    },
+    structuredFeatureStorage: {
+        id: 'axolotl-site.structured-data.feature.storage',
+        defaultMessage: 'Disk usage analysis and cache cleanup that preserves installed games, saves, and backups',
+    },
+    structuredFeatureExport: {
+        id: 'axolotl-site.structured-data.feature.export',
+        defaultMessage: 'Export modpacks as Modrinth MRPACK, CurseForge ZIP, or generic ZIP',
+    },
     structuredFeatureContentSources: {
         id: 'axolotl-site.structured-data.feature.content-sources',
         defaultMessage:
-            'Search, install, and update mods, modpacks, resource packs, and shaders from Modrinth and CurseForge',
+            'Discover Minecraft content from Modrinth, CurseForge, MCArchive, and Planet Minecraft; available content varies by source',
     },
     structuredFeatureLab: {
         id: 'axolotl-site.structured-data.feature.lab',
         defaultMessage:
-            'Axolotl Labs with gradient text generator, Java Edition seed map, and 3D schematic workshop',
+            'Axolotl Labs with gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and mod translation tools',
     },
     structuredFeatureInstances: {
         id: 'axolotl-site.structured-data.feature.instances',
@@ -662,7 +784,7 @@ const messages = defineMessages({
     },
     structuredFeatureAccounts: {
         id: 'axolotl-site.structured-data.feature.accounts',
-        defaultMessage: 'Microsoft, offline, LittleSkin, and custom Yggdrasil account support',
+        defaultMessage: 'Microsoft, eligible offline accounts, LittleSkin, and custom Yggdrasil account support',
     },
     faqLabQuestion: {
         id: 'axolotl-site.faq.lab.question',
@@ -671,7 +793,7 @@ const messages = defineMessages({
     faqLabAnswer: {
         id: 'axolotl-site.faq.lab.answer',
         defaultMessage:
-            'Axolotl Labs is a collection of built-in launcher tools, including a gradient text generator, Java Edition seed map, and 3D schematic workshop.',
+            'Axolotl Labs includes a gradient text generator, Java Edition seed map, 3D schematic workshop, recipe generator, and Minecraft mod translation tools.',
     },
     faqProjectDisclaimerQuestion: {
         id: 'axolotl-site.faq.project-disclaimer.question',
@@ -685,7 +807,7 @@ const messages = defineMessages({
     seoKeywords: {
         id: 'axolotl-site.seo.keywords',
         defaultMessage:
-            'Axolotl Launcher, Minecraft Launcher, Modrinth, CurseForge, Minecraft Java Edition, Axolotl Labs',
+            'Axolotl Launcher, Minecraft Launcher, Modrinth, CurseForge, MCArchive, Planet Minecraft, Minecraft Java Edition, DoH, BMCLAPI, MCIM, instance backup, storage analysis, .minecraft, Axolotl Labs',
     },
 })
 
@@ -712,6 +834,22 @@ const description = computed(() => formatMessage(messages.seoDescription))
 const socialImageAlt = computed(() => formatMessage(messages.socialImageAlt))
 const faqItems = computed(() => [
     {
+        question: formatMessage(messages.faqStorageQuestion),
+        answer: formatMessage(messages.faqStorageAnswer),
+    },
+    {
+        question: formatMessage(messages.faqBackupsQuestion),
+        answer: formatMessage(messages.faqBackupsAnswer),
+    },
+    {
+        question: formatMessage(messages.faqMigrationQuestion),
+        answer: formatMessage(messages.faqMigrationAnswer),
+    },
+    {
+        question: formatMessage(messages.faqNetworkQuestion),
+        answer: formatMessage(messages.faqNetworkAnswer),
+    },
+    {
         question: formatMessage(messages.faqPlatformsQuestion),
         answer: formatMessage(messages.faqPlatformsAnswer),
     },
@@ -726,10 +864,6 @@ const faqItems = computed(() => [
     {
         question: formatMessage(messages.faqContentQuestion),
         answer: formatMessage(messages.faqContentAnswer),
-    },
-    {
-        question: formatMessage(messages.faqDownloadQuestion),
-        answer: formatMessage(messages.faqDownloadAnswer),
     },
     {
         question: formatMessage(messages.faqLabQuestion),
@@ -787,9 +921,14 @@ const structuredData = computed(() => ({
             inLanguage: ['zh-CN', 'en-US'],
             featureList: [
                 formatMessage(messages.structuredFeatureContentSources),
-                formatMessage(messages.structuredFeatureLab),
+                formatMessage(messages.structuredFeatureDownloads),
+                formatMessage(messages.structuredFeatureMigration),
+                formatMessage(messages.structuredFeatureBackups),
+                formatMessage(messages.structuredFeatureStorage),
+                formatMessage(messages.structuredFeatureExport),
                 formatMessage(messages.structuredFeatureInstances),
                 formatMessage(messages.structuredFeatureAccounts),
+                formatMessage(messages.structuredFeatureLab),
             ],
         },
         {
@@ -955,6 +1094,30 @@ useHead(() => ({
                     <p>{{ formatMessage(messages.performantDescription) }}</p>
                 </article>
                 <article
+                    class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
+                    data-number="04"
+                >
+                    <div class="promise-meta"><SearchIcon aria-hidden="true" /><span>04</span></div>
+                    <h3>{{ formatMessage(messages.dohSupport) }}</h3>
+                    <p>{{ formatMessage(messages.dohSupportDescription) }}</p>
+                </article>
+                <article
+                    class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
+                    data-number="05"
+                >
+                    <div class="promise-meta"><DownloadIcon aria-hidden="true" /><span>05</span></div>
+                    <h3>{{ formatMessage(messages.mirrorSupport) }}</h3>
+                    <p>{{ formatMessage(messages.mirrorSupportDescription) }}</p>
+                </article>
+                <article
+                    class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
+                    data-number="06"
+                >
+                    <div class="promise-meta"><BoxesIcon aria-hidden="true" /><span>06</span></div>
+                    <h3>{{ formatMessage(messages.minecraftSupport) }}</h3>
+                    <p>{{ formatMessage(messages.minecraftSupportDescription) }}</p>
+                </article>
+                <article
                     class="feature gradient-border showcase-card showcase-card-wide col-span-3 flex min-w-0 flex-col overflow-hidden p-0"
                 >
                     <div class="showcase-copy px-7 pb-6 pt-7">
@@ -1094,6 +1257,41 @@ useHead(() => ({
                         {{ formatMessage(messages.followProjectsDescription) }}
                     </div>
                 </div>
+            </div>
+        </section>
+        <section
+            id="recent-improvements"
+            class="axolotl-highlights"
+            aria-labelledby="recent-improvements-title"
+        >
+            <div class="highlights-intro">
+                <span class="text-xs font-extrabold uppercase tracking-[0.1em] text-brand">{{
+                    formatMessage(messages.recentEyebrow)
+                }}</span>
+                <h2 id="recent-improvements-title">{{ formatMessage(messages.recentTitle) }}</h2>
+                <p>{{ formatMessage(messages.recentDescription) }}</p>
+            </div>
+            <div class="modrinth-feature-grid">
+                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
+                    <div class="promise-meta"><BoxesIcon aria-hidden="true" /></div>
+                    <h3>{{ formatMessage(messages.recentResourcesTitle) }}</h3>
+                    <p>{{ formatMessage(messages.recentResourcesDescription) }}</p>
+                </article>
+                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
+                    <div class="promise-meta"><DownloadIcon aria-hidden="true" /></div>
+                    <h3>{{ formatMessage(messages.recentDownloadsTitle) }}</h3>
+                    <p>{{ formatMessage(messages.recentDownloadsDescription) }}</p>
+                </article>
+                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
+                    <div class="promise-meta"><GitGraphIcon aria-hidden="true" /></div>
+                    <h3>{{ formatMessage(messages.recentBackupsTitle) }}</h3>
+                    <p>{{ formatMessage(messages.recentBackupsDescription) }}</p>
+                </article>
+                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
+                    <div class="promise-meta"><GaugeIcon aria-hidden="true" /></div>
+                    <h3>{{ formatMessage(messages.recentStorageTitle) }}</h3>
+                    <p>{{ formatMessage(messages.recentStorageDescription) }}</p>
+                </article>
             </div>
         </section>
         <section id="faq" class="faq-section" aria-labelledby="faq-title">
