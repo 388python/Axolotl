@@ -229,3 +229,10 @@ opt-level = 3
 opt-level = "s"  # Optimize for binary size
 strip = true  # Remove debug symbols
 lto = false
+
+[profile.ci]
+inherits = "release"
+opt-level = 0
+lto = "off"
+debug = false
+incremental = false

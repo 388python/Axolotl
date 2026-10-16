@@ -70,6 +70,26 @@ fn blockbench_skin_is_fresh(
 }
 
 fn build_blockbench_skin_editor() {
+    println!("cargo:rerun-if-env-changed=AXOLOTL_BUILD_RESOURCES");
+    if let Some(resources) = std::env::var_os("AXOLOTL_BUILD_RESOURCES") {
+        run_command(
+            Command::new("node")
+                .arg("scripts/axolotl/prepare-build-resources.mjs")
+                .arg("--consume")
+                .arg("--output")
+                .arg(&resources)
+                .current_dir("../.."),
+            "Prepared Blockbench resource verification",
+        );
+        println!(
+            "cargo:rerun-if-changed={}",
+            std::path::Path::new(&resources)
+                .join("manifest.json")
+                .display()
+        );
+        return;
+    }
+
     if std::env::var_os("AXOLOTL_SKIP_BLOCKBENCH_BUILD").is_some_and(|value| {
         !value.is_empty() && value != "0" && value != "false"
     }) {
@@ -117,6 +137,7 @@ fn build_blockbench_skin_editor() {
 }
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=CI");
     println!("cargo:rerun-if-changed=tauri.conf.json");
     println!("cargo:rerun-if-changed=tauri.windows.conf.json");
     println!("cargo:rerun-if-changed=tauri.macos.conf.json");
@@ -160,7 +181,15 @@ fn main() {
             "vendor/cubiomes/quadbase.c",
             "vendor/cubiomes/util.c",
         ])
-        .opt_level(3)
+        .opt_level(
+            if std::env::var_os("CI").is_some()
+                && std::env::var("OPT_LEVEL").as_deref() == Ok("0")
+            {
+                0
+            } else {
+                3
+            },
+        )
         .flag_if_supported("-fwrapv")
         .warnings(false)
         .compile("axolotl-cubiomes");
