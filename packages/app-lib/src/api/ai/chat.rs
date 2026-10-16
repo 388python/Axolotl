@@ -2,6 +2,7 @@
 
 mod bedrock;
 mod google;
+mod stream;
 
 use super::*;
 
@@ -72,7 +73,11 @@ impl ChatModel {
         })
     }
 
-    pub async fn turn(&self, turn: ChatTurn) -> crate::Result<ChatMessage> {
+    pub async fn turn(
+        &self,
+        turn: ChatTurn,
+        emit: &(impl Fn(&str, &str) + Sync),
+    ) -> crate::Result<ChatMessage> {
         if turn.messages.is_empty()
             || turn.messages.len() > 160
             || serde_json::to_vec(&turn)?.len() > 700_000
@@ -125,16 +130,20 @@ impl ChatModel {
             )));
         }
         if self.config.protocol == AiProtocol::Google {
-            return google::turn(self, &client, token, &turn).await;
+            return google::turn(self, &client, token, &turn, emit).await;
         }
         if self.config.protocol == AiProtocol::Bedrock {
-            return bedrock::turn(self, &client, token, &turn).await;
+            let result = bedrock::turn(self, &client, token, &turn).await?;
+            emit("delta", &result.content);
+            return Ok(result);
         }
         let copilot = self.definition.id == "githubcopilot";
         if self.definition.id == "chatgpt"
             || (copilot && github_copilot_uses_responses(&self.model_id))
         {
-            return self.responses(&client, token, account_id, &turn).await;
+            return self
+                .responses(&client, token, account_id, &turn, emit)
+                .await;
         }
         if self.config.protocol == AiProtocol::Anthropic
             || (copilot && self.model_id.contains("claude"))
@@ -149,16 +158,17 @@ impl ChatModel {
             } else {
                 builder.header("x-api-key", token)
             };
-            let mut body = json!({ "model": self.model_id, "max_tokens": 4096, "system": system, "messages": messages });
+            let mut body = json!({ "model": self.model_id, "max_tokens": 4096, "stream": true, "system": system, "messages": messages });
             if !tools.is_empty() {
                 body["tools"] = json!(tools);
             }
-            let value = checked_json(
+            return stream::read(
                 builder.json(&body).send().await?,
                 self.definition.name,
+                stream::Format::Anthropic,
+                emit,
             )
-            .await?;
-            return parse_anthropic(&value);
+            .await;
         }
         let ollama = self.config.protocol == AiProtocol::Ollama;
         let endpoint = if self.config.protocol == AiProtocol::Cloudflare {
@@ -206,7 +216,7 @@ impl ChatModel {
                 },
             )
         };
-        let mut body = json!({ "model": self.model_id, "messages": openai_messages(&turn.messages, ollama), "tools": turn.tools, "stream": false });
+        let mut body = json!({ "model": self.model_id, "messages": openai_messages(&turn.messages, ollama), "tools": turn.tools, "stream": true });
         if turn.tools.is_empty() {
             body.as_object_mut().unwrap().remove("tools");
         } else if !ollama {
@@ -226,13 +236,17 @@ impl ChatModel {
         if copilot {
             builder = copilot_headers(builder, None);
         }
-        let value =
-            checked_json(builder.send().await?, self.definition.name).await?;
-        parse_openai(if ollama {
-            &value["message"]
-        } else {
-            &value["choices"][0]["message"]
-        })
+        stream::read(
+            builder.send().await?,
+            self.definition.name,
+            if ollama {
+                stream::Format::Ollama
+            } else {
+                stream::Format::Openai
+            },
+            emit,
+        )
+        .await
     }
 
     async fn responses(
@@ -241,6 +255,7 @@ impl ChatModel {
         token: String,
         account_id: Option<String>,
         turn: &ChatTurn,
+        emit: &(impl Fn(&str, &str) + Sync),
     ) -> crate::Result<ChatMessage> {
         let mut input = Vec::new();
         let mut instructions = String::new();
@@ -300,12 +315,13 @@ impl ChatModel {
             checked_json(response, self.definition.name).await?;
             return Err(input_error("Invalid Responses result".to_string()));
         }
-        parse_response_stream(response).await
+        parse_response_stream(response, emit).await
     }
 }
 
 async fn parse_response_stream(
     response: reqwest::Response,
+    emit: &(impl Fn(&str, &str) + Sync),
 ) -> crate::Result<ChatMessage> {
     use futures::StreamExt;
     let mut stream = response.bytes_stream();
@@ -327,6 +343,15 @@ async fn parse_response_stream(
                 && let Ok(value) = serde_json::from_str::<Value>(data.trim())
             {
                 match value["type"].as_str() {
+                    Some("response.output_text.delta") => {
+                        if let Some(text) = value["delta"].as_str() {
+                            emit("delta", text);
+                        }
+                    }
+                    Some(
+                        "response.reasoning_summary_text.delta"
+                        | "response.reasoning_text.delta",
+                    ) => emit("thinking", ""),
                     Some("response.completed") => {
                         return parse_responses(&value["response"]);
                     }
@@ -525,9 +550,10 @@ mod tests {
             .map(|chunk| Ok::<_, std::io::Error>(chunk.to_vec()))
             .collect::<Vec<_>>();
         let body = reqwest::Body::wrap_stream(futures::stream::iter(chunks));
-        let result = parse_response_stream(reqwest::Response::from(
-            http::Response::new(body),
-        ))
+        let result = parse_response_stream(
+            reqwest::Response::from(http::Response::new(body)),
+            &|_, _| {},
+        )
         .await
         .unwrap();
         assert_eq!(result.content, "诊断");
@@ -537,7 +563,7 @@ mod tests {
                 "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n",
             ),
         ));
-        assert!(parse_response_stream(incomplete).await.is_err());
+        assert!(parse_response_stream(incomplete, &|_, _| {}).await.is_err());
     }
 
     #[test]

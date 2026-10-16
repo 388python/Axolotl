@@ -271,6 +271,7 @@ impl Session {
 pub async fn model_turn(
     run_id: &str,
     turn: ChatTurn,
+    emit: impl Fn(AnalysisEvent) + Send + Sync,
 ) -> crate::Result<ChatMessage> {
     let session = session(run_id)?;
     let model = session
@@ -297,11 +298,18 @@ pub async fn model_turn(
     }) {
         return Err(error("Unsupported diagnostic model tool"));
     }
+    let stream_event = |kind: &str, text: &str| {
+        emit(AnalysisEvent {
+            run_id: run_id.to_string(),
+            event_type: kind.to_string(),
+            data: json!({ "content": text }),
+        })
+    };
     tokio::select! {
         biased;
         _ = session.cancel.cancelled() => Err(error("LogAgent cancelled")),
         _ = tokio::time::sleep(session.remaining()) => Err(error("LogAgent time budget exceeded")),
-        result = model.turn(turn) => result,
+        result = model.turn(turn, &stream_event) => result,
     }
 }
 

@@ -4,6 +4,7 @@ import type {
     AnalysisEvent,
     AnalysisSource,
     ModelMessage,
+    ModelStreamEvent,
     ModelTurn,
     PreparedSession,
     ToolRequest,
@@ -16,8 +17,26 @@ export const prepareSession = (instanceId: string, runId: string, source: Analys
 export const cancelSession = (runId: string) =>
     invoke<void>('plugin:logs|logs_logagent_cancel', { runId })
 
-export const modelTurn = (runId: string, turn: ModelTurn) =>
-    invoke<ModelMessage>('plugin:logs|logs_logagent_model_turn', { runId, turn })
+export async function modelTurn(
+    runId: string,
+    turn: ModelTurn,
+    onEvent?: (event: ModelStreamEvent) => void,
+) {
+    const channel = new Channel<AnalysisEvent>()
+    let receiving = true
+    channel.onmessage = (event) => {
+        if (receiving && event.run_id === runId) onEvent?.(event)
+    }
+    try {
+        return await invoke<ModelMessage>('plugin:logs|logs_logagent_model_turn', {
+            runId,
+            turn,
+            onEvent: channel,
+        })
+    } finally {
+        receiving = false
+    }
+}
 
 export const executeTool = (runId: string, request: ToolRequest) =>
     invoke<unknown>('plugin:logs|logs_logagent_tool', { runId, request })

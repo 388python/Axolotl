@@ -167,8 +167,12 @@ pub async fn logs_logagent_prepare(
 pub async fn logs_logagent_model_turn(
     run_id: &str,
     turn: theseus::ai::chat::ChatTurn,
+    on_event: tauri::ipc::Channel<logs::logagent::AnalysisEvent>,
 ) -> Result<theseus::ai::chat::ChatMessage> {
-    Ok(logs::logagent::model_turn(run_id, turn).await?)
+    Ok(logs::logagent::model_turn(run_id, turn, |event| {
+        let _ = on_event.send(event);
+    })
+    .await?)
 }
 
 #[tauri::command]

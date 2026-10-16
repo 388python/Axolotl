@@ -5,6 +5,7 @@ pub(super) async fn turn(
     client: &reqwest::Client,
     token: String,
     turn: &ChatTurn,
+    emit: &(impl Fn(&str, &str) + Sync),
 ) -> crate::Result<ChatMessage> {
     let mut builder = if model.definition.id == "vertexai" {
         let credentials = read_credential(
@@ -38,11 +39,11 @@ pub(super) async fn turn(
         } else {
             model.config.endpoint.clone()
         };
-        client.post(format!("{}/v1/projects/{}/locations/{}/publishers/google/models/{}:generateContent", base.trim_end_matches('/'), urlencoding::encode(project), urlencoding::encode(location), urlencoding::encode(&model.model_id))).bearer_auth(access_token)
+        client.post(format!("{}/v1/projects/{}/locations/{}/publishers/google/models/{}:streamGenerateContent?alt=sse", base.trim_end_matches('/'), urlencoding::encode(project), urlencoding::encode(location), urlencoding::encode(&model.model_id))).bearer_auth(access_token)
     } else {
         client
             .post(format!(
-                "{}/v1beta/models/{}:generateContent",
+                "{}/v1beta/models/{}:streamGenerateContent?alt=sse",
                 model.config.endpoint.trim_end_matches('/'),
                 urlencoding::encode(&model.model_id)
             ))
@@ -55,9 +56,13 @@ pub(super) async fn turn(
         body["tools"] = json!([{ "functionDeclarations": declarations }]);
     }
     builder = builder.json(&body);
-    let value =
-        checked_json(builder.send().await?, model.definition.name).await?;
-    parse(&value)
+    stream::read(
+        builder.send().await?,
+        model.definition.name,
+        stream::Format::Google,
+        emit,
+    )
+    .await
 }
 
 fn messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
@@ -105,7 +110,7 @@ fn messages(messages: &[ChatMessage]) -> (String, Vec<Value>) {
     (system, contents)
 }
 
-fn parse(value: &Value) -> crate::Result<ChatMessage> {
+pub(super) fn parse(value: &Value) -> crate::Result<ChatMessage> {
     let parts = value["candidates"][0]["content"]["parts"]
         .as_array()
         .ok_or_else(|| {

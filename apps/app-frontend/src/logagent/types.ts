@@ -57,6 +57,16 @@ export interface ToolRequest {
 }
 
 export interface AgentGateway {
-    modelTurn(turn: ModelTurn): Promise<ModelMessage>
+    modelTurn(turn: ModelTurn, onEvent?: (event: ModelStreamEvent) => void): Promise<ModelMessage>
     tool(request: ToolRequest): Promise<unknown>
+}
+
+export interface ModelStreamEvent {
+    event_type: string
+    data: Record<string, unknown>
+}
+
+export interface LocalProgress {
+    event_type: 'model_start' | 'model_end' | 'delta' | 'thinking' | 'tool' | 'tool_result'
+    data: Record<string, unknown>
 }
