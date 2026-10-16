@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BookmarkIcon, CheckCircleIcon, SparklesIcon, XIcon } from '@modrinth/assets'
-import { Button, Combobox, type ComboboxOption, useVIntl } from '@modrinth/ui'
+import { Button, Combobox, type ComboboxOption, Toggle, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
@@ -58,6 +58,41 @@ const toast = ref('')
 const showGlobalPresets = ref(false)
 
 const userPresets = ref<UserPreset[]>([])
+
+/**
+ * 1.20.x 下用户可选择是否使用 1.20.5+ 数据组件语法。
+ * 其它版本不显示该开关。
+ */
+const useDataComponents = ref(true)
+
+// ============= 版本比较 =============
+function isAtLeast(a: string, b: string): boolean {
+    const av = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
+    const bv = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
+    const len = Math.max(av.length, bv.length)
+    for (let i = 0; i < len; i++) {
+        const x = av[i] ?? 0
+        const y = bv[i] ?? 0
+        if (x !== y) return x > y
+    }
+    return true
+}
+
+// 仅 1.20.x（不含 1.20.5+）显示切换开关
+const showDataComponentsToggle = computed(() => {
+    const v = selectedVersion.value
+    if (!v) return false
+    if (!(v === '1.20' || v.startsWith('1.20.'))) return false
+    return !isAtLeast(v, '1.20.5')
+})
+
+// 传递给 NBT 编辑器的 forceDataComponents：
+// - 未显示开关时传 undefined，让组件根据 version 自动判定
+// - 显示开关时传用户选择
+const forceDataComponents = computed<boolean | undefined>(() => {
+    if (!showDataComponentsToggle.value) return undefined
+    return useDataComponents.value
+})
 
 // ============= 筛选器选项 =============
 const categoryOptions = computed<ComboboxOption[]>(() => [
@@ -168,6 +203,8 @@ watch(selectedVersion, (versionId) => {
     values.value = {}
     executeChainOutput.value = ''
     result.value = ''
+    // 切换版本时重置数据组件开关
+    useDataComponents.value = true
 })
 
 watch(selectedCommandId, () => {
@@ -432,6 +469,18 @@ function presetCategoryLabel(commandId: string): string {
                 :options="versionOptions"
                 @update:model-value="selectedVersion = String($event)"
             />
+            <!-- 1.20.x 专属：数据组件切换 -->
+            <div v-if="showDataComponentsToggle" class="version-toggle-row">
+                <div class="version-toggle-text">
+                    <span class="version-toggle-label">
+                        {{ t('app.lab.command-generator.version.use-data-components') }}
+                    </span>
+                    <span class="version-toggle-hint">
+                        {{ t('app.lab.command-generator.version.use-data-components-hint') }}
+                    </span>
+                </div>
+                <Toggle v-model="useDataComponents" />
+            </div>
         </section>
 
         <!-- ========== 筛选器 ========== -->
@@ -591,6 +640,8 @@ function presetCategoryLabel(commandId: string): string {
                         :key="arg.name"
                         v-model="values[arg.name]"
                         :arg="arg"
+                        :version="selectedVersion"
+                        :force-data-components="forceDataComponents"
                     />
                 </div>
                 <p v-else class="empty-hint">
@@ -930,6 +981,36 @@ function presetCategoryLabel(commandId: string): string {
 }
 
 .placeholder {
+    color: var(--color-text-tertiary);
+}
+
+/* ===== 版本切换行（仅 1.20.x） ===== */
+.version-toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.4rem;
+    border-top: 1px solid var(--color-divider);
+    padding-top: 0.7rem;
+}
+
+.version-toggle-text {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.version-toggle-label {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.version-toggle-hint {
+    font-size: 0.66rem;
+    line-height: 1.5;
     color: var(--color-text-tertiary);
 }
 

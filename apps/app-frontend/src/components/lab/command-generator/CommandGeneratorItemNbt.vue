@@ -17,9 +17,9 @@ interface EnchantDefinition {
 
 const props = defineProps<{
     modelValue?: string
-    /** 目标游戏版本，如 '1.21'、'1.16' */
+    /** 目标游戏版本，如 '1.21'、'1.16'、'1.20' */
     version?: string
-    /** 是否强制使用数据组件（1.20.x 下由用户切换） */
+    /** 1.20.x 下由用户切换：是否使用 1.20.5+ 数据组件 */
     forceDataComponents?: boolean
 }>()
 
@@ -172,25 +172,48 @@ function parseVersion(v: string): number[] {
     })
 }
 
-const versionUsesDataComponents = computed(() => {
-    const v = parseVersion(props.version ?? '1.21')
-    if (v[0] > 1) return true
-    if (v[0] === 1 && v[1] > 20) return true
-    if (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5) return true
-    return false
-})
-
+/**
+ * 决定最终使用数据组件（1.20.5+）还是旧版 NBT。
+ *
+ * 三档：
+ * - 1.20.5 及以上（含 1.21+）：始终数据组件
+ * - 1.20.x 但低于 1.20.5：
+ *     - forceDataComponents 显式传了 → 跟随用户切换
+ *     - 否则默认数据组件（1.20.x 用户大概率在用新语法）
+ * - 1.16 ~ 1.19：始终旧版 NBT
+ *
+ * 注意 "1.20" 这种无小版本的字符串会走第二档，
+ * 因为 manifest 里 1.20 这一项就是 "1.20"。
+ */
 const useDataComponents = computed(() => {
     const v = parseVersion(props.version ?? '1.21')
-    if (v[0] > 1 || (v[0] === 1 && v[1] > 20)) return true
-    if (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5) {
-        return props.forceDataComponents !== false
+
+    const isAtLeast1205 =
+        v[0] > 1 ||
+        (v[0] === 1 && v[1] > 20) ||
+        (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5)
+    if (isAtLeast1205) return true
+
+    const is120Family = v[0] === 1 && v[1] === 20
+    if (is120Family) {
+        // 用户切换优先
+        if (props.forceDataComponents !== undefined) {
+            return props.forceDataComponents
+        }
+        // 默认走数据组件
+        return true
     }
+
     return false
 })
 
 // ============ 序列化 ============
 
+/**
+ * SNBT 字符串内容转义。
+ * - 单引号包裹：转义 \ 和 '
+ * - 双引号包裹：转义 \ 和 "
+ */
 function escapeSnbt(value: string, quote: "'" | '"' = "'"): string {
     let result = value.replace(/\\/g, '\\\\')
     if (quote === "'") {
@@ -201,6 +224,10 @@ function escapeSnbt(value: string, quote: "'" | '"' = "'"): string {
     return result
 }
 
+/**
+ * 旧版 NBT 格式（1.20.4 及之前）
+ * 使用 {display:{Name:...}} + Enchantments + Unbreakable
+ */
 function serializeLegacy(): string {
     const parts: string[] = []
 
@@ -220,6 +247,7 @@ function serializeLegacy(): string {
     }
 
     if (enchantments.value.length) {
+        // 旧版附魔 lvl 是 short 类型，必须加 s 后缀
         const items = enchantments.value
             .map((e) => `{id:"${e.id}",lvl:${e.level}s}`)
             .join(',')
@@ -233,6 +261,10 @@ function serializeLegacy(): string {
     return parts.length ? `{${parts.join(',')}}` : ''
 }
 
+/**
+ * 新版数据组件格式（1.20.5+）
+ * 使用 [custom_name=..., lore=..., enchantments={...}, unbreakable={}]
+ */
 function serializeDataComponents(): string {
     const parts: string[] = []
 
@@ -248,6 +280,7 @@ function serializeDataComponents(): string {
     }
 
     if (enchantments.value.length) {
+        // 新版附魔是键值对映射
         const enchMap = enchantments.value
             .map((e) => `"${e.id}":${e.level}`)
             .join(',')
@@ -269,6 +302,7 @@ const snbt = computed(() =>
 
 let syncing = false
 
+// 初始：从 prop 恢复内部状态
 if (props.modelValue) {
     parseSnbt(props.modelValue)
 }
@@ -294,6 +328,7 @@ watch(
     },
 )
 
+// 版本或用户切换变化时，用新格式重新序列化并 emit
 watch(
     () => [props.version, props.forceDataComponents],
     () => {
@@ -311,11 +346,13 @@ function parseSnbt(snbtStr: string): void {
 
     if (!snbtStr) return
 
+    // 优先尝试解析新版数据组件格式（方括号包裹）
     if (snbtStr.startsWith('[')) {
         parseDataComponents(snbtStr)
         return
     }
 
+    // 旧版 NBT 格式（花括号包裹）
     parseLegacy(snbtStr)
 }
 
