@@ -8081,6 +8081,12 @@
   "app.lab.command-generator.arg.give.nbt.desc": {
     "message": "Item NBT data"
   },
+  "app.lab.command-generator.version.use-data-components": {
+    "message": "Use 1.20.5+ data components"
+  },
+  "app.lab.command-generator.version.use-data-components-hint": {
+    "message": "Enable if your server uses 1.20.5 or newer syntax. Disable for legacy NBT."
+  },
   "app.lab.command-generator.arg.help.command.display": {
     "message": "Command"
   },

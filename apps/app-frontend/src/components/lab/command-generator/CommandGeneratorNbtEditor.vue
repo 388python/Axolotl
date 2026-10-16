@@ -11,6 +11,8 @@ import CommandGeneratorNbtAdvanced from './CommandGeneratorNbtAdvanced.vue'
 const props = defineProps<{
     modelValue?: string
     kind?: NbtKind
+    version?: string
+    forceDataComponents?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,7 +28,6 @@ const messages = defineMessages({
 
 const mode = ref<'simple' | 'advanced'>(props.kind === 'item' ? 'simple' : 'advanced')
 
-// 修复：kind 变化时同步切换默认 mode
 watch(
     () => props.kind,
     (kind) => {
@@ -61,6 +62,8 @@ watch(
         <CommandGeneratorItemNbt
             v-if="kind === 'item' && mode === 'simple'"
             :model-value="modelValue"
+            :version="version"
+            :force-data-components="forceDataComponents"
             @update:model-value="emit('update:modelValue', $event)"
         />
         <CommandGeneratorNbtAdvanced

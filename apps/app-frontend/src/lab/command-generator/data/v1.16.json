@@ -1940,6 +1940,17 @@
                     ]
                 },
                 {
+                    "name": "nbt",
+                    "displayNameKey": "app.lab.command-generator.arg.give.nbt.display",
+                    "type": "nbt",
+                    "required": false,
+                    "descriptionKey": "app.lab.command-generator.arg.give.nbt.desc",
+                    "placeholder": "{Enchantments:[{id:\"minecraft:sharpness\",lvl:5s}]}",
+                    "supportsNbtEditor": true,
+                    "nbtKind": "item",
+                    "attachToPrevious": true
+                },
+                {
                     "name": "count",
                     "displayNameKey": "app.lab.command-generator.arg.give.count.display",
                     "type": "integer",
@@ -1960,16 +1971,6 @@
                             "value": 64
                         }
                     ]
-                },
-                {
-                    "name": "nbt",
-                    "displayNameKey": "app.lab.command-generator.arg.give.nbt.display",
-                    "type": "nbt",
-                    "required": false,
-                    "descriptionKey": "app.lab.command-generator.arg.give.nbt.desc",
-                    "placeholder": "{Enchantments:[{id:\"minecraft:sharpness\",lvl:5}]}",
-                    "supportsNbtEditor": true,
-                    "nbtKind": "item"
                 }
             ]
         },
@@ -2031,20 +2032,21 @@
                     "descriptionKey": "app.lab.command-generator.arg.item.item.desc"
                 },
                 {
-                    "name": "count",
-                    "displayNameKey": "app.lab.command-generator.arg.item.count.display",
-                    "type": "integer",
-                    "required": false,
-                    "descriptionKey": "app.lab.command-generator.arg.item.count.desc"
-                },
-                {
                     "name": "nbt",
                     "displayNameKey": "app.lab.command-generator.arg.item.nbt.display",
                     "type": "nbt",
                     "required": false,
                     "descriptionKey": "app.lab.command-generator.arg.item.nbt.desc",
                     "supportsNbtEditor": true,
-                    "nbtKind": "item"
+                    "nbtKind": "item",
+                    "attachToPrevious": true
+                },
+                {
+                    "name": "count",
+                    "displayNameKey": "app.lab.command-generator.arg.item.count.display",
+                    "type": "integer",
+                    "required": false,
+                    "descriptionKey": "app.lab.command-generator.arg.item.count.desc"
                 }
             ]
         },
@@ -2577,21 +2579,22 @@
                     "descriptionKey": "app.lab.command-generator.arg.replaceitem.item.desc"
                 },
                 {
-                    "name": "count",
-                    "displayNameKey": "app.lab.command-generator.arg.replaceitem.count.display",
-                    "type": "integer",
-                    "required": false,
-                    "descriptionKey": "app.lab.command-generator.arg.replaceitem.count.desc",
-                    "defaultValue": 1
-                },
-                {
                     "name": "nbt",
                     "displayNameKey": "app.lab.command-generator.arg.replaceitem.nbt.display",
                     "type": "nbt",
                     "required": false,
                     "descriptionKey": "app.lab.command-generator.arg.replaceitem.nbt.desc",
                     "supportsNbtEditor": true,
-                    "nbtKind": "item"
+                    "nbtKind": "item",
+                    "attachToPrevious": true
+                },
+                {
+                    "name": "count",
+                    "displayNameKey": "app.lab.command-generator.arg.replaceitem.count.display",
+                    "type": "integer",
+                    "required": false,
+                    "descriptionKey": "app.lab.command-generator.arg.replaceitem.count.desc",
+                    "defaultValue": 1
                 }
             ]
         },

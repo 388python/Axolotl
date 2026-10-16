@@ -17,7 +17,7 @@ import {
     initializeRegistry,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
-import type { CommandCategory } from '@/lab/command-generator/commands/types.ts'
+import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
 import {
     buildCommand,
     getDefaultValues,
@@ -114,6 +114,22 @@ const currentCommand = computed(() =>
 const currentGuide = computed(() =>
     selectedCommandId.value ? (findGuide(selectedCommandId.value) ?? null) : null,
 )
+
+/**
+ * UI 上用于渲染的参数卡片顺序。
+ * 把 nbt 类型的参数统一挪到末尾，与 JSON 中参数的位置无关。
+ * 生成命令时的顺序由 generator.ts 的 orderArguments 另行处理。
+ */
+const uiArguments = computed<CommandArgument[]>(() => {
+    const args = currentCommand.value?.arguments ?? []
+    const nonNbt: CommandArgument[] = []
+    const nbt: CommandArgument[] = []
+    for (const arg of args) {
+        if (arg.type === 'nbt') nbt.push(arg)
+        else nonNbt.push(arg)
+    }
+    return [...nonNbt, ...nbt]
+})
 
 const permissionName = computed(() =>
     currentCommand.value
@@ -569,9 +585,9 @@ function presetCategoryLabel(commandId: string): string {
                     </div>
                 </div>
 
-                <div v-if="currentCommand.arguments.length" class="arguments-grid">
+                <div v-if="uiArguments.length" class="arguments-grid">
                     <CommandGeneratorArgument
-                        v-for="arg in currentCommand.arguments"
+                        v-for="arg in uiArguments"
                         :key="arg.name"
                         v-model="values[arg.name]"
                         :arg="arg"

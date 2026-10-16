@@ -43,6 +43,7 @@ function serializeNbtValue(node: NbtTagNode): string {
         case 'byte':
             return `${node.value}b`
         case 'short':
+            // 修复：short 类型需要 s 后缀，否则会被解析为 int
             return `${node.value}s`
         case 'int':
             return String(node.value)
@@ -53,7 +54,8 @@ function serializeNbtValue(node: NbtTagNode): string {
         case 'double':
             return `${node.value}d`
         case 'string':
-            return `"${String(node.value).replace(/"/g, '\\"')}"`
+            // 修复：SNBT 双引号字符串只需转义 \ 和 "
+            return `"${String(node.value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
         case 'compound':
             return serializeNbt(node.children ?? [])
         case 'list': {

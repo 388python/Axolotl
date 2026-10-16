@@ -3,11 +3,6 @@ import { PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { Combobox, type ComboboxOption, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, ref, watch } from 'vue'
 
-import {
-    allCommandsRef,
-    getCurrentVersion,
-} from '@/lab/command-generator/commands/registry.ts'
-
 interface EnchantEntry {
     key: number
     id: string
@@ -18,11 +13,14 @@ interface EnchantDefinition {
     id: string
     labelKey: string
     maxLevel: number
-    since?: string
 }
 
 const props = defineProps<{
     modelValue?: string
+    /** 目标游戏版本，如 '1.21'、'1.16' */
+    version?: string
+    /** 是否强制使用数据组件（1.20.x 下由用户切换） */
+    forceDataComponents?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -134,49 +132,17 @@ const ENCHANTMENTS: EnchantDefinition[] = [
     { id: 'minecraft:frost_walker', labelKey: 'app.lab.command-generator.enchantment.frost-walker', maxLevel: 2 },
     { id: 'minecraft:binding_curse', labelKey: 'app.lab.command-generator.enchantment.binding-curse', maxLevel: 1 },
     { id: 'minecraft:vanishing_curse', labelKey: 'app.lab.command-generator.enchantment.vanishing-curse', maxLevel: 1 },
-    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3, since: '1.16' },
-    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3, since: '1.19' },
+    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3 },
+    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3 },
     { id: 'minecraft:loyalty', labelKey: 'app.lab.command-generator.enchantment.loyalty', maxLevel: 3 },
     { id: 'minecraft:impaling', labelKey: 'app.lab.command-generator.enchantment.impaling', maxLevel: 5 },
     { id: 'minecraft:riptide', labelKey: 'app.lab.command-generator.enchantment.riptide', maxLevel: 3 },
     { id: 'minecraft:channeling', labelKey: 'app.lab.command-generator.enchantment.channeling', maxLevel: 1 },
     { id: 'minecraft:luck_of_the_sea', labelKey: 'app.lab.command-generator.enchantment.luck-of-the-sea', maxLevel: 3 },
     { id: 'minecraft:lure', labelKey: 'app.lab.command-generator.enchantment.lure', maxLevel: 3 },
-    { id: 'minecraft:breach', labelKey: 'app.lab.command-generator.enchantment.breach', maxLevel: 4, since: '1.21' },
-    { id: 'minecraft:density', labelKey: 'app.lab.command-generator.enchantment.density', maxLevel: 5, since: '1.21' },
-    { id: 'minecraft:wind_burst', labelKey: 'app.lab.command-generator.enchantment.wind-burst', maxLevel: 3, since: '1.21' },
 ]
 
-function compareVersion(a: string, b: string): number {
-    const av = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
-    const bv = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
-    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
-        const x = av[i] ?? 0
-        const y = bv[i] ?? 0
-        if (x !== y) return x - y
-    }
-    return 0
-}
-
-// 从 registry 同步当前的游戏版本。
-// allCommandsRef 会在 switchVersion 时重新计算，因此可作为版本变化的信号。
-const currentVersion = ref(getCurrentVersion())
-
-watch(
-    allCommandsRef,
-    () => {
-        currentVersion.value = getCurrentVersion()
-    },
-    { immediate: true },
-)
-
-const availableEnchantments = computed(() =>
-    ENCHANTMENTS.filter(
-        (e) => !e.since || compareVersion(currentVersion.value, e.since) >= 0,
-    ),
-)
-
-const enchantById = computed(() => new Map(availableEnchantments.value.map((e) => [e.id, e])))
+const enchantById = computed(() => new Map(ENCHANTMENTS.map((e) => [e.id, e])))
 
 function enchantLabel(id: string): string {
     const def = enchantById.value.get(id)
@@ -185,7 +151,7 @@ function enchantLabel(id: string): string {
 }
 
 const enchantOptions = computed<ComboboxOption[]>(() =>
-    availableEnchantments.value.map((e) => ({
+    ENCHANTMENTS.map((e) => ({
         value: e.id,
         label: enchantLabel(e.id),
     })),
@@ -197,31 +163,55 @@ const enchantments = ref<EnchantEntry[]>([])
 const unbreakable = ref(false)
 let nextKey = 1
 
-const snbt = computed(() => serialize())
+// ============ 版本判断 ============
+
+function parseVersion(v: string): number[] {
+    return v.split('.').map((n) => {
+        const num = Number.parseInt(n, 10)
+        return Number.isFinite(num) ? num : 0
+    })
+}
+
+const versionUsesDataComponents = computed(() => {
+    const v = parseVersion(props.version ?? '1.21')
+    if (v[0] > 1) return true
+    if (v[0] === 1 && v[1] > 20) return true
+    if (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5) return true
+    return false
+})
+
+const useDataComponents = computed(() => {
+    const v = parseVersion(props.version ?? '1.21')
+    if (v[0] > 1 || (v[0] === 1 && v[1] > 20)) return true
+    if (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5) {
+        return props.forceDataComponents !== false
+    }
+    return false
+})
 
 // ============ 序列化 ============
 
-function escapeSnbt(value: string): string {
-    let result = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    result = result.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+function escapeSnbt(value: string, quote: "'" | '"' = "'"): string {
+    let result = value.replace(/\\/g, '\\\\')
+    if (quote === "'") {
+        result = result.replace(/'/g, "\\'")
+    } else {
+        result = result.replace(/"/g, '\\"')
+    }
     return result
 }
 
-function unescapeSnbt(value: string): string {
-    return value.replace(/\\(.)/g, '$1')
-}
-
-function serialize(): string {
+function serializeLegacy(): string {
     const parts: string[] = []
 
     const displayParts: string[] = []
     if (name.value.trim()) {
-        displayParts.push(`Name:'{"text":"${escapeSnbt(name.value)}"}'`)
+        displayParts.push(`Name:'{"text":"${escapeSnbt(name.value, "'")}"}'`)
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
         const loreItems = cleanLore
-            .map((l) => `'{"text":"${escapeSnbt(l)}"}'`)
+            .map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`)
             .join(',')
         displayParts.push(`Lore:[${loreItems}]`)
     }
@@ -231,7 +221,7 @@ function serialize(): string {
 
     if (enchantments.value.length) {
         const items = enchantments.value
-            .map((e) => `{id:"${e.id}",lvl:${e.level}}`)
+            .map((e) => `{id:"${e.id}",lvl:${e.level}s}`)
             .join(',')
         parts.push(`Enchantments:[${items}]`)
     }
@@ -243,66 +233,37 @@ function serialize(): string {
     return parts.length ? `{${parts.join(',')}}` : ''
 }
 
-// ============ 反序列化 ============
+function serializeDataComponents(): string {
+    const parts: string[] = []
 
-function parseSnbt(snbtStr: string): void {
-    name.value = ''
-    lore.value = []
-    enchantments.value = []
-    unbreakable.value = false
-
-    if (!snbtStr) return
-
-    const nameMatch = snbtStr.match(/Name:'((?:\\.|[^'\\])*)'/)
-    if (nameMatch) {
-        const content = unescapeSnbt(nameMatch[1])
-        try {
-            const parsed = JSON.parse(content)
-            if (parsed && typeof parsed.text === 'string') {
-                name.value = parsed.text
-            }
-        } catch {
-            // 忽略非法 JSON
-        }
+    if (name.value.trim()) {
+        parts.push(`custom_name='{"text":"${escapeSnbt(name.value, "'")}"}'`)
+    }
+    const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
+    if (cleanLore.length) {
+        const loreItems = cleanLore
+            .map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`)
+            .join(',')
+        parts.push(`lore=[${loreItems}]`)
     }
 
-    const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
-    if (loreMatch) {
-        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
-        lore.value = items
-            .map((raw) => {
-                const inner = raw.slice(1, -1)
-                const content = unescapeSnbt(inner)
-                try {
-                    const parsed = JSON.parse(content)
-                    return typeof parsed?.text === 'string' ? parsed.text : ''
-                } catch {
-                    return ''
-                }
-            })
-            .filter((s) => s.length > 0)
+    if (enchantments.value.length) {
+        const enchMap = enchantments.value
+            .map((e) => `"${e.id}":${e.level}`)
+            .join(',')
+        parts.push(`enchantments={${enchMap}}`)
     }
 
-    const enchMatch = snbtStr.match(/Enchantments:\[((?:\{[^{}]*\},?)+)\]/)
-    if (enchMatch) {
-        const items = enchMatch[1].match(/\{[^{}]*\}/g) ?? []
-        enchantments.value = items
-            .map((raw) => {
-                const idMatch = raw.match(/id:"([^"]*)"/)
-                const lvlMatch = raw.match(/lvl:(\d+)/)
-                return {
-                    key: nextKey++,
-                    id: idMatch ? idMatch[1] : '',
-                    level: lvlMatch ? Number(lvlMatch[1]) : 1,
-                }
-            })
-            .filter((e) => e.id)
+    if (unbreakable.value) {
+        parts.push('unbreakable={}')
     }
 
-    if (/Unbreakable:1b/.test(snbtStr)) {
-        unbreakable.value = true
-    }
+    return parts.length ? `[${parts.join(',')}]` : ''
 }
+
+const snbt = computed(() =>
+    useDataComponents.value ? serializeDataComponents() : serializeLegacy(),
+)
 
 // ============ 双向同步 ============
 
@@ -333,13 +294,128 @@ watch(
     },
 )
 
-// ============ 版本切换 ============
+watch(
+    () => [props.version, props.forceDataComponents],
+    () => {
+        emit('update:modelValue', snbt.value)
+    },
+)
 
-// 版本变化时，移除新版本中不再存在的附魔
-watch(currentVersion, () => {
-    const availableIds = new Set(availableEnchantments.value.map((e) => e.id))
-    enchantments.value = enchantments.value.filter((e) => availableIds.has(e.id))
-})
+// ============ 反序列化 ============
+
+function parseSnbt(snbtStr: string): void {
+    name.value = ''
+    lore.value = []
+    enchantments.value = []
+    unbreakable.value = false
+
+    if (!snbtStr) return
+
+    if (snbtStr.startsWith('[')) {
+        parseDataComponents(snbtStr)
+        return
+    }
+
+    parseLegacy(snbtStr)
+}
+
+function parseLegacy(snbtStr: string): void {
+    const nameMatch = snbtStr.match(/Name:'((?:\\.|[^'\\])*)'/)
+    if (nameMatch) {
+        const content = unescapeSnbt(nameMatch[1])
+        try {
+            const parsed = JSON.parse(content)
+            if (parsed && typeof parsed.text === 'string') {
+                name.value = parsed.text
+            }
+        } catch { /* ignore */ }
+    }
+
+    const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
+    if (loreMatch) {
+        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
+        lore.value = items
+            .map((raw) => {
+                const content = unescapeSnbt(raw.slice(1, -1))
+                try {
+                    const parsed = JSON.parse(content)
+                    return typeof parsed?.text === 'string' ? parsed.text : ''
+                } catch { return '' }
+            })
+            .filter((s) => s.length > 0)
+    }
+
+    const enchMatch = snbtStr.match(/Enchantments:\[((?:\{[^{}]*\},?)+)\]/)
+    if (enchMatch) {
+        const items = enchMatch[1].match(/\{[^{}]*\}/g) ?? []
+        enchantments.value = items
+            .map((raw) => {
+                const idMatch = raw.match(/id:"([^"]*)"/)
+                const lvlMatch = raw.match(/lvl:(\d+)/)
+                return {
+                    key: nextKey++,
+                    id: idMatch ? idMatch[1] : '',
+                    level: lvlMatch ? Number(lvlMatch[1]) : 1,
+                }
+            })
+            .filter((e) => e.id)
+    }
+
+    if (/Unbreakable:1b/.test(snbtStr)) {
+        unbreakable.value = true
+    }
+}
+
+function parseDataComponents(snbtStr: string): void {
+    const nameMatch = snbtStr.match(/custom_name='((?:\\.|[^'\\])*)'/)
+    if (nameMatch) {
+        const content = unescapeSnbt(nameMatch[1])
+        try {
+            const parsed = JSON.parse(content)
+            if (parsed && typeof parsed.text === 'string') {
+                name.value = parsed.text
+            }
+        } catch { /* ignore */ }
+    }
+
+    const loreMatch = snbtStr.match(/lore=\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
+    if (loreMatch) {
+        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
+        lore.value = items
+            .map((raw) => {
+                const content = unescapeSnbt(raw.slice(1, -1))
+                try {
+                    const parsed = JSON.parse(content)
+                    return typeof parsed?.text === 'string' ? parsed.text : ''
+                } catch { return '' }
+            })
+            .filter((s) => s.length > 0)
+    }
+
+    const enchMatch = snbtStr.match(/enchantments=\{([^}]*)\}/)
+    if (enchMatch) {
+        const pairs = enchMatch[1].match(/"([^"]+)":(\d+)/g) ?? []
+        enchantments.value = pairs
+            .map((pair) => {
+                const m = pair.match(/"([^"]+)":(\d+)/)
+                if (!m) return null
+                return {
+                    key: nextKey++,
+                    id: m[1],
+                    level: Number(m[2]),
+                }
+            })
+            .filter((e): e is EnchantEntry => e !== null)
+    }
+
+    if (/unbreakable=\{\}/.test(snbtStr)) {
+        unbreakable.value = true
+    }
+}
+
+function unescapeSnbt(value: string): string {
+    return value.replace(/\\(.)/g, '$1')
+}
 
 // ============ 编辑操作 ============
 
@@ -353,7 +429,7 @@ function removeLore(index: number) {
 
 function addEnchant() {
     const used = new Set(enchantments.value.map((e) => e.id))
-    const next = availableEnchantments.value.find((e) => !used.has(e.id))
+    const next = ENCHANTMENTS.find((e) => !used.has(e.id))
     if (!next) return
     enchantments.value.push({ key: nextKey++, id: next.id, level: 1 })
 }
@@ -386,6 +462,9 @@ function setEnchantLevel(index: number, level: number) {
             <span class="item-nbt-title">
                 <SparklesIcon />
                 {{ formatMessage(messages.title) }}
+            </span>
+            <span v-if="version" class="item-nbt-version">
+                {{ useDataComponents ? '1.20.5+' : version }}
             </span>
         </header>
 
@@ -531,6 +610,15 @@ function setEnchantLevel(index: number, level: number) {
     width: 0.9rem;
     height: 0.9rem;
     color: var(--color-brand);
+}
+
+.item-nbt-version {
+    border-radius: 999px;
+    background: var(--surface-4);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--color-text-tertiary);
 }
 
 .field {

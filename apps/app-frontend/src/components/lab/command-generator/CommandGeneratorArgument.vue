@@ -12,6 +12,14 @@ import CommandGeneratorNbtEditor from './CommandGeneratorNbtEditor.vue'
 const props = defineProps<{
     arg: CommandArgument
     modelValue: string | number | boolean | undefined
+    /** 当前选中的游戏版本，用于 NBT 序列化分支 */
+    version?: string
+    /**
+     * 是否强制使用 1.20.5+ 数据组件格式。
+     * - undefined：由 NBT 编辑器内部根据 version 自动判定
+     * - true / false：仅在 1.20.x 下由用户显式切换时传入
+     */
+    forceDataComponents?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -62,24 +70,15 @@ const ADVANCEMENT_DEFAULT_PRESETS: ArgumentPreset[] = [
 ]
 
 const GAMERULE_DEFAULT_PRESETS: ArgumentPreset[] = [
-    {
-        labelKey: 'app.lab.command-generator.preset.gamerule.keep-inventory',
-        value: 'keepInventory true',
-        descriptionKey: 'app.lab.command-generator.preset.gamerule.keep-inventory.desc',
-    },
-    {
-        labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing',
-        value: 'mobGriefing false',
-        descriptionKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing.desc',
-    },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-daylight-cycle', value: 'doDaylightCycle false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-spawning', value: 'doMobSpawning false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-fire-tick', value: 'doFireTick false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-weather-cycle', value: 'doWeatherCycle false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-natural-regen', value: 'naturalRegeneration false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-insomnia', value: 'doInsomnia false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-command-feedback', value: 'sendCommandFeedback false' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.show-death-messages', value: 'showDeathMessages true' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.keep-inventory', value: 'keepInventory' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing', value: 'mobGriefing' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-daylight-cycle', value: 'doDaylightCycle' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-spawning', value: 'doMobSpawning' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-fire-tick', value: 'doFireTick' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-weather-cycle', value: 'doWeatherCycle' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-natural-regen', value: 'naturalRegeneration' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-insomnia', value: 'doInsomnia' },
+    { labelKey: 'app.lab.command-generator.preset.gamerule.no-command-feedback', value: 'sendCommandFeedback' },
 ]
 
 // ============ 类型判断 ============
@@ -89,10 +88,8 @@ const isNbt = computed(() => props.arg.supportsNbtEditor === true)
 const isItem = computed(() => props.arg.type === 'item')
 
 /**
- * 这三种类型统一走「普通 input + 下方预设 chip」的路径。
- * 关键修复：把它们显式排除出 Combobox 分支，
- * 否则只要数据文件里带了 enumValues，isEnumDropdown 就会为 true，
- * showPresets 永远为 false，预设按钮永远不显示。
+ * 这三种类型统一走「普通 input + 下方预设 chip」的路径，
+ * 显式排除出 Combobox 分支，避免被 enumValues 抢占。
  */
 const hasInlinePresets = computed(
     () =>
@@ -219,6 +216,8 @@ function onItemPicked(id: string) {
             v-if="isNbt"
             :model-value="String(modelValue ?? '')"
             :kind="arg.nbtKind"
+            :version="version"
+            :force-data-components="forceDataComponents"
             @update:model-value="emit('update:modelValue', $event)"
         />
 

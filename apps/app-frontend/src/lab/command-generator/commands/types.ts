@@ -22,8 +22,8 @@ export type ArgumentType =
     | 'slot'
     | 'objective'
     | 'team'
-    | 'advancement'   // ← 新增
-    | 'gamerule'      // ← 新增
+    | 'advancement'
+    | 'gamerule'
 
 export type NbtKind = 'item' | 'entity' | 'generic'
 
@@ -46,6 +46,15 @@ export interface CommandArgument {
     supportsNbtEditor?: boolean
     nbtKind?: NbtKind
     presets?: ArgumentPreset[]
+    /**
+     * 为 true 时，该参数渲染后直接追加到前一个参数尾部，**不加空格**。
+     *
+     * 用于 /give、/item 等把 NBT 视为「物品参数一部分」的命令：
+     *   /give @s diamond_sword{display:...} 1
+     * 而非把 NBT 作为独立参数：
+     *   /summon zombie ~ ~ ~ {IsBaby:1b}
+     */
+    attachToPrevious?: boolean
 }
 
 export interface ExecuteChainSubcommand {

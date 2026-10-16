@@ -7772,6 +7772,12 @@
   "app.lab.command-generator.arg.give.nbt.desc": {
     "message": "物品 NBT 数据"
   },
+  "app.lab.command-generator.version.use-data-components": {
+    "message": "使用 1.20.5+ 数据组件"
+  },
+  "app.lab.command-generator.version.use-data-components-hint": {
+    "message": "如果服务器使用 1.20.5 或更新版本的语法，请开启。旧版 NBT 请关闭。"
+  },
   "app.lab.command-generator.arg.help.command.display": {
     "message": "命令名"
   },
