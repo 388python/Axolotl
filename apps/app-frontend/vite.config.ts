@@ -3,6 +3,7 @@ import { existsSync, readFileSync, statSync } from 'fs'
 import { extname, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { defineConfig } from 'vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import svgLoader from 'vite-svg-loader'
 
@@ -92,6 +93,20 @@ export default defineConfig(({ command }) => ({
         ],
     },
     plugins: [
+        nodePolyfills({
+            include: [
+                'crypto',
+                'path',
+                'util',
+                'stream',
+                'buffer',
+                'events',
+                'string_decoder',
+                'assert',
+                'vm',
+            ],
+            globals: { Buffer: true, process: true, global: true },
+        }),
         blockbenchSkinDevAssets(),
         // Vue DevTools injects transform/runtime work; keep it for `vite`/`tauri
         // dev` only so production `vite build` stays lean.

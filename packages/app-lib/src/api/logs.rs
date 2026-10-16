@@ -23,21 +23,22 @@ pub use analysis_settings::{
     update_crash_analysis_ai_settings,
 };
 
+pub mod logagent;
+
 mod crash_analysis;
 pub use crash_analysis::{
-    CrashAnalysis, CrashAnalysisAiExplanation, CrashAnalysisEvidence,
-    CrashAnalysisFinding, CrashAnalysisMod, CrashAnalysisSource,
-    CrashModChange, CrashModChangeCounts, analyze_crash, explain_crash_with_ai,
-    save_successful_mod_snapshot, undo_added_mod,
+    CrashAnalysis, CrashAnalysisEvidence, CrashAnalysisFinding,
+    CrashAnalysisMod, CrashAnalysisSource, CrashModChange,
+    CrashModChangeCounts, analyze_crash, save_successful_mod_snapshot,
+    undo_added_mod,
 };
 
 mod logshare;
 pub use logshare::{
     LogShareDeleteResponse, LogShareSettings, LogShareUploadResponse,
-    SharedLog, ai_analyze_direct, ai_analyze_stored, analyse_crash_direct,
-    delete_log, delete_shared_log, get_insights, get_log_share_settings,
-    list_shared_logs, record_shared_log, update_log_share_settings,
-    upload_crash,
+    SharedLog, analyse_crash_direct, delete_log, delete_shared_log,
+    get_insights, get_log_share_settings, list_shared_logs, record_shared_log,
+    update_log_share_settings, upload_crash,
 };
 
 #[derive(Serialize, Debug)]

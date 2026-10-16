@@ -3,6 +3,7 @@ import { playwright } from '@vitest/browser-playwright'
 import { resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { defineConfig } from 'vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import svgLoader from 'vite-svg-loader'
 
 /**
@@ -41,6 +42,20 @@ export default defineConfig({
         ],
     },
     plugins: [
+        nodePolyfills({
+            include: [
+                'crypto',
+                'path',
+                'util',
+                'stream',
+                'buffer',
+                'events',
+                'string_decoder',
+                'assert',
+                'vm',
+            ],
+            globals: { Buffer: true, process: true, global: true },
+        }),
         vue(),
         svgLoader({
             svgoConfig: {

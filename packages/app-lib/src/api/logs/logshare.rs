@@ -6,7 +6,6 @@ use serde_json::{Value, json};
 
 use super::crash_analysis::collect_crash_logs;
 use crate::State;
-use crate::emit_logshare_ai_event;
 
 const LOGSHARE_BASE_URL: &str = "https://api.logshare.cn";
 const LOGSHARE_AI_READ_TIMEOUT_SECS: u64 = 300;
@@ -235,6 +234,12 @@ pub async fn upload_crash(
     instance_id: &str,
 ) -> crate::Result<LogShareUploadResponse> {
     let prepared = prepare_upload(instance_id).await?;
+    upload_prepared(&prepared).await
+}
+
+async fn upload_prepared(
+    prepared: &UploadBody,
+) -> crate::Result<LogShareUploadResponse> {
     let client = request_client().await?;
     let body_value = serde_json::to_value(&prepared)?;
     let request = client
@@ -373,28 +378,66 @@ pub async fn delete_log(
     })
 }
 
-pub async fn ai_analyze_stored(
-    instance_id: &str,
-    id: &str,
-) -> crate::Result<String> {
-    let url = format!("{LOGSHARE_BASE_URL}/v1/ai/{id}");
-    stream_ai(instance_id, url, None).await
-}
-
-pub async fn ai_analyze_direct(instance_id: &str) -> crate::Result<String> {
-    let prepared = prepare_upload(instance_id).await?;
-    let url = format!("{LOGSHARE_BASE_URL}/v1/ai/analyse");
-    let body = serde_json::to_value(&prepared)?;
-    stream_ai(instance_id, url, Some(body)).await
+pub(super) async fn analyze_snapshot(
+    files: Vec<(String, String)>,
+    settings: &LogShareSettings,
+    ticket: Option<LogShareUploadResponse>,
+    emit: impl Fn(&str, Value) + Send + Sync,
+) -> crate::Result<super::logagent::CloudResult> {
+    let content = files
+        .iter()
+        .map(|(name, content)| format!("===== {name} =====\n{content}"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let prepared = UploadBody {
+        content,
+        files: if settings.multi_file {
+            files
+                .into_iter()
+                .map(|(name, content)| UploadFile { name, content })
+                .collect()
+        } else {
+            Vec::new()
+        },
+        source: source_identifier(),
+    };
+    let (url, body, ticket) = if settings.no_storage {
+        (
+            format!("{LOGSHARE_BASE_URL}/v1/ai/analyse"),
+            Some(serde_json::to_value(&prepared)?),
+            None,
+        )
+    } else {
+        let ticket = match ticket {
+            Some(ticket)
+                if !ticket.id.is_empty()
+                    && ticket.id.chars().all(|ch| {
+                        ch.is_ascii_alphanumeric() || ch == '-' || ch == '_'
+                    }) =>
+            {
+                ticket
+            }
+            _ => upload_prepared(&prepared).await?,
+        };
+        (
+            format!("{LOGSHARE_BASE_URL}/v1/ai/{}", ticket.id),
+            None,
+            Some(ticket),
+        )
+    };
+    if let Some(ticket) = &ticket {
+        emit("uploaded", serde_json::to_value(ticket)?);
+    }
+    let content = stream_ai(url, body, settings.show_progress, emit).await?;
+    Ok(super::logagent::CloudResult { content, ticket })
 }
 
 async fn stream_ai(
-    instance_id: &str,
     url: String,
     body: Option<Value>,
+    show_progress: bool,
+    emit: impl Fn(&str, Value) + Send + Sync,
 ) -> crate::Result<String> {
-    let settings = get_log_share_settings().await?;
-    let show_progress = settings.show_progress;
     let client = request_client().await?;
     let mut request = client
         .request(
@@ -451,23 +494,13 @@ async fn stream_ai(
             if let Some(delta) = event.content {
                 output.push_str(&delta);
                 if show_progress {
-                    emit_logshare_ai_event(
-                        instance_id,
-                        "delta",
-                        json!({ "content": delta }),
-                    )
-                    .await?;
+                    emit("delta", json!({ "content": delta }));
                 }
             }
             if let Some(status_event) = event.status_event
                 && (show_progress || status_event.event_type == "queued")
             {
-                emit_logshare_ai_event(
-                    instance_id,
-                    &status_event.event_type,
-                    status_event.data,
-                )
-                .await?;
+                emit(&status_event.event_type, status_event.data);
             }
             if let Some(message) = event.error {
                 return Err(crate::ErrorKind::OtherError(format!(
