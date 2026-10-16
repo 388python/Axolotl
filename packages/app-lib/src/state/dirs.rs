@@ -292,6 +292,24 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
+    pub fn resource_cache_db(&self, channel: &str) -> crate::Result<PathBuf> {
+        if !matches!(channel, "release" | "beta") {
+            return Err(crate::ErrorKind::InputError(
+                "Invalid resource cache channel".into(),
+            )
+            .into());
+        }
+        Ok(self
+            .caches_dir()
+            .join("resources")
+            .join(channel)
+            .join("resource-cache.db"))
+    }
+
+    pub fn content_store_dir(&self) -> PathBuf {
+        self.caches_dir().join("content-store")
+    }
+
     /// Get path from environment variable
     #[inline]
     fn env_path(name: &str) -> Option<PathBuf> {
@@ -306,7 +324,9 @@ impl DirectoryInfo {
         app_identifier: &str,
     ) -> crate::Result<()>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Sqlite> + Copy,
+        E: sqlx::Executor<'a, Database = sqlx::Sqlite>
+            + sqlx::Acquire<'a, Database = sqlx::Sqlite>
+            + Copy,
     {
         let app_dir = DirectoryInfo::initial_settings_dir_path(app_identifier)
             .ok_or(crate::ErrorKind::FSError(

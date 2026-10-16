@@ -30,7 +30,7 @@ mod settings;
 pub use self::settings::*;
 
 mod game_options;
-pub use self::game_options::*;
+pub(crate) use self::game_options::*;
 
 mod proxy_settings;
 
@@ -64,6 +64,7 @@ mod cache;
 pub use self::cache::*;
 
 pub mod content_favorites;
+pub mod resources;
 pub use self::content_favorites::*;
 
 mod friends;
@@ -81,6 +82,7 @@ pub use self::mr_auth::*;
 mod legacy_converter;
 
 pub mod attached_world_data;
+pub(crate) mod content_store;
 pub mod instance_groups;
 pub mod server_join_log;
 
@@ -158,9 +160,10 @@ pub struct State {
     pub(crate) instance_locks: Arc<InstanceLockManager>,
 
     pub(crate) pool: SqlitePool,
+    resource_service: OnceCell<Arc<crate::resources::ResourceService>>,
 
     // Cloning reqwest::Client retains its underlying connection pool.
-    configured_http_client: RwLock<reqwest::Client>,
+    configured_http_client: RwLock<crate::util::fetch::DownloadClients>,
     configured_http_client_update: AsyncMutex<()>,
 
     pub(crate) file_watcher: FileWatcher,
@@ -170,6 +173,49 @@ pub struct State {
 }
 
 impl State {
+    pub async fn resources(
+        &self,
+    ) -> crate::resources::ResourceResult<&Arc<crate::resources::ResourceService>>
+    {
+        self.resource_service
+            .get_or_try_init(|| async {
+                let path: String = sqlx::query_scalar(
+                    "SELECT file FROM pragma_database_list WHERE name = 'main'",
+                )
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|error| {
+                    crate::resources::ResourceError::Cache(error.to_string())
+                })?;
+                let channel = std::path::Path::new(&path)
+                    .parent()
+                    .and_then(|parent| parent.file_name())
+                    .and_then(|name| name.to_str())
+                    .filter(|name| matches!(*name, "release" | "beta"))
+                    .unwrap_or_else(|| db::default_update_channel());
+                let path = self
+                    .directories
+                    .resource_cache_db(channel)
+                    .map_err(|_| {
+                        crate::resources::ResourceError::InvalidRequest(
+                            "invalid cache channel".into(),
+                        )
+                    })?;
+                let cache = Arc::new(
+                    crate::resources::cache::ResourceCache::open(path).await,
+                );
+                if let Err(error) = cache.import_legacy(&self.pool).await {
+                    tracing::warn!(error = %error, "Legacy resource cache import incomplete");
+                }
+                crate::resources::ResourceService::with_store(
+                    cache,
+                    crate::resources::providers::default_providers(),
+                    resources::ResourceStore::new(self.pool.clone()),
+                )
+            })
+            .await
+    }
+
     pub(crate) async fn lock_instance_screenshots(
         &self,
         instance_id: &str,
@@ -305,6 +351,20 @@ impl InstanceLockManager {
             inner: Some(inner),
             owner: None,
             instance_id: instance_id.to_string(),
+        }
+    }
+
+    pub(crate) async fn lock_exclusive_cancellable(
+        self: &Arc<Self>,
+        instance_id: &str,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> crate::Result<InstanceLockGuard> {
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => Err(crate::ErrorKind::OtherError(
+                format!("Install was canceled while waiting for the content lock for {instance_id}"),
+            ).into()),
+            guard = self.lock_exclusive(instance_id) => Ok(guard),
         }
     }
 }
@@ -653,9 +713,10 @@ impl State {
     ) -> crate::Result<()> {
         let _update = self.configured_http_client_update.lock().await;
         let settings = Settings::get(&self.pool).await?;
-        let client = crate::util::fetch::build_configured_client(
+        let client = crate::util::fetch::DownloadClients::build(
             config,
             settings.ignore_ssl_errors,
+            settings.doh_enabled,
         )?;
         crate::state::proxy_settings::set(&self.pool, config).await?;
         *self.configured_http_client.write() = client;
@@ -668,15 +729,31 @@ impl State {
     ) -> crate::Result<()> {
         let _update = self.configured_http_client_update.lock().await;
         let proxy = crate::state::proxy_settings::get(&self.pool).await?;
-        let client = crate::util::fetch::build_configured_client(
+        let res = {
+            let current = self.configured_http_client.read();
+            current.proxy == proxy
+                && current.ignore_ssl_errors == settings.ignore_ssl_errors
+                && current.doh_enabled == settings.doh_enabled
+        };
+        if res {
+            return Ok(());
+        }
+        let client = crate::util::fetch::DownloadClients::build(
             &proxy,
             settings.ignore_ssl_errors,
+            settings.doh_enabled,
         )?;
         *self.configured_http_client.write() = client;
         Ok(())
     }
 
     pub(crate) fn configured_http_client(&self) -> reqwest::Client {
+        self.configured_http_client.read().metadata.clone()
+    }
+
+    pub(crate) fn download_clients(
+        &self,
+    ) -> crate::util::fetch::DownloadClients {
         self.configured_http_client.read().clone()
     }
 
@@ -702,6 +779,11 @@ impl State {
 
     pub(crate) fn record_download_error(&self) {
         self.download_sample_errors.fetch_add(1, Ordering::AcqRel);
+    }
+
+    pub(crate) fn record_download_throttle(&self) {
+        self.download_sample_throttles
+            .fetch_add(1, Ordering::AcqRel);
     }
 
     pub(crate) fn update_download_settings(
@@ -756,6 +838,7 @@ impl State {
         let mut controller = AutoConcurrencyController::default();
         loop {
             interval.tick().await;
+            crate::util::download::local_resources::sample_cpu().await;
             if !self.auto_concurrent_downloads.load(Ordering::Acquire) {
                 controller = AutoConcurrencyController::default();
                 self.download_sample_bytes.swap(0, Ordering::AcqRel);
@@ -891,15 +974,16 @@ impl State {
         let download_semaphore =
             FetchSemaphore(Semaphore::new(download_concurrency));
         let io_semaphore =
-            IoSemaphore(Semaphore::new(settings.max_concurrent_writes));
+            IoSemaphore(Semaphore::new(settings.max_concurrent_writes.max(1)));
         let api_semaphore =
             FetchSemaphore(Semaphore::new(download_concurrency));
         let auto_prefers_mirror = settings.auto_prefers_mirror();
         let proxy_config = proxy_settings::get(&pool).await?;
         let configured_http_client =
-            crate::util::fetch::build_configured_client(
+            crate::util::fetch::DownloadClients::build(
                 &proxy_config,
                 settings.ignore_ssl_errors,
+                settings.doh_enabled,
             )?;
 
         tracing::info!("Initializing directories");
@@ -974,6 +1058,7 @@ impl State {
             restart_after_pending_update: AtomicBool::new(false),
             instance_locks: Arc::new(InstanceLockManager::default()),
             pool,
+            resource_service: OnceCell::new(),
             configured_http_client: RwLock::new(configured_http_client),
             configured_http_client_update: AsyncMutex::new(()),
             file_watcher,
@@ -1049,9 +1134,10 @@ pub(crate) async fn test_state(
     let file_watcher = instances::watcher::init_watcher().await?;
     let proxy_config = proxy_settings::get(&pool).await?;
     let settings = Settings::get(&pool).await?;
-    let configured_http_client = crate::util::fetch::build_configured_client(
+    let configured_http_client = crate::util::fetch::DownloadClients::build(
         &proxy_config,
         settings.ignore_ssl_errors,
+        settings.doh_enabled,
     )?;
 
     Ok(Arc::new(State {
@@ -1088,6 +1174,7 @@ pub(crate) async fn test_state(
         restart_after_pending_update: AtomicBool::new(false),
         instance_locks: Arc::new(InstanceLockManager::default()),
         pool,
+        resource_service: OnceCell::new(),
         configured_http_client: RwLock::new(configured_http_client),
         configured_http_client_update: AsyncMutex::new(()),
         file_watcher,
@@ -1194,6 +1281,46 @@ mod auto_concurrency_tests {
 mod instance_lock_tests {
     use super::*;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn canceled_archive_writer_does_not_wait_for_busy_instance() {
+        let manager = Arc::new(InstanceLockManager::default());
+        let holder = manager.lock_exclusive("instance-1").await;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let mut waiter = Box::pin(
+            manager.lock_exclusive_cancellable("instance-1", &cancellation),
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), &mut waiter)
+                .await
+                .is_err()
+        );
+        cancellation.cancel();
+        let result = tokio::time::timeout(Duration::from_millis(500), waiter)
+            .await
+            .unwrap();
+        assert!(result.err().unwrap().to_string().contains("canceled"));
+        drop(holder);
+        tokio::time::timeout(
+            Duration::from_millis(500),
+            manager.lock_exclusive("instance-1"),
+        )
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn canceled_archive_writer_does_not_acquire_available_instance() {
+        let manager = Arc::new(InstanceLockManager::default());
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        cancellation.cancel();
+        assert!(
+            manager
+                .lock_exclusive_cancellable("instance-1", &cancellation)
+                .await
+                .is_err()
+        );
+    }
 
     #[tokio::test]
     async fn serializes_concurrent_tasks_for_the_same_instance() {

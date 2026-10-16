@@ -14,7 +14,7 @@ use crate::state::{
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
     FetchProgressFn, Integrity, ResourceClass, download_to_path, fetch,
-    sha1_file_async, write_cached_icon,
+    write_cached_icon,
 };
 use path_util::SafeRelativeUtf8UnixPathBuf;
 use serde::{Deserialize, Serialize};
@@ -45,7 +45,7 @@ pub struct PackFile {
     pub hashes: HashMap<PackFileHash, String>,
     pub env: Option<HashMap<EnvType, SideType>>,
     pub downloads: Vec<String>,
-    pub file_size: u32,
+    pub file_size: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
@@ -169,9 +169,6 @@ pub struct CreatePack {
     pub description: CreatePackDescription,
 }
 
-// The hash lookup only gates the unknown-pack warning, so avoid a long blocking scan for huge local packs.
-const MAX_LOCAL_FILE_HASH_LOOKUP_SIZE: u64 = 1024 * 1024 * 1024;
-
 #[derive(Clone, Debug)]
 pub struct CreatePackDescription {
     pub icon: Option<PathBuf>,
@@ -237,34 +234,7 @@ pub async fn get_instance_from_pack(
             // Scan ZIP entry names to detect pack format (no extraction, just
             // reads the central directory). This tells us what kind of content
             // we're dealing with before any expensive operations.
-            let _has_known_manifest = detect_local_pack_sync(&path).is_ok();
-
-            let is_known_file = if tokio::fs::metadata(&path).await?.len()
-                <= MAX_LOCAL_FILE_HASH_LOOKUP_SIZE
-            {
-                let state = State::get().await?;
-                let (_, hash) = sha1_file_async(&path).await?;
-                match CachedEntry::get_file_many(
-                    &[&hash],
-                    Some(CacheBehaviour::StaleWhileRevalidateSkipOffline),
-                    &state.pool,
-                    &state.api_semaphore,
-                )
-                .await
-                {
-                    Ok(files) => !files.is_empty(),
-                    Err(err) => {
-                        tracing::warn!(
-                            "Failed to check Modrinth file hash for {}: {}",
-                            path.display(),
-                            err
-                        );
-                        false
-                    }
-                }
-            } else {
-                false
-            };
+            let is_known_file = detect_local_pack_sync(&path).is_ok();
 
             Ok(CreatePackInstance {
                 name: file_name,
@@ -288,19 +258,32 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
 ) -> crate::Result<CreatePack> {
     let state = State::get().await?;
     let has_icon_url = icon_url.is_some();
-
-    let version = CachedEntry::get_version(
-        &ModrinthVersionId::new(version_id.clone())?,
+    let cancellation = reporter.cancellation_token();
+    let version_id_ref = ModrinthVersionId::new(version_id.clone())?;
+    let version_query = CachedEntry::get_version(
+        &version_id_ref,
         Some(CacheBehaviour::Bypass),
         &state.pool,
         &state.api_semaphore,
-    )
-    .await?
+    );
+    let version = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Err(crate::resources::protocol::error(crate::resources::ResourceError::Canceled)),
+        version = version_query => version?,
+    }
     .ok_or_else(|| {
         crate::ErrorKind::InputError(
             "Invalid version ID specified!".to_string(),
         )
     })?;
+
+    if version.project_id != project_id {
+        return Err(crate::ErrorKind::InputError(
+            "The selected modpack release belongs to a different project"
+                .into(),
+        )
+        .into());
+    }
 
     // Update instance with correct loader and game version from the API version metadata,
     // so the UI shows accurate info while the pack file is still downloading.

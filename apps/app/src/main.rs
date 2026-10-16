@@ -25,6 +25,7 @@ mod lightweight_mode;
 mod mod_translation;
 mod portable;
 mod seed_map;
+mod window_frame;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -123,7 +124,7 @@ fn is_allowed_blockbench_skin_request(
 ) -> bool {
     if !matches!(
         request.uri().host(),
-        Some("localhost") | Some("axolotl-skin.localhost")
+        Some("localhost" | "axolotl-skin.localhost")
     ) {
         return false;
     }
@@ -231,8 +232,10 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
                     );
                     if log_level != settings.log_level {
                         settings.log_level = log_level;
-                        if let Err(error) =
-                            theseus::settings::set(settings.clone()).await
+                        if let Err(error) = theseus::settings::patch(
+                                serde_json::json!({ "log_level": settings.log_level }),
+                        )
+                        .await
                         {
                             tracing::warn!(
                                 "Could not save the Beta log level: {error}"
@@ -291,7 +294,7 @@ async fn get_update_channel(app: tauri::AppHandle) -> api::Result<String> {
 async fn resolve_update_channel<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> api::Result<String> {
-    let settings_dir = update_channel_settings_dir(&app)?;
+    let settings_dir = update_channel_settings_dir(app)?;
     let state = theseus::read_update_channel_state(&settings_dir).await?;
     let channel = state
         .active_channel
@@ -466,72 +469,11 @@ fn show_window(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn set_transparent_window_frame(
+async fn set_transparent_window_frame(
     enabled: bool,
     window: tauri::Window,
-) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        use windows::Win32::Graphics::Dwm::{
-            DWMWA_BORDER_COLOR, DWMWA_CAPTION_COLOR, DWMWA_COLOR_DEFAULT,
-            DWMWA_COLOR_NONE, DWMWA_TEXT_COLOR, DWMWA_WINDOW_CORNER_PREFERENCE,
-            DWMWCP_DEFAULT, DWMWCP_ROUND, DwmSetWindowAttribute,
-        };
-
-        window.set_shadow(true).map_err(|error| error.to_string())?;
-
-        let hwnd = window.hwnd().map_err(|error| error.to_string())?;
-        let corner_preference = if enabled {
-            DWMWCP_ROUND
-        } else {
-            DWMWCP_DEFAULT
-        };
-        let border_color = if enabled {
-            DWMWA_COLOR_NONE
-        } else {
-            DWMWA_COLOR_DEFAULT
-        };
-        // Caption must match the border: leaving the default paints a white
-        // strip at the top of a transparent window (issue #444).
-        let caption_color = border_color;
-        let text_color = border_color;
-
-        unsafe {
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                std::ptr::from_ref(&corner_preference).cast(),
-                std::mem::size_of_val(&corner_preference) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_BORDER_COLOR,
-                std::ptr::from_ref(&border_color).cast(),
-                std::mem::size_of_val(&border_color) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_CAPTION_COLOR,
-                std::ptr::from_ref(&caption_color).cast(),
-                std::mem::size_of_val(&caption_color) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_TEXT_COLOR,
-                std::ptr::from_ref(&text_color).cast(),
-                std::mem::size_of_val(&text_color) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-        }
-    }
-
-    #[cfg(not(windows))]
-    let _ = (enabled, window);
-
-    Ok(())
+) -> Result<window_frame::FrameResult, String> {
+    window_frame::apply_frame(enabled, &window).await
 }
 
 #[tauri::command]
@@ -844,7 +786,7 @@ fn main() {
             window_state_builder.build()
         })
         .setup(|app| {
-            lightweight_mode::init(&app.handle());
+            lightweight_mode::init(app.handle());
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(4)).await;
@@ -893,7 +835,7 @@ fn main() {
                 ));
             });
 
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "macos")]
             if let Some(window) = app.get_window("main")
                 && let Err(e) = window.set_shadow(true)
             {
@@ -931,6 +873,7 @@ fn main() {
         .plugin(api::cache::init())
         .plugin(api::content_favorites::init())
         .plugin(api::content_search::init())
+        .plugin(api::resources::init())
         .plugin(api::curseforge::init())
         .plugin(api::datapacks::init())
         .plugin(api::drop::init())
@@ -1018,9 +961,7 @@ fn main() {
                     {
                         fn set_changelog_toast(version: Option<String>) {
                             let toast_result: theseus::Result<()> = tauri::async_runtime::block_on(async move {
-                                let mut settings = settings::get().await?;
-                                settings.pending_update_toast_for_version = version;
-                                settings::set(settings).await?;
+                                settings::patch(serde_json::json!({ "pending_update_toast_for_version": version })).await?;
                                 Ok(())
                             });
                             if let Err(e) = toast_result {

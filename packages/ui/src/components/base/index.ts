@@ -12,16 +12,16 @@ export { default as ButtonLink } from './buttons/ButtonLink.vue'
 export { default as CheckCircleButton } from './buttons/CheckCircleButton.vue'
 export { default as IconButton } from './buttons/IconButton.vue'
 export type {
-	ButtonColor,
-	ButtonContentProps,
-	ButtonElementHandle,
-	ButtonInteraction,
-	ButtonLinkProps,
-	ButtonNativeType,
-	ButtonProps,
-	ButtonSize,
-	ButtonType,
-	ButtonVisualProps,
+    ButtonColor,
+    ButtonContentProps,
+    ButtonElementHandle,
+    ButtonInteraction,
+    ButtonLinkProps,
+    ButtonNativeType,
+    ButtonProps,
+    ButtonSize,
+    ButtonType,
+    ButtonVisualProps,
 } from './buttons/types'
 export { default as Card } from './Card.vue'
 export { default as Checkbox } from './Checkbox.vue'
@@ -50,11 +50,12 @@ export { default as IntlFormatted } from './IntlFormatted.vue'
 export { default as KeybindingChips } from './KeybindingChips.vue'
 export { default as LoadingBar } from './LoadingBar.vue'
 export { default as LoadingIndicator } from './LoadingIndicator.vue'
+export type { MenuAction, MenuColor, MenuOption } from './menu-options'
 export { default as MinecraftFormattedText } from './MinecraftFormattedText.vue'
 export type {
-	MultiSelectItem,
-	MultiSelectOption,
-	MultiSelectSectionHeader,
+    MultiSelectItem,
+    MultiSelectOption,
+    MultiSelectSectionHeader,
 } from './MultiSelect.vue'
 export { default as MultiSelect } from './MultiSelect.vue'
 export type { MaybeCtxFn, StageButtonConfig, StageConfigInput } from './MultiStageModal.vue'
@@ -63,6 +64,7 @@ export { default as NavTabs } from './NavTabs.vue'
 export type { Option as OverflowMenuOption } from './OverflowMenu.vue'
 export { default as OverflowMenu } from './OverflowMenu.vue'
 export { default as Pagination } from './Pagination.vue'
+export { default as PointMenu } from './PointMenu.vue'
 export { default as PopoutMenu } from './PopoutMenu.vue'
 export { default as ProgressBar } from './ProgressBar.vue'
 export { default as RadioButtons } from './RadioButtons.vue'

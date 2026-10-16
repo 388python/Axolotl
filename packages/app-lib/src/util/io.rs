@@ -618,6 +618,10 @@ async fn move_recursive(from: &Path, to: &Path) -> Result<()> {
             })?;
     }
 
+    remove_dir(from)
+        .await
+        .wrap_err_with(|| eyre!("removing source dir {from:?}"))?;
+
     Ok(())
 }
 

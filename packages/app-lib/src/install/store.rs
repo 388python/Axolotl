@@ -453,6 +453,20 @@ pub async fn complete_running_job(
     let instance_id = instance_id(state);
     let completes_instance_install_stage =
         state.request.completes_instance_install_stage();
+    let resource_committed = crate::resources::plans::frozen_request_completed(
+        &state.request,
+        &app_state.pool,
+    )
+    .await?
+        || (matches!(
+            state.request,
+            super::model::InstallRequest::ExportResource { .. }
+        ) && state.events.iter().any(|e| {
+            matches!(
+                e.kind,
+                super::model::InstallJobEventKind::JobSucceeded { .. }
+            )
+        }));
     let mut transaction = app_state.pool.begin().await?;
 
     if completes_instance_install_stage
@@ -480,7 +494,7 @@ pub async fn complete_running_job(
         "UPDATE install_jobs
          SET instance_id = (SELECT id FROM instances WHERE id = ?),
              status = ?, state = ?, modified = ?, finished = ?
-         WHERE id = ? AND status = ?",
+         WHERE id = ? AND (status = ? OR (status = 'canceling' AND ?))",
     )
     .bind(instance_id.as_deref())
     .bind(InstallJobStatus::Succeeded.as_str())
@@ -489,6 +503,7 @@ pub async fn complete_running_job(
     .bind(now.timestamp())
     .bind(&id_value)
     .bind(InstallJobStatus::Running.as_str())
+    .bind(resource_committed)
     .execute(&mut *transaction)
     .await?;
 
@@ -576,6 +591,140 @@ async fn compare_and_swap_status(
     .execute(pool)
     .await?;
     Ok(result.rows_affected() == 1)
+}
+
+pub async fn dismiss(id: Uuid, app_state: &State) -> crate::Result<()> {
+    let id = id.to_string();
+    let modified = Utc::now().timestamp();
+    sqlx::query!(
+        "
+		UPDATE install_jobs
+		SET dismissed = 1, modified = ?
+		WHERE id = ?
+		",
+        modified,
+        id,
+    )
+    .execute(&app_state.pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn clear_finished(app_state: &State) -> crate::Result<u64> {
+    let modified = Utc::now().timestamp();
+    let result = sqlx::query(
+        "UPDATE install_jobs
+         SET dismissed = 1, modified = ?
+         WHERE dismissed = 0
+           AND status IN ('succeeded', 'failed', 'interrupted', 'canceled')",
+    )
+    .bind(modified)
+    .execute(&app_state.pool)
+    .await?;
+    Ok(result.rows_affected())
+}
+
+pub async fn mark_instance_deleted(
+    instance_id: &str,
+    app_state: &State,
+) -> crate::Result<Vec<InstallJobRecord>> {
+    use sqlx::Row;
+
+    let rows = sqlx::query(
+        "
+		SELECT
+			id,
+			instance_id,
+			kind,
+			status,
+			state,
+			created,
+			modified,
+			finished,
+			dismissed
+		FROM install_jobs
+		WHERE instance_id = ? AND dismissed = 0
+		",
+    )
+    .bind(instance_id)
+    .fetch_all(&app_state.pool)
+    .await?;
+
+    let mut updated = Vec::new();
+    for row in rows {
+        let mut record = row_to_record(InstallJobRow {
+            id: row.try_get("id")?,
+            instance_id: row.try_get("instance_id")?,
+            kind: row.try_get("kind")?,
+            status: row.try_get("status")?,
+            state: row.try_get("state")?,
+            created: row.try_get("created")?,
+            modified: row.try_get("modified")?,
+            finished: row.try_get("finished")?,
+            dismissed: row.try_get("dismissed")?,
+        })?;
+        if record.state.instance_deleted() {
+            updated.push(record);
+            continue;
+        }
+        record.state.record_event(
+            super::model::InstallJobEventKind::TargetInstanceDeleted {
+                instance_id: instance_id.to_string(),
+            },
+        );
+        updated.push(update_state(record.id, &record.state, app_state).await?);
+    }
+    Ok(updated)
+}
+
+pub async fn get_required(
+    id: Uuid,
+    app_state: &State,
+) -> crate::Result<InstallJobRecord> {
+    get(id, app_state).await?.ok_or_else(|| {
+        crate::ErrorKind::InputError(format!("Unknown install job {id}")).into()
+    })
+}
+
+fn row_to_record(row: InstallJobRow) -> crate::Result<InstallJobRecord> {
+    Ok(InstallJobRecord {
+        id: Uuid::parse_str(&row.id).map_err(|err| {
+            crate::ErrorKind::InputError(format!(
+                "Invalid install job id {}: {err}",
+                row.id
+            ))
+        })?,
+        instance_id: row.instance_id,
+        kind: InstallJobKind::from_stored_str(&row.kind),
+        status: InstallJobStatus::from_stored_str(&row.status),
+        state: serde_json::from_str(&row.state)?,
+        created: timestamp(row.created),
+        modified: timestamp(row.modified),
+        finished: row.finished.and_then(optional_timestamp),
+        dismissed: row.dismissed != 0,
+    })
+}
+
+fn instance_id(state: &InstallJobState) -> Option<String> {
+    match &state.target {
+        super::model::InstallTarget::NewInstance { instance_id } => {
+            instance_id.clone()
+        }
+        super::model::InstallTarget::ExistingInstance { instance_id } => {
+            Some(instance_id.clone())
+        }
+    }
+}
+
+fn timestamp(value: i64) -> DateTime<Utc> {
+    Utc.timestamp_opt(value, 0)
+        .single()
+        .unwrap_or_else(Utc::now)
+}
+
+fn optional_timestamp(value: i64) -> Option<DateTime<Utc>> {
+    Utc.timestamp_opt(value, 0).single()
 }
 
 #[cfg(test)]
@@ -792,7 +941,7 @@ mod tests {
                 instance_id: instance_id.clone(),
                 project_id: "project".to_string(),
                 version_id: Some("version".to_string()),
-                content_type: modrinth_content_management::ContentType::Mod,
+                content_type: content_management::ContentType::Mod,
                 selected: Default::default(),
                 excluded_project_ids: Vec::new(),
                 display_title: "Modrinth content".to_string(),
@@ -1036,138 +1185,4 @@ mod tests {
         .unwrap();
         assert_eq!(status, "queued");
     }
-}
-
-pub async fn dismiss(id: Uuid, app_state: &State) -> crate::Result<()> {
-    let id = id.to_string();
-    let modified = Utc::now().timestamp();
-    sqlx::query!(
-        "
-		UPDATE install_jobs
-		SET dismissed = 1, modified = ?
-		WHERE id = ?
-		",
-        modified,
-        id,
-    )
-    .execute(&app_state.pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn clear_finished(app_state: &State) -> crate::Result<u64> {
-    let modified = Utc::now().timestamp();
-    let result = sqlx::query(
-        "UPDATE install_jobs
-         SET dismissed = 1, modified = ?
-         WHERE dismissed = 0
-           AND status IN ('succeeded', 'failed', 'interrupted', 'canceled')",
-    )
-    .bind(modified)
-    .execute(&app_state.pool)
-    .await?;
-    Ok(result.rows_affected())
-}
-
-pub async fn mark_instance_deleted(
-    instance_id: &str,
-    app_state: &State,
-) -> crate::Result<Vec<InstallJobRecord>> {
-    use sqlx::Row;
-
-    let rows = sqlx::query(
-        "
-		SELECT
-			id,
-			instance_id,
-			kind,
-			status,
-			state,
-			created,
-			modified,
-			finished,
-			dismissed
-		FROM install_jobs
-		WHERE instance_id = ? AND dismissed = 0
-		",
-    )
-    .bind(instance_id)
-    .fetch_all(&app_state.pool)
-    .await?;
-
-    let mut updated = Vec::new();
-    for row in rows {
-        let mut record = row_to_record(InstallJobRow {
-            id: row.try_get("id")?,
-            instance_id: row.try_get("instance_id")?,
-            kind: row.try_get("kind")?,
-            status: row.try_get("status")?,
-            state: row.try_get("state")?,
-            created: row.try_get("created")?,
-            modified: row.try_get("modified")?,
-            finished: row.try_get("finished")?,
-            dismissed: row.try_get("dismissed")?,
-        })?;
-        if record.state.instance_deleted() {
-            updated.push(record);
-            continue;
-        }
-        record.state.record_event(
-            super::model::InstallJobEventKind::TargetInstanceDeleted {
-                instance_id: instance_id.to_string(),
-            },
-        );
-        updated.push(update_state(record.id, &record.state, app_state).await?);
-    }
-    Ok(updated)
-}
-
-pub async fn get_required(
-    id: Uuid,
-    app_state: &State,
-) -> crate::Result<InstallJobRecord> {
-    get(id, app_state).await?.ok_or_else(|| {
-        crate::ErrorKind::InputError(format!("Unknown install job {id}")).into()
-    })
-}
-
-fn row_to_record(row: InstallJobRow) -> crate::Result<InstallJobRecord> {
-    Ok(InstallJobRecord {
-        id: Uuid::parse_str(&row.id).map_err(|err| {
-            crate::ErrorKind::InputError(format!(
-                "Invalid install job id {}: {err}",
-                row.id
-            ))
-        })?,
-        instance_id: row.instance_id,
-        kind: InstallJobKind::from_stored_str(&row.kind),
-        status: InstallJobStatus::from_stored_str(&row.status),
-        state: serde_json::from_str(&row.state)?,
-        created: timestamp(row.created),
-        modified: timestamp(row.modified),
-        finished: row.finished.and_then(optional_timestamp),
-        dismissed: row.dismissed != 0,
-    })
-}
-
-fn instance_id(state: &InstallJobState) -> Option<String> {
-    match &state.target {
-        super::model::InstallTarget::NewInstance { instance_id } => {
-            instance_id.clone()
-        }
-        super::model::InstallTarget::ExistingInstance { instance_id } => {
-            Some(instance_id.clone())
-        }
-    }
-}
-
-fn timestamp(value: i64) -> DateTime<Utc> {
-    Utc.timestamp_opt(value, 0)
-        .single()
-        .unwrap_or_else(Utc::now)
-}
-
-fn optional_timestamp(value: i64) -> Option<DateTime<Utc>> {
-    Utc.timestamp_opt(value, 0).single()
 }

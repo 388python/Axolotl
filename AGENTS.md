@@ -7,7 +7,7 @@ This repository contains the Axolotl Launcher desktop application and its offici
 - **Monorepo tooling:** [Turborepo](https://turbo.build/) (`turbo.jsonc`) + [pnpm workspaces](https://pnpm.io/workspaces) (`pnpm-workspace.yaml`)
 - **Frontend:** Vue 3 / Nuxt 3, Tailwind CSS v3
 - **Desktop:** Rust / Tauri
-- **Indentation:** Use TAB everywhere, never spaces
+- **Indentation:** Use SPACES everywhere, never tabs
 
 ### Apps (`apps/`)
 
@@ -27,7 +27,7 @@ This repository contains the Axolotl Launcher desktop application and its offici
 | `daedalus`                    | Minecraft metadata protocol              |
 | `ariadne`                     | Social and tunnel protocol types         |
 | `async-minecraft-ping`        | Minecraft server ping client             |
-| `modrinth-content-management` | Content installation model               |
+| `content-management`         | Provider-neutral resource and installation models |
 | `path-util`, `tooling-config` | Shared path and tooling configuration    |
 
 ## Pre-PR Commands

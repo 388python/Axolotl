@@ -1,16 +1,10 @@
 import '../styles/overlays.css'
 
-import {
-	arrow,
-	autoUpdate,
-	computePosition,
-	flip,
-	offset,
-	type Placement,
-	shift,
-} from '@floating-ui/vue'
+import type { Placement } from '@floating-ui/vue'
 import type { ObjectDirective } from 'vue'
 
+import { isElementTruncated } from '../utils/truncate'
+import { acquireTooltipLayer } from './tooltip-layer'
 import { resolveTooltipContent, type TooltipValue } from './tooltip-value'
 
 /**
@@ -32,218 +26,224 @@ import { resolveTooltipContent, type TooltipValue } from './tooltip-value'
 
 /** Matches floating-vue's tooltip theme, so the feel is unchanged. */
 const SHOW_DELAY_MS = 200
-const DISTANCE_PX = 5
 
 const PLACEMENTS = [
-	'top',
-	'top-start',
-	'top-end',
-	'right',
-	'right-start',
-	'right-end',
-	'bottom',
-	'bottom-start',
-	'bottom-end',
-	'left',
-	'left-start',
-	'left-end',
+    'top',
+    'top-start',
+    'top-end',
+    'right',
+    'right-start',
+    'right-end',
+    'bottom',
+    'bottom-start',
+    'bottom-end',
+    'left',
+    'left-start',
+    'left-end',
 ] as const
 
 interface TooltipHandle {
-	/** Called from `updated` with the fresh value; the stored one goes stale. */
-	setValue: (value: TooltipValue) => void
-	destroy: () => void
+    /** Called from `updated` with the fresh value; the stored one goes stale. */
+    setValue: (value: TooltipValue) => void
+    destroy: () => void
 }
 
 function createTooltip(trigger: HTMLElement, modifier: Placement | null): TooltipHandle {
-	const popper = document.createElement('div')
-	popper.className = 'tooltip-popper'
-	popper.setAttribute('role', 'tooltip')
-	// `aria-describedby` has to resolve to a real element, so the id is assigned
-	// once and reused for every show.
-	popper.id = `tooltip-${++tooltipCounter}`
-	const arrowElement = document.createElement('span')
-	arrowElement.className = 'tooltip-popper-arrow'
-	arrowElement.setAttribute('aria-hidden', 'true')
+    const { layer, release } = acquireTooltipLayer(trigger)
+    let value: TooltipValue
+    let showTimer: ReturnType<typeof setTimeout> | null = null
+    let hovered = false
+    let focused = false
+    let disposed = false
+    let resizeObserver: ResizeObserver | undefined
+    let mutationObserver: MutationObserver | undefined
+    let observedTarget: HTMLElement | undefined
+    let measureFrame: number | undefined
 
-	// The value is held here rather than captured from the binding passed to
-	// `mounted`: Vue swaps that binding object on every re-render, so a closure
-	// over it would keep serving the text from the first render.
-	let value: TooltipValue
-	let stopAutoUpdate: (() => void) | null = null
-	let showTimer: ReturnType<typeof setTimeout> | null = null
-	let hovered = false
-	let focused = false
+    function resolvedContent() {
+        const resolved = resolveTooltipContent(value)
+        if (
+            resolved?.options.onlyWhenTruncated &&
+            !isElementTruncated(resolved.options.overflowTarget ?? trigger)
+        )
+            return null
+        return resolved
+    }
 
-	function triggerEnabled(name: 'hover' | 'focus') {
-		const triggers = resolveTooltipContent(value)?.options.triggers
-		return triggers === undefined || triggers.includes(name)
-	}
+    function refreshTruncation() {
+        if (disposed || measureFrame !== undefined) return
+        measureFrame = requestAnimationFrame(() => {
+            measureFrame = undefined
+            measureTruncation()
+        })
+    }
 
-	function hasActiveTrigger() {
-		return (hovered && triggerEnabled('hover')) || (focused && triggerEnabled('focus'))
-	}
+    function measureTruncation() {
+        if (disposed || !observedTarget) return
+        const next = isElementTruncated(observedTarget)
+        if (
+            showTimer === null &&
+            hasActiveTrigger() &&
+            (layer.owns(trigger) || !layer.hasOwner()) &&
+            next !== layer.owns(trigger)
+        )
+            show()
+    }
 
-	function mount() {
-		const resolved = resolveTooltipContent(value)
-		if (!resolved) return
+    function stopObserving() {
+        if (measureFrame !== undefined) cancelAnimationFrame(measureFrame)
+        measureFrame = undefined
+        resizeObserver?.disconnect()
+        mutationObserver?.disconnect()
+        resizeObserver = undefined
+        mutationObserver = undefined
+        observedTarget = undefined
+        document.fonts?.removeEventListener('loadingdone', refreshTruncation)
+    }
 
-		popper.className = resolved.options.popperClass
-			? `tooltip-popper ${resolved.options.popperClass}`
-			: 'tooltip-popper'
+    function observeTruncation() {
+        const options = resolveTooltipContent(value)?.options
+        const target = options?.onlyWhenTruncated ? (options.overflowTarget ?? trigger) : undefined
+        if (target === observedTarget) return
+        stopObserving()
+        if (!target) return
+        observedTarget = target
+        resizeObserver = new ResizeObserver(refreshTruncation)
+        resizeObserver.observe(target)
+        mutationObserver = new MutationObserver(refreshTruncation)
+        mutationObserver.observe(target, {
+            subtree: true,
+            childList: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ['style', 'class'],
+        })
+        for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+            mutationObserver.observe(parent, {
+                attributes: true,
+                attributeFilter: ['style', 'class'],
+            })
+        }
+        document.fonts?.addEventListener('loadingdone', refreshTruncation)
+        void document.fonts?.ready.then(refreshTruncation)
+    }
 
-		if (resolved.options.html) {
-			// Both call sites pass markup that has already been parsed and
-			// sanitised upstream; do not introduce a caller that passes raw input.
-			popper.innerHTML = resolved.text
-		} else {
-			// Text, never markup, so an untrusted string cannot become HTML.
-			popper.textContent = resolved.text
-		}
+    function triggerEnabled(name: 'hover' | 'focus') {
+        const triggers = resolveTooltipContent(value)?.options.triggers
+        return triggers === undefined || triggers.includes(name)
+    }
 
-		popper.appendChild(arrowElement)
-		;(document.getElementById('teleports') ?? document.body).appendChild(popper)
+    function hasActiveTrigger() {
+        return (hovered && triggerEnabled('hover')) || (focused && triggerEnabled('focus'))
+    }
 
-		const placement = modifier ?? resolved.options.placement ?? 'top'
-		void updatePosition(placement)
-		stopAutoUpdate = autoUpdate(trigger, popper, () => void updatePosition(placement))
+    function cancelPendingShow() {
+        if (showTimer === null) return
+        clearTimeout(showTimer)
+        showTimer = null
+    }
 
-		// Announced only while it is actually displayed.
-		trigger.setAttribute('aria-describedby', popper.id)
-	}
+    function show() {
+        cancelPendingShow()
+        if (disposed) return
+        const resolved = resolvedContent()
+        if (resolved) layer.show(trigger, resolved, modifier ?? resolved.options.placement ?? 'top')
+        else layer.leave(trigger, true)
+    }
 
-	async function updatePosition(placement: Placement) {
-		const {
-			x,
-			y,
-			placement: finalPlacement,
-			middlewareData,
-		} = await computePosition(trigger, popper, {
-			placement,
-			// `fixed` so the returned coordinates are viewport-relative, matching
-			// the popper's `position: fixed`.
-			strategy: 'fixed',
-			middleware: [
-				offset(DISTANCE_PX),
-				flip(),
-				shift({ padding: 8 }),
-				arrow({ element: arrowElement, padding: 7 }),
-			],
-		})
-		popper.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`
-		const side = finalPlacement.split('-')[0]
-		arrowElement.dataset.side = side
-		if (side === 'top' || side === 'bottom') {
-			arrowElement.style.left =
-				middlewareData.arrow?.x === undefined ? '' : `${middlewareData.arrow.x}px`
-			arrowElement.style.top = ''
-		} else {
-			arrowElement.style.left = ''
-			arrowElement.style.top =
-				middlewareData.arrow?.y === undefined ? '' : `${middlewareData.arrow.y}px`
-		}
-	}
+    function hide() {
+        cancelPendingShow()
+        layer.leave(trigger)
+    }
 
-	function unmount() {
-		stopAutoUpdate?.()
-		stopAutoUpdate = null
-		popper.remove()
-		trigger.removeAttribute('aria-describedby')
-	}
+    function onEnter() {
+        hovered = true
+        if (!triggerEnabled('hover')) return
+        cancelPendingShow()
+        const request = layer.beginActivation()
+        if (layer.isVisible()) show()
+        else
+            showTimer = setTimeout(() => {
+                showTimer = null
+                if (layer.isCurrentActivation(request) && hasActiveTrigger()) show()
+            }, SHOW_DELAY_MS)
+    }
 
-	function cancelPendingShow() {
-		if (showTimer === null) return
-		clearTimeout(showTimer)
-		showTimer = null
-	}
+    function onLeave() {
+        hovered = false
+        if (!triggerEnabled('hover')) return
+        if (!hasActiveTrigger()) hide()
+    }
 
-	function show() {
-		cancelPendingShow()
-		if (popper.isConnected) unmount()
-		if (resolveTooltipContent(value)) mount()
-	}
+    function onFocusIn() {
+        focused = true
+        if (triggerEnabled('focus')) {
+            layer.beginActivation()
+            show()
+        }
+    }
 
-	function hide() {
-		cancelPendingShow()
-		unmount()
-	}
+    function onFocusOut(event: FocusEvent) {
+        if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return
+        focused = false
+        if (triggerEnabled('focus') && !hasActiveTrigger()) hide()
+    }
 
-	function onEnter() {
-		hovered = true
-		if (!triggerEnabled('hover')) return
-		cancelPendingShow()
-		showTimer = setTimeout(() => {
-			showTimer = null
-			show()
-		}, SHOW_DELAY_MS)
-	}
+    trigger.addEventListener('mouseenter', onEnter)
+    trigger.addEventListener('mouseleave', onLeave)
+    trigger.addEventListener('focusin', onFocusIn)
+    trigger.addEventListener('focusout', onFocusOut)
 
-	function onLeave() {
-		hovered = false
-		if (!triggerEnabled('hover')) return
-		if (!hasActiveTrigger()) hide()
-	}
-
-	function onFocusIn() {
-		focused = true
-		if (triggerEnabled('focus')) show()
-	}
-
-	function onFocusOut(event: FocusEvent) {
-		if (event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget)) return
-		focused = false
-		if (triggerEnabled('focus') && !hasActiveTrigger()) hide()
-	}
-
-	trigger.addEventListener('mouseenter', onEnter)
-	trigger.addEventListener('mouseleave', onLeave)
-	trigger.addEventListener('focusin', onFocusIn)
-	trigger.addEventListener('focusout', onFocusOut)
-
-	return {
-		setValue(next) {
-			value = next
-			// Only re-render when something is actually on screen, so an update to
-			// a closed tooltip costs nothing.
-			if (hasActiveTrigger()) show()
-			else if (popper.isConnected) hide()
-		},
-		destroy() {
-			cancelPendingShow()
-			unmount()
-			trigger.removeEventListener('mouseenter', onEnter)
-			trigger.removeEventListener('mouseleave', onLeave)
-			trigger.removeEventListener('focusin', onFocusIn)
-			trigger.removeEventListener('focusout', onFocusOut)
-		},
-	}
+    return {
+        setValue(next) {
+            value = next
+            observeTruncation()
+            // Only re-render when something is actually on screen, so an update to
+            // a closed tooltip costs nothing.
+            if (
+                showTimer === null &&
+                hasActiveTrigger() &&
+                (layer.owns(trigger) || !layer.hasOwner())
+            )
+                show()
+            else if (!hasActiveTrigger()) hide()
+        },
+        destroy() {
+            disposed = true
+            stopObserving()
+            cancelPendingShow()
+            release()
+            trigger.removeEventListener('mouseenter', onEnter)
+            trigger.removeEventListener('mouseleave', onLeave)
+            trigger.removeEventListener('focusin', onFocusIn)
+            trigger.removeEventListener('focusout', onFocusOut)
+        },
+    }
 }
-
-let tooltipCounter = 0
 
 const handles = new WeakMap<HTMLElement, TooltipHandle>()
 
 function placementModifierOf(modifiers: Record<string, boolean>): Placement | null {
-	return (PLACEMENTS.find((name) => modifiers[name]) as Placement | undefined) ?? null
+    return (PLACEMENTS.find((name) => modifiers[name]) as Placement | undefined) ?? null
 }
 
 export const tooltipDirective: ObjectDirective<HTMLElement, TooltipValue> = {
-	mounted(el, binding) {
-		const handle = createTooltip(el, placementModifierOf(binding.modifiers))
-		handles.set(el, handle)
-		handle.setValue(binding.value)
-	},
+    mounted(el, binding) {
+        const handle = createTooltip(el, placementModifierOf(binding.modifiers))
+        handles.set(el, handle)
+        handle.setValue(binding.value)
+    },
 
-	updated(el, binding) {
-		const handle = handles.get(el)
-		if (!handle) return
-		if (binding.value === binding.oldValue) return
+    updated(el, binding) {
+        const handle = handles.get(el)
+        if (!handle) return
+        if (binding.value === binding.oldValue) return
 
-		handle.setValue(binding.value)
-	},
+        handle.setValue(binding.value)
+    },
 
-	unmounted(el) {
-		handles.get(el)?.destroy()
-		handles.delete(el)
-	},
+    unmounted(el) {
+        handles.get(el)?.destroy()
+        handles.delete(el)
+    },
 }

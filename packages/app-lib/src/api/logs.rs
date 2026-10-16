@@ -450,8 +450,7 @@ async fn maybe_emit_log_display_truncation_warning(
     }
 
     let _ = crate::event::emit::emit_warning(&format!(
-        "Axolotl Launcher truncated {} before displaying it to keep the console responsive. The original log file remains unchanged.",
-        file_name,
+        "Axolotl Launcher truncated {file_name} before displaying it to keep the console responsive. The original log file remains unchanged.",
     ))
     .await;
 }
@@ -972,7 +971,7 @@ mod tests {
 
     #[test]
     fn display_compaction_bounds_many_distinct_lines() {
-        let log = (0..100_000)
+        let log = (0..300_000)
             .map(|index| format!("line-{index}\n"))
             .collect::<String>();
 

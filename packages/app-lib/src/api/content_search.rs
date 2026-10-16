@@ -195,6 +195,13 @@ pub fn lookup_content_identities(
         ) else {
             continue;
         };
+        let requested_mr =
+            requested_modrinth.get(&modrinth_slug.to_lowercase());
+        let requested_cf =
+            requested_curseforge.get(&curseforge_slug.to_lowercase());
+        if requested_mr.is_none() && requested_cf.is_none() {
+            continue;
+        }
         let key = format!("mapping:{}", entry.wiki_id);
         let counterparts = vec![
             ContentIdentityCounterpart {
@@ -212,14 +219,10 @@ pub fn lookup_content_identities(
             key: key.clone(),
             counterparts,
         };
-        if let Some(original) =
-            requested_modrinth.get(&modrinth_slug.to_lowercase())
-        {
+        if let Some(original) = requested_mr {
             push_identity_record(&mut modrinth, original, &record);
         }
-        if let Some(original) =
-            requested_curseforge.get(&curseforge_slug.to_lowercase())
-        {
+        if let Some(original) = requested_cf {
             push_identity_record(&mut curseforge, original, &record);
         }
     }
@@ -582,7 +585,7 @@ fn segment_compact_query(compact: &str) -> Option<String> {
     Some(parts.join(" "))
 }
 
-fn longest_prefix_word<'a>(value: &'a str) -> Option<(&'a str, &'a str)> {
+fn longest_prefix_word(value: &str) -> Option<(&str, &str)> {
     SEARCHER_WORDS.iter().find_map(|word| {
         value.strip_prefix(word).map(|rest| (word.as_str(), rest))
     })

@@ -1,4 +1,10 @@
 {
+  "app.account.modrinth-account": {
+    "message": "Modrinth account"
+  },
+  "app.account.sign-in-modrinth": {
+    "message": "Sign in to a Modrinth account"
+  },
   "app.account.signed-in-as": {
     "message": "Signed in as"
   },
@@ -64,6 +70,48 @@
   },
   "app.action-bar.downloads": {
     "message": "Downloads"
+  },
+  "app.action-bar.downloads.cancel": {
+    "message": "Cancel download"
+  },
+  "app.action-bar.downloads.empty": {
+    "message": "No active downloads"
+  },
+  "app.action-bar.downloads.legacy": {
+    "message": "A download is in progress."
+  },
+  "app.action-bar.downloads.phase.downloading-content": {
+    "message": "Downloading content"
+  },
+  "app.action-bar.downloads.phase.downloading-minecraft": {
+    "message": "Downloading Minecraft"
+  },
+  "app.action-bar.downloads.phase.downloading-pack": {
+    "message": "Downloading modpack"
+  },
+  "app.action-bar.downloads.phase.finalizing": {
+    "message": "Finalizing"
+  },
+  "app.action-bar.downloads.phase.preparing-instance": {
+    "message": "Preparing instance"
+  },
+  "app.action-bar.downloads.phase.preparing-java": {
+    "message": "Preparing Java"
+  },
+  "app.action-bar.downloads.phase.resolving-pack": {
+    "message": "Resolving modpack"
+  },
+  "app.action-bar.downloads.phase.unknown": {
+    "message": "Working"
+  },
+  "app.action-bar.downloads.phase.verifying": {
+    "message": "Verifying"
+  },
+  "app.action-bar.downloads.view-details": {
+    "message": "View details"
+  },
+  "app.action-bar.downloads.view-history": {
+    "message": "View download history"
   },
   "app.action-bar.exporting-modpack": {
     "message": "Exporting modpack"
@@ -488,12 +536,6 @@
   "app.appearance-settings.advanced-rendering.title": {
     "message": "Advanced rendering"
   },
-  "app.appearance-settings.auto-hide-downloads-button.description": {
-    "message": "Hide the downloads button in the sidebar when there are no active download tasks."
-  },
-  "app.appearance-settings.auto-hide-downloads-button.title": {
-    "message": "Auto-hide downloads button"
-  },
   "app.appearance-settings.auto-install-dependencies.description": {
     "message": "Download required dependencies when installing content. You can adjust the selection in the confirmation dialog before each install."
   },
@@ -824,6 +866,9 @@
   "app.browse.back-to-instance": {
     "message": "Back to instance"
   },
+  "app.browse.categories-failed": {
+    "message": "CurseForge categories could not be loaded. Try again later."
+  },
   "app.browse.choose-instance": {
     "message": "Choose instance"
   },
@@ -947,8 +992,14 @@
   "app.browse.server-instance-content-warning": {
     "message": "Adding content can break compatibility when joining the server. Any added content will also be lost when you update the server instance content."
   },
+  "app.browse.server-source-unavailable": {
+    "message": "The server content source is unavailable. Try again later."
+  },
   "app.browse.server.installing": {
     "message": "Installing"
+  },
+  "app.browse.source-failed": {
+    "message": "{source} could not return results for this search. Check the filters or try again later."
   },
   "app.browse.source.all": {
     "message": "All sources"
@@ -1030,6 +1081,45 @@
   },
   "app.content-install.dependencies-skipped.notification-title": {
     "message": "Some dependencies were skipped"
+  },
+  "app.content-install.error.failed": {
+    "message": "Could not install the selected content."
+  },
+  "app.content-install.error.invalid-curseforge-project": {
+    "message": "The CurseForge project reference is invalid. Reopen the project and try again."
+  },
+  "app.content-install.error.missing-curseforge-file": {
+    "message": "The selected CurseForge project or file is unavailable. Reopen the project and try again."
+  },
+  "app.content-install.error.missing-game-version": {
+    "message": "This CurseForge modpack does not specify a Minecraft version."
+  },
+  "app.content-install.error.missing-target": {
+    "message": "The selected project or instance is no longer available."
+  },
+  "app.content-install.error.missing-version": {
+    "message": "The selected release is no longer available."
+  },
+  "app.content-install.error.no-curseforge-files": {
+    "message": "This CurseForge project has no available files."
+  },
+  "app.content-install.error.preview-unavailable": {
+    "message": "The installation preview is unavailable. Reopen the project and try again."
+  },
+  "app.content-install.error.project-not-found": {
+    "message": "Could not find project {project}."
+  },
+  "app.content-install.error.reinstall-unavailable": {
+    "message": "The selected CurseForge modpack release is unavailable for reinstallation."
+  },
+  "app.content-install.error.review-required": {
+    "message": "Review the content changes before installing."
+  },
+  "app.content-install.error.unsupported-provider": {
+    "message": "This content source cannot be used for this installation."
+  },
+  "app.content-install.error.unsupported-type": {
+    "message": "This content type cannot be installed here."
   },
   "app.content-install.no-compatible-versions": {
     "message": "No available versions match {compatibilityLabel}. Select a version to install anyway. Matching dependencies will still be installed."
@@ -1166,29 +1256,26 @@
   "app.content-install.preview.view-details": {
     "message": "View details"
   },
+  "app.content-install.retained-instance.description": {
+    "message": "{name} was created. The content installation was cancelled; you can manage or remove the instance from your library."
+  },
+  "app.content-install.retained-instance.title": {
+    "message": "Created instance retained"
+  },
   "app.content-selection.conflict-unavailable": {
     "message": "Could not verify whether this content duplicates another source."
-  },
-  "app.content-selection.dependency-conflict": {
-    "message": "{dependency} resolves to conflicting versions in this selection."
   },
   "app.content-selection.duplicate-content": {
     "message": "{project} is already installed or selected from another source."
   },
+  "app.content-selection.no-target": {
+    "message": "Select a target instance before adding content."
+  },
   "app.content-selection.preview-failed": {
     "message": "Some selected content could not be prepared. Remove it or try again."
   },
-  "app.content-selection.queue-failed": {
-    "message": "Some content could not be added to the install queue. It remains selected."
-  },
   "app.content-selection.target-changed": {
     "message": "The selected content belongs to another instance. Switch back or clear it first."
-  },
-  "app.content-selection.unknown-dependency": {
-    "message": "Dependency {id}"
-  },
-  "app.content-selection.unknown-reason": {
-    "message": "Could not be resolved"
   },
   "app.content.add-from-file": {
     "message": "Add from file"
@@ -1631,6 +1718,9 @@
   "app.downloads.phase.downloading-pack-file": {
     "message": "Downloading modpack"
   },
+  "app.downloads.phase.exporting": {
+    "message": "Exporting selected files"
+  },
   "app.downloads.phase.extracting-overrides": {
     "message": "Extracting overrides"
   },
@@ -1678,6 +1768,9 @@
   },
   "app.downloads.progress": {
     "message": "Progress"
+  },
+  "app.downloads.retired-source": {
+    "message": "This download source has been retired. Resolve the file again or choose a verified local file."
   },
   "app.downloads.retry": {
     "message": "Retry"
@@ -1753,6 +1846,12 @@
   },
   "app.drop.batch.target-label": {
     "message": "Select target instance for this batch"
+  },
+  "app.drop.compatibility-review-warning": {
+    "message": "{file} targets {modVersion} ({modLoader}); the instance is {instVersion} ({instLoader}). Minecraft: {gameState, select, compatible {compatible} incompatible {incompatible} other {unknown}}; loader: {loaderState, select, compatible {compatible} incompatible {incompatible} other {unknown}}. Confirm to import this file with these compatibility exceptions."
+  },
+  "app.drop.compatibility.unknown": {
+    "message": "Unknown"
   },
   "app.drop.compatible-mode-cancel": {
     "message": "Cancel"
@@ -2045,9 +2144,6 @@
   "app.error.try-sign-in-again": {
     "message": "Try signing in again"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Enter modpack description..."
-  },
   "app.export-modal.export-button": {
     "message": "Export"
   },
@@ -2057,20 +2153,191 @@
   "app.export-modal.export-complete-description": {
     "message": "{name} was exported successfully."
   },
-  "app.export-modal.header": {
-    "message": "Export modpack"
-  },
   "app.export-modal.modpack-name-label": {
-    "message": "Modpack name"
-  },
-  "app.export-modal.modpack-name-placeholder": {
     "message": "Modpack name"
   },
   "app.export-modal.version-number-label": {
     "message": "Version number"
   },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
+  "app.export.analyzed": {
+    "message": "Background verification finished. Unmatched selected files will be embedded."
+  },
+  "app.export.analyzing": {
+    "message": "Verifying exportable files and refreshing exact source matches…"
+  },
+  "app.export.author": {
+    "message": "Author (optional)"
+  },
+  "app.export.cancel": {
+    "message": "Cancel export"
+  },
+  "app.export.canceled": {
+    "message": "Export canceled. The previous output was preserved."
+  },
+  "app.export.categories": {
+    "message": "Choose categories"
+  },
+  "app.export.category-hint": {
+    "message": "Choose what to include, then adjust individual files on the next step."
+  },
+  "app.export.category.defaultConfig": {
+    "message": "Default configuration"
+  },
+  "app.export.category.emiRecords": {
+    "message": "EMI personal records"
+  },
+  "app.export.category.gameSettings": {
+    "message": "Game settings"
+  },
+  "app.export.category.importantData": {
+    "message": "Scripts, data packs and important resources"
+  },
+  "app.export.category.jeiRecords": {
+    "message": "JEI personal records"
+  },
+  "app.export.category.mapRecords": {
+    "message": "Personal maps and waypoints"
+  },
+  "app.export.category.modConfig": {
+    "message": "Mod configuration"
+  },
+  "app.export.category.mods": {
+    "message": "Mods and plugins"
+  },
+  "app.export.category.oldResources": {
+    "message": "Disabled and old resources"
+  },
+  "app.export.category.optifine": {
+    "message": "OptiFine settings"
+  },
+  "app.export.category.other": {
+    "message": "Other folders and root files"
+  },
+  "app.export.category.patchouliRecords": {
+    "message": "Patchouli personal records"
+  },
+  "app.export.category.personalRecords": {
+    "message": "Personal game records"
+  },
+  "app.export.category.recordings": {
+    "message": "Replays and videos"
+  },
+  "app.export.category.resourcePacks": {
+    "message": "Resource packs"
+  },
+  "app.export.category.schematics": {
+    "message": "Schematics"
+  },
+  "app.export.category.screenshots": {
+    "message": "Screenshots"
+  },
+  "app.export.category.servers": {
+    "message": "Server list"
+  },
+  "app.export.category.shaders": {
+    "message": "Shader packs and settings"
+  },
+  "app.export.category.worlds": {
+    "message": "World saves"
+  },
+  "app.export.check-attention": {
+    "message": "Some files need attention. Review them before export, or let the export task retry verification."
+  },
+  "app.export.count": {
+    "message": "{count, plural, one {# file} other {# files}} · {size}"
+  },
+  "app.export.embed-failure": {
+    "message": "Embed this file and continue despite the failed source request"
+  },
+  "app.export.excluded": {
+    "message": "{count, plural, one {# protected path excluded} other {# protected paths excluded}}. Authentication files, runtime libraries and symbolic links cannot be exported."
+  },
+  "app.export.failed": {
+    "message": "Export failed. Retry analysis before exporting again."
+  },
+  "app.export.failed-analysis": {
+    "message": "Some files could not be resolved. Retry, or explicitly embed the files with failed source requests."
+  },
+  "app.export.file-hint": {
+    "message": "Folder checkboxes include all files in the snapshot, even unopened subfolders. Manual exclusions are kept when you change categories."
+  },
+  "app.export.files": {
+    "message": "Adjust files"
+  },
+  "app.export.finalizing-analysis": {
+    "message": "Preparing verification results…"
+  },
+  "app.export.format": {
+    "message": "Export format"
+  },
+  "app.export.format-hint": {
+    "message": "Modrinth references matched MR files; generic ZIP uses verified public links; CurseForge references matched CF files. Other selected files are embedded."
+  },
+  "app.export.format.curseForge": {
+    "message": "CurseForge ZIP (.zip)"
+  },
+  "app.export.format.genericZip": {
+    "message": "Generic ZIP (.zip)"
+  },
+  "app.export.format.modrinth": {
+    "message": "Modrinth standard (.mrpack)"
+  },
+  "app.export.local-failure": {
+    "message": "This local file could not be read. Retry or remove it from the file selection."
+  },
+  "app.export.next": {
+    "message": "Next"
+  },
+  "app.export.no-files": {
+    "message": "This instance has no exportable files."
+  },
+  "app.export.package": {
+    "message": "Package information"
+  },
+  "app.export.queued": {
+    "message": "Export queued"
+  },
+  "app.export.queued-description": {
+    "message": "{name} will finish verification and export in Downloads."
+  },
+  "app.export.requirements": {
+    "message": "Game and loader requirements"
+  },
+  "app.export.requirements-description": {
+    "message": "Included in the manifest. Game files and runtime libraries are excluded."
+  },
+  "app.export.restore": {
+    "message": "Restore category selection"
+  },
+  "app.export.retry": {
+    "message": "Retry scan"
+  },
+  "app.export.retry-analysis": {
+    "message": "Retry analysis"
+  },
+  "app.export.scan": {
+    "message": "Scanning local files…"
+  },
+  "app.export.scan-failed": {
+    "message": "Could not scan the instance files"
+  },
+  "app.export.search": {
+    "message": "Search file paths"
+  },
+  "app.export.selected": {
+    "message": "Selected files"
+  },
+  "app.export.selection": {
+    "message": "{count, plural, one {# file selected} other {# files selected}} · {size}"
+  },
+  "app.export.verify-local": {
+    "message": "Verifying exportable local files…"
+  },
+  "app.export.verify-source": {
+    "message": "Verifying exact matches on {source}…"
+  },
+  "app.export.writing": {
+    "message": "Writing the export archive…"
   },
   "app.gc-notice.fallback": {
     "message": "Java did not accept {preferred}; using {chosen}."
@@ -2636,6 +2903,15 @@
   "app.initialization.quit": {
     "message": "Quit launcher"
   },
+  "app.install.phase.applying-content": {
+    "message": "Applying content"
+  },
+  "app.install.phase.completed": {
+    "message": "Completed"
+  },
+  "app.install.phase.creating-backup": {
+    "message": "Creating backup"
+  },
   "app.install.phase.downloading_content": {
     "message": "Downloading content"
   },
@@ -2690,6 +2966,18 @@
   "app.install.phase.running_loader_processors": {
     "message": "Running loader processors"
   },
+  "app.install.phase.staging-content": {
+    "message": "Staging content"
+  },
+  "app.install.phase.unknown": {
+    "message": "Working"
+  },
+  "app.install.phase.updating-loader": {
+    "message": "Updating loader"
+  },
+  "app.install.phase.verifying": {
+    "message": "Verifying files"
+  },
   "app.instance-item.already-open": {
     "message": "Instance is already open"
   },
@@ -2731,6 +3019,9 @@
   },
   "app.instance.confirm-delete.symlink-warning": {
     "message": "This is a shared instance linked to \"{path}\". Only the link will be removed; the original files will not be deleted."
+  },
+  "app.instance.content.versions-failed": {
+    "message": "The release list could not be loaded. Reopen the version selector and try again."
   },
   "app.instance.copy-links": {
     "message": "Copy links"
@@ -3188,6 +3479,12 @@
   "app.instance.mods.bulk-update.resolving-versions": {
     "message": "Resolving versions..."
   },
+  "app.instance.mods.content-history-warning.body": {
+    "message": "Local content is still complete and can be managed. Rollback or cleanup details may be temporarily unavailable."
+  },
+  "app.instance.mods.content-history-warning.title": {
+    "message": "Some local history details are unavailable"
+  },
   "app.instance.mods.content-operation-timeout": {
     "message": "Timed out waiting for another content operation to finish. Try again."
   },
@@ -3209,6 +3506,9 @@
   "app.instance.mods.file-already-exists": {
     "message": "Failed to add. The file may already exist"
   },
+  "app.instance.mods.manage-backups": {
+    "message": "Old files and backups"
+  },
   "app.instance.mods.missing-files-warning.body": {
     "message": "The required files below were not downloaded or are no longer present. Restore them individually; refreshing scans the instance folder again."
   },
@@ -3229,6 +3529,12 @@
   },
   "app.instance.mods.pack-member-removed": {
     "message": "This modpack file was removed locally"
+  },
+  "app.instance.mods.pack-reconciliation-warning.body": {
+    "message": "Existing files and ownership have been kept. Retry refreshing to verify missing or manually downloaded modpack files."
+  },
+  "app.instance.mods.pack-reconciliation-warning.title": {
+    "message": "Modpack file information could not be refreshed"
   },
   "app.instance.mods.parse-failed": {
     "message": "Failed to parse. This may not be a modpack"
@@ -3304,6 +3610,9 @@
   },
   "app.instance.mods.toggle-dependencies.will-enable": {
     "message": "The following content will be enabled:"
+  },
+  "app.instance.mods.unconfirmed-unlink-history": {
+    "message": "Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly."
   },
   "app.instance.mods.update-added-content": {
     "message": "Update added content"
@@ -3452,11 +3761,26 @@
   "app.instances.batch-edit-groups.header": {
     "message": "Create group"
   },
+  "app.instances.batch-edit-groups.load-failed": {
+    "message": "Could not load instances. Try again."
+  },
+  "app.instances.batch-edit-groups.loading": {
+    "message": "Loading instances…"
+  },
+  "app.instances.batch-edit-groups.membership-failed": {
+    "message": "The group was created, but its instances could not be saved. Retry to finish saving your changes."
+  },
   "app.instances.batch-edit-groups.no-instances-found": {
     "message": "No instances found"
   },
+  "app.instances.batch-edit-groups.retry": {
+    "message": "Retry"
+  },
   "app.instances.batch-edit-groups.save-changes": {
     "message": "Save"
+  },
+  "app.instances.batch-edit-groups.save-failed": {
+    "message": "Could not save the group. Your changes are kept; try again."
   },
   "app.instances.batch-edit-groups.search-instance": {
     "message": "Search instances"
@@ -3592,6 +3916,45 @@
   },
   "app.instances.view-instance": {
     "message": "View instance"
+  },
+  "app.java-arguments.gc.reason.ample-memory-high-cores": {
+    "message": "Ample memory and high CPU core count"
+  },
+  "app.java-arguments.gc.reason.below-zgc-recommendation": {
+    "message": "Resources below ZGC recommendation"
+  },
+  "app.java-arguments.gc.reason.heavy-instance": {
+    "message": "Heavy instance ({loader}, {mods} mods)"
+  },
+  "app.java-arguments.gc.reason.high-resources": {
+    "message": "High resources ({memory}GB, {cores} cores)"
+  },
+  "app.java-arguments.gc.reason.insufficient-cpu": {
+    "message": "Insufficient CPU ({cores} cores / {threads} threads)"
+  },
+  "app.java-arguments.gc.reason.insufficient-memory": {
+    "message": "Insufficient memory ({allocated}GB < 4GB)"
+  },
+  "app.java-arguments.gc.reason.java-too-old": {
+    "message": "Java too old; Shenandoah/ZGC unreliable"
+  },
+  "app.java-arguments.gc.reason.java-version-unknown": {
+    "message": "Java version unknown"
+  },
+  "app.java-arguments.gc.reason.large-modpack-low-memory": {
+    "message": "Large modpack ({mods} mods) but insufficient memory ({allocated}GB < 8GB)"
+  },
+  "app.java-arguments.gc.reason.lightweight-instance": {
+    "message": "Lightweight instance ({loader}, {mods} mods)"
+  },
+  "app.java-arguments.gc.reason.low-resources": {
+    "message": "Low resources ({memory}GB, {cores} cores)"
+  },
+  "app.java-arguments.gc.reason.medium-resources": {
+    "message": "Medium resources ({memory}GB, {cores} cores)"
+  },
+  "app.java-arguments.gc.reason.zgc-non-generational": {
+    "message": "Java < 21; non-generational ZGC performs poorly"
   },
   "app.java-arguments.presets.applied": {
     "message": "Applied"
@@ -3977,6 +4340,12 @@
   "app.lab.mod-translation.completed-count": {
     "message": "{count} completed"
   },
+  "app.lab.mod-translation.copy-diagnostics": {
+    "message": "Copy diagnostics"
+  },
+  "app.lab.mod-translation.copy-diagnostics-info": {
+    "message": "Copy diagnostic information"
+  },
   "app.lab.mod-translation.description": {
     "message": "Translate any Minecraft mod JAR into Simplified Chinese."
   },
@@ -4064,11 +4433,38 @@
   "app.lab.mod-translation.preparing": {
     "message": "Preparing…"
   },
+  "app.lab.mod-translation.progress.current-batch": {
+    "message": "Batch {completed} / {total}"
+  },
+  "app.lab.mod-translation.progress.recently-written": {
+    "message": "Recently written"
+  },
+  "app.lab.mod-translation.progress.verified-weights": {
+    "message": "Verified {verified} / {total}"
+  },
+  "app.lab.mod-translation.progress.workload-measuring": {
+    "message": "Establishing a verifiable workload…"
+  },
   "app.lab.mod-translation.provider": {
     "message": "AI provider"
   },
   "app.lab.mod-translation.repair-enabled": {
     "message": "Repair difficult translations after verification"
+  },
+  "app.lab.mod-translation.result.changed-files": {
+    "message": "Changed files: {files}"
+  },
+  "app.lab.mod-translation.result.class-text": {
+    "message": "Class text"
+  },
+  "app.lab.mod-translation.result.completed": {
+    "message": "Translation complete"
+  },
+  "app.lab.mod-translation.result.completed-warnings": {
+    "message": "Generated, but some text is still uncovered"
+  },
+  "app.lab.mod-translation.result.mod-label": {
+    "message": "Mod"
   },
   "app.lab.mod-translation.select-file": {
     "message": "Choose a mod JAR"
@@ -4081,6 +4477,15 @@
   },
   "app.lab.mod-translation.start-hint": {
     "message": "Choose a JAR and an AI model to start."
+  },
+  "app.lab.mod-translation.technical-details": {
+    "message": "Technical details"
+  },
+  "app.lab.mod-translation.timeline.empty": {
+    "message": "Waiting for processing events…"
+  },
+  "app.lab.mod-translation.timeline.title": {
+    "message": "Processing timeline ({count})"
   },
   "app.lab.mod-translation.title": {
     "message": "Mod translation"
@@ -5517,13 +5922,13 @@
     "message": "{count} tools"
   },
   "app.library.context-menu.pin-instance": {
-    "message": "Pin instance"
+    "message": "Pin in Library"
   },
   "app.library.context-menu.remove-from-group": {
     "message": "Remove from group"
   },
   "app.library.context-menu.unpin-instance": {
-    "message": "Unpin instance"
+    "message": "Unpin from Library"
   },
   "app.library.create-instance": {
     "message": "Create new instance"
@@ -6359,6 +6764,9 @@
   "app.navigation.worlds": {
     "message": "Worlds"
   },
+  "app.notification.error-occurred": {
+    "message": "An error occurred"
+  },
   "app.notification.export-error-logs": {
     "message": "Export error logs"
   },
@@ -6441,7 +6849,7 @@
     "message": "Set the vibe"
   },
   "app.onboarding.browse.description": {
-    "message": "Use types, search, and filters to narrow things down. Project pages keep versions, changelogs, galleries, and install options in one place."
+    "message": "Search available sources together. Matching titles are candidates until their files are verified. Project pages keep versions, changelogs, galleries, and install options in one place. Installation previews expand required dependencies; use + to add an optional dependency and resolve its requirements. When automatic dependency installation is off, use + to explicitly add missing required dependencies."
   },
   "app.onboarding.browse.title": {
     "message": "Search with receipts"
@@ -6531,13 +6939,13 @@
     "message": "Your Home, your layout"
   },
   "app.onboarding.instance-actions.description": {
-    "message": "Launch, stop, repair, configure, export, or open the instance from its header."
+    "message": "Launch, stop, repair, configure, export, or open the instance from its header. Export verifies all exportable files once in the background while you choose categories, adjust files, and fill in package information. Changing selections reuses that verification. You can queue the export before verification finishes and follow its progress in Downloads."
   },
   "app.onboarding.instance-actions.title": {
     "message": "The main controls"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Tidy chaos."
+    "message": "Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Mod updates and version switches queue directly without resolving dependencies. New installations use a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes."
   },
   "app.onboarding.instance-tabs.title": {
     "message": "The rest of the workshop"
@@ -6618,7 +7026,7 @@
     "message": "Your data, your call"
   },
   "app.onboarding.resources.description": {
-    "message": "Choose how content downloads and installs, from download sources to safety checks."
+    "message": "Choose how content downloads and installs, including your preferred resource source. Modrinth is the default; changing the description source only changes what you read."
   },
   "app.onboarding.resources.title": {
     "message": "Do not cook the computer"
@@ -6665,6 +7073,12 @@
   "app.onboarding.welcome.title": {
     "message": "Everything is ready"
   },
+  "app.page-path.copied": {
+    "message": "Copied"
+  },
+  "app.page-path.copy": {
+    "message": "Copy page path"
+  },
   "app.privacy-consent.continue": {
     "message": "Save and continue"
   },
@@ -6689,6 +7103,33 @@
   "app.privacy-consent.title": {
     "message": "Privacy & security"
   },
+  "app.privileged-consent.acknowledge": {
+    "message": "I understand the risks and want to enable privileged link actions"
+  },
+  "app.privileged-consent.confirm": {
+    "message": "Enable"
+  },
+  "app.privileged-consent.danger": {
+    "message": "External links will be able to change settings (theme, launch commands, directories, network options, etc.) and stop running games. You will still confirm each action before it executes."
+  },
+  "app.privileged-consent.title": {
+    "message": "Enable privileged link actions?"
+  },
+  "app.privileged-consent.warning": {
+    "message": "These actions can change security-sensitive settings and stop games"
+  },
+  "app.privileged-modal.applied": {
+    "message": "Privileged link applied"
+  },
+  "app.privileged-modal.no-processes": {
+    "message": "No running game processes for this instance"
+  },
+  "app.privileged-modal.stopped": {
+    "message": "Stop request sent"
+  },
+  "app.project.coming-soon": {
+    "message": "Coming soon"
+  },
   "app.project.curseforge.unavailable-description": {
     "message": "The CurseForge project did not return any data."
   },
@@ -6712,6 +7153,9 @@
   },
   "app.project.install-context.install-content-to-instance": {
     "message": "Install content to instance"
+  },
+  "app.project.load-failed": {
+    "message": "The project could not be loaded. Try again."
   },
   "app.project.mcarchive.install": {
     "message": "Install"
@@ -6748,6 +7192,9 @@
   },
   "app.project.mcarchive.source": {
     "message": "MCArchive source"
+  },
+  "app.project.mcarchive.unavailable": {
+    "message": "This MCArchive project is unavailable. Reopen the project and try again."
   },
   "app.project.mcarchive.versions": {
     "message": "Versions"
@@ -6793,6 +7240,9 @@
   },
   "app.project.planet-minecraft.manual.title": {
     "message": "Manual download required"
+  },
+  "app.project.planet-minecraft.unavailable": {
+    "message": "This Planet Minecraft project is unavailable. Reopen the project and try again."
   },
   "app.project.planet-minecraft.unknown-file": {
     "message": "Downloaded file"
@@ -6859,6 +7309,321 @@
   },
   "app.remote-announcements.view": {
     "message": "View announcement"
+  },
+  "app.resources.backups.back": {
+    "message": "Back to selection"
+  },
+  "app.resources.backups.close": {
+    "message": "Close"
+  },
+  "app.resources.backups.confirm": {
+    "message": "Delete these backups"
+  },
+  "app.resources.backups.description": {
+    "message": "Review old files before removing them. Verified backups can restore a previous installation."
+  },
+  "app.resources.backups.empty": {
+    "message": "No old files or rollback backups found."
+  },
+  "app.resources.backups.failed": {
+    "message": "{count, number} files could not be deleted. Scan again to check their state."
+  },
+  "app.resources.backups.file-size": {
+    "message": "{size, number} bytes"
+  },
+  "app.resources.backups.filter.all": {
+    "message": "All files"
+  },
+  "app.resources.backups.filter.old": {
+    "message": "Other old files"
+  },
+  "app.resources.backups.filter.rollback": {
+    "message": "Rollback backups"
+  },
+  "app.resources.backups.invalid": {
+    "message": "Recorded backup unavailable for rollback"
+  },
+  "app.resources.backups.loading": {
+    "message": "Checking old files…"
+  },
+  "app.resources.backups.missing": {
+    "message": "File missing"
+  },
+  "app.resources.backups.no-matches": {
+    "message": "No files match your search or filter."
+  },
+  "app.resources.backups.orphan": {
+    "message": "Old file without an available rollback"
+  },
+  "app.resources.backups.removed": {
+    "message": "{count, number} files deleted."
+  },
+  "app.resources.backups.review": {
+    "message": "Review selected cleanup"
+  },
+  "app.resources.backups.review-size": {
+    "message": "{count, plural, one {Delete # file} other {Delete # files}} · {size}"
+  },
+  "app.resources.backups.review-title": {
+    "message": "Confirm backup cleanup"
+  },
+  "app.resources.backups.scan": {
+    "message": "Scan again"
+  },
+  "app.resources.backups.search": {
+    "message": "Search file names or paths…"
+  },
+  "app.resources.backups.select-visible": {
+    "message": "Select available files"
+  },
+  "app.resources.backups.selected-size": {
+    "message": "{count, number} selected · {size}"
+  },
+  "app.resources.backups.summary": {
+    "message": "{count, number} selected · {size, number} bytes"
+  },
+  "app.resources.backups.title": {
+    "message": "Old files and rollback backups"
+  },
+  "app.resources.backups.unknown": {
+    "message": "Unknown old file — cleanup unavailable"
+  },
+  "app.resources.backups.valid": {
+    "message": "Verified rollback backup"
+  },
+  "app.resources.backups.warning": {
+    "message": "Deleting these files permanently removes {count, number} available rollback backups. Current installed files are kept."
+  },
+  "app.resources.changelog.empty": {
+    "message": "No changelog was provided for this release."
+  },
+  "app.resources.changelog.exhausted": {
+    "message": "This source’s release pagination limit has been reached."
+  },
+  "app.resources.changelog.failed": {
+    "message": "The changelog could not be loaded."
+  },
+  "app.resources.changelog.list-failed": {
+    "message": "Releases could not be loaded."
+  },
+  "app.resources.changelog.more": {
+    "message": "Load more releases"
+  },
+  "app.resources.changelog.no-releases": {
+    "message": "No releases are available."
+  },
+  "app.resources.changelog.original": {
+    "message": "Show original"
+  },
+  "app.resources.changelog.title": {
+    "message": "Changelog"
+  },
+  "app.resources.changelog.translate": {
+    "message": "Translate changelog"
+  },
+  "app.resources.changelog.translation-failed": {
+    "message": "Translation failed. The original changelog is still available."
+  },
+  "app.resources.changelog.unsupported": {
+    "message": "This source does not provide release changelogs."
+  },
+  "app.resources.description.failed": {
+    "message": "The description could not be loaded."
+  },
+  "app.resources.description.reading": {
+    "message": "Description from {source}"
+  },
+  "app.resources.description.retry": {
+    "message": "Retry description"
+  },
+  "app.resources.error.backup-unavailable": {
+    "message": "This rollback backup is unavailable or no longer matches the recorded file."
+  },
+  "app.resources.error.cache": {
+    "message": "The resource cache is unavailable. Restart the launcher and try again."
+  },
+  "app.resources.error.canceled": {
+    "message": "The content operation was cancelled."
+  },
+  "app.resources.error.cursor-expired": {
+    "message": "The search session expired. Restart the search."
+  },
+  "app.resources.error.database": {
+    "message": "The resource database is unavailable. Restart the launcher and try again."
+  },
+  "app.resources.error.failed": {
+    "message": "Could not complete the content operation. Refresh and try again."
+  },
+  "app.resources.error.http": {
+    "message": "The content source rejected the request (HTTP {status, number, ::group-off}). Try again later."
+  },
+  "app.resources.error.invalid-search": {
+    "message": "These search filters could not be applied. Reset the filters and try again."
+  },
+  "app.resources.error.network": {
+    "message": "Could not connect to the content source. Check your connection and try again."
+  },
+  "app.resources.error.source-response": {
+    "message": "The content source returned an invalid response. Try again."
+  },
+  "app.resources.error.stale": {
+    "message": "The instance or selected files changed. Refresh the preview before continuing."
+  },
+  "app.resources.error.unavailable": {
+    "message": "The content source is unavailable. Check your connection and try again."
+  },
+  "app.resources.error.unsupported": {
+    "message": "This content source does not support the requested operation or filters."
+  },
+  "app.resources.history.cancel": {
+    "message": "Close"
+  },
+  "app.resources.history.empty": {
+    "message": "No rollback backups remain."
+  },
+  "app.resources.history.header": {
+    "message": "Installation history"
+  },
+  "app.resources.history.loading": {
+    "message": "Checking rollback backups…"
+  },
+  "app.resources.history.restore": {
+    "message": "Restore this backup"
+  },
+  "app.resources.history.retry": {
+    "message": "Retry"
+  },
+  "app.resources.history.unavailable": {
+    "message": "Rollback backup unavailable"
+  },
+  "app.resources.installed.compatibility": {
+    "message": "Minecraft: {game, select, compatible {compatible} incompatible {incompatible} other {no supported version declaration}}; loader: {loader, select, compatible {compatible} incompatible {incompatible} other {no loader declaration}}."
+  },
+  "app.resources.manual.unverifiable": {
+    "message": "This source provides no file hash. Its artifact cannot be verified; download it from the source page and use the local import workflow."
+  },
+  "app.resources.operation.accept-dimension": {
+    "message": "{dimension, select, gameVersion {Accept Minecraft compatibility exception} other {Accept loader compatibility exception}}"
+  },
+  "app.resources.operation.add": {
+    "message": "Add {name}"
+  },
+  "app.resources.operation.apply": {
+    "message": "Queue changes"
+  },
+  "app.resources.operation.artifact": {
+    "message": "{source} · release {release} · {file}"
+  },
+  "app.resources.operation.artifact-mismatch": {
+    "message": "The selected installed entry does not match this item."
+  },
+  "app.resources.operation.assessment": {
+    "message": "Game version: {game}; loader: {loader}"
+  },
+  "app.resources.operation.cancel": {
+    "message": "Cancel"
+  },
+  "app.resources.operation.changes": {
+    "message": "{count, plural, one {# file will change} other {# files will change}} in {instance}."
+  },
+  "app.resources.operation.compatibility": {
+    "message": "{state, select, compatible {Compatible} incompatible {Incompatible} other {Unknown}}"
+  },
+  "app.resources.operation.disabled-dependency": {
+    "message": "This installed dependency is disabled. Enable it or review its version before continuing."
+  },
+  "app.resources.operation.empty": {
+    "message": "No file changes are needed."
+  },
+  "app.resources.operation.header": {
+    "message": "Review content changes"
+  },
+  "app.resources.operation.identity-unconfirmed": {
+    "message": "The selected resource could not be identified reliably."
+  },
+  "app.resources.operation.installed-dependency-unavailable": {
+    "message": "An installed copy is disabled, missing, or does not satisfy the required release. Review that copy before continuing."
+  },
+  "app.resources.operation.invalid-path": {
+    "message": "The file path is invalid or cannot be used for this installation."
+  },
+  "app.resources.operation.loading": {
+    "message": "Resolving releases and dependencies…"
+  },
+  "app.resources.operation.manual-download": {
+    "message": "{name} requires a manual download and cannot be installed automatically."
+  },
+  "app.resources.operation.missing-dependency": {
+    "message": "A required dependency could not be resolved."
+  },
+  "app.resources.operation.no-worlds": {
+    "message": "Create a singleplayer world in this instance before installing data packs."
+  },
+  "app.resources.operation.optional": {
+    "message": "Available dependencies"
+  },
+  "app.resources.operation.optional-for": {
+    "message": "Optional dependency of {names}"
+  },
+  "app.resources.operation.path-occupied": {
+    "message": "{path} is already used by another file, so it cannot be installed."
+  },
+  "app.resources.operation.refresh": {
+    "message": "Refresh this preview"
+  },
+  "app.resources.operation.remove": {
+    "message": "Remove {name}"
+  },
+  "app.resources.operation.required": {
+    "message": "Required dependencies"
+  },
+  "app.resources.operation.required-by": {
+    "message": "Required by {names}"
+  },
+  "app.resources.operation.retry": {
+    "message": "Retry"
+  },
+  "app.resources.operation.satisfied": {
+    "message": "Already satisfied"
+  },
+  "app.resources.operation.source-unavailable": {
+    "message": "The source cannot provide this item right now."
+  },
+  "app.resources.operation.stale-revision": {
+    "message": "The instance changed. Refresh this preview before continuing."
+  },
+  "app.resources.operation.unresolved-optional": {
+    "message": "Some optional dependencies could not be resolved."
+  },
+  "app.resources.operation.unselected-dependency": {
+    "message": "Automatic dependency installation is off. Add this required dependency to continue."
+  },
+  "app.resources.operation.version-conflict": {
+    "message": "A version conflict prevents installing this item."
+  },
+  "app.resources.operation.world": {
+    "message": "Target world for data packs"
+  },
+  "app.resources.preferred-source": {
+    "message": "Preferred resource source"
+  },
+  "app.resources.preferred-source.description": {
+    "message": "Used for default descriptions and equivalent releases. Default: Modrinth."
+  },
+  "app.resources.route.failed": {
+    "message": "No resource source could be opened."
+  },
+  "app.resources.route.retry": {
+    "message": "Retry"
+  },
+  "app.resources.search.candidate-source": {
+    "message": "Open the {source} candidate. Its identity is not yet verified."
+  },
+  "app.resources.search.confirmed-source": {
+    "message": "Open the confirmed {source} project"
+  },
+  "app.resources.search.window-exhausted": {
+    "message": "{source} has reached its search result window."
   },
   "app.restarting": {
     "message": "Restarting..."
@@ -6989,11 +7754,17 @@
   "app.screenshots.selection.global-export-filename": {
     "message": "Modrinth screenshots.zip"
   },
+  "app.screenshots.selection.hint": {
+    "message": "Use the checkboxes or Ctrl/Command-click to select, Shift-click for a range, or drag from empty space to select an area."
+  },
   "app.screenshots.selection.instance-export-filename": {
     "message": "{instance} screenshots.zip"
   },
   "app.screenshots.selection.remove-from-group": {
     "message": "Remove from group"
+  },
+  "app.screenshots.selection.select-group": {
+    "message": "Select all screenshots in {group}"
   },
   "app.screenshots.selection.selected-count": {
     "message": "{count} selected"
@@ -7003,6 +7774,9 @@
   },
   "app.screenshots.show-in-folder": {
     "message": "Show in folder"
+  },
+  "app.screenshots.skipped-folders": {
+    "message": "{count, plural, one {Skipped # inaccessible instance folder} other {Skipped # inaccessible instance folders}}"
   },
   "app.screenshots.sort-by": {
     "message": "Sort by"
@@ -7850,11 +8624,11 @@
   "app.settings.about.run.tap-to-start": {
     "message": "Press Space or click to start"
   },
-  "app.settings.about.run.tnt": {
-    "message": "TNT"
-  },
   "app.settings.about.run.title": {
     "message": "Axolotl run"
+  },
+  "app.settings.about.run.tnt": {
+    "message": "TNT"
   },
   "app.settings.about.run.totem": {
     "message": "Totem of Undying"
@@ -8029,6 +8803,9 @@
   },
   "app.settings.downloading": {
     "message": "Downloading v{version}"
+  },
+  "app.settings.environment-variables.invalid-format": {
+    "message": "Use NAME=value, separated by spaces. A name and an equals sign are required; the value may be empty or contain more equals signs."
   },
   "app.settings.feature-flags.advanced-filters-collapsed": {
     "message": "Collapse advanced filters by default"
@@ -9305,8 +10082,23 @@
   "app.settings.privacy.discord-rpc-description": {
     "message": "Show your current launcher or game activity in Discord."
   },
+  "app.settings.privacy.external-scheme": {
+    "message": "Allow external links"
+  },
+  "app.settings.privacy.external-scheme-description": {
+    "message": "Respond to axolotl:// links from browsers and other apps. Turning this off blocks launches, installs and page jumps from outside."
+  },
+  "app.settings.privacy.privileged-scheme": {
+    "message": "Allow privileged link actions"
+  },
+  "app.settings.privacy.privileged-scheme-description": {
+    "message": "Let axolotl:// links change settings and stop game processes. Turning this on requires reading a risk warning; every action still asks for your confirmation."
+  },
   "app.settings.privacy.section-title": {
     "message": "Privacy & data sharing"
+  },
+  "app.settings.privacy.security-title": {
+    "message": "Security"
   },
   "app.settings.privacy.telemetry": {
     "message": "Allow telemetry"
@@ -9316,12 +10108,6 @@
   },
   "app.settings.resources.add-minecraft-directory": {
     "message": "Add .minecraft directory"
-  },
-  "app.settings.resources.app-cache": {
-    "message": "App cache"
-  },
-  "app.settings.resources.app-cache-description": {
-    "message": "Axolotl Launcher caches data to speed up loading. Purging it forces the app to reload data and may temporarily slow the app down."
   },
   "app.settings.resources.app-directory": {
     "message": "App directory"
@@ -9334,6 +10120,12 @@
   },
   "app.settings.resources.axolotl-data-directory": {
     "message": "Axolotl data directory"
+  },
+  "app.settings.resources.chinese-names": {
+    "message": "Add known Chinese names to downloads"
+  },
+  "app.settings.resources.chinese-names-description": {
+    "message": "Prefix new resource filenames with the known Chinese project name, when available."
   },
   "app.settings.resources.concurrency.manual": {
     "message": "Manual"
@@ -9356,17 +10148,14 @@
   "app.settings.resources.database-backups-description": {
     "message": "Backups of important app data are stored here in case you need to recover them later."
   },
-  "app.settings.resources.download-engine": {
-    "message": "Download engine"
+  "app.settings.resources.doh-enabled": {
+    "message": "Use DNS over HTTPS"
   },
-  "app.settings.resources.download-engine-description": {
-    "message": "Choose which download engine the launcher uses."
+  "app.settings.resources.doh-settings": {
+    "message": "DNS over HTTPS"
   },
-  "app.settings.resources.download-engine.legacy": {
-    "message": "Native engine"
-  },
-  "app.settings.resources.download-engine.xmcl": {
-    "message": "XMCL-compatible"
+  "app.settings.resources.doh-settings-description": {
+    "message": "Resolve download hosts through a built-in pool of encrypted DNS services."
   },
   "app.settings.resources.download-mirrors": {
     "message": "Download sources"
@@ -9401,17 +10190,14 @@
   "app.settings.resources.minecraft-directory-mode": {
     "message": "Game directory mode"
   },
+  "app.settings.resources.minecraft-directory-mode.automatic": {
+    "message": "Automatic"
+  },
   "app.settings.resources.minecraft-directory-mode.isolated": {
     "message": "Version-isolated"
   },
   "app.settings.resources.minecraft-directory-mode.shared": {
     "message": "Shared .minecraft directory"
-  },
-	"app.settings.resources.minecraft-directory-mode.automatic": {
-		"message": "Automatic"
-	},
-  "app.settings.resources.minecraft-directory-must-end-with": {
-    "message": "The selected folder must be named .minecraft."
   },
   "app.settings.resources.minecraft-file-source": {
     "message": "Minecraft files, loaders, and Java"
@@ -9451,6 +10237,12 @@
   },
   "app.settings.resources.open-backups-folder": {
     "message": "Open backups folder"
+  },
+  "app.settings.resources.preserve-names": {
+    "message": "Preserve local prefixes and suffixes when updating"
+  },
+  "app.settings.resources.preserve-names-description": {
+    "message": "Updates and version changes replace only the known original filename. Custom names that cannot be matched are kept intact."
   },
   "app.settings.resources.proxy-mode": {
     "message": "Proxy mode"
@@ -9506,15 +10298,6 @@
   "app.settings.resources.proxy-username-placeholder": {
     "message": "Username (optional)"
   },
-  "app.settings.resources.purge-cache": {
-    "message": "Purge cache"
-  },
-  "app.settings.resources.purge-confirm-description": {
-    "message": "If you proceed, your entire cache will be purged. This may slow down the app temporarily."
-  },
-  "app.settings.resources.purge-confirm-title": {
-    "message": "Are you sure you want to purge the cache?"
-  },
   "app.settings.resources.remove-minecraft-directory": {
     "message": "Remove .minecraft directory"
   },
@@ -9563,9 +10346,6 @@
   "app.settings.resources.source.open-bmcl-api": {
     "message": "Prefer OpenBMCLAPI"
   },
-  "app.settings.resources.source.tianpao": {
-    "message": "Prefer Tianpao"
-  },
   "app.settings.resources.system-downloads-directory": {
     "message": "System Downloads folder"
   },
@@ -9593,14 +10373,116 @@
   "app.settings.search.results": {
     "message": "Search results"
   },
+  "app.settings.storage.activeOperation": {
+    "message": "Finish the current installation or recovery before cleaning shared files."
+  },
   "app.settings.storage.actual-size-tooltip": {
-    "message": "Actual size: {size}"
+    "message": "File size: {size}"
+  },
+  "app.settings.storage.analysisDescription": {
+    "message": "Inspect launcher and game storage, then analyze unused metadata for cleanup."
+  },
+  "app.settings.storage.analysisTitle": {
+    "message": "Storage analysis"
+  },
+  "app.settings.storage.analyzeFailed": {
+    "message": "Metadata could not be analyzed. Try again after current operations finish."
+  },
+  "app.settings.storage.analyzeMeta": {
+    "message": "Check unused files"
+  },
+  "app.settings.storage.analyzingMeta": {
+    "message": "Checking file usage…"
+  },
+  "app.settings.storage.assets": {
+    "message": "Game assets"
+  },
+  "app.settings.storage.assetsHelp": {
+    "message": "Sounds, textures and other game assets."
+  },
+  "app.settings.storage.availableSpace": {
+    "message": "{size} can be cleaned"
+  },
+  "app.settings.storage.backups": {
+    "message": "Instance backups"
   },
   "app.settings.storage.cache-data": {
     "message": "Cache data"
   },
+  "app.settings.storage.cacheCleanupResult": {
+    "message": "Freed {freed}. Remaining cache: {remaining}."
+  },
+  "app.settings.storage.cacheClearFailed": {
+    "message": "Could not clear the cache. Please try again."
+  },
+  "app.settings.storage.cacheFailureDetails": {
+    "message": "Files that could not be cleared"
+  },
+  "app.settings.storage.cachePartialFailure": {
+    "message": "Some cache files could not be cleared. See the details before trying again."
+  },
+  "app.settings.storage.cacheRetainedHelp": {
+    "message": "Instance icons, native archives and referenced content objects are kept for offline use and recovery. Cache files in previous data locations are kept. Cache database files also occupy some space."
+  },
+  "app.settings.storage.cachedScanHelp": {
+    "message": "Showing the previous scan while storage usage is refreshed."
+  },
+  "app.settings.storage.cancel": {
+    "message": "Cancel"
+  },
+  "app.settings.storage.cleanConfirm": {
+    "message": "Permanently delete {size} of unused files? Files that are still needed will be kept."
+  },
+  "app.settings.storage.cleanFailed": {
+    "message": "Cleanup could not finish. Refresh the analysis before retrying."
+  },
+  "app.settings.storage.cleanFailures": {
+    "message": "Some files could not be deleted."
+  },
+  "app.settings.storage.cleanResult": {
+    "message": "Freed {size} by deleting {count} files. {skipped} changed or referenced files were kept."
+  },
+  "app.settings.storage.cleanSelected": {
+    "message": "Clean selected files"
+  },
+  "app.settings.storage.cleanTitle": {
+    "message": "Clean shared game files"
+  },
+  "app.settings.storage.cleaning": {
+    "message": "Deleting files…"
+  },
+  "app.settings.storage.clearCache": {
+    "message": "Clear cache"
+  },
+  "app.settings.storage.clearCacheHelp": {
+    "message": "Deletes downloaded mod and modpack caches, unused content objects and cached resource information. Installed games, saves and backups are kept. Files needed for offline use or recovery are kept. Downloads may be needed again."
+  },
+  "app.settings.storage.clearingCache": {
+    "message": "Clearing cache…"
+  },
+  "app.settings.storage.close": {
+    "message": "Close"
+  },
+  "app.settings.storage.components": {
+    "message": "Multiplayer components"
+  },
+  "app.settings.storage.contentStore": {
+    "message": "Shared content files"
+  },
+  "app.settings.storage.crashReports": {
+    "message": "Crash reports"
+  },
+  "app.settings.storage.customArguments": {
+    "message": "Custom launch arguments may use these files, so they are kept."
+  },
+  "app.settings.storage.dataType": {
+    "message": "Data type"
+  },
   "app.settings.storage.database": {
     "message": "Database"
+  },
+  "app.settings.storage.databaseUnavailable": {
+    "message": "Some launcher records could not be read. Unverified files are kept."
   },
   "app.settings.storage.db-backup": {
     "message": "Database backups"
@@ -9608,8 +10490,38 @@
   "app.settings.storage.db-file": {
     "message": "App database"
   },
+  "app.settings.storage.details": {
+    "message": "Details"
+  },
   "app.settings.storage.distant-horizons": {
     "message": "Distant Horizons cache"
+  },
+  "app.settings.storage.externalData": {
+    "message": "External game directories"
+  },
+  "app.settings.storage.externalHelp": {
+    "message": "These directories are managed outside Axolotl and are excluded from the launcher total. Overlapping directories are listed once."
+  },
+  "app.settings.storage.externalMetadata": {
+    "message": "Linked instances also use this folder. Files with uncertain usage are kept."
+  },
+  "app.settings.storage.fileSize": {
+    "message": "Size"
+  },
+  "app.settings.storage.folder": {
+    "message": "Files"
+  },
+  "app.settings.storage.gameLocales": {
+    "message": "Game setting language indexes"
+  },
+  "app.settings.storage.icons": {
+    "message": "Icons"
+  },
+  "app.settings.storage.incompleteScan": {
+    "message": "Some paths could not be read; these totals are incomplete."
+  },
+  "app.settings.storage.installRollbacks": {
+    "message": "Installation rollback data"
   },
   "app.settings.storage.instance": {
     "message": "Instance"
@@ -9623,11 +10535,65 @@
   "app.settings.storage.item-count": {
     "message": "{count} items"
   },
+  "app.settings.storage.javaHelp": {
+    "message": "Java runtimes are kept because games can select them automatically."
+  },
+  "app.settings.storage.javaVersions": {
+    "message": "Java runtimes"
+  },
   "app.settings.storage.last-updated-label": {
     "message": "Last updated:"
   },
+  "app.settings.storage.launcherData": {
+    "message": "Launcher settings and appearance"
+  },
+  "app.settings.storage.launcherLogs": {
+    "message": "Launcher logs"
+  },
+  "app.settings.storage.legacyHelp": {
+    "message": "Copies of sounds, textures and other assets for older Minecraft versions. Unused copies can be cleaned after matching them to a local asset index."
+  },
+  "app.settings.storage.libraries": {
+    "message": "Shared libraries"
+  },
+  "app.settings.storage.librariesHelp": {
+    "message": "Shared files needed to run Minecraft and its loaders."
+  },
+  "app.settings.storage.linkedSize": {
+    "message": "Linked files: {size}"
+  },
+  "app.settings.storage.localesHelp": {
+    "message": "Language indexes used by synced game settings."
+  },
+  "app.settings.storage.logConfigs": {
+    "message": "Logging configurations"
+  },
+  "app.settings.storage.logConfigsHelp": {
+    "message": "Files that control how Minecraft writes logs."
+  },
+  "app.settings.storage.logs": {
+    "message": "Game logs"
+  },
+  "app.settings.storage.measurementHelp": {
+    "message": "Sizes are file lengths, not allocated disk space. Linked files are shown separately and may also be referenced elsewhere."
+  },
+  "app.settings.storage.measurementTitle": {
+    "message": "How sizes are counted"
+  },
   "app.settings.storage.meta-data": {
-    "message": "Meta data"
+    "message": "Shared game files"
+  },
+  "app.settings.storage.metaGroup": {
+    "message": "Metadata group"
+  },
+  "app.settings.storage.metaHelp": {
+    "message": "These files are shared across instances. Check their usage before choosing what to clean."
+  },
+  "app.settings.storage.metaItemCount": {
+    "message": "{count} items"
+  },
+  "app.settings.storage.metaWarnings": {
+    "message": "Why some files are kept"
   },
   "app.settings.storage.minimap": {
     "message": "Minimap data"
@@ -9635,20 +10601,71 @@
   "app.settings.storage.mods": {
     "message": "Mods"
   },
+  "app.settings.storage.natives": {
+    "message": "Native libraries"
+  },
+  "app.settings.storage.nativesHelp": {
+    "message": "Platform files extracted for game versions."
+  },
+  "app.settings.storage.noUnused": {
+    "message": "No files are currently available to clean."
+  },
   "app.settings.storage.open-action": {
     "message": "Open in launcher or open location"
+  },
+  "app.settings.storage.openFolder": {
+    "message": "Open folder in file manager"
   },
   "app.settings.storage.other": {
     "message": "Other"
   },
+  "app.settings.storage.preview-cache": {
+    "message": "Avatar and skin preview cache"
+  },
+  "app.settings.storage.preview-cache-help": {
+    "message": "Image payload sizes stored by this WebView. Database overhead is excluded; this value is separate from the launcher file total."
+  },
+  "app.settings.storage.processorUnresolved": {
+    "message": "Some loader installation paths could not be read. Related shared files are kept. Versions: {names}."
+  },
+  "app.settings.storage.refresh-failed": {
+    "message": "Files were deleted, but the storage total could not be refreshed."
+  },
+  "app.settings.storage.refreshRequired": {
+    "message": "The analysis is a snapshot. Analyze again after installing, removing or changing instances."
+  },
+  "app.settings.storage.refreshingTotals": {
+    "message": "Refreshing storage totals…"
+  },
   "app.settings.storage.replay": {
     "message": "Replay recordings"
+  },
+  "app.settings.storage.resource-backups": {
+    "message": "Previous resource files"
+  },
+  "app.settings.storage.resourceCache": {
+    "message": "Resource metadata cache"
   },
   "app.settings.storage.resourcepacks": {
     "message": "Resource packs"
   },
+  "app.settings.storage.resources": {
+    "message": "Legacy game resources"
+  },
+  "app.settings.storage.retainedAmount": {
+    "message": "{size} kept until usage can be verified"
+  },
+  "app.settings.storage.retry": {
+    "message": "Retry"
+  },
   "app.settings.storage.saves": {
     "message": "Saves"
+  },
+  "app.settings.storage.scanFailed": {
+    "message": "Storage could not be scanned. The last complete snapshot is kept when available."
+  },
+  "app.settings.storage.scanSections": {
+    "message": "{completed} / {total} areas"
   },
   "app.settings.storage.scanning": {
     "message": "Scanning storage…"
@@ -9659,8 +10676,20 @@
   "app.settings.storage.screenshots": {
     "message": "Screenshots"
   },
+  "app.settings.storage.selectGroup": {
+    "message": "Select unused files in {name}"
+  },
+  "app.settings.storage.selectedSize": {
+    "message": "{count} items selected · {size}"
+  },
+  "app.settings.storage.servers": {
+    "message": "Managed servers"
+  },
   "app.settings.storage.shaderpacks": {
     "message": "Shader packs"
+  },
+  "app.settings.storage.staging": {
+    "message": "Operation staging"
   },
   "app.settings.storage.symlink-help": {
     "message": "What is a symlink?"
@@ -9674,17 +10703,47 @@
   "app.settings.storage.symlink-size-tooltip": {
     "message": "Symbolic link or junction referenced size: {size}"
   },
+  "app.settings.storage.syncedOptions": {
+    "message": "Synced settings and files"
+  },
   "app.settings.storage.total": {
     "message": "Total size"
   },
   "app.settings.storage.total-description": {
     "message": "Total size including symbolic links and junctions"
   },
+  "app.settings.storage.unknown": {
+    "message": "Kept"
+  },
+  "app.settings.storage.unknownUsage": {
+    "message": "Files whose usage cannot be verified are kept."
+  },
+  "app.settings.storage.unreadablePath": {
+    "message": "Some files could not be read or are links. They are kept."
+  },
+  "app.settings.storage.unused": {
+    "message": "Can be cleaned"
+  },
   "app.settings.storage.update": {
     "message": "Update"
   },
   "app.settings.storage.updating": {
     "message": "Updating…"
+  },
+  "app.settings.storage.usageChart": {
+    "message": "Storage usage by data type"
+  },
+  "app.settings.storage.used": {
+    "message": "In use"
+  },
+  "app.settings.storage.versionUnavailable": {
+    "message": "Some installed versions are missing local version information. Shared files that may be needed are kept. Versions: {names}."
+  },
+  "app.settings.storage.versions": {
+    "message": "Game versions"
+  },
+  "app.settings.storage.versionsHelp": {
+    "message": "Minecraft versions and their loaders. Expand to choose individual versions."
   },
   "app.settings.storage.world": {
     "message": "World"
@@ -10702,6 +11761,18 @@
   },
   "app.warning.running-as-admin": {
     "message": "Axolotl is running as administrator. Drag-and-drop file import is disabled in this mode; please restart the launcher without administrator privileges."
+  },
+  "app.window-controls.close": {
+    "message": "Close"
+  },
+  "app.window-controls.maximize": {
+    "message": "Maximize"
+  },
+  "app.window-controls.minimize": {
+    "message": "Minimize"
+  },
+  "app.window-controls.restore": {
+    "message": "Restore"
   },
   "app.world-editor.allow-commands.label": {
     "message": "Allow cheats"
@@ -13204,137 +14275,5 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Unknown file warning"
-  },
-  "app.settings.privacy.security-title": {
-    "message": "Security"
-  },
-  "app.settings.privacy.privileged-scheme-description": {
-    "message": "Let axolotl:// links change settings and stop game processes. Turning this on requires reading a risk warning; every action still asks for your confirmation."
-  },
-  "app.settings.privacy.privileged-scheme": {
-    "message": "Allow privileged link actions"
-  },
-  "app.settings.privacy.external-scheme-description": {
-    "message": "Respond to axolotl:// links from browsers and other apps. Turning this off blocks launches, installs and page jumps from outside."
-  },
-  "app.settings.privacy.external-scheme": {
-    "message": "Allow external links"
-  },
-  "app.privileged-modal.stopped": {
-    "message": "Stop request sent"
-  },
-  "app.privileged-modal.no-processes": {
-    "message": "No running game processes for this instance"
-  },
-  "app.privileged-modal.applied": {
-    "message": "Privileged link applied"
-  },
-  "app.privileged-consent.warning": {
-    "message": "These actions can change security-sensitive settings and stop games"
-  },
-  "app.privileged-consent.title": {
-    "message": "Enable privileged link actions?"
-  },
-  "app.privileged-consent.danger": {
-    "message": "External links will be able to change settings (theme, launch commands, directories, network options, etc.) and stop running games. You will still confirm each action before it executes."
-  },
-  "app.privileged-consent.confirm": {
-    "message": "Enable"
-  },
-  "app.privileged-consent.acknowledge": {
-    "message": "I understand the risks and want to enable privileged link actions"
-  },
-  "app.page-path.copy": {
-    "message": "Copy page path"
-  },
-  "app.page-path.copied": {
-    "message": "Copied"
-  },
-  "app.notification.error-occurred": {
-    "message": "An error occurred"
-  },
-  "app.lab.mod-translation.timeline.title": {
-    "message": "Processing timeline ({count})"
-  },
-  "app.lab.mod-translation.timeline.empty": {
-    "message": "Waiting for processing events…"
-  },
-  "app.lab.mod-translation.technical-details": {
-    "message": "Technical details"
-  },
-  "app.lab.mod-translation.result.mod-label": {
-    "message": "Mod"
-  },
-  "app.lab.mod-translation.result.completed-warnings": {
-    "message": "Generated, but some text is still uncovered"
-  },
-  "app.lab.mod-translation.result.completed": {
-    "message": "Translation complete"
-  },
-  "app.lab.mod-translation.result.class-text": {
-    "message": "Class text"
-  },
-  "app.lab.mod-translation.result.changed-files": {
-    "message": "Changed files: {files}"
-  },
-  "app.lab.mod-translation.progress.workload-measuring": {
-    "message": "Establishing a verifiable workload…"
-  },
-  "app.lab.mod-translation.progress.verified-weights": {
-    "message": "Verified {verified} / {total}"
-  },
-  "app.lab.mod-translation.progress.recently-written": {
-    "message": "Recently written"
-  },
-  "app.lab.mod-translation.progress.current-batch": {
-    "message": "Batch {completed} / {total}"
-  },
-  "app.lab.mod-translation.copy-diagnostics-info": {
-    "message": "Copy diagnostic information"
-  },
-  "app.lab.mod-translation.copy-diagnostics": {
-    "message": "Copy diagnostics"
-  },
-  "app.java-arguments.gc.reason.zgc-non-generational": {
-    "message": "Java < 21; non-generational ZGC performs poorly"
-  },
-  "app.java-arguments.gc.reason.medium-resources": {
-    "message": "Medium resources ({memory}GB, {cores} cores)"
-  },
-  "app.java-arguments.gc.reason.low-resources": {
-    "message": "Low resources ({memory}GB, {cores} cores)"
-  },
-  "app.java-arguments.gc.reason.lightweight-instance": {
-    "message": "Lightweight instance ({loader}, {mods} mods)"
-  },
-  "app.java-arguments.gc.reason.large-modpack-low-memory": {
-    "message": "Large modpack ({mods} mods) but insufficient memory ({allocated}GB < 8GB)"
-  },
-  "app.java-arguments.gc.reason.java-version-unknown": {
-    "message": "Java version unknown"
-  },
-  "app.java-arguments.gc.reason.java-too-old": {
-    "message": "Java too old; Shenandoah/ZGC unreliable"
-  },
-  "app.java-arguments.gc.reason.insufficient-memory": {
-    "message": "Insufficient memory ({allocated}GB < 4GB)"
-  },
-  "app.java-arguments.gc.reason.insufficient-cpu": {
-    "message": "Insufficient CPU ({cores} cores / {threads} threads)"
-  },
-  "app.java-arguments.gc.reason.high-resources": {
-    "message": "High resources ({memory}GB, {cores} cores)"
-  },
-  "app.java-arguments.gc.reason.heavy-instance": {
-    "message": "Heavy instance ({loader}, {mods} mods)"
-  },
-  "app.java-arguments.gc.reason.below-zgc-recommendation": {
-    "message": "Resources below ZGC recommendation"
-  },
-  "app.java-arguments.gc.reason.ample-memory-high-cores": {
-    "message": "Ample memory and high CPU core count"
-  },
-  "app.home.widgets.source-settings": {
-    "message": "Widget settings"
   }
 }

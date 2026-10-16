@@ -21,13 +21,12 @@ fn newest_mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
     if path.is_file() {
         return path.metadata().and_then(|m| m.modified()).ok();
     }
-    if path.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(path) {
-            for entry in entries.flatten() {
-                if let Some(time) = newest_mtime(&entry.path()) {
-                    newest =
-                        Some(newest.map_or(time, |current| current.max(time)));
-                }
+    if path.is_dir()
+        && let Ok(entries) = std::fs::read_dir(path)
+    {
+        for entry in entries.flatten() {
+            if let Some(time) = newest_mtime(&entry.path()) {
+                newest = Some(newest.map_or(time, |current| current.max(time)));
             }
         }
     }
@@ -267,6 +266,55 @@ fn main() {
                     ),
             )
             .plugin(
+                "axolotl-resources",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "resource_sources",
+                        "resource_search",
+                        "resource_get",
+                        "resource_get_description",
+                        "resource_list_releases",
+                        "resource_get_release",
+                        "resource_get_changelog",
+                        "resource_list_changelogs",
+                        "resource_cancel",
+                        "resource_preferred_source",
+                        "resource_set_preferred_source",
+                        "resource_cache_info",
+                        "resource_cache_clear",
+                        "resource_locate",
+                        "resource_project_document",
+                        "resource_project_documents",
+                        "resource_project_protocol",
+                        "resource_release_documents",
+                        "resource_favorites",
+                        "resource_favorite_add",
+                        "resource_favorite_remove",
+                        "resource_prepare_operation",
+                        "resource_prepare_entry_operation",
+                        "resource_list_installed",
+                        "resource_check_updates",
+                        "resource_revise_plan",
+                        "resource_queue_plan",
+                        "resource_list_history",
+                        "resource_scan_backups",
+                        "resource_prepare_history_cleanup",
+                        "resource_execute_history_cleanup",
+                        "resource_export_scan",
+                        "resource_export_refresh",
+                        "resource_export_refresh_retry",
+                        "resource_export_close",
+                        "resource_export_plan",
+                        "resource_export_execute",
+                        "resource_export_queue",
+                        "resource_export_cancel",
+                        "resource_rollback",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "datapacks",
                 InlinedPlugin::new()
                     .commands(&[
@@ -296,10 +344,6 @@ fn main() {
                         "curseforge_get_download_url",
                         "curseforge_get_categories",
                         "curseforge_match_fingerprints",
-                        "curseforge_install_file",
-                        "curseforge_preview_install_file",
-                        "curseforge_update_installed_file",
-                        "curseforge_switch_installed_file_version",
                         "curseforge_recognize_instance_files",
                         "curseforge_import_manual_downloads",
                         "curseforge_list_pending_manual_downloads",
@@ -569,10 +613,6 @@ fn main() {
                         "instance_preview_core_jar",
                         "instance_install_mcarchive_modloader",
                         "instance_import_mcarchive_modloader",
-                        "instance_install_mcarchive_content",
-                        "instance_import_mcarchive_content",
-                        "instance_install_planet_minecraft_content",
-                        "instance_import_planet_minecraft_content",
                         "instance_get_full_path",
                         "instance_get_mod_full_path",
                         "instance_list",
@@ -580,17 +620,8 @@ fn main() {
                         "instance_get_daily_playtime",
                         "instance_get_daily_playtime_details",
                         "instance_check_installed",
-                        "instance_update_all",
-                        "instance_update_project",
-                        "instance_add_project_from_version",
-                        "instance_install_project_with_dependencies",
-                        "instance_preview_project_with_dependencies",
-                        "instance_preview_project_with_dependencies_for_target",
-                        "instance_queue_project_with_dependencies",
                         "instance_queue_content_batch",
-                        "instance_queue_curseforge_content",
                         "instance_queue_curseforge_world",
-                        "instance_switch_project_version_with_dependencies",
                         "instance_add_project_from_path",
                         "instance_import_world_save",
                         "instance_install_datapack_to_world",
@@ -610,8 +641,6 @@ fn main() {
                         "instance_edit",
                         "instance_cache_icon",
                         "instance_edit_icon",
-                        "instance_export_mrpack",
-                        "instance_get_pack_export_candidates",
                         "instance_list_screenshots",
                         "instance_list_all_screenshots",
                         "instance_list_synced_screenshots",
@@ -659,6 +688,7 @@ fn main() {
                         "instance_delete_group",
                         "instance_set_group_order",
                         "instance_set_group_memberships",
+                        "instance_update_group_memberships",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -669,12 +699,11 @@ fn main() {
                 InlinedPlugin::new()
                     .commands(&[
                         "settings_get",
-                        "settings_set",
+                        "settings_patch",
                         "privacy_get",
                         "privacy_set",
                         "telemetry_set",
                         "discord_rpc_set",
-                        "download_engine_set",
                         "cancel_directory_change",
                         "proxy_get",
                         "proxy_set",
@@ -804,7 +833,13 @@ fn main() {
             .plugin(
                 "storage",
                 InlinedPlugin::new()
-                    .commands(&["storage_scan_start", "storage_open_paths"])
+                    .commands(&[
+                        "storage_scan",
+                        "storage_cache_clear",
+                        "storage_meta_analyze",
+                        "storage_meta_clean",
+                        "storage_open_paths",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
@@ -961,6 +996,27 @@ fn main() {
                         "servers_get_log_buffer",
                         "servers_clear_log",
                     ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                "friends",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "friends",
+                        "friend_statuses",
+                        "add_friend",
+                        "remove_friend",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                "telemetry",
+                InlinedPlugin::new()
+                    .commands(&["notify_online"])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),

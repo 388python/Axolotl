@@ -2615,6 +2615,7 @@ mod tests {
 				provider TEXT NOT NULL,
 				provider_project_id TEXT NOT NULL,
 				provider_release_id TEXT NULL,
+                provider_file_id TEXT NULL,
 				is_origin INTEGER NOT NULL DEFAULT 0
 			);
 			CREATE UNIQUE INDEX instance_content_provider_refs_identity

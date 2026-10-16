@@ -110,6 +110,9 @@ pub enum ErrorKind {
     #[error("Invalid input: {0}")]
     InputError(String),
 
+    #[error("{0}")]
+    ResourceError(#[from] crate::resources::ResourceError),
+
     #[error(
         "The instance upgrade plan is stale (planned revision {planned_revision}, current revision {current_revision})"
     )]
