@@ -28,21 +28,22 @@ it('bridges expansion and collapse without jumping or trapping rapid toggles', a
             element: wrapper.element,
             path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/expand-start.png`,
         })
-    await wrapper.get('summary').trigger('click')
-    await frame()
-    await frame()
     if (
         CSS.supports('interpolate-size', 'allow-keywords') &&
         !matchMedia('(prefers-reduced-motion: reduce)').matches
     ) {
-        expect(height()).toBeGreaterThan(closed)
-        expect(height()).toBeLessThan(closed + 120)
+        const contentStyle = getComputedStyle(details, '::details-content')
+        expect(contentStyle.blockSize).toBe('0px')
+        const properties = contentStyle.transitionProperty.split(',').map((value) => value.trim())
+        const durations = contentStyle.transitionDuration.split(',').map(parseFloat)
+        const sizeIndex = properties.indexOf('block-size')
+        expect(sizeIndex).toBeGreaterThanOrEqual(0)
+        expect(durations[sizeIndex % durations.length]).toBeGreaterThan(0)
     }
-    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
-        await page.screenshot({
-            element: wrapper.element,
-            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/expand-mid.png`,
-        })
+    await wrapper.get('summary').trigger('click')
+    expect(details.open).toBe(true)
+    await waitFor(() => height() > closed, { label: 'disclosure to start expanding' })
+    expect(height()).toBeLessThanOrEqual(closed + 120)
     await waitFor(() => height() >= closed + 119)
     if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
         await page.screenshot({
