@@ -6,13 +6,11 @@ import {
     ListOrderedIcon,
     ScanEyeIcon,
     ShareIcon,
-    SparklesIcon,
     XIcon,
 } from '@modrinth/assets'
 import {
     Button,
     Card,
-    Combobox,
     commonMessages,
     defineMessages,
     injectModrinthClient,
@@ -25,10 +23,13 @@ import {
     useVIntl,
 } from '@modrinth/ui'
 import { renderHighlightedString } from '@modrinth/utils/highlightjs'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import CrashModChangesModal from '@/components/ui/CrashModChangesModal.vue'
 import LogAgentActivity from '@/components/ui/LogAgentActivity.vue'
+import LogAgentSourcePicker from '@/components/ui/LogAgentSourcePicker.vue'
+import LogShareSettings from '@/components/ui/settings/LogShareSettings.vue'
 import {
     clearCrashAnalysis,
     type CrashAnalysisResult,
@@ -102,6 +103,11 @@ type Unlisten = () => void
 
 const { formatMessage } = useVIntl()
 const client = injectModrinthClient()
+const router = useRouter()
+const route = useRoute()
+const localSetupModal = ref<InstanceType<typeof NewModal>>()
+const localSetupSaving = ref(false)
+let resumeAfterProviderSettings = false
 const { addNotification } = injectNotificationManager()
 const modal = ref<InstanceType<typeof NewModal>>()
 const modChangesModal = ref<InstanceType<typeof CrashModChangesModal>>()
@@ -120,6 +126,9 @@ let uploadTicketPromise: Promise<LogShareTicket | null> | null = null
 const defaultSource = ref<AnalysisSource>('logshare')
 const selectedSource = ref<AnalysisSource>('logshare')
 const localAvailable = ref(false)
+const configuredModel = ref('')
+const configuredProvider = ref('')
+const choosingSource = ref(false)
 const aiAvailable = computed(() => selectedSource.value === 'logshare' || localAvailable.value)
 const agent = useLogAgent()
 const aiOutput = agent.output
@@ -145,10 +154,6 @@ const aiStatus = computed(() => {
     if (event?.event_type === 'limit') return formatMessage(messages.aiReachedLimit)
     return formatMessage(messages.aiWorking)
 })
-const sourceOptions = computed(() => [
-    { value: 'custom', label: formatMessage(messages.sourceLocal) },
-    { value: 'logshare', label: formatMessage(messages.sourceCloud) },
-])
 const logShareSettingsLoaded = ref(false)
 
 const logShareSettings = ref<LogShareSettings>({
@@ -180,6 +185,27 @@ const aiTabVisible = ref(false)
 const AI_TAB = 'logagent'
 
 const messages = defineMessages({
+    returnToAnalysis: {
+        id: 'app.logagent.controls.return-to-analysis',
+        defaultMessage: 'Return to analysis',
+    },
+    changeSource: { id: 'app.logagent.controls.change-source', defaultMessage: 'Change' },
+    sourceDone: { id: 'app.logagent.controls.source-done', defaultMessage: 'Done' },
+    configureModel: {
+        id: 'app.logagent.controls.configure-model',
+        defaultMessage: 'Configure analysis',
+    },
+    startAnalysis: { id: 'app.logagent.controls.start', defaultMessage: 'Start analysis' },
+    retryAnalysis: { id: 'app.logagent.controls.retry', defaultMessage: 'Analyze again' },
+    localSending: {
+        id: 'app.logagent.controls.local-sending',
+        defaultMessage: 'Relevant log excerpts will be sent to {provider}.',
+    },
+    modelMissing: {
+        id: 'app.logagent.controls.model-missing',
+        defaultMessage: 'Choose and enable a model to use local analysis.',
+    },
+    analysisSection: { id: 'app.logagent.controls.section', defaultMessage: 'Analyze this crash' },
     aiCheckingLogs: {
         id: 'app.logagent.checking-logs',
         defaultMessage: 'Checking the relevant log evidence…',
@@ -188,22 +214,11 @@ const messages = defineMessages({
         id: 'app.logagent.reviewing',
         defaultMessage: 'Reviewing the evidence and preparing the next step…',
     },
-    sourceLabel: { id: 'app.logagent.source-label', defaultMessage: 'Analysis for this run' },
     sourceLocal: { id: 'app.logagent.source-local', defaultMessage: 'Local LogAgent' },
     sourceCloud: { id: 'app.logagent.source-cloud', defaultMessage: 'Cloud LogShare' },
-    sourceLocalHint: {
-        id: 'app.logagent.source-local-hint',
-        defaultMessage:
-            'LogAgent runs in the launcher. Relevant log excerpts are sent to your configured model provider.',
-    },
     sourceCloudHint: {
         id: 'app.logagent.source-cloud-hint',
         defaultMessage: 'Crash logs are sent to LogShare for cloud analysis.',
-    },
-    localUnavailable: {
-        id: 'app.logagent.local-unavailable',
-        defaultMessage:
-            'Enable local LogAgent and select a supported model in Settings > Launch defaults.',
     },
     aiPreparing: {
         id: 'app.logagent.preparing',
@@ -215,7 +230,6 @@ const messages = defineMessages({
             'Analysis cancelled in the launcher. A cloud task may continue on the server.',
     },
     aiCancel: { id: 'app.logagent.cancel', defaultMessage: 'Cancel analysis' },
-    aiRun: { id: 'app.logagent.run', defaultMessage: 'Analyze with LogAgent' },
     title: {
         id: 'app.minecraft-crash.title',
         defaultMessage: '{instanceName} crashed',
@@ -709,7 +723,9 @@ function show(modalPayload: CrashModalPayload, isPreview = false): boolean {
     }
     analysisVersion += 1
     summaryGeneration += 1
+    resumeAfterProviderSettings = false
     agent.reset()
+    choosingSource.value = false
     selectedSource.value = defaultSource.value
     payload.value = modalPayload
     lastAnalysis = null
@@ -1096,6 +1112,7 @@ async function copyShareUrl(): Promise<void> {
 function selectAnalysisSource(value: unknown): void {
     if (aiLoading.value) return
     const next = value === 'custom' ? 'custom' : 'logshare'
+    choosingSource.value = false
     if (next === selectedSource.value) return
     selectedSource.value = next
     agent.reset()
@@ -1107,6 +1124,33 @@ function selectAnalysisSource(value: unknown): void {
     if (next === 'logshare' && payload.value.instance_id)
         void loadLogShareSummary(payload.value.instance_id)
 }
+
+function openAnalysisSettings(): void {
+    localSetupModal.value?.show()
+}
+
+async function openProviderSettings(): Promise<void> {
+    resumeAfterProviderSettings = true
+    localSetupModal.value?.hide()
+    modal.value?.hide()
+    await router.push('/settings#ai')
+}
+
+watch(
+    () => route.fullPath,
+    async (path, previous) => {
+        if (
+            !resumeAfterProviderSettings ||
+            !previous.startsWith('/settings') ||
+            path.startsWith('/settings#ai')
+        )
+            return
+        await refreshAIAvailability()
+        if (!mounted) return
+        resumeAfterProviderSettings = false
+        modal.value?.show()
+    },
+)
 
 async function openAIAnalysis(): Promise<void> {
     if (aiLoading.value || !aiAvailable.value || !payload.value.instance_id) return
@@ -1139,6 +1183,14 @@ async function refreshAIAvailability(): Promise<void> {
         const provider = state?.providers.find(
             (item) => item.provider_id === aiSettings.provider_id,
         )
+        configuredProvider.value = provider?.custom_name || aiSettings.provider_id
+        configuredModel.value = [
+            configuredProvider.value,
+            provider?.models.find((model) => model.id === aiSettings.model_id)?.name ||
+                aiSettings.model_id,
+        ]
+            .filter(Boolean)
+            .join(' / ')
         localAvailable.value =
             aiSettings.enabled &&
             !!state?.settings.enabled &&
@@ -1245,6 +1297,7 @@ defineExpose({
         ref="modal"
         :on-hide="
             () => {
+                if (resumeAfterProviderSettings) return
                 analysisVersion += 1
                 summaryGeneration += 1
                 visibleSession.close()
@@ -1285,7 +1338,7 @@ defineExpose({
                         v-tooltip="formatMessage(commonMessages.closeButton)"
                         circular
                         icon-only
-                        :aria-label="formatMessage(commonMessages.closeButton)"
+                        :label="formatMessage(commonMessages.closeButton)"
                         @click="modal?.hide()"
                         ><XIcon aria-hidden="true"
                     /></Button>
@@ -1330,80 +1383,118 @@ defineExpose({
                     </p>
                 </div>
 
-                <div v-if="shareUrl" class="flex items-center gap-2 rounded-lg bg-surface-2 p-3">
-                    <ExternalIcon
-                        class="size-4 shrink-0 text-[var(--color-text-tertiary)]"
-                        aria-hidden="true"
-                    />
-                    <a
-                        :href="shareUrl"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="min-w-0 flex-1 truncate text-sm text-[var(--color-text-default)] underline"
-                    >
-                        {{ shareUrl }}
-                    </a>
-                    <Button
-                        type="outlined"
-                        circular
-                        icon-only
-                        :aria-label="formatMessage(messages.copyLink)"
-                        @click="copyShareUrl"
-                        ><ClipboardCopyIcon aria-hidden="true" />
-                    </Button>
-                </div>
-
-                <div class="mt-auto flex flex-col gap-2 pt-2">
-                    <label for="crash-analysis-source" class="text-sm font-semibold">{{
-                        formatMessage(messages.sourceLabel)
-                    }}</label>
-                    <Combobox
-                        id="crash-analysis-source"
+                <div
+                    class="mt-auto flex flex-col gap-3 border-0 border-t border-solid border-surface-4 pt-4"
+                    data-testid="crash-analysis-controls"
+                >
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="m-0 text-sm font-semibold">
+                            {{ formatMessage(messages.analysisSection) }}
+                        </h3>
+                        <Button
+                            v-if="!aiLoading"
+                            type="quiet"
+                            @click="choosingSource = !choosingSource"
+                            >{{
+                                formatMessage(
+                                    choosingSource ? messages.sourceDone : messages.changeSource,
+                                )
+                            }}</Button
+                        >
+                    </div>
+                    <LogAgentSourcePicker
+                        v-if="choosingSource"
                         :model-value="selectedSource"
-                        :options="sourceOptions"
+                        :local-model="configuredModel"
                         :disabled="aiLoading"
                         @update:model-value="selectAnalysisSource"
                     />
-                    <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                        {{
+                    <div v-else class="flex min-w-0 flex-col gap-1">
+                        <span class="text-sm font-medium">{{
                             formatMessage(
                                 selectedSource === 'custom'
-                                    ? messages.sourceLocalHint
-                                    : messages.sourceCloudHint,
+                                    ? messages.sourceLocal
+                                    : messages.sourceCloud,
                             )
-                        }}
-                    </p>
-                    <p
-                        v-if="selectedSource === 'custom' && !localAvailable"
-                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
-                    >
-                        {{ formatMessage(messages.localUnavailable) }}
-                    </p>
-                </div>
-                <div class="flex flex-wrap gap-2 pt-2">
-                    <Button type="outlined" :disabled="sharing" @click="shareDiagnostic"
-                        ><ShareIcon aria-hidden="true" />
+                        }}</span>
+                        <span
+                            v-if="selectedSource === 'custom' && configuredModel"
+                            class="break-words text-xs text-[var(--color-text-tertiary)]"
+                            >{{ configuredModel }}</span
+                        >
+                    </div>
+                    <p class="m-0 text-xs leading-relaxed text-[var(--color-text-tertiary)]">
                         {{
-                            sharing
-                                ? formatMessage(messages.sharingDiagnostic)
-                                : formatMessage(messages.shareDiagnostic)
+                            selectedSource === 'custom'
+                                ? configuredProvider
+                                    ? formatMessage(messages.localSending, {
+                                          provider: configuredProvider,
+                                      })
+                                    : formatMessage(messages.modelMissing)
+                                : formatMessage(messages.sourceCloudHint)
                         }}
-                    </Button>
-                    <Button
-                        v-if="aiAvailable"
-                        type="colored"
-                        color="brand"
-                        :disabled="aiLoading"
-                        @click="openAIAnalysis"
-                        ><SparklesIcon aria-hidden="true" />
-                        {{ formatMessage(messages.aiRun) }}
-                    </Button>
+                    </p>
                     <Button v-if="aiLoading" type="outlined" @click="agent.cancel">{{
                         formatMessage(messages.aiCancel)
                     }}</Button>
-                    <Button v-if="modChangesAvailable" type="outlined" @click="openModChanges"
-                        >{{ formatMessage(messages.viewModChanges) }}
+                    <Button
+                        v-else-if="aiAvailable"
+                        type="colored"
+                        color="brand"
+                        @click="openAIAnalysis"
+                    >
+                        <ScanEyeIcon aria-hidden="true" />{{
+                            formatMessage(
+                                agent.status.value === 'idle'
+                                    ? messages.startAnalysis
+                                    : messages.retryAnalysis,
+                            )
+                        }}
                     </Button>
+                    <Button v-else type="colored" color="brand" @click="openAnalysisSettings">{{
+                        formatMessage(messages.configureModel)
+                    }}</Button>
+                </div>
+                <div
+                    class="flex flex-col gap-2 border-0 border-t border-solid border-surface-4 pt-3"
+                >
+                    <div class="flex flex-wrap gap-2">
+                        <Button type="quiet" :disabled="sharing" @click="shareDiagnostic"
+                            ><ShareIcon aria-hidden="true" />{{
+                                formatMessage(
+                                    sharing ? messages.sharingDiagnostic : messages.shareDiagnostic,
+                                )
+                            }}</Button
+                        >
+                        <Button v-if="modChangesAvailable" type="quiet" @click="openModChanges">{{
+                            formatMessage(messages.viewModChanges)
+                        }}</Button>
+                    </div>
+                    <div
+                        v-if="shareUrl"
+                        class="flex items-center gap-2 rounded-lg bg-surface-2 p-3"
+                    >
+                        <ExternalIcon
+                            class="size-4 shrink-0 text-[var(--color-text-tertiary)]"
+                            aria-hidden="true"
+                        />
+                        <a
+                            :href="shareUrl"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="min-w-0 flex-1 truncate text-sm text-[var(--color-text-default)] underline"
+                        >
+                            {{ shareUrl }}
+                        </a>
+                        <Button
+                            type="outlined"
+                            circular
+                            icon-only
+                            :label="formatMessage(messages.copyLink)"
+                            @click="copyShareUrl"
+                            ><ClipboardCopyIcon aria-hidden="true" />
+                        </Button>
+                    </div>
                 </div>
             </section>
 
@@ -1585,6 +1676,31 @@ defineExpose({
                 <LogViewport v-else class="min-h-0 flex-1 p-5" :lines="selectedLogLines" />
             </section>
         </div>
+    </NewModal>
+    <NewModal
+        ref="localSetupModal"
+        :header="formatMessage(messages.configureModel)"
+        :disable-close="localSetupSaving"
+        :on-hide="
+            () => {
+                void refreshAIAvailability()
+            }
+        "
+        max-width="min(42rem, 90vw)"
+    >
+        <LogShareSettings
+            local-setup
+            @open-providers="openProviderSettings"
+            @saving-change="localSetupSaving = $event"
+        />
+        <template #actions
+            ><Button
+                type="outlined"
+                :disabled="localSetupSaving"
+                @click="localSetupModal?.hide()"
+                >{{ formatMessage(messages.returnToAnalysis) }}</Button
+            ></template
+        >
     </NewModal>
     <CrashModChangesModal ref="modChangesModal" />
 </template>
