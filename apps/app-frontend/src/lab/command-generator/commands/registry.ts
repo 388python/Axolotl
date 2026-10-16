@@ -1,16 +1,18 @@
+import { computed, type ComputedRef,ref } from 'vue'
+
 import { loadCommandsForVersion, loadManifest } from '../loader.ts'
 import type { CommandCategory, CommandDefinition } from './types.ts'
 
-let currentCommands: CommandDefinition[] = []
+const currentCommands = ref<CommandDefinition[]>([])
 let currentVersion = '1.21'
 let commandIndex = new Map<string, CommandDefinition>()
 
 export function initializeRegistry(versionId?: string): void {
     const manifest = loadManifest()
     currentVersion = versionId ?? manifest.defaultVersion
-    currentCommands = loadCommandsForVersion(currentVersion)
+    currentCommands.value = loadCommandsForVersion(currentVersion)
     commandIndex = new Map()
-    for (const cmd of currentCommands) {
+    for (const cmd of currentCommands.value) {
         commandIndex.set(cmd.id, cmd)
     }
 }
@@ -23,8 +25,14 @@ export function getCurrentVersion(): string {
     return currentVersion
 }
 
+/** 响应式命令列表 */
+export const allCommandsRef: ComputedRef<readonly CommandDefinition[]> = computed(
+    () => currentCommands.value,
+)
+
+/** 兼容旧接口（非响应式快照） */
 export function getAllCommands(): readonly CommandDefinition[] {
-    return currentCommands
+    return currentCommands.value
 }
 
 export function findCommand(id: string): CommandDefinition | undefined {
@@ -34,7 +42,7 @@ export function findCommand(id: string): CommandDefinition | undefined {
 export function getCommandsByCategory(
     category: CommandCategory,
 ): CommandDefinition[] {
-    return currentCommands.filter((c) => c.category === category)
+    return currentCommands.value.filter((c) => c.category === category)
 }
 
 export const CATEGORY_KEYS: Record<CommandCategory, string> = {
@@ -58,9 +66,9 @@ export const PERMISSION_KEYS: Record<number, string> = {
 }
 
 export function searchCommands(query: string): CommandDefinition[] {
-    if (!query.trim()) return currentCommands
+    if (!query.trim()) return currentCommands.value
     const q = query.toLowerCase().trim()
-    return currentCommands.filter((cmd) => {
+    return currentCommands.value.filter((cmd) => {
         if (cmd.name.toLowerCase().includes(q)) return true
         if (cmd.aliases?.some((a) => a.toLowerCase().includes(q))) return true
         return false
