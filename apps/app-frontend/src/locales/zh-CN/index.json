@@ -6530,6 +6530,24 @@
   "app.lab.command-generator.guide.setblock.ex1": {
     "message": "在头顶放置一个箱子"
   },
+  "app.lab.command-generator.item-picker.title": {
+    "message": "选择物品"
+  },
+  "app.lab.command-generator.item-picker.button": {
+    "message": "选择物品"
+  },
+  "app.lab.command-generator.item-picker.search-placeholder": {
+    "message": "按名称或 ID 搜索物品"
+  },
+  "app.lab.command-generator.item-picker.loading": {
+    "message": "加载物品中"
+  },
+  "app.lab.command-generator.item-picker.empty": {
+    "message": "没有匹配的物品。"
+  },
+  "app.lab.command-generator.item-picker.pick": {
+    "message": "选择物品"
+  },
   "app.lab.command-generator.preset.common.self": {
     "message": "自己"
   },

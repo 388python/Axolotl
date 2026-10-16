@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { Combobox, type ComboboxOption, useVIntl } from '@modrinth/ui'
-import { computed, ref } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 
 import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
+import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
 import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 
+import CommandGeneratorItemPickerModal from './CommandGeneratorItemPickerModal.vue'
 import CommandGeneratorNbtEditor from './CommandGeneratorNbtEditor.vue'
 
 const props = defineProps<{
@@ -43,8 +45,13 @@ const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
 
 const isNumber = computed(() => props.arg.type === 'number' || props.arg.type === 'integer')
 const isNbt = computed(() => props.arg.supportsNbtEditor === true)
+const isItem = computed(() => props.arg.type === 'item')
 const isEnumDropdown = computed(
     () => !!props.arg.enumValues && props.arg.enumValues.length > 0,
+)
+
+const itemPickerRef = useTemplateRef<InstanceType<typeof CommandGeneratorItemPickerModal>>(
+    'itemPickerRef',
 )
 
 const enumOptions = computed<ComboboxOption[]>(() =>
@@ -78,7 +85,11 @@ const mergedPresets = computed<ArgumentPreset[]>(() => {
 })
 
 const showPresets = computed(
-    () => !isEnumDropdown.value && !isNbt.value && mergedPresets.value.length > 0,
+    () =>
+        !isEnumDropdown.value &&
+        !isNbt.value &&
+        !isItem.value &&
+        mergedPresets.value.length > 0,
 )
 
 const VISIBLE_PRESET_COUNT = 4
@@ -107,6 +118,14 @@ function onCheckboxChange(checked: boolean) {
 
 function applyPreset(value: string | number | boolean) {
     emit('update:modelValue', value)
+}
+
+function openItemPicker() {
+    itemPickerRef.value?.show()
+}
+
+function onItemPicked(id: string) {
+    emit('update:modelValue', id)
 }
 </script>
 
@@ -150,6 +169,19 @@ function applyPreset(value: string | number | boolean) {
             <span>{{ t(arg.descriptionKey) }}</span>
         </label>
 
+        <div v-else-if="isItem" class="item-input-column">
+            <input
+                :value="modelValue"
+                type="text"
+                :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+                class="argument-input"
+                @input="onTextInput(($event.target as HTMLInputElement).value)"
+            />
+            <button type="button" class="item-pick-button" @click="openItemPicker">
+                {{ t('app.lab.command-generator.item-picker.button') }}
+            </button>
+        </div>
+
         <input
             v-else
             :value="modelValue"
@@ -183,6 +215,13 @@ function applyPreset(value: string | number | boolean) {
         <p v-if="!isNbt && arg.type !== 'boolean'" class="argument-hint">
             {{ t(arg.descriptionKey) }}
         </p>
+
+        <CommandGeneratorItemPickerModal
+            v-if="isItem"
+            ref="itemPickerRef"
+            :version="getCurrentVersion()"
+            @select="onItemPicked"
+        />
     </div>
 </template>
 
@@ -246,6 +285,38 @@ function applyPreset(value: string | number | boolean) {
 
 .argument-input:focus {
     border-color: var(--color-brand);
+}
+
+.item-input-column {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.item-input-column .argument-input {
+    width: 100%;
+}
+
+.item-pick-button {
+    display: inline-flex;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-brand);
+    border-radius: var(--radius-md);
+    background: var(--surface-1);
+    padding: 0.5rem 1.2rem;
+    color: var(--color-brand);
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.item-pick-button:hover {
+    background: var(--surface-4);
 }
 
 .argument-toggle {

@@ -6839,6 +6839,24 @@
   "app.lab.command-generator.guide.setblock.ex1": {
     "message": "Place a chest above your head"
   },
+  "app.lab.command-generator.item-picker.title": {
+    "message": "Pick an item"
+  },
+  "app.lab.command-generator.item-picker.button": {
+    "message": "Pick item"
+  },
+  "app.lab.command-generator.item-picker.search-placeholder": {
+    "message": "Search items by name or ID"
+  },
+  "app.lab.command-generator.item-picker.loading": {
+    "message": "Loading items"
+  },
+  "app.lab.command-generator.item-picker.empty": {
+    "message": "No items match your search."
+  },
+  "app.lab.command-generator.item-picker.pick": {
+    "message": "Pick item"
+  },
   "app.lab.command-generator.preset.common.self": {
     "message": "Self"
   },
