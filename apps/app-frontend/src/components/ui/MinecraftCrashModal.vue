@@ -415,14 +415,6 @@ const messages = defineMessages({
         id: 'app.minecraft-crash.copy-link',
         defaultMessage: 'Copy link',
     },
-    aiAnalyze: {
-        id: 'app.crash-analysis.ai.action',
-        defaultMessage: 'Use AI to explain',
-    },
-    aiAnalyzeLogShare: {
-        id: 'app.log-share.ai.action',
-        defaultMessage: 'Deep AI analysis',
-    },
     noLogContent: {
         id: 'app.minecraft-crash.no-log-content',
         defaultMessage:
@@ -511,10 +503,6 @@ const messages = defineMessages({
     aiUsingTool: {
         id: 'app.log-share.ai.tool',
         defaultMessage: 'Using tool: {name}',
-    },
-    aiUnknownTool: {
-        id: 'app.log-share.ai.unknown-tool',
-        defaultMessage: 'tool',
     },
     aiToolResult: {
         id: 'app.log-share.ai.tool-result',
@@ -1346,7 +1334,7 @@ defineExpose({
                     </Button>
                 </div>
 
-                <div class="mt-auto flex flex-col gap-2 pt-2" data-onboarding-id="logagent-source">
+                <div class="mt-auto flex flex-col gap-2 pt-2">
                     <label for="crash-analysis-source" class="text-sm font-semibold">{{
                         formatMessage(messages.sourceLabel)
                     }}</label>

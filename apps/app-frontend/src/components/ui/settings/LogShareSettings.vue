@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import { Combobox, defineMessages, injectNotificationManager, Toggle, useVIntl } from '@modrinth/ui'
-import { computed, onMounted, ref } from 'vue'
+import {
+    Button,
+    Combobox,
+    defineMessages,
+    injectNotificationManager,
+    Toggle,
+    useVIntl,
+} from '@modrinth/ui'
+import { computed, inject, onMounted, ref } from 'vue'
 
 import { type AIState, getAIState, sharedAIState } from '@/helpers/ai'
 import {
@@ -9,16 +16,10 @@ import {
     update_crash_analysis_ai_settings,
     update_log_share_settings,
 } from '@/helpers/logs'
+import type { AnalysisSettings } from '@/logagent/types'
 
 import SettingsRow from './SettingsRow.vue'
 import SettingsSection from './SettingsSection.vue'
-
-type CrashAISettings = {
-    enabled: boolean
-    provider_id: string
-    model_id: string
-    ai_source: 'logshare' | 'custom'
-}
 
 type LogShareSettings = {
     share_provider: 'logshare' | 'mclogs'
@@ -30,6 +31,7 @@ type LogShareSettings = {
 }
 
 const { formatMessage } = useVIntl()
+const replayOnboarding = inject<(mode: 'logagent') => Promise<void>>('replayOnboarding')
 const { handleError } = injectNotificationManager()
 const settings = ref<LogShareSettings>({
     share_provider: 'logshare',
@@ -39,7 +41,7 @@ const settings = ref<LogShareSettings>({
     no_storage: false,
     show_progress: true,
 })
-const aiSettings = ref<CrashAISettings>({
+const aiSettings = ref<AnalysisSettings>({
     enabled: false,
     provider_id: '',
     model_id: '',
@@ -49,11 +51,17 @@ const loading = ref(true)
 const saving = ref(false)
 
 const messages = defineMessages({
+    tour: { id: 'app.logagent.settings.tour', defaultMessage: 'About analysis sources' },
+    supportedModels: {
+        id: 'app.logagent.settings.supported-models',
+        defaultMessage:
+            'Choose a model that supports tool calling. Protocol support does not guarantee that every model accepts tools. Copilot Auto requires selecting an explicit model.',
+    },
     title: { id: 'app.log-share.settings.title', defaultMessage: 'Log sharing & AI analysis' },
     description: {
         id: 'app.log-share.settings.description',
         defaultMessage:
-            'Share crash diagnostics with LogShare for a structured summary and optional AI analysis. LogShare is preferred; mclo.gs is used as a fallback.',
+            'Choose local LogAgent or cloud LogShare for crash analysis. Your log sharing service is configured separately.',
     },
     shareProvider: {
         id: 'app.log-share.settings.share-provider',
@@ -66,20 +74,20 @@ const messages = defineMessages({
     aiSource: { id: 'app.log-share.settings.ai-source', defaultMessage: 'AI analysis source' },
     aiSourceLogShare: {
         id: 'app.log-share.settings.ai-source-logshare',
-        defaultMessage: 'LogShare AI',
+        defaultMessage: 'Cloud LogShare',
     },
     aiSourceCustom: {
         id: 'app.log-share.settings.ai-source-custom',
-        defaultMessage: 'Custom AI provider',
+        defaultMessage: 'Local LogAgent',
     },
     aiSourceDescription: {
         id: 'app.log-share.settings.ai-source-description',
         defaultMessage:
-            'Both sources send a sanitized and shortened crash context. AI output may be inaccurate.',
+            'Local LogAgent runs in the launcher and sends relevant log excerpts to your configured model provider. Cloud LogShare sends logs to LogShare. This is the default; you can change the source for each analysis.',
     },
     enabled: {
         id: 'app.crash-analysis.ai.settings.enabled',
-        defaultMessage: 'Enable AI explanations',
+        defaultMessage: 'Enable local LogAgent',
     },
     enabledDescription: {
         id: 'app.crash-analysis.ai.settings.enabled-description',
@@ -90,7 +98,7 @@ const messages = defineMessages({
     noProviders: {
         id: 'app.crash-analysis.ai.settings.no-providers',
         defaultMessage:
-            'Enable a provider and a text model above before using AI crash explanations.',
+            'Enable an AI provider and a tool-capable model in Settings > AI before configuring local LogAgent.',
     },
     autoUpload: {
         id: 'app.log-share.settings.auto-upload',
@@ -120,7 +128,8 @@ const messages = defineMessages({
     },
     showProgressDescription: {
         id: 'app.log-share.settings.show-progress-description',
-        defaultMessage: 'Display thinking, tool and limit status while LogShare AI is working.',
+        defaultMessage:
+            'Display tool and processing status while either analysis source is working.',
     },
 })
 
@@ -152,10 +161,10 @@ const shareProviderOptions = [
     { value: 'logshare', label: 'LogShare' },
     { value: 'mclogs', label: 'mclo.gs' },
 ]
-const aiSourceOptions = [
+const aiSourceOptions = computed(() => [
     { value: 'logshare', label: formatMessage(messages.aiSourceLogShare) },
     { value: 'custom', label: formatMessage(messages.aiSourceCustom) },
-]
+])
 
 async function saveShare(next: LogShareSettings): Promise<void> {
     saving.value = true
@@ -169,7 +178,7 @@ async function saveShare(next: LogShareSettings): Promise<void> {
     }
 }
 
-async function saveAI(next: CrashAISettings): Promise<void> {
+async function saveAI(next: AnalysisSettings): Promise<void> {
     saving.value = true
     try {
         await update_crash_analysis_ai_settings(next)
@@ -215,7 +224,7 @@ onMounted(async () => {
         const [nextShare, nextAI] = await Promise.all([
             get_log_share_settings(),
             get_crash_analysis_ai_settings(),
-            getAIState(),
+            getAIState().catch(handleError),
         ])
         settings.value = { ...nextShare, ai_source: nextAI.ai_source }
         aiSettings.value = nextAI
@@ -234,7 +243,7 @@ onMounted(async () => {
         :title="formatMessage(messages.title)"
         :description="formatMessage(messages.description)"
     >
-        <SettingsRow>
+        <SettingsRow data-onboarding-id="logagent-settings-sharing">
             <template #label>{{ formatMessage(messages.shareProvider) }}</template>
             <template #description>{{ formatMessage(messages.shareProviderDescription) }}</template>
             <template #control>
@@ -247,7 +256,12 @@ onMounted(async () => {
                 />
             </template>
         </SettingsRow>
-        <SettingsRow>
+        <template #extra>
+            <Button type="outlined" @click="replayOnboarding?.('logagent')">{{
+                formatMessage(messages.tour)
+            }}</Button>
+        </template>
+        <SettingsRow data-onboarding-id="logagent-settings-source">
             <template #label>{{ formatMessage(messages.aiSource) }}</template>
             <template #description>{{ formatMessage(messages.aiSourceDescription) }}</template>
             <template #control>
@@ -260,6 +274,9 @@ onMounted(async () => {
                 />
             </template>
         </SettingsRow>
+        <p v-if="isCustom" class="m-0 px-4 py-3 text-sm text-[var(--color-text-tertiary)]">
+            {{ formatMessage(messages.supportedModels) }}
+        </p>
         <template v-if="isCustom">
             <SettingsRow>
                 <template #label>{{ formatMessage(messages.enabled) }}</template>
@@ -327,7 +344,7 @@ onMounted(async () => {
                 />
             </template>
         </SettingsRow>
-        <SettingsRow>
+        <SettingsRow data-onboarding-id="logagent-settings-cloud">
             <template #label>{{ formatMessage(messages.noStorage) }}</template>
             <template #description>{{ formatMessage(messages.noStorageDescription) }}</template>
             <template #control>

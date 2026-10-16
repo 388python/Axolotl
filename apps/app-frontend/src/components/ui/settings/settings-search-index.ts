@@ -462,6 +462,8 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
         keywords: [
             message('app.log-share.settings.share-provider', 'Log sharing service'),
             message('app.log-share.settings.ai-source', 'AI analysis source'),
+            message('app.logagent.source-local', 'Local LogAgent'),
+            message('app.logagent.source-cloud', 'Cloud LogShare'),
         ],
     },
     {

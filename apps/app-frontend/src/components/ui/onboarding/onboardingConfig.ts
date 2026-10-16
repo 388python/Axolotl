@@ -1,7 +1,7 @@
 import { defineMessages, type MessageDescriptor } from '@modrinth/ui'
 
 export type OnboardingInteraction = 'manual' | 'navigate' | 'activate' | 'inspect'
-export type OnboardingMode = 'main' | 'instance'
+export type OnboardingMode = 'main' | 'instance' | 'logagent'
 export type CreationPath = 'custom'
 export type StepDestination = string | 'complete'
 
@@ -27,6 +27,33 @@ export type OnboardingStep = {
 }
 
 export const onboardingMessages = defineMessages({
+    logagentSourceTitle: {
+        id: 'app.onboarding.logagent-source.title',
+        defaultMessage: 'Choose where analysis runs',
+    },
+    logagentSourceDescription: {
+        id: 'app.onboarding.logagent-source.description',
+        defaultMessage:
+            'Local LogAgent investigates logs in this launcher using your configured model. Relevant excerpts are sent to that model provider. Cloud LogShare analyzes logs on its server. This setting is a default; the crash window can override it for one analysis.',
+    },
+    logagentSharingTitle: {
+        id: 'app.onboarding.logagent-sharing.title',
+        defaultMessage: 'Sharing is a separate action',
+    },
+    logagentSharingDescription: {
+        id: 'app.onboarding.logagent-sharing.description',
+        defaultMessage:
+            'Choosing local analysis does not upload logs to LogShare. You can still explicitly share a diagnostic link using your selected sharing service.',
+    },
+    logagentCloudTitle: {
+        id: 'app.onboarding.logagent-cloud.title',
+        defaultMessage: 'Control cloud storage',
+    },
+    logagentCloudDescription: {
+        id: 'app.onboarding.logagent-cloud.description',
+        defaultMessage:
+            'Cloud analysis can submit logs without storing them. Logs are still sent to LogShare, and the automatic stored summary is disabled. Cancelling disconnects the launcher; a cloud task may continue on the server.',
+    },
     welcomeTitle: {
         id: 'app.onboarding.welcome.title',
         defaultMessage: 'Everything is ready',
@@ -478,6 +505,26 @@ const settingsTourSteps: Array<{
 ]
 
 export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
+    logagent: [
+        inspect(
+            'logagent-source',
+            'logagent-settings-source',
+            onboardingMessages.logagentSourceTitle,
+            onboardingMessages.logagentSourceDescription,
+        ),
+        inspect(
+            'logagent-sharing',
+            'logagent-settings-sharing',
+            onboardingMessages.logagentSharingTitle,
+            onboardingMessages.logagentSharingDescription,
+        ),
+        inspect(
+            'logagent-cloud',
+            'logagent-settings-cloud',
+            onboardingMessages.logagentCloudTitle,
+            onboardingMessages.logagentCloudDescription,
+        ),
+    ],
     main: [
         step(
             'welcome',

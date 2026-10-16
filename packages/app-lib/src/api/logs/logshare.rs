@@ -474,6 +474,7 @@ async fn stream_ai(
     let mut stream = response.bytes_stream();
     let mut parser = SseParser::new();
     let mut output = String::new();
+    let mut received_bytes = 0usize;
 
     loop {
         let maybe = tokio::time::timeout(
@@ -490,6 +491,13 @@ async fn stream_ai(
             break;
         };
         let chunk = chunk?;
+        received_bytes = received_bytes.saturating_add(chunk.len());
+        if received_bytes > 8 * 1024 * 1024 {
+            return Err(crate::ErrorKind::OtherError(
+                "LogShare analysis exceeded its response budget".to_string(),
+            )
+            .into());
+        }
         for event in parser.feed(&chunk) {
             if let Some(delta) = event.content {
                 output.push_str(&delta);

@@ -1,5 +1,8 @@
 //! Model turns for tool-driven diagnostics. Credentials never leave Rust.
 
+mod bedrock;
+mod google;
+
 use super::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,19 +60,10 @@ impl ChatModel {
         {
             return Err(input_error("Enable the selected AI provider and model before using local LogAgent".to_string()));
         }
-        if !matches!(
-            config.protocol,
-            AiProtocol::Openai
-                | AiProtocol::Azure
-                | AiProtocol::AzureAi
-                | AiProtocol::Router
-                | AiProtocol::Huggingface
-                | AiProtocol::Anthropic
-                | AiProtocol::Ollama
-        ) || (provider_id == "githubcopilot"
-            && model_id.eq_ignore_ascii_case("auto"))
+        if provider_id == "githubcopilot"
+            && model_id.eq_ignore_ascii_case("auto")
         {
-            return Err(input_error("LOCAL_LOGAGENT_UNSUPPORTED: This protocol or automatic model selection is not yet supported. Select an explicit tool-capable OpenAI-compatible, Anthropic or Ollama model.".to_string()));
+            return Err(input_error("LOCAL_LOGAGENT_UNSUPPORTED: Select an explicit tool-capable Copilot model instead of Auto.".to_string()));
         }
         Ok(Self {
             definition: provider_definition(provider_id)?,
@@ -120,11 +114,21 @@ impl ChatModel {
             };
             account_id = credentials.account_id;
         }
-        if self.definition.auth_type != AiAuthType::None && token.is_empty() {
+        if self.definition.auth_type != AiAuthType::None
+            && token.is_empty()
+            && self.definition.id != "vertexai"
+            && self.config.protocol != AiProtocol::Bedrock
+        {
             return Err(input_error(format!(
                 "Configure credentials for {} before using LogAgent",
                 self.definition.name
             )));
+        }
+        if self.config.protocol == AiProtocol::Google {
+            return google::turn(self, &client, token, &turn).await;
+        }
+        if self.config.protocol == AiProtocol::Bedrock {
+            return bedrock::turn(self, &client, token, &turn).await;
         }
         let copilot = self.definition.id == "githubcopilot";
         if self.definition.id == "chatgpt"
@@ -145,11 +149,35 @@ impl ChatModel {
             } else {
                 builder.header("x-api-key", token)
             };
-            let value = checked_json(builder.json(&json!({ "model": self.model_id, "max_tokens": 4096, "system": system, "messages": messages, "tools": tools })).send().await?, self.definition.name).await?;
+            let mut body = json!({ "model": self.model_id, "max_tokens": 4096, "system": system, "messages": messages });
+            if !tools.is_empty() {
+                body["tools"] = json!(tools);
+            }
+            let value = checked_json(
+                builder.json(&body).send().await?,
+                self.definition.name,
+            )
+            .await?;
             return parse_anthropic(&value);
         }
         let ollama = self.config.protocol == AiProtocol::Ollama;
-        let endpoint = if self.config.protocol == AiProtocol::Azure {
+        let endpoint = if self.config.protocol == AiProtocol::Cloudflare {
+            let account = self
+                .config
+                .settings
+                .get("account_id")
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    input_error(
+                        "Configure the Cloudflare account ID".to_string(),
+                    )
+                })?;
+            format!(
+                "{}/accounts/{}/ai/v1/chat/completions",
+                self.config.endpoint.trim_end_matches('/'),
+                urlencoding::encode(account)
+            )
+        } else if self.config.protocol == AiProtocol::Azure {
             let deployment = self
                 .config
                 .settings
@@ -179,7 +207,9 @@ impl ChatModel {
             )
         };
         let mut body = json!({ "model": self.model_id, "messages": openai_messages(&turn.messages, ollama), "tools": turn.tools, "stream": false });
-        if !ollama {
+        if turn.tools.is_empty() {
+            body.as_object_mut().unwrap().remove("tools");
+        } else if !ollama {
             body["tool_choice"] = json!("auto");
         }
         let mut builder = client.post(endpoint).json(&body);
@@ -227,7 +257,18 @@ impl ChatModel {
             }
         }
         let tools = turn.tools.iter().map(|tool| json!({ "type": "function", "name": tool["function"]["name"], "description": tool["function"]["description"], "parameters": tool["function"]["parameters"] })).collect::<Vec<_>>();
-        let body = json!({ "model": self.model_id, "instructions": instructions, "input": input, "tools": tools, "tool_choice": "auto", "parallel_tool_calls": false, "include": ["reasoning.encrypted_content"], "store": false, "stream": true });
+        let lite = self.definition.id == "chatgpt"
+            && matches!(
+                self.model_id.as_str(),
+                "gpt-5.6-luna" | "gpt-5.6-sol" | "gpt-5.6-terra"
+            );
+        let body = if lite {
+            input.insert(0, json!({ "role": "developer", "type": "message", "content": instructions }));
+            input.insert(0, json!({ "role": "developer", "type": "additional_tools", "tools": tools }));
+            json!({ "model": self.model_id, "input": input, "tool_choice": "auto", "parallel_tool_calls": false, "reasoning": { "context": "all_turns" }, "store": false, "stream": true })
+        } else {
+            json!({ "model": self.model_id, "instructions": instructions, "input": input, "tools": tools, "tool_choice": "auto", "parallel_tool_calls": false, "include": ["reasoning.encrypted_content"], "store": false, "stream": true })
+        };
         let mut builder = client
             .post(endpoint_with_path(&self.config.endpoint, "/responses"))
             .bearer_auth(token)
@@ -249,6 +290,10 @@ impl ChatModel {
                 .header("version", env!("CARGO_PKG_VERSION"));
         } else {
             builder = copilot_headers(builder, None);
+        }
+        if lite {
+            builder = builder
+                .header("x-openai-internal-codex-responses-lite", "true");
         }
         let response = builder.send().await?;
         if !response.status().is_success() {
@@ -466,6 +511,34 @@ fn parse_responses(value: &Value) -> crate::Result<ChatMessage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn responses_stream_handles_fragmented_utf8_and_requires_completion()
+    {
+        let completed = json!({ "type": "response.completed", "response": { "output": [{ "type": "message", "content": [{ "type": "output_text", "text": "诊断" }] }, { "type": "function_call", "call_id": "c1", "name": "read_log_file", "arguments": "{\"file_id\":\"log-1\"}" }] } });
+        let text = format!(
+            "event: response.function_call_arguments.delta\ndata: {{\"type\":\"response.function_call_arguments.delta\",\"delta\":\"partial\"}}\n\ndata: {completed}\n\n"
+        );
+        let chunks = text
+            .as_bytes()
+            .chunks(7)
+            .map(|chunk| Ok::<_, std::io::Error>(chunk.to_vec()))
+            .collect::<Vec<_>>();
+        let body = reqwest::Body::wrap_stream(futures::stream::iter(chunks));
+        let result = parse_response_stream(reqwest::Response::from(
+            http::Response::new(body),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(result.content, "诊断");
+        assert_eq!(result.tool_calls[0].args["file_id"], "log-1");
+        let incomplete = reqwest::Response::from(http::Response::new(
+            reqwest::Body::from(
+                "data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n",
+            ),
+        ));
+        assert!(parse_response_stream(incomplete).await.is_err());
+    }
 
     #[test]
     fn openai_round_trip_retains_tool_ids_arguments_and_reasoning() {

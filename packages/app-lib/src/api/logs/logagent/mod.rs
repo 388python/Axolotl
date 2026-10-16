@@ -151,6 +151,7 @@ pub async fn prepare(
         sessions.insert(run_id.clone(), session.clone());
     }
     let result = tokio::select! {
+        biased;
         _ = session.cancel.cancelled() => Err(error("LogAgent cancelled")),
         _ = tokio::time::sleep(SESSION_TTL) => Err(error("LogAgent time budget exceeded")),
         result = prepare_snapshot(instance_id, &run_id, &session) => result,
@@ -297,6 +298,7 @@ pub async fn model_turn(
         return Err(error("Unsupported diagnostic model tool"));
     }
     tokio::select! {
+        biased;
         _ = session.cancel.cancelled() => Err(error("LogAgent cancelled")),
         _ = tokio::time::sleep(session.remaining()) => Err(error("LogAgent time budget exceeded")),
         result = model.turn(turn) => result,
@@ -352,8 +354,53 @@ pub async fn cloud(
         })
         .collect::<Vec<_>>();
     tokio::select! {
+        biased;
         _ = session.cancel.cancelled() => Err(error("LogAgent cancelled")),
         _ = tokio::time::sleep(session.remaining()) => Err(error("LogAgent time budget exceeded")),
         result = super::logshare::analyze_snapshot(files, &snapshot.share_settings, ticket, |event_type, data| emit(AnalysisEvent { run_id: run_id.to_string(), event_type: event_type.to_string(), data })) => result,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancellation_cannot_affect_another_run() {
+        let first = uuid::Uuid::new_v4().to_string();
+        let second = uuid::Uuid::new_v4().to_string();
+        let make_session = || {
+            Arc::new(Session {
+                created: Instant::now(),
+                cancel: CancellationToken::new(),
+                snapshot: tokio::sync::OnceCell::new(),
+                source: "custom".into(),
+                budget: Mutex::new(Budget::default()),
+                turn_lock: tokio::sync::Mutex::new(()),
+            })
+        };
+        let old = make_session();
+        sessions().unwrap().insert(first.clone(), old.clone());
+        sessions().unwrap().insert(second.clone(), make_session());
+        cancel(&first).unwrap();
+        assert!(old.cancel.is_cancelled());
+        assert!(session(&first).is_err());
+        assert!(session(&second).is_ok());
+        cancel(&first).unwrap();
+        cancel(&second).unwrap();
+    }
+
+    #[test]
+    fn sanitizes_nested_metadata_without_changing_structure() {
+        let username = whoami::username();
+        let mut metadata = json!({ "windows_events": [{ "message": format!("C:\\Users\\{username}\\game") }], "count": 3 });
+        sanitize(&mut metadata, &[]);
+        assert_eq!(metadata["count"], 3);
+        assert!(
+            metadata["windows_events"][0]["message"]
+                .as_str()
+                .unwrap()
+                .contains("{COMPUTER_USERNAME}")
+        );
     }
 }

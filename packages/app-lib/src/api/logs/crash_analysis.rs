@@ -1628,6 +1628,33 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn truncated_sources_keep_complete_lines_and_original_offsets() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("latest.log");
+        let content = format!(
+            "{}original final line\n",
+            "prefix line\n".repeat(MAX_SOURCE_BYTES as usize / 12 + 10)
+        );
+        tokio::fs::write(&path, &content).await.unwrap();
+        let sources = read_sources(vec![SourceCandidate {
+            path,
+            filename: "latest.log".into(),
+            upload_name: "latest.log".into(),
+            source_type: "minecraft_log",
+            modified: SystemTime::now(),
+        }])
+        .await;
+        let source = &sources[0];
+        assert!(source.first_line > 1);
+        assert!(source.content.len() <= MAX_SOURCE_BYTES as usize);
+        assert!(source.content.starts_with("prefix line\n"));
+        assert_eq!(
+            source.first_line + source.content.lines().count() - 1,
+            content.lines().count()
+        );
+    }
+
     #[test]
     fn reports_rule_evidence_with_source_line() {
         let findings = analyze_sources(&[source(
