@@ -24,7 +24,7 @@ const manifests = targets.map((target) => {
     const directory = path.join(input, target)
     const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'axolotl-build.json'), 'utf8'))
     const binary = requireFile(path.join(directory, 'Axolotl Launcher'))
-    run('lipo', ['-verify_arch', target.startsWith('aarch64') ? 'arm64' : 'x86_64', binary])
+    run('lipo', [binary, '-verify_arch', target.startsWith('aarch64') ? 'arm64' : 'x86_64'])
     if (
         manifest.schema !== 1 ||
         manifest.target !== target ||
@@ -57,7 +57,7 @@ run('lipo', [
     '-output',
     binary,
 ])
-run('lipo', ['-verify_arch', 'arm64', 'x86_64', binary])
+run('lipo', [binary, '-verify_arch', 'arm64', 'x86_64'])
 fs.chmodSync(binary, 0o755)
 run(
     'pnpm',
