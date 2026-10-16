@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { defineMessages, StyledInput, useVIntl } from '@modrinth/ui'
 import Fuse from 'fuse.js'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import RecipeItemIcon from '@/components/lab/recipe-generator/RecipeItemIcon.vue'
 import type { SlotDisplay } from '@/lab/recipe-generator/display'
@@ -48,13 +48,23 @@ const messages = defineMessages({
 
 const search = ref('')
 const debouncedSearch = ref('')
-let searchTimer: ReturnType<typeof window.setTimeout> | undefined
+
+// 修复：使用 ReturnType<typeof setTimeout> 而非 window.setTimeout，避免 SSR/类型环境差异
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(search, (value) => {
-    if (searchTimer) window.clearTimeout(searchTimer)
-    searchTimer = window.setTimeout(() => {
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => {
         debouncedSearch.value = value
     }, 120)
+})
+
+// 修复：组件卸载时清理挂起的 timer
+onBeforeUnmount(() => {
+    if (searchTimer) {
+        clearTimeout(searchTimer)
+        searchTimer = undefined
+    }
 })
 
 const fuse = computed(

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { CodeIcon, SparklesIcon } from '@modrinth/assets'
 import { defineMessages, useVIntl } from '@modrinth/ui'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 import type { NbtKind } from '@/lab/command-generator/commands/types.ts'
 
@@ -25,6 +25,14 @@ const messages = defineMessages({
 })
 
 const mode = ref<'simple' | 'advanced'>(props.kind === 'item' ? 'simple' : 'advanced')
+
+// 修复：kind 变化时同步切换默认 mode
+watch(
+    () => props.kind,
+    (kind) => {
+        mode.value = kind === 'item' ? 'simple' : 'advanced'
+    },
+)
 </script>
 
 <template>

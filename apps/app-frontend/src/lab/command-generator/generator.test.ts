@@ -1,7 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
-import { VANILLA_COMMANDS } from './commands/registry'
+import { getAllCommands, initializeRegistry } from './commands/registry'
 import { buildCommand, getDefaultValues, validateCommand } from './generator'
+
+// 修复：registry 是懒加载的，测试前必须先初始化
+beforeAll(() => {
+    initializeRegistry()
+})
 
 describe('buildCommand', () => {
     it('生成基础 give 命令', () => {
@@ -89,13 +94,15 @@ describe('getDefaultValues', () => {
 
 describe('registry completeness', () => {
     it('所有指令都有唯一的 id', () => {
-        const ids = VANILLA_COMMANDS.map((c) => c.id)
+        const commands = getAllCommands()
+        const ids = commands.map((c) => c.id)
         expect(new Set(ids).size).toBe(ids.length)
     })
 
     it('所有指令都有描述和分类', () => {
-        for (const cmd of VANILLA_COMMANDS) {
-            expect(cmd.description).toBeTruthy()
+        // 修复：字段名是 descriptionKey 而不是 description
+        for (const cmd of getAllCommands()) {
+            expect(cmd.descriptionKey).toBeTruthy()
             expect(cmd.category).toBeTruthy()
         }
     })

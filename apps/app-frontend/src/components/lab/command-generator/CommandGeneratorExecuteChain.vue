@@ -48,6 +48,7 @@ function t(key: string, fallback?: string): string {
     return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
+// 修复：nextId 放在 setup 作用域内，每个组件实例独立，避免 HMR 后 id 冲突
 let nextId = 1
 
 const chain = ref<ChainStep[]>([])
@@ -160,7 +161,8 @@ function renderStep(step: ChainStep): string {
         const value = step.values[arg.name]
         const replacement =
             value !== undefined && value !== null && value !== '' ? String(value) : ''
-        text = text.replace(`{${arg.name}}`, replacement)
+        // 修复：使用 split/join 替换所有同名占位符，避免 String.replace 只替换首个的问题
+        text = text.split(`{${arg.name}}`).join(replacement)
     }
     return text.trim()
 }

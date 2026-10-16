@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { Combobox, type ComboboxOption, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 interface EnchantEntry {
     key: number
@@ -161,22 +161,24 @@ let nextKey = 1
 
 const snbt = computed(() => serialize())
 
-watch(snbt, (val) => emit('update:modelValue', val), { immediate: true })
+// ============ 序列化 ============
 
-watch(
-    () => props.modelValue,
-    (val) => {
-        if (
-            !val &&
-            (name.value || lore.value.length || enchantments.value.length || unbreakable.value)
-        ) {
-            name.value = ''
-            lore.value = []
-            enchantments.value = []
-            unbreakable.value = false
-        }
-    },
-)
+/**
+ * 对原始值做两层转义：
+ *   1. JSON 层：\ → \\， " → \"
+ *   2. SNBT 单引号字符串层：\ → \\， ' → \'
+ * 修复点：原实现漏掉了单引号转义，导致名称/描述中含 ' 时 SNBT 断裂。
+ */
+function escapeSnbt(value: string): string {
+    let result = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    result = result.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    return result
+}
+
+/** 反转 SNBT 单引号字符串层转义 */
+function unescapeSnbt(value: string): string {
+    return value.replace(/\\(.)/g, '$1')
+}
 
 function serialize(): string {
     const parts: string[] = []
@@ -187,7 +189,9 @@ function serialize(): string {
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
-        const loreItems = cleanLore.map((l) => `'{"text":"${escapeSnbt(l)}"}'`).join(',')
+        const loreItems = cleanLore
+            .map((l) => `'{"text":"${escapeSnbt(l)}"}'`)
+            .join(',')
         displayParts.push(`Lore:[${loreItems}]`)
     }
     if (displayParts.length) {
@@ -195,7 +199,9 @@ function serialize(): string {
     }
 
     if (enchantments.value.length) {
-        const items = enchantments.value.map((e) => `{id:"${e.id}",lvl:${e.level}}`).join(',')
+        const items = enchantments.value
+            .map((e) => `{id:"${e.id}",lvl:${e.level}}`)
+            .join(',')
         parts.push(`Enchantments:[${items}]`)
     }
 
@@ -206,9 +212,102 @@ function serialize(): string {
     return parts.length ? `{${parts.join(',')}}` : ''
 }
 
-function escapeSnbt(value: string): string {
-    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+// ============ 反序列化（受控状态恢复） ============
+
+function parseSnbt(snbtStr: string): void {
+    name.value = ''
+    lore.value = []
+    enchantments.value = []
+    unbreakable.value = false
+
+    if (!snbtStr) return
+
+    // Name: '{"text":"..."}'
+    const nameMatch = snbtStr.match(/Name:'((?:\\.|[^'\\])*)'/)
+    if (nameMatch) {
+        const content = unescapeSnbt(nameMatch[1])
+        try {
+            const parsed = JSON.parse(content)
+            if (parsed && typeof parsed.text === 'string') {
+                name.value = parsed.text
+            }
+        } catch {
+            // 忽略非法 JSON
+        }
+    }
+
+    // Lore: ['{"text":"..."}', ...]
+    const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
+    if (loreMatch) {
+        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
+        lore.value = items
+            .map((raw) => {
+                const inner = raw.slice(1, -1)
+                const content = unescapeSnbt(inner)
+                try {
+                    const parsed = JSON.parse(content)
+                    return typeof parsed?.text === 'string' ? parsed.text : ''
+                } catch {
+                    return ''
+                }
+            })
+            .filter((s) => s.length > 0)
+    }
+
+    // Enchantments: [{id:"...",lvl:N}, ...]
+    const enchMatch = snbtStr.match(/Enchantments:\[((?:\{[^{}]*\},?)+)\]/)
+    if (enchMatch) {
+        const items = enchMatch[1].match(/\{[^{}]*\}/g) ?? []
+        enchantments.value = items
+            .map((raw) => {
+                const idMatch = raw.match(/id:"([^"]*)"/)
+                const lvlMatch = raw.match(/lvl:(\d+)/)
+                return {
+                    key: nextKey++,
+                    id: idMatch ? idMatch[1] : '',
+                    level: lvlMatch ? Number(lvlMatch[1]) : 1,
+                }
+            })
+            .filter((e) => e.id)
+    }
+
+    // Unbreakable: 1b
+    if (/Unbreakable:1b/.test(snbtStr)) {
+        unbreakable.value = true
+    }
 }
+
+// ============ 双向同步 ============
+
+let syncing = false
+
+// 初始：从 prop 恢复内部状态
+if (props.modelValue) {
+    parseSnbt(props.modelValue)
+}
+
+watch(
+    snbt,
+    (val) => {
+        syncing = true
+        emit('update:modelValue', val)
+        nextTick(() => {
+            syncing = false
+        })
+    },
+    { immediate: true },
+)
+
+watch(
+    () => props.modelValue,
+    (val, oldVal) => {
+        if (val === oldVal) return
+        if (syncing) return
+        parseSnbt(val ?? '')
+    },
+)
+
+// ============ 编辑操作 ============
 
 function addLore() {
     lore.value.push('')

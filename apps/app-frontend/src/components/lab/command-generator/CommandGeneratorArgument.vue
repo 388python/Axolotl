@@ -109,7 +109,12 @@ function onEnumChange(value: unknown) {
 }
 
 function onTextInput(value: string) {
-    emit('update:modelValue', isNumber.value ? Number(value) : value)
+    if (isNumber.value) {
+        // 修复：清空输入框时应保持为 ''，而不是被 Number('') 转成 0
+        emit('update:modelValue', value === '' ? '' : Number(value))
+    } else {
+        emit('update:modelValue', value)
+    }
 }
 
 function onCheckboxChange(checked: boolean) {

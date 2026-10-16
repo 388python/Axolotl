@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { SparklesIcon } from '@modrinth/assets'
 import { Button, Combobox, type ComboboxOption, defineMessages, useVIntl } from '@modrinth/ui'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
 import {
-    CATEGORY_LABELS,
-    VANILLA_COMMANDS,
+    CATEGORY_KEYS,
     findCommand,
+    getAllCommands,
+    initializeRegistry,
 } from '@/lab/command-generator/commands/registry.ts'
-import { findGuide } from '@/lab/command-generator/command-guides'
+import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
     buildCommand,
     getDefaultValues,
@@ -17,6 +18,10 @@ import {
 } from '@/lab/command-generator/generator.ts'
 
 const { formatMessage } = useVIntl()
+
+function t(key: string, fallback?: string): string {
+    return formatMessage({ id: key, defaultMessage: fallback ?? key })
+}
 
 const messages = defineMessages({
     title: { id: 'app.lab.command-generator.title', defaultMessage: 'Command generator' },
@@ -34,10 +39,15 @@ const values = ref<Record<string, string | number | boolean>>({})
 const result = ref('')
 const errors = ref<string[]>([])
 
+onMounted(() => {
+    // 该组件不再自行加载版本清单，但需要保证 registry 至少初始化一次
+    initializeRegistry()
+})
+
 const commandOptions = computed<ComboboxOption[]>(() =>
-    VANILLA_COMMANDS.map((cmd) => ({
+    getAllCommands().map((cmd) => ({
         value: cmd.id,
-        label: `[${CATEGORY_LABELS[cmd.category]}] /${cmd.name} — ${cmd.description}`,
+        label: `[${t(CATEGORY_KEYS[cmd.category])}] /${cmd.name} — ${t(cmd.descriptionKey)}`,
     })),
 )
 
@@ -118,21 +128,23 @@ async function copy() {
             class="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[var(--surface-3)] p-[0.95rem_1rem]"
         >
             <p class="m-0 text-[0.78rem] text-[var(--color-text-secondary)]">
-                {{ currentGuide.summary }}
+                {{ t(currentGuide.summaryKey) }}
             </p>
             <div v-for="ex in currentGuide.examples" :key="ex.command" class="flex flex-col gap-1">
                 <code class="font-mono text-[0.75rem] text-[var(--color-brand)]">
                     {{ ex.command }}
                 </code>
                 <span class="text-[0.7rem] text-[var(--color-text-tertiary)]">
-                    {{ ex.explanation }}
+                    {{ t(ex.explanationKey) }}
                 </span>
             </div>
             <ul
-                v-if="currentGuide.tips"
+                v-if="currentGuide.tipKeys?.length"
                 class="m-0 list-inside list-disc text-[0.7rem] text-[var(--color-text-tertiary)]"
             >
-                <li v-for="tip in currentGuide.tips" :key="tip">{{ tip }}</li>
+                <li v-for="tipKey in currentGuide.tipKeys" :key="tipKey">
+                    {{ t(tipKey) }}
+                </li>
             </ul>
         </section>
 
