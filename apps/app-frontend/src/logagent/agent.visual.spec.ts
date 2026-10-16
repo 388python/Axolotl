@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
 
+import { AIMessage } from '@langchain/core/messages'
 import { expect, it, vi } from 'vitest'
 
-import { runLocalAgent } from './agent'
+import { diagnosticText, runLocalAgent } from './agent'
 
 it('runs a complete diagnostic tool loop inside Chromium without Node APIs', async () => {
     const network = vi
@@ -48,4 +49,9 @@ it('supports the hashing dependency used by Deep Agents context offloading', () 
     expect(createHash('sha256').update('abc').digest('hex')).toBe(
         'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
     )
+})
+
+it('reads standard assistant text blocks in the browser', () => {
+    const message = new AIMessage({ contentBlocks: [{ type: 'text', text: '诊断结果' }] })
+    expect(diagnosticText(message)).toBe('诊断结果')
 })

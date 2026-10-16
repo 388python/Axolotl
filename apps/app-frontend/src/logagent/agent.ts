@@ -1,3 +1,4 @@
+import { AIMessage, type BaseMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createDeepAgent, registerHarnessProfile } from 'deepagents/browser'
 import { z } from 'zod'
@@ -21,6 +22,19 @@ registerHarnessProfile('axolotl-logagent', {
     ],
     generalPurposeSubagent: { enabled: false },
 })
+
+export function diagnosticText(message: BaseMessage | undefined): string {
+    if (!message || !AIMessage.isInstance(message))
+        throw new Error('LogAgent finished without a final assistant reply')
+    if (message.tool_calls?.length)
+        throw new Error('LogAgent finished with unresolved tool calls instead of a diagnosis')
+    const text = message.text
+    if (!text.trim()) {
+        const blocks = message.contentBlocks.map((block) => block.type).join(', ') || 'empty'
+        throw new Error(`LogAgent final reply contains no diagnostic text (content: ${blocks})`)
+    }
+    return text
+}
 
 export async function runLocalAgent(
     session: PreparedSession,
@@ -77,8 +91,5 @@ export async function runLocalAgent(
         },
         { signal, recursionLimit: 34, callbacks: [], maxConcurrency: 1 },
     )
-    const last = result.messages.at(-1)
-    if (!last || typeof last.content !== 'string' || !last.content.trim())
-        throw new Error('LogAgent returned no diagnostic text')
-    return last.content
+    return diagnosticText(result.messages.at(-1))
 }
