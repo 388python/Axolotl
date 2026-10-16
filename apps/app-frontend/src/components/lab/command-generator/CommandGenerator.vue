@@ -44,7 +44,7 @@ onMounted(() => {
     initializeRegistry()
 })
 
-const commandOptions = computed<ComboboxOption[]>(() =>
+const commandOptions = computed<ComboboxOption<string>[]>(() =>
     getAllCommands().map((cmd) => ({
         value: cmd.id,
         label: `[${t(CATEGORY_KEYS[cmd.category])}] /${cmd.name} — ${t(cmd.descriptionKey)}`,

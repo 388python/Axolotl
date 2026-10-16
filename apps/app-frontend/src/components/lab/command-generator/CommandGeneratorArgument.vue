@@ -105,7 +105,7 @@ const isEnumDropdown = computed(
         props.arg.enumValues.length > 0,
 )
 
-const enumOptions = computed<ComboboxOption[]>(() =>
+const enumOptions = computed<ComboboxOption<string>[]>(() =>
     (props.arg.enumValues ?? []).map((value) => ({ value, label: value })),
 )
 

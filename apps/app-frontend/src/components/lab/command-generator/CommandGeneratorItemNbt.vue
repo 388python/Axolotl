@@ -150,7 +150,7 @@ function enchantLabel(id: string): string {
     return formatMessage({ id: def.labelKey, defaultMessage: def.labelKey })
 }
 
-const enchantOptions = computed<ComboboxOption[]>(() =>
+const enchantOptions = computed<ComboboxOption<string>[]>(() =>
     ENCHANTMENTS.map((e) => ({
         value: e.id,
         label: enchantLabel(e.id),

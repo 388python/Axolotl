@@ -40,8 +40,17 @@ function t(key: string, fallback?: string): string {
     return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
+type CommandComboboxOption = ComboboxOption<string> & {
+    description: string
+    category: string
+}
+
+function asCommandOption(item: ComboboxOption<string>): CommandComboboxOption {
+    return item as CommandComboboxOption
+}
+
 // ============= 状态 =============
-const versionOptions = ref<ComboboxOption[]>([])
+const versionOptions = ref<ComboboxOption<string>[]>([])
 const selectedVersion = ref('')
 const selectedCommandId = ref('')
 const filterCategory = ref<string>('')
@@ -95,7 +104,7 @@ const forceDataComponents = computed<boolean | undefined>(() => {
 })
 
 // ============= 筛选器选项 =============
-const categoryOptions = computed<ComboboxOption[]>(() => [
+const categoryOptions = computed<ComboboxOption<string>[]>(() => [
     { value: '', label: formatMessage(messages.filterAll) },
     ...(Object.keys(CATEGORY_KEYS) as CommandCategory[]).map((key) => ({
         value: key,
@@ -103,7 +112,7 @@ const categoryOptions = computed<ComboboxOption[]>(() => [
     })),
 ])
 
-const permissionOptions = computed<ComboboxOption[]>(() => [
+const permissionOptions = computed<ComboboxOption<string>[]>(() => [
     { value: '', label: formatMessage(messages.filterAll) },
     { value: '0', label: `0 · ${t(PERMISSION_KEYS[0])}` },
     { value: '1', label: `1 · ${t(PERMISSION_KEYS[1])}` },
@@ -132,7 +141,7 @@ const filteredCommands = computed(() => {
     return list
 })
 
-const commandOptions = computed<ComboboxOption[]>(() =>
+const commandOptions = computed<CommandComboboxOption[]>(() =>
     filteredCommands.value.map((cmd) => ({
         value: cmd.id,
         label: cmd.name,
@@ -526,12 +535,12 @@ function presetCategoryLabel(commandId: string): string {
                 </template>
                 <template #option="{ item, isSelected }">
                     <div class="option-row">
-                        <span class="option-category">{{ item.category }}</span>
+                        <span class="option-category">{{ asCommandOption(item).category }}</span>
                         <div class="option-text">
                             <strong :class="isSelected ? 'text-brand' : ''">
                                 /{{ item.label }}
                             </strong>
-                            <span>{{ item.description }}</span>
+                            <span>{{ asCommandOption(item).description }}</span>
                         </div>
                     </div>
                 </template>
