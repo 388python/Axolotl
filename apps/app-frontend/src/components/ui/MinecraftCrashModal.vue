@@ -51,6 +51,7 @@ import { shouldShowMinecraftCrash } from '@/helpers/process.js'
 import { parseLogAgentInsight } from '@/logagent/result'
 import type { AnalysisSource } from '@/logagent/types'
 
+import { createCrashModalSession } from './crash-modal-session'
 import {
     combineCrashLogs,
     type CrashLogFile,
@@ -106,6 +107,7 @@ const payload = ref<Partial<CrashModalPayload>>({})
 let lastAnalysis: CrashAnalysisResult | null = null
 const modChangesAvailable = ref(false)
 const activeRuns = new Map<string, string>()
+const visibleSession = createCrashModalSession()
 const lastShownAt = new Map<string, number>()
 let unlistenProcess: Unlisten | undefined
 let mounted = false
@@ -634,7 +636,7 @@ async function loadCrashLogs(instanceId: string): Promise<void> {
         if (version !== analysisVersion) return
         crashLogFiles.value = selectCrashLogFiles(logs)
         selectedLogKey.value = preferredCrashLogKey(crashLogFiles.value)
-        activeTab.value = selectedLogKey.value
+        if (!activeTab.value) activeTab.value = selectedLogKey.value
         const selected = selectedCrashLog.value
         if (selected) await loadCrashLogContent(selected)
     } catch (error) {
@@ -689,6 +691,10 @@ function show(modalPayload: CrashModalPayload, isPreview = false): boolean {
         const now = Date.now()
         const lastShown = lastShownAt.get(modalPayload.instance_id) ?? 0
         if (now - lastShown < 5000) return false
+        if (
+            !visibleSession.open(modalPayload.instance_id, activeRuns.get(modalPayload.instance_id))
+        )
+            return false
         lastShownAt.set(modalPayload.instance_id, now)
     }
     analysisVersion += 1
@@ -1136,6 +1142,7 @@ async function refreshAIAvailability(): Promise<void> {
 
 async function handleProcessEvent(event: ProcessEvent): Promise<void> {
     if (event.event === 'launched') {
+        visibleSession.launched(event.instance_id, event.uuid)
         activeRuns.set(event.instance_id, event.uuid)
         clearCrashAnalysis(event.instance_id)
         lastAnalysis = null
@@ -1229,6 +1236,8 @@ defineExpose({
         :on-hide="
             () => {
                 analysisVersion += 1
+                summaryGeneration += 1
+                visibleSession.close()
                 agent.cancel()
             }
         "
