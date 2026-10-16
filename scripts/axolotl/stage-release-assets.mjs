@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 
-import { files, root } from './desktop-build-utils.mjs'
+import { root } from './desktop-build-utils.mjs'
 
 const { values } = parseArgs({
     options: {
@@ -20,9 +20,19 @@ const suffixes =
     values.platform === 'linux'
         ? ['.deb', '.rpm', '.AppImage', '.AppImage.tar.gz']
         : ['.dmg', '.app.tar.gz']
-const selected = files(path.resolve(root, values.input)).filter((file) =>
-    suffixes.some((suffix) => file.endsWith(suffix)),
-)
+const input = path.resolve(root, values.input)
+const selected = fs
+    .readdirSync(input, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .flatMap((entry) => {
+        const directory = path.join(input, entry.name)
+        return fs
+            .readdirSync(directory, { withFileTypes: true })
+            .filter(
+                (file) => file.isFile() && suffixes.some((suffix) => file.name.endsWith(suffix)),
+            )
+            .map((file) => path.join(directory, file.name))
+    })
 for (const suffix of suffixes) {
     if (selected.filter((file) => file.endsWith(suffix)).length !== 1) {
         throw new Error(`Expected exactly one ${suffix} artifact`)
