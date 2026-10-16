@@ -52,7 +52,7 @@ export const onboardingMessages = defineMessages({
     logagentCloudDescription: {
         id: 'app.onboarding.logagent-cloud.description',
         defaultMessage:
-            'Cloud analysis can submit logs without storing them. Logs are still sent to LogShare, and the automatic stored summary is disabled. Cancelling disconnects the launcher; a cloud task may continue on the server.',
+            'Cloud options appear when Cloud LogShare is selected. Analyze without storing logs still sends content to LogShare and disables the automatic summary. Cancelling disconnects the launcher; a cloud task may continue on the server.',
     },
     welcomeTitle: {
         id: 'app.onboarding.welcome.title',

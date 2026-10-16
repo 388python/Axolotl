@@ -464,6 +464,9 @@ export const settingsSearchEntries: SettingsSearchEntry[] = [
             message('app.log-share.settings.ai-source', 'AI analysis source'),
             message('app.logagent.source-local', 'Local LogAgent'),
             message('app.logagent.source-cloud', 'Cloud LogShare'),
+            message('app.logagent.settings.analysis-title', 'Crash analysis'),
+            message('app.logagent.settings.sharing-title', 'Diagnostic sharing'),
+            message('app.logagent.settings.display-title', 'Analysis display'),
         ],
     },
     {

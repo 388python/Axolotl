@@ -5987,26 +5987,11 @@
   "app.log-share.ai.working": {
     "message": "Analyzing with LogAgent…"
   },
-  "app.log-share.settings.ai-source": {
-    "message": "AI analysis source"
-  },
-  "app.log-share.settings.ai-source-custom": {
-    "message": "Local LogAgent"
-  },
-  "app.log-share.settings.ai-source-description": {
-    "message": "Local LogAgent runs in the launcher and sends relevant log excerpts to your configured model provider. Cloud LogShare sends logs to LogShare. This is the default; you can change the source for each analysis."
-  },
-  "app.log-share.settings.ai-source-logshare": {
-    "message": "Cloud LogShare"
-  },
   "app.log-share.settings.auto-upload": {
     "message": "Upload to get a structured summary automatically"
   },
   "app.log-share.settings.auto-upload-description": {
-    "message": "Only effective in LogShare AI mode."
-  },
-  "app.log-share.settings.description": {
-    "message": "Choose local LogAgent or cloud LogShare for crash analysis. Your log sharing service is configured separately."
+    "message": "Uploads logs to LogShare after a crash, before you start AI analysis."
   },
   "app.log-share.settings.multi-file": {
     "message": "Multi-file upload"
@@ -6023,17 +6008,11 @@
   "app.log-share.settings.share-provider": {
     "message": "Log sharing service"
   },
-  "app.log-share.settings.share-provider-description": {
-    "message": "Where the diagnostic link is uploaded when you share it."
-  },
   "app.log-share.settings.show-progress": {
     "message": "Show AI analysis progress"
   },
   "app.log-share.settings.show-progress-description": {
     "message": "Show readable investigation steps and keep their history after analysis. Diagnostic text appears as it is generated when the provider supports streaming."
-  },
-  "app.log-share.settings.title": {
-    "message": "Log sharing & AI analysis"
   },
   "app.log-share.shared-logs.delete": {
     "message": "Delete"
@@ -6128,8 +6107,41 @@
   "app.logagent.checking-logs": {
     "message": "Checking the relevant log evidence…"
   },
-  "app.logagent.local-unavailable": {
-    "message": "Enable local LogAgent and select a supported model in Settings > Launch defaults."
+  "app.logagent.controls.change-source": {
+    "message": "Change"
+  },
+  "app.logagent.controls.configure-model": {
+    "message": "Configure analysis"
+  },
+  "app.logagent.controls.local-sending": {
+    "message": "Relevant log excerpts will be sent to {provider}."
+  },
+  "app.logagent.controls.model-missing": {
+    "message": "Choose and enable a model to use local analysis."
+  },
+  "app.logagent.controls.retry": {
+    "message": "Analyze again"
+  },
+  "app.logagent.controls.return-to-analysis": {
+    "message": "Return to analysis"
+  },
+  "app.logagent.controls.section": {
+    "message": "Analyze this crash"
+  },
+  "app.logagent.controls.source-done": {
+    "message": "Done"
+  },
+  "app.logagent.controls.start": {
+    "message": "Start analysis"
+  },
+  "app.logagent.picker.cloud-hint": {
+    "message": "Sends crash logs to LogShare for analysis."
+  },
+  "app.logagent.picker.label": {
+    "message": "Analysis source"
+  },
+  "app.logagent.picker.local-hint": {
+    "message": "Uses your configured model. Relevant excerpts go to its provider."
   },
   "app.logagent.preparing": {
     "message": "Preparing the diagnostic snapshot…"
@@ -6137,8 +6149,32 @@
   "app.logagent.reviewing": {
     "message": "Reviewing the evidence and preparing the next step…"
   },
-  "app.logagent.run": {
-    "message": "Analyze with LogAgent"
+  "app.logagent.settings.analysis-description": {
+    "message": "Choose the default. You can change it for an individual analysis."
+  },
+  "app.logagent.settings.analysis-title": {
+    "message": "Crash analysis"
+  },
+  "app.logagent.settings.display-title": {
+    "message": "Analysis display"
+  },
+  "app.logagent.settings.local-setup-description": {
+    "message": "Configure your model for local analysis. Your default analysis source stays the same."
+  },
+  "app.logagent.settings.local-setup-title": {
+    "message": "Local LogAgent"
+  },
+  "app.logagent.settings.manage-models": {
+    "message": "Configure AI providers"
+  },
+  "app.logagent.settings.model-help": {
+    "message": "Model requirements"
+  },
+  "app.logagent.settings.sharing-description": {
+    "message": "Used when you choose to share a diagnostic link."
+  },
+  "app.logagent.settings.sharing-title": {
+    "message": "Diagnostic sharing"
   },
   "app.logagent.settings.supported-models": {
     "message": "Choose a model that supports tool calling. Protocol support does not guarantee that every model accepts tools. Copilot Auto requires selecting an explicit model."
@@ -6152,14 +6188,8 @@
   "app.logagent.source-cloud-hint": {
     "message": "Crash logs are sent to LogShare for cloud analysis."
   },
-  "app.logagent.source-label": {
-    "message": "Analysis for this run"
-  },
   "app.logagent.source-local": {
     "message": "Local LogAgent"
-  },
-  "app.logagent.source-local-hint": {
-    "message": "LogAgent runs in the launcher. Relevant log excerpts are sent to your configured model provider."
   },
   "app.memory-display.available": {
     "message": "{memory} available"
@@ -7059,7 +7089,7 @@
     "message": "Your launch shelf"
   },
   "app.onboarding.logagent-cloud.description": {
-    "message": "Cloud analysis can submit logs without storing them. Logs are still sent to LogShare, and the automatic stored summary is disabled. Cancelling disconnects the launcher; a cloud task may continue on the server."
+    "message": "Cloud options appear when Cloud LogShare is selected. Analyze without storing logs still sends content to LogShare and disables the automatic summary. Cancelling disconnects the launcher; a cloud task may continue on the server."
   },
   "app.onboarding.logagent-cloud.title": {
     "message": "Control cloud storage"

@@ -5709,7 +5709,7 @@
     "message": "自动上传以获取结构化摘要"
   },
   "app.log-share.settings.auto-upload-description": {
-    "message": "仅在 LogShare 模式下生效。"
+    "message": "崩溃后自动将日志上传到 LogShare，无需先启动 AI 分析。"
   },
   "app.log-share.settings.description": {
     "message": "选择本地 LogAgent 或云端 LogShare 分析崩溃；日志分享服务单独配置。"
@@ -14328,7 +14328,7 @@
     "message": "LogAgent 在启动器内运行，相关日志片段会发送给你配置的模型服务商。"
   },
   "app.onboarding.logagent-cloud.description": {
-    "message": "云端分析可以直接提交日志而不存储；日志仍会发送到 LogShare，自动生成的存储摘要会停用。取消分析会断开启动器连接，服务器上的云端任务可能继续运行。"
+    "message": "选择「云端 LogShare」后显示云端选项。不存储日志的分析仍会将内容发送到 LogShare，并停用自动摘要。取消分析会断开启动器连接，服务器上的任务可能继续运行。"
   },
   "app.onboarding.logagent-cloud.title": {
     "message": "控制云端日志存储"
@@ -14389,5 +14389,68 @@
   },
   "app.logagent.activity.working": {
     "message": "进行中"
+  },
+  "app.logagent.settings.analysis-title": {
+    "message": "崩溃分析"
+  },
+  "app.logagent.settings.analysis-description": {
+    "message": "设置默认分析方式；每次分析时仍可临时切换。"
+  },
+  "app.logagent.settings.sharing-title": {
+    "message": "诊断分享"
+  },
+  "app.logagent.settings.sharing-description": {
+    "message": "在你主动分享诊断链接时使用。"
+  },
+  "app.logagent.settings.display-title": {
+    "message": "分析显示"
+  },
+  "app.logagent.settings.model-help": {
+    "message": "模型要求"
+  },
+  "app.logagent.settings.manage-models": {
+    "message": "配置 AI 服务商"
+  },
+  "app.logagent.picker.label": {
+    "message": "分析来源"
+  },
+  "app.logagent.picker.local-hint": {
+    "message": "使用你配置的模型，相关片段会发送给该服务商。"
+  },
+  "app.logagent.picker.cloud-hint": {
+    "message": "将崩溃日志发送到 LogShare 分析。"
+  },
+  "app.logagent.controls.change-source": {
+    "message": "更改"
+  },
+  "app.logagent.controls.source-done": {
+    "message": "完成"
+  },
+  "app.logagent.controls.configure-model": {
+    "message": "配置分析"
+  },
+  "app.logagent.controls.start": {
+    "message": "开始分析"
+  },
+  "app.logagent.controls.retry": {
+    "message": "重新分析"
+  },
+  "app.logagent.controls.local-sending": {
+    "message": "相关日志片段将发送给 {provider}。"
+  },
+  "app.logagent.controls.model-missing": {
+    "message": "请选择并启用模型，以使用本地分析。"
+  },
+  "app.logagent.controls.section": {
+    "message": "分析本次崩溃"
+  },
+  "app.logagent.settings.local-setup-title": {
+    "message": "本地 LogAgent"
+  },
+  "app.logagent.settings.local-setup-description": {
+    "message": "配置本地分析使用的模型，不改变默认分析来源。"
+  },
+  "app.logagent.controls.return-to-analysis": {
+    "message": "返回分析"
   }
 }
