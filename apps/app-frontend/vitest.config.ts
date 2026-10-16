@@ -78,6 +78,8 @@ export default defineConfig({
     optimizeDeps: {
         // UI mock factories load this dependency after Vite's initial scan.
         include: [
+            'deepagents/browser',
+            'langchain',
             '@modrinth/ui > qrcode.vue',
             '@tauri-apps/api/app',
             '@tauri-apps/api/path',

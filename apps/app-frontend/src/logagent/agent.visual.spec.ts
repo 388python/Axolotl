@@ -55,3 +55,36 @@ it('reads standard assistant text blocks in the browser', () => {
     const message = new AIMessage({ contentBlocks: [{ type: 'text', text: '诊断结果' }] })
     expect(diagnosticText(message)).toBe('诊断结果')
 })
+
+it('recovers when the model asks for a reserved extraction tool instead of giving a diagnosis', async () => {
+    let turns = 0
+    const tool = vi.fn()
+    const output = await runLocalAgent(
+        {
+            run_id: 'browser-test',
+            provider_id: 'mock',
+            model_id: 'mock',
+            locale: 'en-US',
+            context: 'Snapshot',
+        },
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [{ id: 'call-extract', name: 'extract-diagnosis', args: {} }],
+                    }
+                expect(turn.messages.find((message) => message.role === 'tool')?.content).toContain(
+                    'not available',
+                )
+                return { role: 'assistant', content: 'Final diagnostic reply.' }
+            },
+            tool,
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    expect(output).toBe('Final diagnostic reply.')
+    expect(tool).not.toHaveBeenCalled()
+})

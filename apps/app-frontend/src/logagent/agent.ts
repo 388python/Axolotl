@@ -1,6 +1,7 @@
-import { AIMessage, type BaseMessage } from '@langchain/core/messages'
+import { AIMessage, type BaseMessage, ToolMessage } from '@langchain/core/messages'
 import { tool } from '@langchain/core/tools'
 import { createDeepAgent, registerHarnessProfile } from 'deepagents/browser'
+import { createMiddleware } from 'langchain'
 import { z } from 'zod'
 
 import { LogAgentModel } from './model.ts'
@@ -76,12 +77,56 @@ export async function runLocalAgent(
             }),
         }),
     ]
+    const availableTools = new Set(tools.map((tool) => tool.name))
+    let invalidToolRounds = 0
+    let modelTurns = 0
+    const gatewayWithBudget: AgentGateway = {
+        ...gateway,
+        modelTurn: (turn) => {
+            if (++modelTurns > 16) throw new Error('LogAgent reached the 16 model turn limit')
+            return gateway.modelTurn(turn)
+        },
+    }
+    const diagnosticTools = createMiddleware({
+        name: 'DiagnosticToolValidation',
+        afterModel: {
+            canJumpTo: ['model'],
+            hook: (state) => {
+                const message = state.messages.at(-1)
+                if (
+                    !message ||
+                    !AIMessage.isInstance(message) ||
+                    !message.tool_calls?.some((call) => !availableTools.has(call.name))
+                )
+                    return
+                const names = message.tool_calls
+                    .filter((call) => !availableTools.has(call.name))
+                    .map((call) => call.name)
+                    .join(', ')
+                if (++invalidToolRounds > 2)
+                    throw new Error(`LogAgent repeatedly requested unavailable tools: ${names}`)
+                return {
+                    messages: message.tool_calls.map(
+                        (call) =>
+                            new ToolMessage({
+                                tool_call_id: call.id ?? '',
+                                name: call.name,
+                                status: 'error',
+                                content: `This tool batch was not executed: ${names} is not available. Use only list_log_files, read_log_file, grep_log_file, or finish with a diagnostic reply.`,
+                            }),
+                    ),
+                    jumpTo: 'model' as const,
+                }
+            },
+        },
+    })
     const agent = createDeepAgent({
-        model: new LogAgentModel(gateway),
+        model: new LogAgentModel(gatewayWithBudget),
         tools,
         systemPrompt: LOGAGENT_PROMPT,
         checkpointer: false,
         subagents: [],
+        middleware: [diagnosticTools],
     })
     const result = await agent.invoke(
         {
@@ -89,7 +134,13 @@ export async function runLocalAgent(
                 { role: 'user', content: `User language: ${session.locale}\n${session.context}` },
             ],
         },
-        { signal, recursionLimit: 34, callbacks: [], maxConcurrency: 1 },
+        { signal, recursionLimit: 100, callbacks: [], maxConcurrency: 1 },
     )
-    return diagnosticText(result.messages.at(-1))
+    const last = result.messages.at(-1)
+    if (last && AIMessage.isInstance(last) && last.tool_calls?.length) {
+        throw new Error(
+            `LogAgent stopped after ${modelTurns} model turns with unresolved tools: ${last.tool_calls.map((call) => call.name).join(', ')}`,
+        )
+    }
+    return diagnosticText(last)
 }

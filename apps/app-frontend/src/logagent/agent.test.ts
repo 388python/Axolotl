@@ -15,6 +15,119 @@ const session = {
     context: 'A crash occurred.',
 }
 
+test('repeated provider tool-call IDs still execute every investigation round', async () => {
+    let turns = 0
+    const reads: string[] = []
+    const output = await runLocalAgent(
+        session,
+        {
+            modelTurn: async () => {
+                turns++
+                if (turns <= 2)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [
+                            {
+                                id: 'call_0',
+                                name: 'read_log_file',
+                                args: { file_id: `log-${turns}` },
+                            },
+                        ],
+                    }
+                return { role: 'assistant', content: 'Final diagnosis after two reads.' }
+            },
+            tool: async (request) => {
+                reads.push(request.file_id!)
+                return 'evidence'
+            },
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    assert.deepEqual(reads, ['log-1', 'log-2'])
+    assert.equal(turns, 3)
+    assert.match(output, /Final diagnosis/)
+})
+
+test('an unsupported extraction tool is returned to the model as an error instead of ending analysis', async () => {
+    let turns = 0
+    const output = await runLocalAgent(
+        session,
+        {
+            modelTurn: async (turn) => {
+                if (++turns === 1)
+                    return {
+                        role: 'assistant',
+                        content: '',
+                        tool_calls: [{ id: 'extract-1', name: 'extract-diagnosis', args: {} }],
+                    }
+                const error = turn.messages.find((message) => message.role === 'tool')
+                assert.match(error?.content ?? '', /not available/)
+                return { role: 'assistant', content: 'Final diagnosis.' }
+            },
+            tool: async () => {
+                throw new Error('Unsupported tools must not reach Rust')
+            },
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    assert.equal(output, 'Final diagnosis.')
+    assert.equal(turns, 2)
+})
+
+test('repeated unavailable tools stop with the tool name and do not execute', async () => {
+    let turns = 0
+    await assert.rejects(
+        runLocalAgent(
+            session,
+            {
+                modelTurn: async () => ({
+                    role: 'assistant',
+                    content: '',
+                    tool_calls: [{ id: `call-${++turns}`, name: 'extract-diagnosis', args: {} }],
+                }),
+                tool: async () => {
+                    throw new Error('Must not execute')
+                },
+            },
+            new AbortController().signal,
+            () => {},
+        ),
+        /repeatedly requested unavailable tools: extract-diagnosis/,
+    )
+    assert.equal(turns, 3)
+})
+
+test('the full 16-turn budget supports multiple investigation rounds before finalizing', async () => {
+    let turns = 0
+    const output = await runLocalAgent(
+        session,
+        {
+            modelTurn: async () =>
+                ++turns < 16
+                    ? {
+                          role: 'assistant',
+                          content: '',
+                          tool_calls: [
+                              {
+                                  id: `call-${turns}`,
+                                  name: 'read_log_file',
+                                  args: { file_id: 'log-1', start_line: turns * 20 },
+                              },
+                          ],
+                      }
+                    : { role: 'assistant', content: 'Diagnosis after fifteen tool rounds.' },
+            tool: async () => 'evidence',
+        },
+        new AbortController().signal,
+        () => {},
+    )
+    assert.equal(turns, 16)
+    assert.match(output, /Diagnosis/)
+})
+
 test('Deep Agents uses only diagnostic tools and preserves tool IDs and opaque protocol state', async () => {
     const turns: ModelTurn[] = []
     const used: string[] = []

@@ -131,6 +131,15 @@ export default defineConfig(({ command }) => ({
         }),
     ],
     optimizeDeps: {
+        include: [
+            'deepagents/browser',
+            'langchain',
+            '@langchain/core/language_models/chat_models',
+            '@langchain/core/messages',
+            '@langchain/core/tools',
+            '@langchain/core/utils/function_calling',
+            'zod',
+        ],
         exclude: ['ace-builds', 'vue3-ace-editor'],
     },
 
