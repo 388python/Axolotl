@@ -23,22 +23,22 @@ function t(key: string, fallback?: string): string {
 }
 
 const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
-    { labelKey: 'command-generator.preset.entity.self', value: '@s' },
-    { labelKey: 'command-generator.preset.entity.nearest-player', value: '@p' },
-    { labelKey: 'command-generator.preset.entity.all-players', value: '@a' },
-    { labelKey: 'command-generator.preset.entity.random-player', value: '@r' },
-    { labelKey: 'command-generator.preset.entity.all-entities', value: '@e' },
-    { labelKey: 'command-generator.preset.entity.nearest-entity', value: '@n' },
-    { labelKey: 'command-generator.preset.entity.zombies', value: '@e[type=zombie]' },
-    { labelKey: 'command-generator.preset.entity.skeletons', value: '@e[type=skeleton]' },
-    { labelKey: 'command-generator.preset.entity.creepers', value: '@e[type=creeper]' },
-    { labelKey: 'command-generator.preset.entity.endermen', value: '@e[type=enderman]' },
-    { labelKey: 'command-generator.preset.entity.villagers', value: '@e[type=villager]' },
-    { labelKey: 'command-generator.preset.entity.items', value: '@e[type=item]' },
-    { labelKey: 'command-generator.preset.entity.creative-players', value: '@a[gamemode=creative]' },
-    { labelKey: 'command-generator.preset.entity.survival-players', value: '@a[gamemode=survival]' },
-    { labelKey: 'command-generator.preset.entity.nearby-10', value: '@p[distance=..10]' },
-    { labelKey: 'command-generator.preset.entity.nearby-entities-5', value: '@e[distance=..5]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.self', value: '@s' },
+    { labelKey: 'app.lab.command-generator.preset.entity.nearest-player', value: '@p' },
+    { labelKey: 'app.lab.command-generator.preset.entity.all-players', value: '@a' },
+    { labelKey: 'app.lab.command-generator.preset.entity.random-player', value: '@r' },
+    { labelKey: 'app.lab.command-generator.preset.entity.all-entities', value: '@e' },
+    { labelKey: 'app.lab.command-generator.preset.entity.nearest-entity', value: '@n' },
+    { labelKey: 'app.lab.command-generator.preset.entity.zombies', value: '@e[type=zombie]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.skeletons', value: '@e[type=skeleton]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.creepers', value: '@e[type=creeper]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.endermen', value: '@e[type=enderman]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.villagers', value: '@e[type=villager]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.items', value: '@e[type=item]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.creative-players', value: '@a[gamemode=creative]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.survival-players', value: '@a[gamemode=survival]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.nearby-10', value: '@p[distance=..10]' },
+    { labelKey: 'app.lab.command-generator.preset.entity.nearby-entities-5', value: '@e[distance=..5]' },
 ]
 
 const isNumber = computed(() => props.arg.type === 'number' || props.arg.type === 'integer')

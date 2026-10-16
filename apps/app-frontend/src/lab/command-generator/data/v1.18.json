@@ -6,34 +6,55 @@
         {
             "id": "placefeature",
             "name": "placefeature",
-            "descriptionKey": "command-generator.cmd.placefeature.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.placefeature.desc",
             "category": "world",
             "permissionLevel": 2,
             "arguments": [
                 {
                     "name": "id",
-                    "displayNameKey": "command-generator.arg.placefeature.id.display",
+                    "displayNameKey": "app.lab.command-generator.arg.placefeature.id.display",
                     "type": "string",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.placefeature.id.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.placefeature.id.desc",
                     "placeholder": "minecraft:oak",
                     "presets": [
-                        { "labelKey": "command-generator.preset.feature.oak", "value": "minecraft:oak" },
-                        { "labelKey": "command-generator.preset.feature.spruce", "value": "minecraft:spruce" },
-                        { "labelKey": "command-generator.preset.feature.birch", "value": "minecraft:birch" },
-                        { "labelKey": "command-generator.preset.feature.grass", "value": "minecraft:grass" },
-                        { "labelKey": "command-generator.preset.feature.flower", "value": "minecraft:flower" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.feature.oak",
+                            "value": "minecraft:oak"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.feature.spruce",
+                            "value": "minecraft:spruce"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.feature.birch",
+                            "value": "minecraft:birch"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.feature.grass",
+                            "value": "minecraft:grass"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.feature.flower",
+                            "value": "minecraft:flower"
+                        }
                     ]
                 },
                 {
                     "name": "pos",
-                    "displayNameKey": "command-generator.arg.placefeature.pos.display",
+                    "displayNameKey": "app.lab.command-generator.arg.placefeature.pos.display",
                     "type": "coordinates",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.placefeature.pos.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.placefeature.pos.desc",
                     "presets": [
-                        { "labelKey": "command-generator.preset.coord.current", "value": "~ ~ ~" },
-                        { "labelKey": "command-generator.preset.coord.world-center", "value": "0 64 0" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.coord.current",
+                            "value": "~ ~ ~"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.coord.world-center",
+                            "value": "0 64 0"
+                        }
                     ]
                 }
             ]

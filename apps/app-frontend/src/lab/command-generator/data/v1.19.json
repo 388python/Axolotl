@@ -6,58 +6,94 @@
         {
             "id": "damage",
             "name": "damage",
-            "descriptionKey": "command-generator.cmd.damage.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.damage.desc",
             "category": "entity",
             "permissionLevel": 2,
             "arguments": [
                 {
                     "name": "target",
-                    "displayNameKey": "command-generator.arg.damage.target.display",
+                    "displayNameKey": "app.lab.command-generator.arg.damage.target.display",
                     "type": "entity-selector",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.damage.target.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.damage.target.desc",
                     "selector": true,
                     "placeholder": "@e[type=zombie]",
                     "presets": [
-                        { "labelKey": "command-generator.preset.entity.all-zombies", "value": "@e[type=zombie]" },
-                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" },
-                        { "labelKey": "command-generator.preset.common.self", "value": "@s" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.entity.all-zombies",
+                            "value": "@e[type=zombie]"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.common.all-players",
+                            "value": "@a"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.common.self",
+                            "value": "@s"
+                        }
                     ]
                 },
                 {
                     "name": "amount",
-                    "displayNameKey": "command-generator.arg.damage.amount.display",
+                    "displayNameKey": "app.lab.command-generator.arg.damage.amount.display",
                     "type": "number",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.damage.amount.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.damage.amount.desc",
                     "presets": [
-                        { "labelKey": "command-generator.preset.damage-amount.1", "value": 1 },
-                        { "labelKey": "command-generator.preset.damage-amount.5", "value": 5 },
-                        { "labelKey": "command-generator.preset.damage-amount.10", "value": 10 },
-                        { "labelKey": "command-generator.preset.damage-amount.fatal", "value": 1000 }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-amount.1",
+                            "value": 1
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-amount.5",
+                            "value": 5
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-amount.10",
+                            "value": 10
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-amount.fatal",
+                            "value": 1000
+                        }
                     ]
                 },
                 {
                     "name": "damageType",
-                    "displayNameKey": "command-generator.arg.damage.damageType.display",
+                    "displayNameKey": "app.lab.command-generator.arg.damage.damageType.display",
                     "type": "string",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.damage.damageType.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.damage.damageType.desc",
                     "placeholder": "minecraft:generic",
                     "presets": [
-                        { "labelKey": "command-generator.preset.damage-type.generic", "value": "minecraft:generic" },
-                        { "labelKey": "command-generator.preset.damage-type.fire", "value": "minecraft:in_fire" },
-                        { "labelKey": "command-generator.preset.damage-type.fall", "value": "minecraft:fall" },
-                        { "labelKey": "command-generator.preset.damage-type.void", "value": "minecraft:out_of_world" },
-                        { "labelKey": "command-generator.preset.damage-type.drowning", "value": "minecraft:drown" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-type.generic",
+                            "value": "minecraft:generic"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-type.fire",
+                            "value": "minecraft:in_fire"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-type.fall",
+                            "value": "minecraft:fall"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-type.void",
+                            "value": "minecraft:out_of_world"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.damage-type.drowning",
+                            "value": "minecraft:drown"
+                        }
                     ]
                 },
                 {
                     "name": "source",
-                    "displayNameKey": "command-generator.arg.damage.source.display",
+                    "displayNameKey": "app.lab.command-generator.arg.damage.source.display",
                     "type": "string",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.damage.source.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.damage.source.desc",
                     "placeholder": "@p"
                 }
             ]
@@ -65,48 +101,75 @@
         {
             "id": "ride",
             "name": "ride",
-            "descriptionKey": "command-generator.cmd.ride.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.ride.desc",
             "category": "entity",
             "permissionLevel": 2,
             "arguments": [
                 {
                     "name": "target",
-                    "displayNameKey": "command-generator.arg.ride.target.display",
+                    "displayNameKey": "app.lab.command-generator.arg.ride.target.display",
                     "type": "entity-selector",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.ride.target.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.ride.target.desc",
                     "selector": true,
                     "placeholder": "@s",
                     "presets": [
-                        { "labelKey": "command-generator.preset.common.self", "value": "@s" },
-                        { "labelKey": "command-generator.preset.common.all-players", "value": "@a" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.common.self",
+                            "value": "@s"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.common.all-players",
+                            "value": "@a"
+                        }
                     ]
                 },
                 {
                     "name": "action",
-                    "displayNameKey": "command-generator.arg.ride.action.display",
+                    "displayNameKey": "app.lab.command-generator.arg.ride.action.display",
                     "type": "enum",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.ride.action.desc",
-                    "enumValues": ["mount", "dismount"],
+                    "descriptionKey": "app.lab.command-generator.arg.ride.action.desc",
+                    "enumValues": [
+                        "mount",
+                        "dismount"
+                    ],
                     "presets": [
-                        { "labelKey": "command-generator.preset.ride-action.mount", "value": "mount" },
-                        { "labelKey": "command-generator.preset.ride-action.dismount", "value": "dismount" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.ride-action.mount",
+                            "value": "mount"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.ride-action.dismount",
+                            "value": "dismount"
+                        }
                     ]
                 },
                 {
                     "name": "vehicle",
-                    "displayNameKey": "command-generator.arg.ride.vehicle.display",
+                    "displayNameKey": "app.lab.command-generator.arg.ride.vehicle.display",
                     "type": "entity-selector",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.ride.vehicle.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.ride.vehicle.desc",
                     "selector": true,
                     "placeholder": "@e[type=pig]",
                     "presets": [
-                        { "labelKey": "command-generator.preset.entity-type.pig", "value": "@e[type=pig]" },
-                        { "labelKey": "command-generator.preset.entity-type.boat", "value": "@e[type=boat]" },
-                        { "labelKey": "command-generator.preset.entity-type.minecart", "value": "@e[type=minecart]" },
-                        { "labelKey": "command-generator.preset.entity-type.horse", "value": "@e[type=horse]" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.entity-type.pig",
+                            "value": "@e[type=pig]"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.entity-type.boat",
+                            "value": "@e[type=boat]"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.entity-type.minecart",
+                            "value": "@e[type=minecart]"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.entity-type.horse",
+                            "value": "@e[type=horse]"
+                        }
                     ]
                 }
             ]
@@ -114,43 +177,63 @@
         {
             "id": "fillbiome",
             "name": "fillbiome",
-            "descriptionKey": "command-generator.cmd.fillbiome.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.fillbiome.desc",
             "category": "world",
             "permissionLevel": 2,
             "arguments": [
                 {
                     "name": "from",
-                    "displayNameKey": "command-generator.arg.fillbiome.from.display",
+                    "displayNameKey": "app.lab.command-generator.arg.fillbiome.from.display",
                     "type": "coordinates",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.fillbiome.from.desc"
+                    "descriptionKey": "app.lab.command-generator.arg.fillbiome.from.desc"
                 },
                 {
                     "name": "to",
-                    "displayNameKey": "command-generator.arg.fillbiome.to.display",
+                    "displayNameKey": "app.lab.command-generator.arg.fillbiome.to.display",
                     "type": "coordinates",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.fillbiome.to.desc"
+                    "descriptionKey": "app.lab.command-generator.arg.fillbiome.to.desc"
                 },
                 {
                     "name": "biome",
-                    "displayNameKey": "command-generator.arg.fillbiome.biome.display",
+                    "displayNameKey": "app.lab.command-generator.arg.fillbiome.biome.display",
                     "type": "biome",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.fillbiome.biome.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.fillbiome.biome.desc",
                     "placeholder": "minecraft:plains",
                     "presets": [
-                        { "labelKey": "command-generator.preset.biome.plains", "value": "minecraft:plains" },
-                        { "labelKey": "command-generator.preset.biome.desert", "value": "minecraft:desert" },
-                        { "labelKey": "command-generator.preset.biome.forest", "value": "minecraft:forest" },
-                        { "labelKey": "command-generator.preset.biome.ocean", "value": "minecraft:ocean" },
-                        { "labelKey": "command-generator.preset.biome.snowy-plains", "value": "minecraft:snowy_plains" },
-                        { "labelKey": "command-generator.preset.biome.jungle", "value": "minecraft:jungle" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.plains",
+                            "value": "minecraft:plains"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.desert",
+                            "value": "minecraft:desert"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.forest",
+                            "value": "minecraft:forest"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.ocean",
+                            "value": "minecraft:ocean"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.snowy-plains",
+                            "value": "minecraft:snowy_plains"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.biome.jungle",
+                            "value": "minecraft:jungle"
+                        }
                     ]
                 }
             ]
         }
     ],
-    "removed": ["placefeature"],
+    "removed": [
+        "placefeature"
+    ],
     "patched": {}
 }

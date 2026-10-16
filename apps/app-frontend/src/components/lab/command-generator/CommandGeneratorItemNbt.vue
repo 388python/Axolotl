@@ -11,7 +11,7 @@ interface EnchantEntry {
 
 interface EnchantDefinition {
     id: string
-    label: string
+    labelKey: string
     maxLevel: number
 }
 
@@ -97,53 +97,61 @@ const messages = defineMessages({
 })
 
 const ENCHANTMENTS: EnchantDefinition[] = [
-    { id: 'minecraft:sharpness', label: '锋利', maxLevel: 5 },
-    { id: 'minecraft:smite', label: '亡灵杀手', maxLevel: 5 },
-    { id: 'minecraft:bane_of_arthropods', label: '节肢杀手', maxLevel: 5 },
-    { id: 'minecraft:knockback', label: '击退', maxLevel: 2 },
-    { id: 'minecraft:fire_aspect', label: '火焰附加', maxLevel: 2 },
-    { id: 'minecraft:looting', label: '抢夺', maxLevel: 3 },
-    { id: 'minecraft:sweeping_edge', label: '横扫之刃', maxLevel: 3 },
-    { id: 'minecraft:efficiency', label: '效率', maxLevel: 5 },
-    { id: 'minecraft:silk_touch', label: '精准采集', maxLevel: 1 },
-    { id: 'minecraft:unbreaking', label: '耐久', maxLevel: 3 },
-    { id: 'minecraft:fortune', label: '时运', maxLevel: 3 },
-    { id: 'minecraft:mending', label: '经验修补', maxLevel: 1 },
-    { id: 'minecraft:power', label: '力量', maxLevel: 5 },
-    { id: 'minecraft:punch', label: '冲击', maxLevel: 2 },
-    { id: 'minecraft:flame', label: '火矢', maxLevel: 1 },
-    { id: 'minecraft:infinity', label: '无限', maxLevel: 1 },
-    { id: 'minecraft:multishot', label: '多重射击', maxLevel: 1 },
-    { id: 'minecraft:quick_charge', label: '快速装填', maxLevel: 3 },
-    { id: 'minecraft:piercing', label: '穿透', maxLevel: 4 },
-    { id: 'minecraft:protection', label: '保护', maxLevel: 4 },
-    { id: 'minecraft:fire_protection', label: '火焰保护', maxLevel: 4 },
-    { id: 'minecraft:feather_falling', label: '摔落保护', maxLevel: 4 },
-    { id: 'minecraft:blast_protection', label: '爆炸保护', maxLevel: 4 },
-    { id: 'minecraft:projectile_protection', label: '弹射物保护', maxLevel: 4 },
-    { id: 'minecraft:respiration', label: '水下呼吸', maxLevel: 3 },
-    { id: 'minecraft:aqua_affinity', label: '水下速掘', maxLevel: 1 },
-    { id: 'minecraft:thorns', label: '荆棘', maxLevel: 3 },
-    { id: 'minecraft:depth_strider', label: '深海探索者', maxLevel: 3 },
-    { id: 'minecraft:frost_walker', label: '冰霜行者', maxLevel: 2 },
-    { id: 'minecraft:binding_curse', label: '绑定诅咒', maxLevel: 1 },
-    { id: 'minecraft:vanishing_curse', label: '消失诅咒', maxLevel: 1 },
-    { id: 'minecraft:soul_speed', label: '灵魂疾行', maxLevel: 3 },
-    { id: 'minecraft:swift_sneak', label: '迅捷潜行', maxLevel: 3 },
-    { id: 'minecraft:loyalty', label: '忠诚', maxLevel: 3 },
-    { id: 'minecraft:impaling', label: '穿刺', maxLevel: 5 },
-    { id: 'minecraft:riptide', label: '激流', maxLevel: 3 },
-    { id: 'minecraft:channeling', label: '引雷', maxLevel: 1 },
-    { id: 'minecraft:luck_of_the_sea', label: '海之眷顾', maxLevel: 3 },
-    { id: 'minecraft:lure', label: '饵钓', maxLevel: 3 },
+    { id: 'minecraft:sharpness', labelKey: 'app.lab.command-generator.enchantment.sharpness', maxLevel: 5 },
+    { id: 'minecraft:smite', labelKey: 'app.lab.command-generator.enchantment.smite', maxLevel: 5 },
+    { id: 'minecraft:bane_of_arthropods', labelKey: 'app.lab.command-generator.enchantment.bane-of-arthropods', maxLevel: 5 },
+    { id: 'minecraft:knockback', labelKey: 'app.lab.command-generator.enchantment.knockback', maxLevel: 2 },
+    { id: 'minecraft:fire_aspect', labelKey: 'app.lab.command-generator.enchantment.fire-aspect', maxLevel: 2 },
+    { id: 'minecraft:looting', labelKey: 'app.lab.command-generator.enchantment.looting', maxLevel: 3 },
+    { id: 'minecraft:sweeping_edge', labelKey: 'app.lab.command-generator.enchantment.sweeping-edge', maxLevel: 3 },
+    { id: 'minecraft:efficiency', labelKey: 'app.lab.command-generator.enchantment.efficiency', maxLevel: 5 },
+    { id: 'minecraft:silk_touch', labelKey: 'app.lab.command-generator.enchantment.silk-touch', maxLevel: 1 },
+    { id: 'minecraft:unbreaking', labelKey: 'app.lab.command-generator.enchantment.unbreaking', maxLevel: 3 },
+    { id: 'minecraft:fortune', labelKey: 'app.lab.command-generator.enchantment.fortune', maxLevel: 3 },
+    { id: 'minecraft:mending', labelKey: 'app.lab.command-generator.enchantment.mending', maxLevel: 1 },
+    { id: 'minecraft:power', labelKey: 'app.lab.command-generator.enchantment.power', maxLevel: 5 },
+    { id: 'minecraft:punch', labelKey: 'app.lab.command-generator.enchantment.punch', maxLevel: 2 },
+    { id: 'minecraft:flame', labelKey: 'app.lab.command-generator.enchantment.flame', maxLevel: 1 },
+    { id: 'minecraft:infinity', labelKey: 'app.lab.command-generator.enchantment.infinity', maxLevel: 1 },
+    { id: 'minecraft:multishot', labelKey: 'app.lab.command-generator.enchantment.multishot', maxLevel: 1 },
+    { id: 'minecraft:quick_charge', labelKey: 'app.lab.command-generator.enchantment.quick-charge', maxLevel: 3 },
+    { id: 'minecraft:piercing', labelKey: 'app.lab.command-generator.enchantment.piercing', maxLevel: 4 },
+    { id: 'minecraft:protection', labelKey: 'app.lab.command-generator.enchantment.protection', maxLevel: 4 },
+    { id: 'minecraft:fire_protection', labelKey: 'app.lab.command-generator.enchantment.fire-protection', maxLevel: 4 },
+    { id: 'minecraft:feather_falling', labelKey: 'app.lab.command-generator.enchantment.feather-falling', maxLevel: 4 },
+    { id: 'minecraft:blast_protection', labelKey: 'app.lab.command-generator.enchantment.blast-protection', maxLevel: 4 },
+    { id: 'minecraft:projectile_protection', labelKey: 'app.lab.command-generator.enchantment.projectile-protection', maxLevel: 4 },
+    { id: 'minecraft:respiration', labelKey: 'app.lab.command-generator.enchantment.respiration', maxLevel: 3 },
+    { id: 'minecraft:aqua_affinity', labelKey: 'app.lab.command-generator.enchantment.aqua-affinity', maxLevel: 1 },
+    { id: 'minecraft:thorns', labelKey: 'app.lab.command-generator.enchantment.thorns', maxLevel: 3 },
+    { id: 'minecraft:depth_strider', labelKey: 'app.lab.command-generator.enchantment.depth-strider', maxLevel: 3 },
+    { id: 'minecraft:frost_walker', labelKey: 'app.lab.command-generator.enchantment.frost-walker', maxLevel: 2 },
+    { id: 'minecraft:binding_curse', labelKey: 'app.lab.command-generator.enchantment.binding-curse', maxLevel: 1 },
+    { id: 'minecraft:vanishing_curse', labelKey: 'app.lab.command-generator.enchantment.vanishing-curse', maxLevel: 1 },
+    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3 },
+    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3 },
+    { id: 'minecraft:loyalty', labelKey: 'app.lab.command-generator.enchantment.loyalty', maxLevel: 3 },
+    { id: 'minecraft:impaling', labelKey: 'app.lab.command-generator.enchantment.impaling', maxLevel: 5 },
+    { id: 'minecraft:riptide', labelKey: 'app.lab.command-generator.enchantment.riptide', maxLevel: 3 },
+    { id: 'minecraft:channeling', labelKey: 'app.lab.command-generator.enchantment.channeling', maxLevel: 1 },
+    { id: 'minecraft:luck_of_the_sea', labelKey: 'app.lab.command-generator.enchantment.luck-of-the-sea', maxLevel: 3 },
+    { id: 'minecraft:lure', labelKey: 'app.lab.command-generator.enchantment.lure', maxLevel: 3 },
 ]
 
-const enchantOptions: ComboboxOption[] = ENCHANTMENTS.map((e) => ({
-    value: e.id,
-    label: e.label,
-}))
-
 const enchantById = computed(() => new Map(ENCHANTMENTS.map((e) => [e.id, e])))
+
+function enchantLabel(id: string): string {
+    const def = enchantById.value.get(id)
+    if (!def) return id
+    return formatMessage({ id: def.labelKey, defaultMessage: def.labelKey })
+}
+
+const enchantOptions = computed<ComboboxOption[]>(() =>
+    ENCHANTMENTS.map((e) => ({
+        value: e.id,
+        label: enchantLabel(e.id),
+    })),
+)
 
 const name = ref('')
 const lore = ref<string[]>([])
@@ -236,10 +244,6 @@ function setEnchantLevel(index: number, level: number) {
     const max = def?.maxLevel ?? 10
     const min = 1
     entry.level = Math.min(max, Math.max(min, Math.floor(level || min)))
-}
-
-function enchantLabel(id: string): string {
-    return enchantById.value.get(id)?.label ?? id
 }
 </script>
 

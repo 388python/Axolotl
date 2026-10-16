@@ -6,43 +6,68 @@
         {
             "id": "random",
             "name": "random",
-            "descriptionKey": "command-generator.cmd.random.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.random.desc",
             "category": "misc",
             "permissionLevel": 0,
             "arguments": [
                 {
                     "name": "action",
-                    "displayNameKey": "command-generator.arg.random.action.display",
+                    "displayNameKey": "app.lab.command-generator.arg.random.action.display",
                     "type": "enum",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.random.action.desc",
-                    "enumValues": ["value", "roll", "reset"],
+                    "descriptionKey": "app.lab.command-generator.arg.random.action.desc",
+                    "enumValues": [
+                        "value",
+                        "roll",
+                        "reset"
+                    ],
                     "presets": [
-                        { "labelKey": "command-generator.preset.random-action.value", "value": "value" },
-                        { "labelKey": "command-generator.preset.random-action.roll", "value": "roll" },
-                        { "labelKey": "command-generator.preset.random-action.reset", "value": "reset" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.random-action.value",
+                            "value": "value"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.random-action.roll",
+                            "value": "roll"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.random-action.reset",
+                            "value": "reset"
+                        }
                     ]
                 },
                 {
                     "name": "range",
-                    "displayNameKey": "command-generator.arg.random.range.display",
+                    "displayNameKey": "app.lab.command-generator.arg.random.range.display",
                     "type": "string",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.random.range.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.random.range.desc",
                     "placeholder": "1..100",
                     "presets": [
-                        { "labelKey": "command-generator.preset.range.1-100", "value": "1..100" },
-                        { "labelKey": "command-generator.preset.range.1-6", "value": "1..6" },
-                        { "labelKey": "command-generator.preset.range.0-1", "value": "0..1" },
-                        { "labelKey": "command-generator.preset.range.1-10", "value": "1..10" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.range.1-100",
+                            "value": "1..100"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.range.1-6",
+                            "value": "1..6"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.range.0-1",
+                            "value": "0..1"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.range.1-10",
+                            "value": "1..10"
+                        }
                     ]
                 },
                 {
                     "name": "sequence",
-                    "displayNameKey": "command-generator.arg.random.sequence.display",
+                    "displayNameKey": "app.lab.command-generator.arg.random.sequence.display",
                     "type": "string",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.random.sequence.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.random.sequence.desc",
                     "placeholder": "minecraft:my_sequence"
                 }
             ]
@@ -50,37 +75,71 @@
         {
             "id": "tick",
             "name": "tick",
-            "descriptionKey": "command-generator.cmd.tick.desc",
+            "descriptionKey": "app.lab.command-generator.cmd.tick.desc",
             "category": "server",
             "permissionLevel": 3,
             "arguments": [
                 {
                     "name": "action",
-                    "displayNameKey": "command-generator.arg.tick.action.display",
+                    "displayNameKey": "app.lab.command-generator.arg.tick.action.display",
                     "type": "enum",
                     "required": true,
-                    "descriptionKey": "command-generator.arg.tick.action.desc",
-                    "enumValues": ["freeze", "unfreeze", "rate", "sprint", "step", "query"],
+                    "descriptionKey": "app.lab.command-generator.arg.tick.action.desc",
+                    "enumValues": [
+                        "freeze",
+                        "unfreeze",
+                        "rate",
+                        "sprint",
+                        "step",
+                        "query"
+                    ],
                     "presets": [
-                        { "labelKey": "command-generator.preset.tick-action.freeze", "value": "freeze" },
-                        { "labelKey": "command-generator.preset.tick-action.unfreeze", "value": "unfreeze" },
-                        { "labelKey": "command-generator.preset.tick-action.rate", "value": "rate" },
-                        { "labelKey": "command-generator.preset.tick-action.sprint", "value": "sprint" },
-                        { "labelKey": "command-generator.preset.tick-action.step", "value": "step" },
-                        { "labelKey": "command-generator.preset.tick-action.query", "value": "query" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.freeze",
+                            "value": "freeze"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.unfreeze",
+                            "value": "unfreeze"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.rate",
+                            "value": "rate"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.sprint",
+                            "value": "sprint"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.step",
+                            "value": "step"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-action.query",
+                            "value": "query"
+                        }
                     ]
                 },
                 {
                     "name": "value",
-                    "displayNameKey": "command-generator.arg.tick.value.display",
+                    "displayNameKey": "app.lab.command-generator.arg.tick.value.display",
                     "type": "string",
                     "required": false,
-                    "descriptionKey": "command-generator.arg.tick.value.desc",
+                    "descriptionKey": "app.lab.command-generator.arg.tick.value.desc",
                     "placeholder": "20",
                     "presets": [
-                        { "labelKey": "command-generator.preset.tick-rate.1", "value": "1" },
-                        { "labelKey": "command-generator.preset.tick-rate.20", "value": "20" },
-                        { "labelKey": "command-generator.preset.tick-rate.100", "value": "100" }
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-rate.1",
+                            "value": "1"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-rate.20",
+                            "value": "20"
+                        },
+                        {
+                            "labelKey": "app.lab.command-generator.preset.tick-rate.100",
+                            "value": "100"
+                        }
                     ]
                 }
             ]

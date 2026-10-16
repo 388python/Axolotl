@@ -478,12 +478,12 @@ function presetCategoryLabel(commandId: string): string {
         <section v-if="currentGuide" class="guide-card">
             <div class="guide-head">
                 <SparklesIcon />
-                <span>{{ t('command-generator.guide-title') }}</span>
+                <span>{{ t('app.lab.command-generator.guide-title') }}</span>
             </div>
             <p class="guide-summary">{{ t(currentGuide.summaryKey) }}</p>
             <div class="guide-block">
                 <span class="guide-label">
-                    {{ t('command-generator.guide-examples') }}
+                    {{ t('app.lab.command-generator.guide-examples') }}
                 </span>
                 <div class="example-list">
                     <div
@@ -498,7 +498,7 @@ function presetCategoryLabel(commandId: string): string {
             </div>
             <div v-if="currentGuide.tipKeys?.length" class="guide-block">
                 <span class="guide-label">
-                    {{ t('command-generator.guide-tips') }}
+                    {{ t('app.lab.command-generator.guide-tips') }}
                 </span>
                 <ul class="tip-list">
                     <li v-for="tipKey in currentGuide.tipKeys" :key="tipKey">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XIcon } from '@modrinth/assets'
-import { Combobox, type ComboboxOption } from '@modrinth/ui'
+import { Combobox, type ComboboxOption, defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
 import type { NbtTagNode, NbtTagType } from '@/lab/command-generator/nbt-tree.ts'
@@ -16,20 +16,65 @@ const emit = defineEmits<{
     'add-child': [id: string]
 }>()
 
+const { formatMessage } = useVIntl()
+
+const messages = defineMessages({
+    typeString: {
+        id: 'app.lab.command-generator.nbt.type.string',
+        defaultMessage: 'String',
+    },
+    typeInt: {
+        id: 'app.lab.command-generator.nbt.type.int',
+        defaultMessage: 'Int',
+    },
+    typeShort: {
+        id: 'app.lab.command-generator.nbt.type.short',
+        defaultMessage: 'Short',
+    },
+    typeByte: {
+        id: 'app.lab.command-generator.nbt.type.byte',
+        defaultMessage: 'Byte',
+    },
+    typeFloat: {
+        id: 'app.lab.command-generator.nbt.type.float',
+        defaultMessage: 'Float',
+    },
+    typeDouble: {
+        id: 'app.lab.command-generator.nbt.type.double',
+        defaultMessage: 'Double',
+    },
+    typeCompound: {
+        id: 'app.lab.command-generator.nbt.type.compound',
+        defaultMessage: 'Compound',
+    },
+    typeList: {
+        id: 'app.lab.command-generator.nbt.type.list',
+        defaultMessage: 'List',
+    },
+    childCount: {
+        id: 'app.lab.command-generator.nbt.child-count',
+        defaultMessage: '{count} children',
+    },
+})
+
 const expanded = ref(true)
 
 const isContainer = computed(() => props.node.type === 'compound' || props.node.type === 'list')
 
-const typeOptions: ComboboxOption[] = [
-    { value: 'string', label: '字符串' },
-    { value: 'int', label: '整数' },
-    { value: 'short', label: '短整' },
-    { value: 'byte', label: '字节' },
-    { value: 'float', label: '浮点' },
-    { value: 'double', label: '双精度' },
-    { value: 'compound', label: '复合' },
-    { value: 'list', label: '列表' },
-]
+const typeOptions = computed<ComboboxOption[]>(() => [
+    { value: 'string', label: formatMessage(messages.typeString) },
+    { value: 'int', label: formatMessage(messages.typeInt) },
+    { value: 'short', label: formatMessage(messages.typeShort) },
+    { value: 'byte', label: formatMessage(messages.typeByte) },
+    { value: 'float', label: formatMessage(messages.typeFloat) },
+    { value: 'double', label: formatMessage(messages.typeDouble) },
+    { value: 'compound', label: formatMessage(messages.typeCompound) },
+    { value: 'list', label: formatMessage(messages.typeList) },
+])
+
+const childCountLabel = computed(() =>
+    formatMessage(messages.childCount, { count: props.node.children?.length ?? 0 }),
+)
 
 function onTypeChange(value: unknown) {
     emit('update', props.node.id, 'type', String(value) as NbtTagType)
@@ -71,7 +116,7 @@ function onTypeChange(value: unknown) {
                 :value="String(node.value)"
                 @input="emit('update', node.id, 'value', ($event.target as HTMLInputElement).value)"
             />
-            <span v-else class="nbt-child-count"> {{ node.children?.length ?? 0 }} 个子项 </span>
+            <span v-else class="nbt-child-count">{{ childCountLabel }}</span>
 
             <button
                 v-if="isContainer"

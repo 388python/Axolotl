@@ -38,23 +38,23 @@ export function getCommandsByCategory(
 }
 
 export const CATEGORY_KEYS: Record<CommandCategory, string> = {
-    player: 'command-generator.cat.player',
-    world: 'command-generator.cat.world',
-    entity: 'command-generator.cat.entity',
-    block: 'command-generator.cat.block',
-    item: 'command-generator.cat.item',
-    communication: 'command-generator.cat.communication',
-    server: 'command-generator.cat.server',
-    data: 'command-generator.cat.data',
-    misc: 'command-generator.cat.misc',
+    player: 'app.lab.command-generator.cat.player',
+    world: 'app.lab.command-generator.cat.world',
+    entity: 'app.lab.command-generator.cat.entity',
+    block: 'app.lab.command-generator.cat.block',
+    item: 'app.lab.command-generator.cat.item',
+    communication: 'app.lab.command-generator.cat.communication',
+    server: 'app.lab.command-generator.cat.server',
+    data: 'app.lab.command-generator.cat.data',
+    misc: 'app.lab.command-generator.cat.misc',
 }
 
 export const PERMISSION_KEYS: Record<number, string> = {
-    0: 'command-generator.perm.0',
-    1: 'command-generator.perm.1',
-    2: 'command-generator.perm.2',
-    3: 'command-generator.perm.3',
-    4: 'command-generator.perm.4',
+    0: 'app.lab.command-generator.perm.0',
+    1: 'app.lab.command-generator.perm.1',
+    2: 'app.lab.command-generator.perm.2',
+    3: 'app.lab.command-generator.perm.3',
+    4: 'app.lab.command-generator.perm.4',
 }
 
 export function searchCommands(query: string): CommandDefinition[] {
