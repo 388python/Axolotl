@@ -5978,6 +5978,15 @@
   "app.lab.command-generator.enchantment.lure": {
     "message": "饵钓"
   },
+  "app.lab.command-generator.enchantment.breach": {
+    "message": "破甲"
+  },
+  "app.lab.command-generator.enchantment.density": {
+    "message": "致密"
+  },
+  "app.lab.command-generator.enchantment.wind-burst": {
+    "message": "风爆"
+  },
   "app.lab.command-generator.cat.player": {
     "message": "玩家"
   },

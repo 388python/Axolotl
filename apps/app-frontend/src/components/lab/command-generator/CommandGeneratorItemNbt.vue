@@ -3,6 +3,11 @@ import { PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { Combobox, type ComboboxOption, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, ref, watch } from 'vue'
 
+import {
+    allCommandsRef,
+    getCurrentVersion,
+} from '@/lab/command-generator/commands/registry.ts'
+
 interface EnchantEntry {
     key: number
     id: string
@@ -13,6 +18,7 @@ interface EnchantDefinition {
     id: string
     labelKey: string
     maxLevel: number
+    since?: string
 }
 
 const props = defineProps<{
@@ -128,17 +134,49 @@ const ENCHANTMENTS: EnchantDefinition[] = [
     { id: 'minecraft:frost_walker', labelKey: 'app.lab.command-generator.enchantment.frost-walker', maxLevel: 2 },
     { id: 'minecraft:binding_curse', labelKey: 'app.lab.command-generator.enchantment.binding-curse', maxLevel: 1 },
     { id: 'minecraft:vanishing_curse', labelKey: 'app.lab.command-generator.enchantment.vanishing-curse', maxLevel: 1 },
-    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3 },
-    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3 },
+    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3, since: '1.16' },
+    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3, since: '1.19' },
     { id: 'minecraft:loyalty', labelKey: 'app.lab.command-generator.enchantment.loyalty', maxLevel: 3 },
     { id: 'minecraft:impaling', labelKey: 'app.lab.command-generator.enchantment.impaling', maxLevel: 5 },
     { id: 'minecraft:riptide', labelKey: 'app.lab.command-generator.enchantment.riptide', maxLevel: 3 },
     { id: 'minecraft:channeling', labelKey: 'app.lab.command-generator.enchantment.channeling', maxLevel: 1 },
     { id: 'minecraft:luck_of_the_sea', labelKey: 'app.lab.command-generator.enchantment.luck-of-the-sea', maxLevel: 3 },
     { id: 'minecraft:lure', labelKey: 'app.lab.command-generator.enchantment.lure', maxLevel: 3 },
+    { id: 'minecraft:breach', labelKey: 'app.lab.command-generator.enchantment.breach', maxLevel: 4, since: '1.21' },
+    { id: 'minecraft:density', labelKey: 'app.lab.command-generator.enchantment.density', maxLevel: 5, since: '1.21' },
+    { id: 'minecraft:wind_burst', labelKey: 'app.lab.command-generator.enchantment.wind-burst', maxLevel: 3, since: '1.21' },
 ]
 
-const enchantById = computed(() => new Map(ENCHANTMENTS.map((e) => [e.id, e])))
+function compareVersion(a: string, b: string): number {
+    const av = a.split('.').map((n) => Number.parseInt(n, 10) || 0)
+    const bv = b.split('.').map((n) => Number.parseInt(n, 10) || 0)
+    for (let i = 0; i < Math.max(av.length, bv.length); i++) {
+        const x = av[i] ?? 0
+        const y = bv[i] ?? 0
+        if (x !== y) return x - y
+    }
+    return 0
+}
+
+// 从 registry 同步当前的游戏版本。
+// allCommandsRef 会在 switchVersion 时重新计算，因此可作为版本变化的信号。
+const currentVersion = ref(getCurrentVersion())
+
+watch(
+    allCommandsRef,
+    () => {
+        currentVersion.value = getCurrentVersion()
+    },
+    { immediate: true },
+)
+
+const availableEnchantments = computed(() =>
+    ENCHANTMENTS.filter(
+        (e) => !e.since || compareVersion(currentVersion.value, e.since) >= 0,
+    ),
+)
+
+const enchantById = computed(() => new Map(availableEnchantments.value.map((e) => [e.id, e])))
 
 function enchantLabel(id: string): string {
     const def = enchantById.value.get(id)
@@ -147,7 +185,7 @@ function enchantLabel(id: string): string {
 }
 
 const enchantOptions = computed<ComboboxOption[]>(() =>
-    ENCHANTMENTS.map((e) => ({
+    availableEnchantments.value.map((e) => ({
         value: e.id,
         label: enchantLabel(e.id),
     })),
@@ -163,19 +201,12 @@ const snbt = computed(() => serialize())
 
 // ============ 序列化 ============
 
-/**
- * 对原始值做两层转义：
- *   1. JSON 层：\ → \\， " → \"
- *   2. SNBT 单引号字符串层：\ → \\， ' → \'
- * 修复点：原实现漏掉了单引号转义，导致名称/描述中含 ' 时 SNBT 断裂。
- */
 function escapeSnbt(value: string): string {
     let result = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
     result = result.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
     return result
 }
 
-/** 反转 SNBT 单引号字符串层转义 */
 function unescapeSnbt(value: string): string {
     return value.replace(/\\(.)/g, '$1')
 }
@@ -212,7 +243,7 @@ function serialize(): string {
     return parts.length ? `{${parts.join(',')}}` : ''
 }
 
-// ============ 反序列化（受控状态恢复） ============
+// ============ 反序列化 ============
 
 function parseSnbt(snbtStr: string): void {
     name.value = ''
@@ -222,7 +253,6 @@ function parseSnbt(snbtStr: string): void {
 
     if (!snbtStr) return
 
-    // Name: '{"text":"..."}'
     const nameMatch = snbtStr.match(/Name:'((?:\\.|[^'\\])*)'/)
     if (nameMatch) {
         const content = unescapeSnbt(nameMatch[1])
@@ -236,7 +266,6 @@ function parseSnbt(snbtStr: string): void {
         }
     }
 
-    // Lore: ['{"text":"..."}', ...]
     const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
     if (loreMatch) {
         const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
@@ -254,7 +283,6 @@ function parseSnbt(snbtStr: string): void {
             .filter((s) => s.length > 0)
     }
 
-    // Enchantments: [{id:"...",lvl:N}, ...]
     const enchMatch = snbtStr.match(/Enchantments:\[((?:\{[^{}]*\},?)+)\]/)
     if (enchMatch) {
         const items = enchMatch[1].match(/\{[^{}]*\}/g) ?? []
@@ -271,7 +299,6 @@ function parseSnbt(snbtStr: string): void {
             .filter((e) => e.id)
     }
 
-    // Unbreakable: 1b
     if (/Unbreakable:1b/.test(snbtStr)) {
         unbreakable.value = true
     }
@@ -281,7 +308,6 @@ function parseSnbt(snbtStr: string): void {
 
 let syncing = false
 
-// 初始：从 prop 恢复内部状态
 if (props.modelValue) {
     parseSnbt(props.modelValue)
 }
@@ -307,6 +333,14 @@ watch(
     },
 )
 
+// ============ 版本切换 ============
+
+// 版本变化时，移除新版本中不再存在的附魔
+watch(currentVersion, () => {
+    const availableIds = new Set(availableEnchantments.value.map((e) => e.id))
+    enchantments.value = enchantments.value.filter((e) => availableIds.has(e.id))
+})
+
 // ============ 编辑操作 ============
 
 function addLore() {
@@ -319,7 +353,7 @@ function removeLore(index: number) {
 
 function addEnchant() {
     const used = new Set(enchantments.value.map((e) => e.id))
-    const next = ENCHANTMENTS.find((e) => !used.has(e.id))
+    const next = availableEnchantments.value.find((e) => !used.has(e.id))
     if (!next) return
     enchantments.value.push({ key: nextKey++, id: next.id, level: 1 })
 }

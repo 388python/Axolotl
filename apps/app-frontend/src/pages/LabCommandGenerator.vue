@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BlocksIcon, BookmarkIcon, CheckCircleIcon, SparklesIcon, XIcon } from '@modrinth/assets'
+import { BookmarkIcon, CheckCircleIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { Button, Combobox, type ComboboxOption, useVIntl } from '@modrinth/ui'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
@@ -339,7 +339,6 @@ function presetCategoryLabel(commandId: string): string {
     <div class="command-generator">
         <!-- ========== 标题栏 ========== -->
         <header class="page-header">
-            <span class="header-badge"><BlocksIcon /></span>
             <div class="header-titles">
                 <h1>{{ formatMessage(messages.title) }}</h1>
                 <p>{{ formatMessage(messages.subtitle) }}</p>
@@ -673,8 +672,7 @@ function presetCategoryLabel(commandId: string): string {
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
-    max-width: 64rem;
-    margin: 0 auto;
+    width: 100%;
     padding: 1rem 1.25rem 3rem;
 }
 
@@ -683,23 +681,6 @@ function presetCategoryLabel(commandId: string): string {
     align-items: center;
     gap: 0.85rem;
     padding: 0.25rem 0;
-}
-
-.header-badge {
-    display: inline-flex;
-    width: 2.75rem;
-    height: 2.75rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-md);
-    background: var(--surface-4);
-    color: var(--color-brand);
-}
-
-.header-badge :deep(svg) {
-    width: 1.35rem;
-    height: 1.35rem;
 }
 
 .header-titles {

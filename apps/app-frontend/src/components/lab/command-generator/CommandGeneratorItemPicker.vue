@@ -144,7 +144,8 @@ function pick(value: SlotValue) {
     gap: 0.4rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0.1rem 0.25rem 0.25rem 0.1rem;
+    /* 给 hover 上浮位移和阴影留出空间，避免被 overflow 裁切 */
+    padding: 0.45rem 0.55rem 0.6rem 0.45rem;
 }
 
 .item-cell {
@@ -163,14 +164,26 @@ function pick(value: SlotValue) {
     cursor: pointer;
     transition:
         background-color 0.15s ease,
-        border-color 0.15s ease;
+        border-color 0.15s ease,
+        box-shadow 0.15s ease,
+        transform 0.15s ease;
 }
 
 .item-cell:hover,
 .item-cell:focus-visible {
     border-color: var(--color-brand);
     background: var(--color-surface-3);
+    /* 品牌色描边环 + 投影，做出"卡片浮起"的观感 */
+    box-shadow:
+        0 0 0 1px var(--color-brand),
+        0 6px 16px rgba(0, 0, 0, 0.28);
+    transform: translateY(-2px);
     outline: none;
+}
+
+.item-cell:active {
+    transform: translateY(0) scale(0.98);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.24);
 }
 
 .item-name {

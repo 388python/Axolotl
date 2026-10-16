@@ -7328,6 +7328,15 @@
   "app.lab.command-generator.preset.enchantment.fortune": {
     "message": "Fortune"
   },
+  "app.lab.command-generator.enchantment.breach": {
+    "message": "Breach"
+  },
+  "app.lab.command-generator.enchantment.density": {
+    "message": "Density"
+  },
+  "app.lab.command-generator.enchantment.wind-burst": {
+    "message": "Wind Burst"
+  },
   "app.lab.command-generator.preset.particle.flame": {
     "message": "Flame"
   },
