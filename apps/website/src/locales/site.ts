@@ -33,6 +33,13 @@ export const siteLocaleMessages: Record<string, Record<string, string>> = {
 		'axolotl-marketing.recent.resources.title': '喜欢的模组，一处找齐',
 		'axolotl-marketing.recent.resources.description':
 			'在一个地方浏览 Modrinth、CurseForge 等来源的游戏内容。安装前看清需要搭配哪些模组，按需更新或切换版本；想和朋友分享时，也能导出整合包。',
+		'axolotl-marketing.recent.lab.title': '实用工具，启动器里直接用',
+		'axolotl-marketing.recent.lab.description':
+			'编辑皮肤、生成渐变文字、查看 Java 版种子地图，或预览和编辑投影，无需离开 Axolotl。',
+		'axolotl-marketing.recent.downloads.alt': 'Axolotl Launcher 正在显示下载任务、实时进度和顶部下载状态面板。',
+		'axolotl-marketing.recent.backups.alt': 'Axolotl Launcher 的实例备份设置，显示已有快照和恢复操作。',
+		'axolotl-marketing.recent.storage.alt': 'Axolotl Launcher 的存储分析，显示实例、缓存、共享文件和备份的磁盘占用。',
+		'axolotl-marketing.recent.lab.alt': 'Axolotl Launcher 实验室，包含皮肤编辑器、渐变文字生成器、种子地图和投影工坊。',
 		'axolotl-site.faq.migration.question': '从 PCL2、HMCL 换过来，需要重新下载游戏吗？',
 		'axolotl-site.faq.migration.answer':
 			'Axolotl现在支持直接关联使用国内启动器普遍使用的 .minecraft 文件夹，沿用游戏文件，不需要重新下载或调整设置。',
