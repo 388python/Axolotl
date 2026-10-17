@@ -4503,7 +4503,7 @@
     "message": "Copyright and attribution"
   },
   "app.lab.recipe-generator.copyright.tags-body": {
-    "message": "Expanded item tags are sourced from the crafting generator by destruc7i0n, provided under the MIT License."
+    "message": "Legacy expanded tags are sourced from the crafting generator by destruc7i0n (MIT License). Minecraft 26.3 tags come from vanilla data archived by mcmeta."
   },
   "app.lab.recipe-generator.copyright.tags-heading": {
     "message": "Vanilla tags"
@@ -14578,5 +14578,56 @@
   },
   "app.lab.seed-map.details.estimated-containers": {
     "message": "Container coordinates are rough chunk estimates; exact chest positions are unavailable."
+  },
+  "app.lab.recipe-generator.brewing.title": {
+    "message": "Brewing conditions"
+  },
+  "app.lab.recipe-generator.brewing.input": {
+    "message": "Input potion condition"
+  },
+  "app.lab.recipe-generator.brewing.reagent": {
+    "message": "Reagent potion condition"
+  },
+  "app.lab.recipe-generator.brewing.output": {
+    "message": "Output potion"
+  },
+  "app.lab.recipe-generator.brewing.any": {
+    "message": "No potion condition"
+  },
+  "app.lab.recipe-generator.brewing.unchanged": {
+    "message": "Use output components"
+  },
+  "app.lab.recipe-generator.brewing.advanced": {
+    "message": "Advanced predicates and components"
+  },
+  "app.lab.recipe-generator.brewing.input-json": {
+    "message": "Additional input predicate (JSON)"
+  },
+  "app.lab.recipe-generator.brewing.reagent-json": {
+    "message": "Additional reagent predicate (JSON)"
+  },
+  "app.lab.recipe-generator.brewing.output-json": {
+    "message": "Output components (JSON)"
+  },
+  "app.lab.recipe-generator.brewing.guide": {
+    "message": "Brewing guide"
+  },
+  "app.lab.recipe-generator.issue.invalid-result-count": {
+    "message": "Output count must be an integer from 1 to 99."
+  },
+  "app.lab.recipe-generator.brewing.count": {
+    "message": "Output count"
+  },
+  "app.lab.recipe-generator.issue.invalid-brewing-json": {
+    "message": "Brewing predicates and components must contain valid JSON objects."
+  },
+  "app.lab.recipe-generator.type.brewing": {
+    "message": "Brewing"
+  },
+  "app.lab.recipe-generator.brewing.invalid": {
+    "message": "Enter a valid JSON object. This recipe cannot be exported until the error is fixed."
+  },
+  "app.lab.recipe-generator.brewing.hint": {
+    "message": "Drop any supported item into the input, reagent and output slots. Potion choices override only the potion ID in the corresponding JSON object. Other conditions and components are preserved."
   }
 }

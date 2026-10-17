@@ -4194,7 +4194,7 @@
     "message": "版权与来源"
   },
   "app.lab.recipe-generator.copyright.tags-body": {
-    "message": "扩展物品标签来自 destruc7i0n 的 crafting generator，采用 MIT 许可证。"
+    "message": "旧版展开标签来自 destruc7i0n 的 crafting 生成器（MIT 许可证）；Minecraft 26.3 标签来自 mcmeta 归档的原版数据。"
   },
   "app.lab.recipe-generator.copyright.tags-heading": {
     "message": "原版标签"
@@ -14599,5 +14599,56 @@
   },
   "app.lab.seed-map.details.estimated-containers": {
     "message": "容器坐标仅为区块位置的粗略估计，无法确定箱子的精确位置。"
+  },
+  "app.lab.recipe-generator.brewing.title": {
+    "message": "酿造条件"
+  },
+  "app.lab.recipe-generator.brewing.input": {
+    "message": "输入药水条件"
+  },
+  "app.lab.recipe-generator.brewing.reagent": {
+    "message": "试剂药水条件"
+  },
+  "app.lab.recipe-generator.brewing.output": {
+    "message": "输出药水"
+  },
+  "app.lab.recipe-generator.brewing.any": {
+    "message": "不限药水"
+  },
+  "app.lab.recipe-generator.brewing.unchanged": {
+    "message": "使用输出组件"
+  },
+  "app.lab.recipe-generator.brewing.advanced": {
+    "message": "高级条件与组件"
+  },
+  "app.lab.recipe-generator.brewing.input-json": {
+    "message": "附加输入条件（JSON）"
+  },
+  "app.lab.recipe-generator.brewing.reagent-json": {
+    "message": "附加试剂条件（JSON）"
+  },
+  "app.lab.recipe-generator.brewing.output-json": {
+    "message": "输出组件（JSON）"
+  },
+  "app.lab.recipe-generator.brewing.guide": {
+    "message": "酿造指南"
+  },
+  "app.lab.recipe-generator.issue.invalid-result-count": {
+    "message": "输出数量必须是 1 至 99 的整数。"
+  },
+  "app.lab.recipe-generator.brewing.count": {
+    "message": "输出数量"
+  },
+  "app.lab.recipe-generator.issue.invalid-brewing-json": {
+    "message": "酿造条件和组件必须是有效的 JSON 对象。"
+  },
+  "app.lab.recipe-generator.type.brewing": {
+    "message": "酿造"
+  },
+  "app.lab.recipe-generator.brewing.invalid": {
+    "message": "请输入有效的 JSON 对象。修正错误后才能导出此配方。"
+  },
+  "app.lab.recipe-generator.brewing.hint": {
+    "message": "将任意受支持物品拖入输入、试剂和输出槽。药水选项只覆盖对应 JSON 对象中的药水 ID，其他条件和组件会保留。"
   }
 }

@@ -26,3 +26,9 @@ export function resolveRecipeItemName(id: string, locale: string, readable: stri
     if (!key) return readable
     return itemNameIndex[preferred][key] ?? itemNameIndex.en_us[key] ?? readable
 }
+
+export function resolveRecipePotionName(id: string, locale: string): string {
+    const key = `item.minecraft.potion.effect.${id.replace('minecraft:', '')}`
+    const preferred = locale.toLowerCase().startsWith('zh') ? 'zh_cn' : 'en_us'
+    return itemNameIndex[preferred][key] ?? itemNameIndex.en_us[key] ?? id
+}
