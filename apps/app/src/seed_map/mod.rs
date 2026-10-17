@@ -1083,10 +1083,38 @@ mod tests {
         let void_pixels = first
             .chunks_exact(4)
             .filter(|pixel| {
-                pixel[0] == 0x0D && pixel[1] == 0x0D && pixel[2] == 0x16
+                pixel[0] == 0x4B && pixel[1] == 0x4B && pixel[2] == 0xAB
             })
             .count();
         assert!(void_pixels > 0, "outer end tiles should contain void");
+    }
+
+    #[test]
+    fn end_void_remains_purple_at_detailed_scales() {
+        for scale in [1, 4] {
+            let pixels = render_tile(TileRequest {
+                seed: "10292992".to_owned(),
+                edition: Edition::Java,
+                version: "26.3".to_owned(),
+                dimension: Dimension::End,
+                x: 768,
+                z: 0,
+                scale,
+                width: 32,
+                height: 32,
+                elevation: Some(62),
+                terrain: true,
+                contours: false,
+                highlight_biomes: None,
+            })
+            .expect("end void tile should render");
+            assert!(
+                pixels
+                    .chunks_exact(4)
+                    .all(|pixel| pixel == [0x4B, 0x4B, 0xAB, 255]),
+                "the gap between the central and outer islands should stay purple at scale {scale}"
+            );
+        }
     }
 
     #[test]

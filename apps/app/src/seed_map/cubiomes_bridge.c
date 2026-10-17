@@ -196,7 +196,7 @@ int32_t axolotl_seed_map_java_version(int32_t version) {
     }
 }
 
-static const unsigned char AXOLOTL_END_VOID[3] = {0x0D, 0x0D, 0x16};
+static const unsigned char AXOLOTL_END_VOID[3] = {0x4B, 0x4B, 0xAB};
 
 static int axolotl_smooth_height_grid(
     float *grid,
