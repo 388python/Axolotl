@@ -5,6 +5,7 @@ import WindowsIcon from '@modrinth/assets/external/windows.svg?component'
 import ArrowDownIcon from '@modrinth/assets/icons/arrow-down.svg?component'
 import BoxesIcon from '@modrinth/assets/icons/boxes.svg?component'
 import DownloadIcon from '@modrinth/assets/icons/download.svg?component'
+import FlaskConicalIcon from '@modrinth/assets/icons/flask-conical.svg?component'
 import GaugeIcon from '@modrinth/assets/icons/gauge.svg?component'
 import GitGraphIcon from '@modrinth/assets/icons/git-graph.svg?component'
 import IssuesIcon from '@modrinth/assets/icons/issues.svg?component'
@@ -327,6 +328,35 @@ const messages = defineMessages({
         id: 'axolotl-marketing.recent.storage.description',
         defaultMessage:
             'See how much space your games, backups, and caches use. Remove download caches and unused resource information while keeping installed games, saves, and backups.',
+    },
+    recentLabTitle: {
+        id: 'axolotl-marketing.recent.lab.title',
+        defaultMessage: 'Useful tools, right inside the launcher',
+    },
+    recentLabDescription: {
+        id: 'axolotl-marketing.recent.lab.description',
+        defaultMessage:
+            'Edit skins, create gradient text, explore Java Edition seeds, and preview schematics without leaving Axolotl.',
+    },
+    recentDownloadsScreenshotAlt: {
+        id: 'axolotl-marketing.recent.downloads.alt',
+        defaultMessage:
+            'Axolotl Launcher showing an active download, task progress, and the download status panel.',
+    },
+    recentBackupsScreenshotAlt: {
+        id: 'axolotl-marketing.recent.backups.alt',
+        defaultMessage:
+            'Axolotl Launcher instance backup settings showing a saved snapshot and restore action.',
+    },
+    recentStorageScreenshotAlt: {
+        id: 'axolotl-marketing.recent.storage.alt',
+        defaultMessage:
+            'Axolotl Launcher storage analysis showing disk usage by instances, caches, shared files, and backups.',
+    },
+    recentLabScreenshotAlt: {
+        id: 'axolotl-marketing.recent.lab.alt',
+        defaultMessage:
+            'Axolotl Launcher Lab showing the skin editor, gradient text generator, seed map, and schematic workshop.',
     },
     openSourceBadge: {
         id: 'axolotl-marketing.hero.open-source',
@@ -1156,8 +1186,8 @@ useHead(() => ({
                         class="block h-auto w-full"
                         src="/showcase/theme-accent.png"
                         :alt="formatMessage(messages.themesScreenshotAlt)"
-                        width="3104"
-                        height="1814"
+                        width="1280"
+                        height="743"
                         decoding="async"
                         loading="lazy"
                     />
@@ -1173,10 +1203,10 @@ useHead(() => ({
                     </div>
                     <img
                         class="block h-auto w-full"
-                        src="/showcase/axolotl-lab.png"
+                        src="/showcase/recent-lab.png"
                         :alt="formatMessage(messages.translationScreenshotAlt)"
                         width="3104"
-                        height="1814"
+                        height="1802"
                         decoding="async"
                         loading="lazy"
                     />
@@ -1279,26 +1309,85 @@ useHead(() => ({
                 <h2 id="recent-improvements-title">{{ formatMessage(messages.recentTitle) }}</h2>
                 <p>{{ formatMessage(messages.recentDescription) }}</p>
             </div>
-            <div class="modrinth-feature-grid">
-                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
-                    <div class="promise-meta"><BoxesIcon aria-hidden="true" /></div>
-                    <h3>{{ formatMessage(messages.recentResourcesTitle) }}</h3>
-                    <p>{{ formatMessage(messages.recentResourcesDescription) }}</p>
+            <div class="modrinth-feature-grid recent-feature-list">
+                <article
+                    class="feature gradient-border recent-feature-card recent-feature-card--text-only"
+                >
+                    <div class="recent-feature-copy">
+                        <div class="recent-feature-icon"><BoxesIcon aria-hidden="true" /></div>
+                        <h3>{{ formatMessage(messages.recentResourcesTitle) }}</h3>
+                        <p>{{ formatMessage(messages.recentResourcesDescription) }}</p>
+                    </div>
                 </article>
-                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
-                    <div class="promise-meta"><DownloadIcon aria-hidden="true" /></div>
-                    <h3>{{ formatMessage(messages.recentDownloadsTitle) }}</h3>
-                    <p>{{ formatMessage(messages.recentDownloadsDescription) }}</p>
+                <article class="feature gradient-border recent-feature-card">
+                    <div class="recent-feature-copy">
+                        <div class="recent-feature-icon"><DownloadIcon aria-hidden="true" /></div>
+                        <h3>{{ formatMessage(messages.recentDownloadsTitle) }}</h3>
+                        <p>{{ formatMessage(messages.recentDownloadsDescription) }}</p>
+                    </div>
+                    <img
+                        class="recent-feature-media"
+                        src="/showcase/recent-downloads.png"
+                        :alt="formatMessage(messages.recentDownloadsScreenshotAlt)"
+                        width="1280"
+                        height="743"
+                        decoding="async"
+                        loading="lazy"
+                    />
                 </article>
-                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
-                    <div class="promise-meta"><GitGraphIcon aria-hidden="true" /></div>
-                    <h3>{{ formatMessage(messages.recentBackupsTitle) }}</h3>
-                    <p>{{ formatMessage(messages.recentBackupsDescription) }}</p>
+                <article
+                    class="feature gradient-border recent-feature-card recent-feature-card--reverse"
+                >
+                    <div class="recent-feature-copy">
+                        <div class="recent-feature-icon"><GitGraphIcon aria-hidden="true" /></div>
+                        <h3>{{ formatMessage(messages.recentBackupsTitle) }}</h3>
+                        <p>{{ formatMessage(messages.recentBackupsDescription) }}</p>
+                    </div>
+                    <img
+                        class="recent-feature-media"
+                        src="/showcase/recent-backups.png"
+                        :alt="formatMessage(messages.recentBackupsScreenshotAlt)"
+                        width="1280"
+                        height="743"
+                        decoding="async"
+                        loading="lazy"
+                    />
                 </article>
-                <article class="feature gradient-border promise-card col-span-3 min-w-0 p-6">
-                    <div class="promise-meta"><GaugeIcon aria-hidden="true" /></div>
-                    <h3>{{ formatMessage(messages.recentStorageTitle) }}</h3>
-                    <p>{{ formatMessage(messages.recentStorageDescription) }}</p>
+                <article class="feature gradient-border recent-feature-card">
+                    <div class="recent-feature-copy">
+                        <div class="recent-feature-icon"><GaugeIcon aria-hidden="true" /></div>
+                        <h3>{{ formatMessage(messages.recentStorageTitle) }}</h3>
+                        <p>{{ formatMessage(messages.recentStorageDescription) }}</p>
+                    </div>
+                    <img
+                        class="recent-feature-media"
+                        src="/showcase/recent-storage.png"
+                        :alt="formatMessage(messages.recentStorageScreenshotAlt)"
+                        width="1280"
+                        height="743"
+                        decoding="async"
+                        loading="lazy"
+                    />
+                </article>
+                <article
+                    class="feature gradient-border recent-feature-card recent-feature-card--reverse"
+                >
+                    <div class="recent-feature-copy">
+                        <div class="recent-feature-icon">
+                            <FlaskConicalIcon aria-hidden="true" />
+                        </div>
+                        <h3>{{ formatMessage(messages.recentLabTitle) }}</h3>
+                        <p>{{ formatMessage(messages.recentLabDescription) }}</p>
+                    </div>
+                    <img
+                        class="recent-feature-media"
+                        src="/showcase/recent-lab.png"
+                        :alt="formatMessage(messages.recentLabScreenshotAlt)"
+                        width="3104"
+                        height="1802"
+                        decoding="async"
+                        loading="lazy"
+                    />
                 </article>
             </div>
         </section>
@@ -1832,6 +1921,92 @@ useHead(() => ({
         font-weight: 800;
         line-height: 1;
     }
+}
+
+.recent-feature-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+}
+
+.recent-feature-card {
+    display: grid;
+    grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.2fr);
+    min-width: 0;
+    padding: 0 !important;
+    align-items: stretch;
+
+    &--reverse {
+        grid-template-columns: minmax(0, 1.2fr) minmax(16rem, 0.8fr);
+
+        .recent-feature-copy {
+            order: 2;
+        }
+
+        .recent-feature-media {
+            order: 1;
+        }
+    }
+
+    &--text-only {
+        grid-template-columns: minmax(0, 1fr);
+
+        .recent-feature-copy {
+            max-width: 52rem;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .recent-feature-icon {
+            align-self: center;
+        }
+    }
+}
+
+.recent-feature-copy {
+    display: flex;
+    min-width: 0;
+    padding: clamp(1.75rem, 4vw, 3.25rem);
+    flex-direction: column;
+    justify-content: center;
+
+    h3 {
+        margin: 1rem 0 0.75rem;
+        color: var(--color-contrast);
+        font-size: clamp(1.3rem, 2.5vw, 1.75rem);
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+    }
+
+    p {
+        margin: 0;
+        color: var(--color-secondary);
+        font-size: 0.95rem;
+        line-height: 1.7;
+    }
+}
+
+.recent-feature-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--color-brand) 35%, transparent);
+    border-radius: 0.8rem;
+    color: var(--color-brand);
+    background: color-mix(in srgb, var(--color-brand) 10%, transparent);
+
+    svg {
+        width: 1.25rem;
+        height: 1.25rem;
+    }
+}
+
+.recent-feature-media {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 16rem;
+    object-fit: cover;
 }
 
 .showcase-card-wide {
@@ -2372,6 +2547,21 @@ useHead(() => ({
 
     .showcase-copy {
         padding: 1.35rem 1.25rem 1.15rem;
+    }
+
+    .recent-feature-card,
+    .recent-feature-card--reverse {
+        grid-template-columns: minmax(0, 1fr);
+
+        .recent-feature-copy {
+            order: 1;
+        }
+
+        .recent-feature-media {
+            order: 2;
+            min-height: 0;
+            aspect-ratio: 1280 / 743;
+        }
     }
 
     .main-header {
