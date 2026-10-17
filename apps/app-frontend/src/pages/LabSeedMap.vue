@@ -74,7 +74,6 @@ import {
     getSeedMapBiomeAt,
     getSeedMapProfiles,
     getSeedMapSpawn,
-    isCurrentSeedMapEpoch,
     loadSeedMapHistory,
     loadSeedMapWorkspace,
     recordSeedMapHistory,
@@ -111,14 +110,17 @@ import {
     seedMapOreYRange,
     type SeedMapSpawnPoint,
     seedMapTileConcurrency,
-    type SeedMapTileRequest,
     type SeedMapVersionProfile,
     updateSeedMapHistoryProgress,
     useSeedMapOreLayer,
     visibleFeatureDefinitions,
 } from '@/lab/seed-map'
 import type { SeedMapStructurePiece, SeedMapStructureQuery } from '@/lab/seed-map/advanced'
-import { SEED_MAP_ENGINE_REVISION } from '@/lab/seed-map/backend'
+import {
+    createSeedMapTileLayer,
+    seedMapTileLevel,
+    type SeedMapTileView,
+} from '@/lab/seed-map/tile-layer'
 
 type MapBounds = {
     minX: number
@@ -137,20 +139,10 @@ type Selection = {
     biome?: number
 }
 
-type TileJob = {
-    epoch: number
-    key: string
-    run: () => Promise<void>
-}
-
 type ActivePointer = {
     x: number
     y: number
 }
-
-// Keep one extra source tile around each edge so a fractional zoom/pan does
-// not make an edge tile disappear when a bounds value crosses a tile boundary.
-const TILE_CULL_PADDING = 1
 
 type SeedMapElevation = (typeof SEED_MAP_ELEVATIONS)[number]
 
@@ -184,17 +176,12 @@ const copyrightModal = useTemplateRef<InstanceType<typeof SeedMapCopyrightModal>
 let activeHistoryId = seedMapHistoryId(workspace.seed.trim().slice(0, 256), workspace.edition)
 const coordinateX = ref(String(Math.round(workspace.center.x)))
 const coordinateZ = ref(String(Math.round(workspace.center.z)))
-const tileImages = new Map<string, ImageBitmap>()
 const featureImages = new Map<string, HTMLImageElement>()
 const oreImages = new Map<string, HTMLImageElement>()
 let spawnImage: HTMLImageElement | undefined
-const pendingTiles = new Map<string, number>()
-const tileQueue: TileJob[] = []
 const activePointers = new Map<number, ActivePointer>()
 const pointer = reactive({ id: -1, startX: 0, startY: 0, centerX: 0, centerZ: 0, moved: false })
 const viewport = reactive({ width: 0, height: 0 })
-let activeTileRequests = 0
-const activeTileRequestsByEpoch = new Map<number, number>()
 let requestEpoch = 0
 let refreshTimer: ReturnType<typeof window.setTimeout> | undefined
 let saveTimer: ReturnType<typeof window.setTimeout> | undefined
@@ -203,7 +190,6 @@ let redrawFrame: number | undefined
 let panFrame: number | undefined
 let pendingPanCenter: { x: number; z: number } | undefined
 let zoomAnimationFrame: number | undefined
-let fallbackTileScale: number | undefined
 let resizeObserver: ResizeObserver | undefined
 let pinchDistance = 0
 let wheelMode: 'trackpad' | 'wheel' | undefined
@@ -215,6 +201,8 @@ let wheelAnchor = { x: 0, y: 0 }
 let suppressPointerSelection = false
 let centerOnNextSpawn = false
 let spawnContextKey = ''
+let spawnRequest: { key: string; promise: Promise<SeedMapSpawnPoint> } | undefined
+let disposed = false
 let pendingHistorySource: SeedMapHistorySource | null = null
 let pendingHistoryLabels: { instanceName?: string; worldName?: string } = {}
 let historyTimer: ReturnType<typeof window.setTimeout> | undefined
@@ -580,20 +568,10 @@ const dimensions = computed(
     () => selectedProfile.value?.dimensions ?? ['overworld', 'nether', 'end'],
 )
 const scale = computed(() => 4 ** workspace.zoom)
-// Native tiles are generated at discrete powers of four. Keep the current
-// tile source for the whole zoom interval and switch only at its boundary;
-// rounding here used to replace the biome sampler halfway through an
-// animated zoom (for example at zoom 0.5), causing abrupt color changes.
-const tileScale = computed(() =>
-    workspace.displayMode === 'underground'
-        ? scale.value <= 1
-            ? 1
-            : 4
-        : SEED_MAP_SCALES[
-              Math.min(Math.max(Math.floor(workspace.zoom), 0), SEED_MAP_SCALES.length - 1)
-          ],
+const tileLevel = computed(() =>
+    seedMapTileLevel(scale.value, workspace.displayMode === 'underground'),
 )
-const tilePixels = computed(() => (workspace.displayMode === 'underground' ? 16 : 256))
+const tileScale = computed(() => tileLevel.value.scale)
 const undergroundMask = computed(
     () => selectedProfile.value?.undergroundMasks?.[dimensionsIndex.value] ?? 0,
 )
@@ -795,12 +773,6 @@ watch(
     () => {
         focusedPiece.value = null
         redraw()
-    },
-)
-watch(
-    () => workspace.displayMode,
-    () => {
-        fallbackTileScale = undefined
     },
 )
 watch(
@@ -1033,6 +1005,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+    disposed = true
+    requestEpoch++
     if (historyTimer) {
         window.clearTimeout(historyTimer)
         historyTimer = undefined
@@ -1053,7 +1027,7 @@ onUnmounted(() => {
     if (zoomAnimationFrame !== undefined) window.cancelAnimationFrame(zoomAnimationFrame)
     saveSeedMapWorkspace(workspace)
     disposeOreLayer()
-    clearTileImages()
+    tileLayer.dispose()
     resizeObserver?.disconnect()
     document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
@@ -1227,28 +1201,52 @@ function screenToWorld(x: number, y: number) {
     }
 }
 
-function tileKey(x: number, z: number, sourceScale = tileScale.value) {
-    return [
-        SEED_MAP_ENGINE_REVISION,
-        workspace.displayMode,
-        workspace.undergroundLayers,
-        workspace.undergroundY,
-        workspace.seed,
-        workspace.edition,
-        workspace.gameVersion,
-        workspace.dimension,
-        sourceScale,
-        workspace.elevation,
-        terrainEnabled.value,
-        workspace.contourLines,
-        workspace.highlightBiomeEnabled ? activeHighlightedBiomes.value.join(',') : 'none',
-        x,
-        z,
-    ].join(':')
+function tileView(): SeedMapTileView {
+    const underground = workspace.displayMode === 'underground'
+    return {
+        epoch: requestEpoch,
+        context: {
+            seed: workspace.seed,
+            edition: workspace.edition,
+            version: workspace.gameVersion,
+            dimension: workspace.dimension,
+            elevation: underground ? workspace.undergroundY : workspace.elevation,
+            underground: underground
+                ? workspace.undergroundLayers & undergroundMask.value
+                : undefined,
+            terrain: terrainEnabled.value,
+            contours: contoursEnabled.value,
+            highlightBiomes: workspace.highlightBiomeEnabled
+                ? [...activeHighlightedBiomes.value]
+                : undefined,
+        },
+        bounds: mapBounds(),
+        center: { ...workspace.center },
+        level: { ...tileLevel.value },
+        concurrency: underground ? 2 : seedMapTileConcurrency(tileScale.value),
+    }
 }
 
+let overlaysEpoch = -1
+const tileLayer = createSeedMapTileLayer({
+    render: renderSeedMapTile,
+    onUpdate: () => redraw(),
+    onLoading: (value) => {
+        loading.value = value
+    },
+    onError: (message) => {
+        mapError.value = message
+    },
+    onCoverage: (epoch) => {
+        if (epoch !== requestEpoch || epoch === overlaysEpoch) return
+        overlaysEpoch = epoch
+        if (workspace.displayMode === 'structures') void requestFeatures(epoch)
+        refreshCurrentOreLayer()
+    },
+})
+
 function redraw() {
-    if (redrawFrame !== undefined) return
+    if (disposed || redrawFrame !== undefined) return
     redrawFrame = window.requestAnimationFrame(() => {
         redrawFrame = undefined
         drawMap()
@@ -1273,10 +1271,14 @@ function drawMap() {
     }
 
     const bounds = mapBounds()
-    if (fallbackTileScale !== undefined && fallbackTileScale !== tileScale.value) {
-        drawTileLayer(context, bounds, fallbackTileScale)
+    context.save()
+    context.imageSmoothingEnabled = false
+    for (const tile of tileLayer.drawable(tileView())) {
+        const position = worldToScreen(tile.x, tile.z)
+        const size = tile.span / scale.value
+        context.drawImage(tile.bitmap, position.x, position.y, size, size)
     }
-    drawTileLayer(context, bounds, tileScale.value)
+    context.restore()
 
     if (workspace.showGrid || workspace.showChunkCoordinates) drawGrid(context, bounds)
     if (workspace.displayMode === 'structures') drawFeatures(context)
@@ -1300,70 +1302,6 @@ function drawMap() {
     drawSpawn(context)
     drawMarkers(context)
     drawRuler(context)
-}
-
-function drawTileLayer(context: CanvasRenderingContext2D, bounds: MapBounds, sourceScale: number) {
-    const tileSpan = tilePixels.value * sourceScale
-    const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
-    const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
-    const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
-    const maxTileZ = Math.floor(bounds.maxZ / tileSpan) + TILE_CULL_PADDING
-    const displaySize = tileSpan / scale.value
-    context.save()
-    context.imageSmoothingEnabled = false
-    for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
-        for (let tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) {
-            const key = tileKey(tileX, tileZ, sourceScale)
-            const bitmap = tileImages.get(key)
-            const position = worldToScreen(tileX * tileSpan, tileZ * tileSpan)
-            if (bitmap) {
-                tileImages.delete(key)
-                tileImages.set(key, bitmap)
-                context.drawImage(bitmap, position.x, position.y, displaySize, displaySize)
-            }
-        }
-    }
-    context.restore()
-}
-
-function visibleTileKeys(bounds: MapBounds): Set<string> {
-    const keys = new Set<string>()
-    const sourceScales = new Set<number>([tileScale.value])
-    if (fallbackTileScale !== undefined) sourceScales.add(fallbackTileScale)
-    for (const sourceScale of sourceScales) {
-        const tileSpan = tilePixels.value * sourceScale
-        const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
-        const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
-        const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
-        const maxTileZ = Math.floor(bounds.maxZ / tileSpan) + TILE_CULL_PADDING
-        for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
-            for (let tileZ = minTileZ; tileZ <= maxTileZ; tileZ++)
-                keys.add(tileKey(tileX, tileZ, sourceScale))
-        }
-    }
-    return keys
-}
-
-function hasMissingCurrentTiles(bounds: MapBounds): boolean {
-    return countMissingCurrentTiles(bounds).missing > 0
-}
-
-function countMissingCurrentTiles(bounds: MapBounds) {
-    const sourceScale = tileScale.value
-    const tileSpan = tilePixels.value * sourceScale
-    const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
-    const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
-    const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
-    const maxTileZ = Math.floor(bounds.maxZ / tileSpan) + TILE_CULL_PADDING
-    let visible = 0
-    let missing = 0
-    for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
-        for (let tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) {
-            visible++
-            if (!tileImages.has(tileKey(tileX, tileZ, sourceScale))) missing++
-        }
-    }
-    return { visible, missing }
 }
 
 function drawGrid(context: CanvasRenderingContext2D, bounds: MapBounds) {
@@ -1625,9 +1563,10 @@ async function startMapGuide() {
 }
 
 function scheduleRefresh(delay = 80) {
-    if (!viewport.width || !viewport.height) return
+    if (disposed || !viewport.width || !viewport.height) return
     requestEpoch++
-    clearQueuedTileJobs()
+    tileLayer.invalidate(tileView())
+    refreshCurrentOreLayer(null)
     redraw()
     if (refreshTimer) window.clearTimeout(refreshTimer)
     refreshTimer = window.setTimeout(refreshMap, delay)
@@ -1635,7 +1574,6 @@ function scheduleRefresh(delay = 80) {
 
 function refreshMap() {
     refreshTimer = undefined
-    const epoch = requestEpoch
     if (!workspace.seed.trim()) {
         features.value = []
         spawn.value = null
@@ -1653,21 +1591,18 @@ function refreshMap() {
         return
     }
     mapError.value = ''
-    if (centerOnNextSpawn && workspace.dimension === 'overworld' && workspace.showSpawn) {
-        void requestSpawn(epoch)
-        return
-    }
-    if (workspace.displayMode !== 'underground' || scale.value <= 4) requestVisibleTiles(epoch)
-    if (workspace.displayMode === 'structures') void requestFeatures(epoch)
-    else features.value = []
-    void requestSpawn(epoch)
-    refreshCurrentOreLayer()
+    if (workspace.displayMode !== 'underground' || scale.value <= 4) tileLayer.refresh(tileView())
+    if (workspace.displayMode !== 'structures') features.value = []
+    void requestSpawn()
 }
 
-function refreshCurrentOreLayer(delay = 180) {
+function refreshCurrentOreLayer(delay: number | null = 180) {
     refreshOreLayer(
         {
-            enabled: workspace.displayMode === 'ores',
+            enabled:
+                workspace.displayMode === 'ores' &&
+                !!selectedProfile.value?.available &&
+                !!workspace.seed.trim(),
             seed: workspace.seed,
             edition: workspace.edition,
             version: workspace.gameVersion,
@@ -1681,157 +1616,6 @@ function refreshCurrentOreLayer(delay = 180) {
         },
         delay,
     )
-}
-
-function requestVisibleTiles(epoch: number) {
-    const bounds = mapBounds()
-    const requestScale = tileScale.value
-    const tileSpan = tilePixels.value * requestScale
-    const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
-    const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
-    const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
-    const maxTileZ = Math.floor(bounds.maxZ / tileSpan) + TILE_CULL_PADDING
-    const candidates: { tileX: number; tileZ: number }[] = []
-    for (let tileX = minTileX; tileX <= maxTileX; tileX++) {
-        for (let tileZ = minTileZ; tileZ <= maxTileZ; tileZ++) candidates.push({ tileX, tileZ })
-    }
-    candidates.sort(
-        (a, b) =>
-            Math.hypot(
-                a.tileX * tileSpan + tileSpan / 2 - workspace.center.x,
-                a.tileZ * tileSpan + tileSpan / 2 - workspace.center.z,
-            ) -
-            Math.hypot(
-                b.tileX * tileSpan + tileSpan / 2 - workspace.center.x,
-                b.tileZ * tileSpan + tileSpan / 2 - workspace.center.z,
-            ),
-    )
-    let hasMissingTiles = false
-    for (const { tileX, tileZ } of candidates) {
-        const key = tileKey(tileX, tileZ, requestScale)
-        if (tileImages.has(key) || pendingTiles.get(key) === epoch) continue
-        hasMissingTiles = true
-        const request: SeedMapTileRequest = {
-            epoch,
-            seed: workspace.seed,
-            edition: workspace.edition,
-            version: workspace.gameVersion,
-            dimension: workspace.dimension,
-            x: tileX * tileSpan,
-            z: tileZ * tileSpan,
-            scale: requestScale,
-            width: tilePixels.value,
-            height: tilePixels.value,
-            elevation:
-                workspace.displayMode === 'underground'
-                    ? workspace.undergroundY
-                    : workspace.elevation,
-            underground:
-                workspace.displayMode === 'underground'
-                    ? workspace.undergroundLayers & undergroundMask.value
-                    : undefined,
-            terrain: terrainEnabled.value,
-            contours: contoursEnabled.value,
-            highlightBiomes:
-                workspace.highlightBiomeEnabled && activeHighlightedBiomes.value.length > 0
-                    ? activeHighlightedBiomes.value
-                    : undefined,
-        }
-        pendingTiles.set(key, epoch)
-        enqueueTile({
-            epoch,
-            key,
-            run: async () => {
-                try {
-                    if (!isCurrentSeedMapEpoch(epoch, requestEpoch)) {
-                        return
-                    }
-                    const tile = await renderSeedMapTile(request)
-                    if (!isCurrentSeedMapEpoch(tile.epoch, requestEpoch)) {
-                        tile.bitmap.close()
-                        return
-                    }
-                    tileImages.get(key)?.close()
-                    tileImages.set(key, tile.bitmap)
-                    const protectedKeys = visibleTileKeys(mapBounds())
-                    while (tileImages.size > 96) {
-                        const oldest = [...tileImages.keys()].find(
-                            (candidate) => !protectedKeys.has(candidate),
-                        )
-                        // Never evict a tile that is currently drawable. The cache may
-                        // temporarily exceed its soft limit when the viewport is large.
-                        if (oldest === undefined) break
-                        tileImages.get(oldest)?.close()
-                        tileImages.delete(oldest)
-                    }
-                    redraw()
-                } catch (error) {
-                    if (isCurrentSeedMapEpoch(epoch, requestEpoch)) {
-                        mapError.value = error instanceof Error ? error.message : String(error)
-                    }
-                } finally {
-                    if (pendingTiles.get(key) === epoch) pendingTiles.delete(key)
-                }
-            },
-        })
-    }
-    if (!hasMissingTiles) fallbackTileScale = undefined
-}
-
-function enqueueTile(job: TileJob) {
-    tileQueue.push(job)
-    pumpTileQueue()
-}
-
-function pumpTileQueue() {
-    const concurrency =
-        workspace.displayMode === 'underground' ? 2 : seedMapTileConcurrency(tileScale.value)
-    const totalConcurrency = concurrency * 2
-    while (
-        (activeTileRequestsByEpoch.get(requestEpoch) ?? 0) < concurrency &&
-        activeTileRequests < totalConcurrency &&
-        tileQueue.length
-    ) {
-        const job = tileQueue.shift()
-        if (!job) return
-        activeTileRequests += 1
-        activeTileRequestsByEpoch.set(
-            job.epoch,
-            (activeTileRequestsByEpoch.get(job.epoch) ?? 0) + 1,
-        )
-        loading.value = true
-        void job.run().finally(() => {
-            activeTileRequests -= 1
-            const epochRequests = (activeTileRequestsByEpoch.get(job.epoch) ?? 1) - 1
-            if (epochRequests > 0) activeTileRequestsByEpoch.set(job.epoch, epochRequests)
-            else activeTileRequestsByEpoch.delete(job.epoch)
-            loading.value =
-                (activeTileRequestsByEpoch.get(requestEpoch) ?? 0) > 0 ||
-                tileQueue.some((queuedJob) => queuedJob.epoch === requestEpoch)
-            if (
-                !loading.value &&
-                job.epoch === requestEpoch &&
-                fallbackTileScale !== undefined &&
-                !hasMissingCurrentTiles(mapBounds())
-            ) {
-                fallbackTileScale = undefined
-                redraw()
-            }
-            pumpTileQueue()
-        })
-    }
-}
-
-function clearQueuedTileJobs() {
-    const queuedJobs = tileQueue.splice(0, tileQueue.length)
-    for (const job of queuedJobs) {
-        if (pendingTiles.get(job.key) === job.epoch) pendingTiles.delete(job.key)
-    }
-}
-
-function clearTileImages() {
-    for (const bitmap of tileImages.values()) bitmap.close()
-    tileImages.clear()
 }
 
 async function requestFeatures(epoch: number) {
@@ -1862,7 +1646,7 @@ async function requestFeatures(epoch: number) {
     }
 }
 
-async function requestSpawn(epoch: number) {
+async function requestSpawn() {
     if (workspace.dimension !== 'overworld' || !workspace.showSpawn) {
         spawn.value = null
         return
@@ -1873,13 +1657,26 @@ async function requestSpawn(epoch: number) {
         return
     }
     spawn.value = null
+    const request =
+        spawnRequest?.key === contextKey
+            ? spawnRequest
+            : {
+                  key: contextKey,
+                  promise: getSeedMapSpawn(
+                      workspace.seed,
+                      workspace.edition,
+                      workspace.gameVersion,
+                  ),
+              }
+    spawnRequest = request
+    const isCurrent = () =>
+        !disposed &&
+        workspace.dimension === 'overworld' &&
+        workspace.showSpawn &&
+        contextKey === `${workspace.seed}|${workspace.edition}|${workspace.gameVersion}`
     try {
-        const result = await getSeedMapSpawn(
-            workspace.seed,
-            workspace.edition,
-            workspace.gameVersion,
-        )
-        if (epoch !== requestEpoch) return
+        const result = await request.promise
+        if (!isCurrent()) return
         spawn.value = result
         spawnContextKey = contextKey
         if (centerOnNextSpawn) {
@@ -1891,7 +1688,7 @@ async function requestSpawn(epoch: number) {
         }
         redraw()
     } catch {
-        if (epoch === requestEpoch) {
+        if (isCurrent()) {
             spawn.value = null
             spawnContextKey = ''
             if (centerOnNextSpawn) {
@@ -1899,6 +1696,8 @@ async function requestSpawn(epoch: number) {
                 scheduleRefresh()
             }
         }
+    } finally {
+        if (spawnRequest === request) spawnRequest = undefined
     }
 }
 
@@ -2242,9 +2041,7 @@ function applyZoomAt(x: number, y: number, delta: number) {
         x: workspace.center.x + (x - viewport.width / 2) * scale.value,
         z: workspace.center.z + (y - viewport.height / 2) * scale.value,
     }
-    const previousTileScale = tileScale.value
     workspace.zoom = targetZoom
-    if (tileScale.value !== previousTileScale) fallbackTileScale = previousTileScale
     workspace.center.x = clampWorldCoordinate(anchor.x - (x - viewport.width / 2) * scale.value)
     workspace.center.z = clampWorldCoordinate(anchor.z - (y - viewport.height / 2) * scale.value)
     redraw()
@@ -2262,9 +2059,7 @@ function animateZoomTo(x: number, y: number, targetZoom: number, duration: numbe
     const step = (now: number) => {
         const progress = Math.min(1, (now - startTime) / duration)
         const easedProgress = 1 - (1 - progress) ** 3
-        const previousTileScale = tileScale.value
         workspace.zoom = startZoom + (targetZoom - startZoom) * easedProgress
-        if (tileScale.value !== previousTileScale) fallbackTileScale = previousTileScale
         workspace.center.x = clampWorldCoordinate(anchor.x - (x - viewport.width / 2) * scale.value)
         workspace.center.z = clampWorldCoordinate(
             anchor.z - (y - viewport.height / 2) * scale.value,

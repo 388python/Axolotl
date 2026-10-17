@@ -57,10 +57,12 @@ export function useSeedMapOreLayer(options: {
     let refreshGeneration = 0
     let lastRebuild = 0
 
-    function refresh(nextContext: SeedMapOreLayerContext, delay = 180): void {
+    function refresh(nextContext: SeedMapOreLayerContext, delay: number | null = 180): void {
         context = cloneContext(nextContext)
         refreshGeneration++
         if (refreshTimer) clearTimeout(refreshTimer)
+        refreshTimer = undefined
+        scanning.value = false
         const nextKey = `${SEED_MAP_ENGINE_REVISION}|${nextContext.seed}|${nextContext.edition}|${nextContext.version}|${nextContext.dimension}|${[...nextContext.selectedOres].sort().join(',')}`
         if (nextKey !== contextKey) {
             contextKey = nextKey
@@ -76,7 +78,8 @@ export function useSeedMapOreLayer(options: {
             return
         }
         const generation = refreshGeneration
-        refreshTimer = setTimeout(() => void scanVisibleChunks(generation), delay)
+        if (delay !== null)
+            refreshTimer = setTimeout(() => void scanVisibleChunks(generation), delay)
     }
 
     function refreshFilter(yMin: number | null, yMax: number | null): void {
