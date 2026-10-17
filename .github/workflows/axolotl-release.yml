@@ -343,7 +343,6 @@ jobs:
 
   publish-website:
     needs: verify-and-publish
-    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -361,14 +360,16 @@ jobs:
         with:
           ref: main
           path: website-publish
-      - name: Publish website download metadata
-        if: ${{ !contains(github.ref_name, '-') }}
+      - name: Publish website release data
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/axolotl/create-website-release-metadata.mjs \
-            release-check/release.json \
-            website-publish/apps/website/releases/latest.json
+          if [[ "${GITHUB_REF_NAME}" != *-* ]]; then
+            node scripts/axolotl/create-website-release-metadata.mjs \
+              release-check/release.json \
+              website-publish/apps/website/releases/latest.json
+          fi
+
           node scripts/axolotl/create-website-release-catalog.mjs \
             website-publish/apps/website/releases/catalog.json
 
@@ -376,9 +377,11 @@ jobs:
           git -C website-publish config user.email "release@axolotl.local"
           git -C website-publish add apps/website/releases/latest.json apps/website/releases/catalog.json
           if git -C website-publish diff --cached --quiet; then
-            echo "Website metadata is unchanged"
+            echo "Website release data is unchanged"
           else
-            git -C website-publish commit -m "chore(website): update download metadata to ${GITHUB_REF_NAME} [skip ci]"
+            # This commit must trigger the Git-connected static-site build so
+            # the newly generated catalog is included in /changelog HTML.
+            git -C website-publish commit -m "chore(website): update release data for ${GITHUB_REF_NAME}"
             git -C website-publish push origin main
           fi
 

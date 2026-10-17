@@ -195,11 +195,6 @@ export const siteLocaleMessages: Record<string, Record<string, string>> = {
 		'axolotl-site.changelog.eyebrow': '版本历史',
 		'axolotl-site.changelog.title': '更新日志',
 		'axolotl-site.changelog.description': '查看每个已公开发布版本的功能改进、变更与修复。',
-		'axolotl-site.changelog.loading': '正在核对已发布版本…',
-		'axolotl-site.changelog.error.title': '暂时无法加载更新日志',
-		'axolotl-site.changelog.error.description':
-			'未能获取更新日志。可能是网络连接不畅，或数据源暂时不可达。',
-		'axolotl-site.changelog.retry': '重试',
 		'axolotl-site.changelog.empty': '尚无已公开发布的更新日志。',
 		'axolotl-site.changelog.no-release-notes': '该版本未提供更新说明。',
 		'axolotl-site.changelog.category.added': '新增',
