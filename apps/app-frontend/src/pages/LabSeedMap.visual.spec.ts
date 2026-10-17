@@ -280,3 +280,20 @@ it.each([
         }
     },
 )
+
+it('loads the provided camp and fossil PNGs and omits the removed end-island layer', async () => {
+    const { vm } = await openMap()
+    const camp = wrapper!.get('.layer-options img[src$="/abandoned_camp.png"]')
+        .element as HTMLImageElement
+    await camp.decode()
+    expect(camp.naturalWidth).toBe(26)
+    vm.workspace.dimension = 'nether'
+    await flushPromises()
+    const fossil = wrapper!.get('.layer-options img[src$="/nether_fossil.png"]')
+        .element as HTMLImageElement
+    await fossil.decode()
+    expect(fossil.naturalWidth).toBe(26)
+    vm.workspace.dimension = 'end'
+    await flushPromises()
+    expect(wrapper!.findAll('.layer-options > button')).toHaveLength(3)
+})

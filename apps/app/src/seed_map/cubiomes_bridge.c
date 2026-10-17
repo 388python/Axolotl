@@ -98,7 +98,6 @@ enum {
     AXOLOTL_FEATURE_END_GATEWAY = 1 << 23,
     AXOLOTL_FEATURE_ABANDONED_CAMP = 1 << 24,
     AXOLOTL_FEATURE_NETHER_FOSSIL = 1 << 25,
-    AXOLOTL_FEATURE_END_ISLAND = 1 << 26,
 };
 
 typedef struct AxolotlStructureDefinition {
@@ -132,7 +131,6 @@ static const AxolotlStructureDefinition AXOLOTL_STRUCTURES[] = {
     {End_Gateway, AXOLOTL_FEATURE_END_GATEWAY},
     {Abandoned_Camp, AXOLOTL_FEATURE_ABANDONED_CAMP},
     {Nether_Fossil, AXOLOTL_FEATURE_NETHER_FOSSIL},
-    {End_Island, AXOLOTL_FEATURE_END_ISLAND},
 };
 
 uint32_t axolotl_seed_map_abi_version(void) { return 1; }
@@ -600,6 +598,9 @@ size_t axolotl_seed_map_find_features(
     applySeed(&generator, dimension, seed);
     SurfaceNoise end_surface_noise;
     if (dimension == DIM_END) initSurfaceNoise(&end_surface_noise, DIM_END, seed);
+    BlendedNoise nether_terrain;
+    if (dimension == DIM_NETHER && (feature_mask & AXOLOTL_FEATURE_NETHER_FOSSIL))
+        initBlendedNoise(&nether_terrain, seed, DIM_NETHER);
 
     size_t count = 0;
     for (size_t index = 0; index < sizeof(AXOLOTL_STRUCTURES) / sizeof(AXOLOTL_STRUCTURES[0]); index++) {
@@ -620,8 +621,20 @@ size_t axolotl_seed_map_find_features(
             for (int region_z = min_region_z; region_z <= max_region_z; region_z++) {
                 Pos position;
                 if (!getStructurePos(definition.type, minecraft_version, seed, region_x, region_z, &position)) continue;
+                if (definition.type == Nether_Fossil) {
+                    StructureVariant variant;
+                    if (!getVariant(&variant, Nether_Fossil, minecraft_version, seed, position.x, position.z, -1) ||
+                        !isViableNetherFossilTerrain(position.x >> 4, position.z >> 4, &variant, &nether_terrain, minecraft_version))
+                        continue;
+                    position.x += variant.x;
+                    position.z += variant.z;
+                    if (!isViableFeatureBiome(minecraft_version, Nether_Fossil,
+                            getBiomeAt(&generator, 4, position.x >> 2, variant.y >> 2, position.z >> 2)))
+                        continue;
+                }
                 if (position.x < min_x || position.x > max_x || position.z < min_z || position.z > max_z) continue;
-                if (!isViableStructurePos(definition.type, &generator, position.x, position.z, 0)) continue;
+                if (definition.type != Nether_Fossil &&
+                    !isViableStructurePos(definition.type, &generator, position.x, position.z, 0)) continue;
                 if (definition.type == End_City &&
                     !isViableEndCityTerrain(&generator, &end_surface_noise, position.x, position.z))
                     continue;

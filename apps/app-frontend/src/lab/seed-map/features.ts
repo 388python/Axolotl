@@ -27,7 +27,6 @@ export type SeedMapFeatureKind =
     | 'end-gateway'
     | 'abandoned-camp'
     | 'nether-fossil'
-    | 'end-island'
 
 export type SeedMapFeature = {
     kind: SeedMapFeatureKind
@@ -81,7 +80,6 @@ export const SEED_MAP_FEATURES: readonly SeedMapFeatureDefinition[] = [
     { kind: 'end-gateway', mask: 1 << 23, dimensions: END, maxScale: 4 },
     { kind: 'abandoned-camp', mask: 1 << 24, dimensions: OVERWORLD, maxScale: 16 },
     { kind: 'nether-fossil', mask: 1 << 25, dimensions: NETHER, maxScale: 4 },
-    { kind: 'end-island', mask: 1 << 26, dimensions: END, maxScale: 4 },
 ]
 
 export function visibleFeatureDefinitions(

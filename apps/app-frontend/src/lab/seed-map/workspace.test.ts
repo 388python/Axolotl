@@ -35,6 +35,19 @@ test('seed map starts near spawn with a lightweight layer set', () => {
     assert.deepEqual(workspace.selectedOres, ['diamond'])
 })
 
+test('removed end-island layer is discarded from saved selections while other data survives', () => {
+    const state = sanitizeSeedMapWorkspace({
+        ...createDefaultSeedMapWorkspace(),
+        visibleFeatures: ['end-island', 'end-city', 'nether-fossil', 'abandoned-camp'],
+        completedFeatures: ['end-island:1200:1300', 'end-city:1500:1600'],
+        markers: [{ id: 'home', name: 'Home', x: 12, z: -34, color: '#22C55E' }],
+    })
+    assert.deepEqual(state.visibleFeatures, ['end-city', 'nether-fossil', 'abandoned-camp'])
+    assert.equal(featureMask(['end-island'] as never[]), 0)
+    assert.equal(state.completedFeatures.length, 2)
+    assert.equal(state.markers[0].name, 'Home')
+})
+
 test('seed map workspace recovers from invalid persisted values', () => {
     const state = sanitizeSeedMapWorkspace({
         seed: '  mushroom island  ',

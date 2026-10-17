@@ -48,7 +48,6 @@ pub const FEATURE_END_CITY: u32 = 1 << 22;
 pub const FEATURE_END_GATEWAY: u32 = 1 << 23;
 pub const FEATURE_ABANDONED_CAMP: u32 = 1 << 24;
 pub const FEATURE_NETHER_FOSSIL: u32 = 1 << 25;
-pub const FEATURE_END_ISLAND: u32 = 1 << 26;
 pub const ALL_FEATURES: u32 = FEATURE_VILLAGE
     | FEATURE_OUTPOST
     | FEATURE_SHIPWRECK
@@ -74,8 +73,7 @@ pub const ALL_FEATURES: u32 = FEATURE_VILLAGE
     | FEATURE_END_CITY
     | FEATURE_END_GATEWAY
     | FEATURE_ABANDONED_CAMP
-    | FEATURE_NETHER_FOSSIL
-    | FEATURE_END_ISLAND;
+    | FEATURE_NETHER_FOSSIL;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -697,7 +695,6 @@ fn feature_name(feature: u32) -> Option<&'static str> {
         FEATURE_END_GATEWAY => Some("end-gateway"),
         FEATURE_ABANDONED_CAMP => Some("abandoned-camp"),
         FEATURE_NETHER_FOSSIL => Some("nether-fossil"),
-        FEATURE_END_ISLAND => Some("end-island"),
         _ => None,
     }
 }
@@ -867,6 +864,68 @@ mod tests {
         })
         .expect("fixture query should succeed");
         assert!(!strongholds.is_empty());
+    }
+
+    #[test]
+    fn nether_fossils_require_terrain_and_use_block_positions() {
+        for version in ["1.16.5", "1.18.2", "26.3"] {
+            let query = FeatureQuery {
+                seed: "10292992".into(),
+                edition: Edition::Java,
+                version: version.into(),
+                dimension: Dimension::Nether,
+                min_x: -512,
+                min_z: -512,
+                max_x: 511,
+                max_z: 511,
+                feature_mask: Some(FEATURE_NETHER_FOSSIL),
+            };
+            let fossils = find_features(query.clone()).unwrap();
+            assert_eq!(
+                fossils.len(),
+                158,
+                "{version}: terrain-filtered fixture"
+            );
+            assert!(fossils.iter().all(|f| f.kind == "nether-fossil"));
+            assert!(fossils.iter().any(|f| f.x.rem_euclid(16) != 0));
+            assert!(fossils.iter().any(|f| f.z.rem_euclid(16) != 0));
+            let first = &fossils[0];
+            let bounded = find_features(FeatureQuery {
+                min_x: first.x,
+                min_z: first.z,
+                max_x: first.x,
+                max_z: first.z,
+                ..query
+            })
+            .unwrap();
+            assert_eq!(bounded.len(), 1);
+            assert_eq!((bounded[0].x, bounded[0].z), (first.x, first.z));
+        }
+    }
+
+    #[test]
+    fn end_island_layer_is_not_exposed_or_returned() {
+        let removed_mask = 1 << 26;
+        assert_eq!(ALL_FEATURES & removed_mask, 0);
+        assert!(feature_name(removed_mask).is_none());
+        for profile in version_profiles() {
+            assert_eq!(profile.feature_masks[2] & removed_mask, 0);
+        }
+        assert!(
+            find_features(FeatureQuery {
+                seed: "12345".into(),
+                edition: Edition::Java,
+                version: "26.3".into(),
+                dimension: Dimension::End,
+                min_x: 1024,
+                min_z: 1024,
+                max_x: 4096,
+                max_z: 4096,
+                feature_mask: Some(removed_mask),
+            })
+            .unwrap()
+            .is_empty()
+        );
     }
 
     #[test]

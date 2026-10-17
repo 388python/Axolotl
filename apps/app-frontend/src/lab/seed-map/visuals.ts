@@ -48,7 +48,6 @@ export const SEED_MAP_FEATURE_ICONS: Record<SeedMapFeatureKind, Component> = {
     'end-gateway': WorldIcon,
     'abandoned-camp': HomeIcon,
     'nether-fossil': LayersIcon,
-    'end-island': WorldIcon,
 }
 
 export const SEED_MAP_FEATURE_IMAGE_SOURCES: Partial<Record<SeedMapFeatureKind, string>> = {
@@ -76,6 +75,8 @@ export const SEED_MAP_FEATURE_IMAGE_SOURCES: Partial<Record<SeedMapFeatureKind, 
     bastion: `${SEED_MAP_STRUCTURE_ASSET_ROOT}/bastion_remnant.webp`,
     'end-city': `${SEED_MAP_STRUCTURE_ASSET_ROOT}/end_city.webp`,
     'end-gateway': `${SEED_MAP_STRUCTURE_ASSET_ROOT}/end_gateway.webp`,
+    'abandoned-camp': `${SEED_MAP_STRUCTURE_ASSET_ROOT}/abandoned_camp.png`,
+    'nether-fossil': `${SEED_MAP_STRUCTURE_ASSET_ROOT}/nether_fossil.png`,
 }
 
 export const SEED_MAP_FEATURE_COLORS: Record<SeedMapFeatureKind, string> = {
@@ -104,6 +105,5 @@ export const SEED_MAP_FEATURE_COLORS: Record<SeedMapFeatureKind, string> = {
     'end-city': '#A57BC5',
     'abandoned-camp': '#D58B35',
     'nether-fossil': '#D0A23E',
-    'end-island': '#8793A4',
     'end-gateway': '#70559F',
 }

@@ -347,7 +347,6 @@ const messages = defineMessages({
         defaultMessage: 'Abandoned camp',
     },
     netherFossil: { id: 'app.lab.seed-map.feature.nether-fossil', defaultMessage: 'Nether fossil' },
-    endIsland: { id: 'app.lab.seed-map.feature.end-island', defaultMessage: 'End island' },
     oreCandidate: {
         id: 'app.lab.seed-map.ore-candidate',
         defaultMessage: 'Predicted position; terrain and block replacement are unverified',
@@ -505,7 +504,6 @@ const featureMessages: Record<SeedMapFeatureKind, (typeof messages)[keyof typeof
     'end-gateway': messages.endGateway,
     'abandoned-camp': messages.abandonedCamp,
     'nether-fossil': messages.netherFossil,
-    'end-island': messages.endIsland,
 }
 
 const oreMessages: Record<SeedMapOreKind, (typeof messages)[keyof typeof messages]> = {

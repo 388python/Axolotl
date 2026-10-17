@@ -15,7 +15,7 @@ static int structure_type(uint32_t feature, int dimension) {
         Trail_Ruins, Trial_Chambers, Ruined_Portal, Stronghold, -1,
         Desert_Pyramid, Jungle_Temple, Swamp_Hut, Igloo, Ocean_Ruin,
         Treasure, Mineshaft, Desert_Well, Geode, Fortress, Bastion,
-        End_City, End_Gateway, Abandoned_Camp, Nether_Fossil, End_Island,
+        End_City, End_Gateway, Abandoned_Camp, Nether_Fossil,
     };
     for (unsigned int i = 0; i < sizeof(types) / sizeof(types[0]); i++) {
         if (feature == (UINT32_C(1) << i)) {
@@ -99,6 +99,11 @@ char *axolotl_seed_map_structure_details(
     int biome = getBiomeAt(&g, 4, x >> 2, dimension == DIM_OVERWORLD ? 80 : 16, z >> 2);
     StructureVariant variant = {0};
     int has_variant = getVariant(&variant, type, mc, seed, x, z, biome);
+    if (has_variant && type == Nether_Fossil) {
+        BlendedNoise terrain;
+        initBlendedNoise(&terrain, seed, DIM_NETHER);
+        has_variant = isViableNetherFossilTerrain(x >> 4, z >> 4, &variant, &terrain, mc);
+    }
     if (has_variant) {
         cJSON *value = cJSON_AddObjectToObject(result, "variant");
         cJSON_AddNumberToObject(value, "rotation", variant.rotation * 90);
