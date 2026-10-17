@@ -254,11 +254,7 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div
-        v-if="!loading"
-        :id="localSetup ? undefined : 'settings-target-log-share'"
-        class="flex min-w-0 flex-col gap-6"
-    >
+    <div v-if="!loading" class="flex min-w-0 flex-col gap-6">
         <SettingsSection
             :title="formatMessage(localSetup ? messages.localSetupTitle : messages.analysisTitle)"
             :description="
@@ -272,7 +268,12 @@ onMounted(async () => {
                     formatMessage(messages.tour)
                 }}</Button></template
             >
-            <div v-if="!localSetup" data-onboarding-id="logagent-settings-source" class="p-4">
+            <div
+                v-if="!localSetup"
+                id="settings-target-log-share"
+                data-onboarding-id="logagent-settings-source"
+                class="p-4"
+            >
                 <LogAgentSourcePicker
                     :model-value="aiSettings.ai_source"
                     :disabled="saving"

@@ -111,6 +111,7 @@ async function render(width = 900, localSetup = false) {
 
 it('shows only relevant analysis settings and saves source selection once', async () => {
     const wrapper = await render()
+    expect(wrapper.findAll('#settings-target-log-share')).toHaveLength(1)
     expect(wrapper.find('#crash-analysis-ai-model').exists()).toBe(true)
     expect(wrapper.find('#log-share-no-storage').exists()).toBe(false)
     expect(wrapper.find('#log-share-provider').exists()).toBe(true)
@@ -135,6 +136,7 @@ it('retains the selected source when saving fails', async () => {
 it('configures local analysis from a cloud default without changing the saved source', async () => {
     calls.settings.ai_source = 'logshare'
     const wrapper = await render(600, true)
+    expect(wrapper.find('#settings-target-log-share').exists()).toBe(false)
     expect(wrapper.find('[role="radiogroup"]').exists()).toBe(false)
     expect(wrapper.find('#crash-analysis-ai-model').exists()).toBe(true)
     expect(wrapper.find('#log-share-provider').exists()).toBe(false)
