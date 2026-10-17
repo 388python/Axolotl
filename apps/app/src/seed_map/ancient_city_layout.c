@@ -238,6 +238,8 @@ char *axolotl_seed_map_ancient_city_layout(
     if (!ctx.templates || !ctx.pools) { cJSON_Delete(layout); return NULL; }
     StructureVariant variant;
     if (!getVariant(&variant, Ancient_City, mc, seed, x, z, -1)) { cJSON_Delete(layout); return NULL; }
+    next_int(&ctx, 4);
+    next_int(&ctx, 3);
     char start_id[128];
     snprintf(start_id, sizeof(start_id), "minecraft:ancient_city/city_center/city_center_%d", variant.start);
     cJSON *start = template_by_id(&ctx, start_id);

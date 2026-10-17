@@ -44,10 +44,49 @@ fn ancient_city_layout(
     query: &StructureQuery,
     mc: i32,
 ) -> io::Result<serde_json::Value> {
-    let compressed = match query.version.as_str() {
+    let compressed: &[u8] = match query.version.as_str() {
         "26.3" => {
             include_bytes!("assets/versions/26.3/ancient-city-layout.json.gz")
         }
+        "26.2" => {
+            include_bytes!("assets/versions/26.2/ancient-city-layout.json.gz")
+        }
+        "26.1" => {
+            include_bytes!("assets/versions/26.1/ancient-city-layout.json.gz")
+        }
+        "26.1.2" => {
+            include_bytes!("assets/versions/26.1.2/ancient-city-layout.json.gz")
+        }
+        "1.21.9" => {
+            include_bytes!("assets/versions/1.21.9/ancient-city-layout.json.gz")
+        }
+        "1.21.7" => {
+            include_bytes!("assets/versions/1.21.7/ancient-city-layout.json.gz")
+        }
+        "1.21.6" => {
+            include_bytes!("assets/versions/1.21.6/ancient-city-layout.json.gz")
+        }
+        "1.21.5" => {
+            include_bytes!("assets/versions/1.21.5/ancient-city-layout.json.gz")
+        }
+        "1.21.4" => {
+            include_bytes!("assets/versions/1.21.4/ancient-city-layout.json.gz")
+        }
+        "1.21.3" => {
+            include_bytes!("assets/versions/1.21.3/ancient-city-layout.json.gz")
+        }
+        "1.21.1" => {
+            include_bytes!("assets/versions/1.21.1/ancient-city-layout.json.gz")
+        }
+        "1.20.6" => {
+            include_bytes!("assets/versions/1.20.6/ancient-city-layout.json.gz")
+        }
+        "1.19.4" => {
+            include_bytes!("assets/versions/1.19.4/ancient-city-layout.json.gz")
+        }
+        "1.21.11" => include_bytes!(
+            "assets/versions/1.21.11/ancient-city-layout.json.gz"
+        ),
         _ => {
             return Err(io::Error::other(
                 "Ancient city detailed layouts are not bundled for this version.",
@@ -84,10 +123,49 @@ fn ancient_city_blocks(
     query: &StructureQuery,
     pieces: &serde_json::Value,
 ) -> io::Result<serde_json::Value> {
-    let compressed = match query.version.as_str() {
+    let compressed: &[u8] = match query.version.as_str() {
         "26.3" => {
             include_bytes!("assets/versions/26.3/ancient-city-blocks.json.gz")
         }
+        "26.2" => {
+            include_bytes!("assets/versions/26.2/ancient-city-blocks.json.gz")
+        }
+        "26.1" => {
+            include_bytes!("assets/versions/26.1/ancient-city-blocks.json.gz")
+        }
+        "26.1.2" => {
+            include_bytes!("assets/versions/26.1.2/ancient-city-blocks.json.gz")
+        }
+        "1.21.9" => {
+            include_bytes!("assets/versions/1.21.9/ancient-city-blocks.json.gz")
+        }
+        "1.21.7" => {
+            include_bytes!("assets/versions/1.21.7/ancient-city-blocks.json.gz")
+        }
+        "1.21.6" => {
+            include_bytes!("assets/versions/1.21.6/ancient-city-blocks.json.gz")
+        }
+        "1.21.5" => {
+            include_bytes!("assets/versions/1.21.5/ancient-city-blocks.json.gz")
+        }
+        "1.21.4" => {
+            include_bytes!("assets/versions/1.21.4/ancient-city-blocks.json.gz")
+        }
+        "1.21.3" => {
+            include_bytes!("assets/versions/1.21.3/ancient-city-blocks.json.gz")
+        }
+        "1.21.1" => {
+            include_bytes!("assets/versions/1.21.1/ancient-city-blocks.json.gz")
+        }
+        "1.20.6" => {
+            include_bytes!("assets/versions/1.20.6/ancient-city-blocks.json.gz")
+        }
+        "1.19.4" => {
+            include_bytes!("assets/versions/1.19.4/ancient-city-blocks.json.gz")
+        }
+        "1.21.11" => include_bytes!(
+            "assets/versions/1.21.11/ancient-city-blocks.json.gz"
+        ),
         _ => {
             return Err(io::Error::other(
                 "Ancient city block templates are not bundled for this version.",
