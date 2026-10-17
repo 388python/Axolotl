@@ -307,7 +307,7 @@ const messages = defineMessages({
     recentDownloadsDescription: {
         id: 'axolotl-marketing.recent.downloads.description',
         defaultMessage:
-            'Faster downloads, Chinese mirror options, and DoH support help you get ready to play. Check active downloads from the action bar and revisit completed tasks in download history.',
+            'Downloads are faster again, with Chinese mirror options and DoH support for a smoother setup. Check task progress from the top bar and revisit completed downloads in your history.',
     },
     recentBackupsTitle: {
         id: 'axolotl-marketing.recent.backups.title',
@@ -316,7 +316,7 @@ const messages = defineMessages({
     recentBackupsDescription: {
         id: 'axolotl-marketing.recent.backups.description',
         defaultMessage:
-            'Save an instance snapshot before changing your setup. Choose which files to include, keep using the launcher while it backs up, and preview file changes before restoring.',
+            'Back up an instance before changing its mods or settings. When you need to restore it, preview which files will change first.',
     },
     recentStorageTitle: {
         id: 'axolotl-marketing.recent.storage.title',
@@ -402,7 +402,7 @@ const messages = defineMessages({
     dohSupportDescription: {
         id: 'axolotl-marketing.improvements.doh.description',
         defaultMessage:
-            'If download domains are difficult to resolve, try DNS over HTTPS (DoH). Enable encrypted DNS in resource settings to use the built-in resolver services.',
+            'DoH is enabled by default to resolve download domains for faster, smoother downloads. You can turn it off in resource settings to use your system DNS instead.',
     },
     mirrorSupport: {
         id: 'axolotl-marketing.improvements.mirrors.title',
@@ -410,8 +410,7 @@ const messages = defineMessages({
     },
     mirrorSupportDescription: {
         id: 'axolotl-marketing.improvements.mirrors.description',
-        defaultMessage:
-            'Use Chinese mirrors for supported game resources and mod downloads, or choose official sources to suit your connection.',
+        defaultMessage: 'If downloads are unreliable, use Chinese mirrors for game resources and mods.',
     },
     minecraftSupport: {
         id: 'axolotl-marketing.improvements.minecraft.title',
@@ -581,7 +580,8 @@ const messages = defineMessages({
     },
     followProjectsDescription: {
         id: 'app-marketing.features.follow.description',
-        defaultMessage: 'Terracotta-powered multiplayer networking, jump in with a single click.',
+        defaultMessage:
+            'Powered by Terracotta and RedStone Online, launcher-integrated multiplayer is only one click away.',
     },
     downloadOptions: {
         id: 'app-marketing.download.options-title',
@@ -715,7 +715,7 @@ const messages = defineMessages({
     faqNetworkAnswer: {
         id: 'axolotl-site.faq.network.answer',
         defaultMessage:
-            'Yes. Resource settings offer Chinese mirrors, including BMCLAPI and MCIM, for supported Minecraft resources and Modrinth or CurseForge downloads. Choose automatic, mirror-preferred, or official-source options as available. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
+            'Yes. Resource settings offer Chinese mirrors, including BMCLAPI, MCIM, and Tianpao, for supported Minecraft resources and Modrinth or CurseForge downloads. Choose automatic, mirror-preferred, or official-source options as available. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
     },
     faqMigrationQuestion: {
         id: 'axolotl-site.faq.migration.question',
@@ -724,7 +724,7 @@ const messages = defineMessages({
     faqMigrationAnswer: {
         id: 'axolotl-site.faq.migration.answer',
         defaultMessage:
-            'You can import existing instances from PCL2, HMCL, and other supported launchers, or directly link existing .minecraft folders. This lets you keep existing game files instead of rebuilding each setup. A version upgrade may still need additional downloads. Before upgrading, review mod compatibility and choose an in-place upgrade or an upgraded copy.',
+            'Axolotl can directly link the .minecraft folders commonly used by Chinese launchers, so you can keep your existing game files without downloading them again or changing your settings.',
     },
     faqBackupsQuestion: {
         id: 'axolotl-site.faq.backups.question',

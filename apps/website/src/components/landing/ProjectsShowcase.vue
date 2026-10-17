@@ -157,8 +157,7 @@ const messages = defineMessages({
     },
     description: {
         id: 'app-marketing.features.website.description',
-        defaultMessage:
-            'Find something you want to play, choose a version, and install it into your game. See which other mods it needs before installing, and manage later updates in the same place.',
+        defaultMessage: 'Find something you want to play, choose a version, and install it directly into your game.',
     },
 })
 </script>
