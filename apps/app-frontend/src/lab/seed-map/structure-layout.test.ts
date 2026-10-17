@@ -10,6 +10,7 @@ import { createSeedMapLayoutLayer } from './layout-layer.ts'
 import {
     hitSeedMapLayout,
     seedMapLayoutPieces,
+    seedMapLayoutPieceStyle,
     seedMapStructureBadgePositions,
     seedMapStructureCapabilities,
 } from './structure-layout.ts'
@@ -55,6 +56,26 @@ const query: SeedMapStructureQuery = {
     z: 8,
     featureMask: 512,
 }
+
+test('End portal room projections use a distinct color while selection keeps priority', () => {
+    const palette = { normal: '#4b83c3', selected: '#e28b38', portal: '#18a765' }
+    const portalRoom = { ...piece, endPortalRoom: true }
+
+    assert.deepEqual(seedMapLayoutPieceStyle(portalRoom, undefined, palette), {
+        color: palette.portal,
+        fillAlpha: 0.3,
+        lineWidth: 2,
+    })
+    assert.deepEqual(seedMapLayoutPieceStyle(piece, undefined, palette), {
+        color: palette.normal,
+        fillAlpha: 0.2,
+        lineWidth: 1,
+    })
+    assert.equal(
+        seedMapLayoutPieceStyle(portalRoom, portalRoom.id, palette).color,
+        palette.selected,
+    )
+})
 
 test('only real horizontal bounds become projections, including negative coordinates', () => {
     const result = {

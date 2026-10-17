@@ -155,7 +155,10 @@ export class SeedMapLayoutScene {
         this.chestMaterial.color.set(palette.selected)
         this.chestOutlineMaterial.color.set(palette.selected)
         this.pieces.forEach((_, index) =>
-            this.mesh.setColorAt(index, new THREE.Color(palette.normal)),
+            this.mesh.setColorAt(
+                index,
+                new THREE.Color(this.pieces[index].endPortalRoom ? palette.portal : palette.normal),
+            ),
         )
         if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
         this.render()

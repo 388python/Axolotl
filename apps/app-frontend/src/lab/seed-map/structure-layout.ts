@@ -152,12 +152,13 @@ export function drawSeedMapLayout(
             point.y > context.canvas.height
         )
             continue
-        context.fillStyle = piece.id === selected ? palette.selected : palette.normal
-        context.globalAlpha = piece.id === selected ? 0.35 : 0.2
+        const style = seedMapLayoutPieceStyle(piece, selected, palette)
+        context.fillStyle = style.color
+        context.globalAlpha = style.fillAlpha
         context.fillRect(point.x, point.y, width, height)
         context.globalAlpha = 1
-        context.strokeStyle = piece.id === selected ? palette.selected : palette.normal
-        context.lineWidth = piece.id === selected ? 2 : 1
+        context.strokeStyle = style.color
+        context.lineWidth = style.lineWidth
         context.strokeRect(point.x, point.y, width, height)
     }
     context.restore()
@@ -168,6 +169,21 @@ export function seedMapLayoutPalette(element: Element) {
     return {
         normal: style.getPropertyValue('--color-blue').trim(),
         selected: style.getPropertyValue('--color-orange').trim(),
+        portal: style.getPropertyValue('--color-green').trim(),
+    }
+}
+
+export function seedMapLayoutPieceStyle(
+    piece: SeedMapStructurePiece,
+    selected: number | undefined,
+    palette: ReturnType<typeof seedMapLayoutPalette>,
+) {
+    const isSelected = piece.id === selected
+    const isPortalRoom = piece.endPortalRoom === true
+    return {
+        color: isSelected ? palette.selected : isPortalRoom ? palette.portal : palette.normal,
+        fillAlpha: isSelected ? 0.35 : isPortalRoom ? 0.3 : 0.2,
+        lineWidth: isSelected || isPortalRoom ? 2 : 1,
     }
 }
 

@@ -196,6 +196,43 @@ mod tests {
         assert!(!loot["items"].as_array().unwrap().is_empty());
     }
     #[test]
+    fn stronghold_details_identify_the_end_portal_room_by_piece_type() {
+        let feature = super::super::find_features(super::super::FeatureQuery {
+            seed: "10292992".into(),
+            edition: Edition::Java,
+            version: "26.3".into(),
+            dimension: Dimension::Overworld,
+            min_x: -4096,
+            min_z: -4096,
+            max_x: 4096,
+            max_z: 4096,
+            feature_mask: Some(super::super::FEATURE_STRONGHOLD),
+        })
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+        let result = structure_details(
+            query(
+                "10292992",
+                "26.3",
+                feature.x,
+                feature.z,
+                super::super::FEATURE_STRONGHOLD,
+            ),
+            None,
+        )
+        .unwrap();
+        let portal_rooms: Vec<_> = result["pieces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|piece| piece["endPortalRoom"] == true)
+            .collect();
+        assert_eq!(portal_rooms.len(), 1);
+        assert_eq!(portal_rooms[0]["name"], "SHPR");
+    }
+    #[test]
     fn outpost_loot_matches_upstream_enchantment_fixture() {
         let result = structure_details(
             query(

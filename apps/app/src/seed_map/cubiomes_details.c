@@ -170,6 +170,7 @@ char *axolotl_seed_map_structure_details(
         cJSON *value = cJSON_CreateObject();
         cJSON_AddNumberToObject(value, "id", i);
         cJSON_AddStringToObject(value, "name", piece->name ? piece->name : "unknown");
+        cJSON_AddBoolToObject(value, "endPortalRoom", type == Stronghold && piece->type == SH_PORTAL_ROOM);
         cJSON_AddNumberToObject(value, "rotation", (type == Abandoned_Camp || type == Bastion || type == Shipwreck || type == Igloo) ? variant.rotation * 90 : piece->rot * 90);
         cJSON_AddBoolToObject(value, "positionKnown", type != Abandoned_Camp && type != Bastion);
         cJSON_AddItemToObject(value, "position", position(piece->pos.x, piece->pos.y, piece->pos.z));

@@ -23,6 +23,7 @@ export type SeedMapStructurePiece = {
     min?: SeedMapPosition
     max?: SeedMapPosition
     portalEyes?: number
+    endPortalRoom?: boolean
     templateId?: string
     mirror?: boolean
 }
