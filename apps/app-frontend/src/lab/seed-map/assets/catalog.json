@@ -1,0 +1,666 @@
+{
+    "schemaVersion": 1,
+    "versions": {
+        "26.3": {
+            "dataVersion": 5023,
+            "structures": [
+                "end-city",
+                "shipwreck",
+                "igloo",
+                "outpost",
+                "ruined-portal",
+                "nether-fossil"
+            ],
+            "templates": {
+                "end_city/base_floor": {
+                    "size": [
+                        10,
+                        4,
+                        10
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/base_roof": {
+                    "size": [
+                        12,
+                        2,
+                        12
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/bridge_end": {
+                    "size": [
+                        5,
+                        6,
+                        2
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/bridge_gentle_stairs": {
+                    "size": [
+                        5,
+                        7,
+                        8
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/bridge_piece": {
+                    "size": [
+                        5,
+                        6,
+                        4
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/bridge_steep_stairs": {
+                    "size": [
+                        5,
+                        7,
+                        4
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/fat_tower_base": {
+                    "size": [
+                        13,
+                        4,
+                        13
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/fat_tower_middle": {
+                    "size": [
+                        13,
+                        8,
+                        13
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/fat_tower_top": {
+                    "size": [
+                        17,
+                        6,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/second_floor_1": {
+                    "size": [
+                        12,
+                        8,
+                        12
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/second_floor_2": {
+                    "size": [
+                        12,
+                        8,
+                        12
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/second_roof": {
+                    "size": [
+                        14,
+                        2,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/ship": {
+                    "size": [
+                        13,
+                        24,
+                        29
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/third_floor_1": {
+                    "size": [
+                        14,
+                        8,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/third_floor_2": {
+                    "size": [
+                        14,
+                        8,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/third_roof": {
+                    "size": [
+                        16,
+                        2,
+                        16
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/tower_base": {
+                    "size": [
+                        7,
+                        7,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/tower_floor": {
+                    "size": [
+                        7,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/tower_piece": {
+                    "size": [
+                        7,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "end_city/tower_top": {
+                    "size": [
+                        9,
+                        5,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "igloo/bottom": {
+                    "size": [
+                        7,
+                        6,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "igloo/middle": {
+                    "size": [
+                        3,
+                        3,
+                        3
+                    ],
+                    "paletteCount": 1
+                },
+                "igloo/top": {
+                    "size": [
+                        7,
+                        5,
+                        8
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_1": {
+                    "size": [
+                        4,
+                        4,
+                        5
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_10": {
+                    "size": [
+                        3,
+                        7,
+                        1
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_11": {
+                    "size": [
+                        5,
+                        5,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_12": {
+                    "size": [
+                        4,
+                        4,
+                        3
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_13": {
+                    "size": [
+                        4,
+                        5,
+                        6
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_14": {
+                    "size": [
+                        7,
+                        7,
+                        6
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_2": {
+                    "size": [
+                        5,
+                        1,
+                        5
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_3": {
+                    "size": [
+                        3,
+                        4,
+                        2
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_4": {
+                    "size": [
+                        3,
+                        4,
+                        1
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_5": {
+                    "size": [
+                        2,
+                        5,
+                        1
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_6": {
+                    "size": [
+                        7,
+                        5,
+                        5
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_7": {
+                    "size": [
+                        4,
+                        6,
+                        5
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_8": {
+                    "size": [
+                        3,
+                        5,
+                        1
+                    ],
+                    "paletteCount": 1
+                },
+                "nether_fossils/fossil_9": {
+                    "size": [
+                        3,
+                        5,
+                        5
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/base_plate": {
+                    "size": [
+                        16,
+                        30,
+                        16
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_cage_with_allays": {
+                    "size": [
+                        7,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_cage1": {
+                    "size": [
+                        7,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_cage2": {
+                    "size": [
+                        7,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_logs": {
+                    "size": [
+                        6,
+                        3,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_plate": {
+                    "size": [
+                        16,
+                        4,
+                        32
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_targets": {
+                    "size": [
+                        3,
+                        3,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_tent1": {
+                    "size": [
+                        6,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/feature_tent2": {
+                    "size": [
+                        6,
+                        4,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/watchtower_overgrown": {
+                    "size": [
+                        15,
+                        23,
+                        15
+                    ],
+                    "paletteCount": 1
+                },
+                "pillager_outpost/watchtower": {
+                    "size": [
+                        15,
+                        21,
+                        15
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/giant_portal_1": {
+                    "size": [
+                        11,
+                        17,
+                        16
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/giant_portal_2": {
+                    "size": [
+                        11,
+                        16,
+                        16
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/giant_portal_3": {
+                    "size": [
+                        16,
+                        16,
+                        16
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_1": {
+                    "size": [
+                        6,
+                        10,
+                        6
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_10": {
+                    "size": [
+                        12,
+                        8,
+                        10
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_2": {
+                    "size": [
+                        9,
+                        12,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_3": {
+                    "size": [
+                        8,
+                        9,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_4": {
+                    "size": [
+                        8,
+                        9,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_5": {
+                    "size": [
+                        10,
+                        10,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_6": {
+                    "size": [
+                        5,
+                        7,
+                        7
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_7": {
+                    "size": [
+                        9,
+                        7,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_8": {
+                    "size": [
+                        14,
+                        9,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "ruined_portal/portal_9": {
+                    "size": [
+                        10,
+                        8,
+                        9
+                    ],
+                    "paletteCount": 1
+                },
+                "shipwreck/rightsideup_backhalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        16
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/rightsideup_backhalf": {
+                    "size": [
+                        9,
+                        9,
+                        16
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/rightsideup_fronthalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        24
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/rightsideup_fronthalf": {
+                    "size": [
+                        9,
+                        9,
+                        24
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/rightsideup_full_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/rightsideup_full": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_backhalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        17
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_backhalf": {
+                    "size": [
+                        9,
+                        9,
+                        17
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_fronthalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        24
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_fronthalf": {
+                    "size": [
+                        9,
+                        9,
+                        24
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_full_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/sideways_full": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_backhalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        16
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_backhalf": {
+                    "size": [
+                        9,
+                        9,
+                        16
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_fronthalf_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        22
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_fronthalf": {
+                    "size": [
+                        9,
+                        9,
+                        22
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_full_degraded": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/upsidedown_full": {
+                    "size": [
+                        9,
+                        9,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/with_mast_degraded": {
+                    "size": [
+                        9,
+                        21,
+                        28
+                    ],
+                    "paletteCount": 8
+                },
+                "shipwreck/with_mast": {
+                    "size": [
+                        9,
+                        21,
+                        28
+                    ],
+                    "paletteCount": 8
+                }
+            }
+        }
+    }
+}

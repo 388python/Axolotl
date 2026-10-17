@@ -49,6 +49,9 @@ importers:
       keep-a-changelog:
         specifier: ^3.0.2
         version: 3.0.2
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
       prettier:
         specifier: ^3.9.6
         version: 3.9.6

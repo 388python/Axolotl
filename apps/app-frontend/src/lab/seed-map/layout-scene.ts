@@ -2,9 +2,11 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
 import type { SeedMapStructurePiece } from './advanced'
+import { type PreviewAxis, seedMapPreviewAxes } from './preview-overlays'
+import type { StructureBlocksResult, StructureChest } from './structure-blocks'
 import { seedMapLayoutPalette } from './structure-layout'
 
-/** An on-demand spatial preview of engine bounding boxes, without invented blocks. */
+/** On-demand preview sharing one camera between bounds and template block geometry. */
 export class SeedMapLayoutScene {
     private readonly renderer: THREE.WebGLRenderer
     private readonly scene = new THREE.Scene()
@@ -31,11 +33,33 @@ export class SeedMapLayoutScene {
     private frame?: number
     private disposed = false
     private readonly themeObserver: MutationObserver
+    private readonly blocks = new THREE.Group()
+    private readonly blockMaterial = new THREE.MeshLambertMaterial({
+        vertexColors: true,
+        side: THREE.DoubleSide,
+    })
+    private readonly selectedBlockMaterial = new THREE.MeshLambertMaterial({
+        side: THREE.DoubleSide,
+    })
+    private selectedId?: number
+    private readonly chests = new THREE.Group()
+    private readonly chestGeometry = new THREE.BoxGeometry(1.04, 1.04, 1.04)
+    private readonly chestMaterial = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0.22,
+        depthTest: false,
+        depthWrite: false,
+    })
+    private readonly chestOutlineMaterial = new THREE.LineBasicMaterial({
+        depthTest: false,
+        depthWrite: false,
+    })
 
     constructor(
         private readonly canvas: HTMLCanvasElement,
         private readonly pieces: SeedMapStructurePiece[],
         private readonly onSelect: (piece: SeedMapStructurePiece) => void,
+        private readonly onOrientation?: (axes: PreviewAxis[]) => void,
     ) {
         this.renderer = new THREE.WebGLRenderer({
             canvas,
@@ -89,6 +113,12 @@ export class SeedMapLayoutScene {
         this.selection.matrixAutoUpdate = false
         this.selection.visible = false
         this.scene.add(this.mesh, this.edges, this.selection)
+        this.scene.add(this.chests)
+        this.blocks.visible = false
+        this.scene.add(this.blocks, new THREE.HemisphereLight(0xffffff, 0x687080, 0.65))
+        const light = new THREE.DirectionalLight(0xffffff, 1.2)
+        light.position.set(1, 2, 3)
+        this.scene.add(light)
         this.controls = new OrbitControls(this.camera, canvas)
         this.controls.screenSpacePanning = true
         this.controls.zoomToCursor = true
@@ -121,6 +151,9 @@ export class SeedMapLayoutScene {
         const palette = seedMapLayoutPalette(this.canvas)
         this.outlineMaterial.color.set(palette.normal)
         this.selectionMaterial.color.set(palette.selected)
+        this.selectedBlockMaterial.color.set(palette.selected)
+        this.chestMaterial.color.set(palette.selected)
+        this.chestOutlineMaterial.color.set(palette.selected)
         this.pieces.forEach((_, index) =>
             this.mesh.setColorAt(index, new THREE.Color(palette.normal)),
         )
@@ -133,6 +166,7 @@ export class SeedMapLayoutScene {
         this.frame = requestAnimationFrame(() => {
             this.frame = undefined
             this.renderer.render(this.scene, this.camera)
+            this.onOrientation?.(seedMapPreviewAxes(this.camera.quaternion))
         })
     }
 
@@ -147,10 +181,91 @@ export class SeedMapLayoutScene {
     }
 
     select(id?: number) {
+        this.selectedId = id
         const index = this.pieces.findIndex((piece) => piece.id === id)
         this.selection.visible = index >= 0
         if (index >= 0) this.selection.matrix.copy(this.transforms[index])
+        for (const child of this.blocks.children) {
+            const mesh = child as THREE.Mesh
+            mesh.material =
+                mesh.userData.pieceId === id ? this.selectedBlockMaterial : this.blockMaterial
+        }
         this.render()
+    }
+
+    setBlocks(result: StructureBlocksResult) {
+        this.clearBlocks()
+        this.blocks.position.set(...result.origin).sub(this.center)
+        for (const item of result.meshes) {
+            const geometry = new THREE.BufferGeometry()
+            geometry.setAttribute('position', new THREE.BufferAttribute(item.positions, 3))
+            geometry.setAttribute('color', new THREE.BufferAttribute(item.colors, 3))
+            geometry.computeVertexNormals()
+            geometry.computeBoundingSphere()
+            const mesh = new THREE.Mesh(geometry, this.blockMaterial)
+            mesh.userData.pieceId = item.pieceId
+            this.blocks.add(mesh)
+        }
+        this.select(this.selectedId)
+    }
+
+    showBlocks(show: boolean) {
+        this.blocks.visible = show
+        this.mesh.visible = !show
+        this.edges.visible = !show
+        this.render()
+    }
+
+    setChests(chests: StructureChest[]) {
+        this.clearChests()
+        if (!chests.length) {
+            this.render()
+            return
+        }
+        const fill = new THREE.InstancedMesh(this.chestGeometry, this.chestMaterial, chests.length)
+        fill.renderOrder = 1000
+        const edgeGeometry = new THREE.EdgesGeometry(this.chestGeometry)
+        const vertices = edgeGeometry.getAttribute('position')
+        const lines: number[] = []
+        const point = new THREE.Vector3()
+        const matrix = new THREE.Matrix4()
+        chests.forEach((chest, index) => {
+            matrix.makeTranslation(
+                chest.position[0] - this.center.x + 0.5,
+                chest.position[1] - this.center.y + 0.5,
+                chest.position[2] - this.center.z + 0.5,
+            )
+            fill.setMatrixAt(index, matrix)
+            for (let i = 0; i < vertices.count; i++) {
+                point.fromBufferAttribute(vertices, i).applyMatrix4(matrix)
+                lines.push(point.x, point.y, point.z)
+            }
+        })
+        fill.computeBoundingSphere()
+        edgeGeometry.dispose()
+        const edges = new THREE.LineSegments(new THREE.BufferGeometry(), this.chestOutlineMaterial)
+        edges.geometry.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3))
+        edges.renderOrder = 1001
+        this.chests.add(fill, edges)
+        this.render()
+    }
+
+    showChests(show: boolean) {
+        this.chests.visible = show
+        this.render()
+    }
+
+    private clearChests() {
+        for (const child of this.chests.children) {
+            if (child instanceof THREE.InstancedMesh) child.dispose()
+            else if (child instanceof THREE.LineSegments) child.geometry.dispose()
+        }
+        this.chests.clear()
+    }
+
+    private clearBlocks() {
+        for (const child of this.blocks.children) (child as THREE.Mesh).geometry.dispose()
+        this.blocks.clear()
     }
 
     private pointerDown = (event: PointerEvent) => {
@@ -170,8 +285,14 @@ export class SeedMapLayoutScene {
             (-(event.clientY - rect.top) / rect.height) * 2 + 1,
         )
         this.raycaster.setFromCamera(this.pointer, this.camera)
-        const hit = this.raycaster.intersectObject(this.mesh)[0]
-        if (hit?.instanceId !== undefined) this.onSelect(this.pieces[hit.instanceId])
+        if (this.blocks.visible) {
+            const hit = this.raycaster.intersectObjects(this.blocks.children)[0]
+            const piece = this.pieces.find((piece) => piece.id === hit?.object.userData.pieceId)
+            if (piece) this.onSelect(piece)
+        } else {
+            const hit = this.raycaster.intersectObject(this.mesh)[0]
+            if (hit?.instanceId !== undefined) this.onSelect(this.pieces[hit.instanceId])
+        }
     }
 
     dispose() {
@@ -189,6 +310,13 @@ export class SeedMapLayoutScene {
         this.outlineMaterial.dispose()
         this.selectionMaterial.dispose()
         this.selection.geometry.dispose()
+        this.clearBlocks()
+        this.blockMaterial.dispose()
+        this.selectedBlockMaterial.dispose()
+        this.clearChests()
+        this.chestGeometry.dispose()
+        this.chestMaterial.dispose()
+        this.chestOutlineMaterial.dispose()
         this.renderer.dispose()
     }
 }
