@@ -111,6 +111,7 @@ type MapVm = {
     selection: { x: number; z: number; feature?: SeedMapFeature } | null
     focusedPiece: SeedMapStructurePiece | null
     selectAt: (x: number, y: number) => void
+    worldToScreen: (x: number, z: number) => { x: number; y: number }
 }
 let wrapper: VueWrapper | undefined
 let closed: ReturnType<typeof vi.spyOn>[] = []
@@ -276,12 +277,13 @@ it('automatically paints visible layouts without a selection, shares requests wi
     expect(backend.details).toHaveBeenCalledOnce()
     expect(vm.focusedPiece?.id).toBe(0)
     const divider = wrapper!.get('[role="separator"]')
-    const initialWidth = canvas.clientWidth
+    const mapRegion = wrapper!.get('.seed-map-canvas-shell').element as HTMLElement
+    const initialWidth = mapRegion.clientWidth
     await divider.trigger('keydown', { key: 'ArrowLeft' })
-    await vi.waitFor(() => expect(canvas.clientWidth).toBeLessThan(initialWidth))
-    const keyboardWidth = canvas.clientWidth
-    await userEvent.dragAndDrop(divider.element, canvas)
-    await vi.waitFor(() => expect(canvas.clientWidth).toBeLessThan(keyboardWidth))
+    await vi.waitFor(() => expect(mapRegion.clientWidth).toBeLessThan(initialWidth))
+    const keyboardWidth = mapRegion.clientWidth
+    await userEvent.dragAndDrop(divider.element, mapRegion)
+    await vi.waitFor(() => expect(mapRegion.clientWidth).toBeLessThan(keyboardWidth))
     await divider.trigger('dblclick')
     await vi.waitFor(() => expect(Number(divider.attributes('aria-valuenow'))).toBe(62))
     await wrapper!.findAll('[role="tab"]')[1].trigger('click')
@@ -296,7 +298,7 @@ it('automatically paints visible layouts without a selection, shares requests wi
     ;(wrapper!.element as HTMLElement).style.width = '650px'
     await vi.waitFor(() => expect(wrapper!.find('[role="separator"]').exists()).toBe(false))
     expect(wrapper!.element.scrollWidth).toBeLessThanOrEqual(wrapper!.element.clientWidth + 1)
-    expect(canvas.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    expect(mapRegion.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         wrapper!.get('aside').element.getBoundingClientRect().top + 1,
     )
     if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
@@ -307,6 +309,71 @@ it('automatically paints visible layouts without a selection, shares requests wi
     await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
     expect(vm.selection).toBeNull()
     expect(wrapper!.find('aside').exists()).toBe(false)
+})
+
+it('keeps screen coordinates and painted canvas intact when opening, dragging and closing details', async () => {
+    await page.viewport(1280, 1100)
+    const { vm, canvas } = await openMap()
+    ;(wrapper!.element as HTMLElement).style.cssText = 'width: 1200px; height: 1000px'
+    canvas.style.width = ''
+    canvas.style.height = ''
+    await vi.waitFor(() => expect(canvas.clientWidth).toBeGreaterThan(1000))
+    vm.resizeCanvas()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = []
+    await flushPromises()
+    vm.drawMap()
+    const center = { ...vm.workspace.center }
+    const screenPoint = vm.worldToScreen(center.x - 200, center.z - 100)
+    const dimensions = { width: canvas.width, height: canvas.height }
+    const origin = canvas.getBoundingClientRect()
+    const resets: MutationRecord[] = []
+    const observer = new MutationObserver((records) => resets.push(...records))
+    observer.observe(canvas, { attributes: true, attributeFilter: ['width', 'height'] })
+    const pixel = () => [...canvas.getContext('2d')!.getImageData(40, 40, 1, 1).data]
+    const painted = pixel()
+    const frames: number[][] = []
+    let recording = true
+    const sample = () => {
+        if (recording) {
+            frames.push(pixel())
+            requestAnimationFrame(sample)
+        }
+    }
+    requestAnimationFrame(sample)
+    try {
+        vm.selection = {
+            x: 0,
+            z: 0,
+            feature: { kind: 'stronghold', x: 0, z: 0, approximate: true },
+        }
+        await vi.waitFor(() => expect(wrapper!.find('[role="separator"]').exists()).toBe(true))
+        const divider = wrapper!.get('[role="separator"]')
+        for (const key of ['ArrowLeft', 'ArrowLeft', 'ArrowRight', 'End', 'Home']) {
+            await divider.trigger('keydown', { key })
+            await new Promise((resolve) => requestAnimationFrame(resolve))
+            expect(vm.worldToScreen(center.x - 200, center.z - 100)).toEqual(screenPoint)
+            expect(canvas.width).toBe(dimensions.width)
+            expect(canvas.height).toBe(dimensions.height)
+        }
+        await userEvent.dragAndDrop(divider.element, wrapper!.get('.seed-map-canvas-shell').element)
+        await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+        expect(vm.workspace.center).toEqual(center)
+        expect(vm.worldToScreen(center.x - 200, center.z - 100)).toEqual(screenPoint)
+        expect(canvas.getBoundingClientRect().left).toBe(origin.left)
+        expect(canvas.getBoundingClientRect().top).toBe(origin.top)
+        expect(canvas.width).toBe(dimensions.width)
+        expect(canvas.height).toBe(dimensions.height)
+        expect(resets).toHaveLength(0)
+        expect(frames.length).toBeGreaterThan(0)
+        expect(
+            frames.every((frame) => frame.every((value, index) => value === painted[index])),
+        ).toBe(true)
+    } finally {
+        recording = false
+        observer.disconnect()
+    }
 })
 
 afterEach(async () => {

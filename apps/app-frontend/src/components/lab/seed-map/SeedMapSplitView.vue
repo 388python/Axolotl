@@ -2,7 +2,7 @@
 import { defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from 'vue'
 
-defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean }>()
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
     resize: {
@@ -15,8 +15,13 @@ const fraction = ref(0.62)
 const narrow = ref(false)
 const dragging = ref(false)
 const width = ref(1200)
+const height = ref(0)
 const minimum = computed(() => Math.max(0.35, 320 / width.value))
 const maximum = computed(() => Math.min(0.72, 1 - 296 / width.value))
+const visibleSize = computed(() => ({
+    width: props.open && !narrow.value ? width.value * fraction.value : width.value,
+    height: props.open && narrow.value ? height.value * 0.45 : height.value,
+}))
 function clamp(value: number) {
     return Math.max(minimum.value, Math.min(maximum.value, value))
 }
@@ -46,9 +51,10 @@ function keydown(event: KeyboardEvent) {
 }
 onMounted(() => {
     observer = new ResizeObserver(([entry]) => {
+        width.value = entry.contentRect.width
+        height.value = entry.contentRect.height
         narrow.value = entry.contentRect.width < 760
         if (!narrow.value) {
-            width.value = entry.contentRect.width
             fraction.value = clamp(fraction.value)
         }
     })
@@ -64,10 +70,13 @@ onBeforeUnmount(() => observer?.disconnect())
         :class="{ 'flex-col': narrow, 'select-none': dragging }"
     >
         <div
-            class="relative flex min-h-0 min-w-0 flex-1"
+            class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
             :style="open ? { flex: `0 0 ${narrow ? 45 : fraction * 100}%` } : undefined"
         >
-            <slot />
+            <slot
+                :canvas-size="height > 0 ? { width, height } : undefined"
+                :visible-size="visibleSize"
+            />
         </div>
         <template v-if="open">
             <div
@@ -86,7 +95,7 @@ onBeforeUnmount(() => observer?.disconnect())
                 @pointerup="stop"
                 @pointercancel="stop"
                 @lostpointercapture="stop"
-                @keydown="keydown"
+                @keydown.stop="keydown"
                 @dblclick="fraction = clamp(0.62)"
             >
                 <span class="h-8 w-0.5 rounded bg-surface-5" />
