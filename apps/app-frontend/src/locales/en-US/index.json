@@ -14489,9 +14489,6 @@
   "app.lab.seed-map.details.containers": {
     "message": "{count} containers"
   },
-  "app.lab.seed-map.details.container": {
-    "message": "Container {number} · {x}, {z}"
-  },
   "app.lab.seed-map.details.no-layout": {
     "message": "Internal layout is not simulated by this engine."
   },
@@ -14515,18 +14512,6 @@
   },
   "app.lab.seed-map.details.truncated": {
     "message": "The structure reached the piece limit; additional pieces may be missing."
-  },
-  "app.lab.seed-map.details.bastion-units": {
-    "message": "Housing units"
-  },
-  "app.lab.seed-map.details.bastion-stable": {
-    "message": "Hoglin stable"
-  },
-  "app.lab.seed-map.details.bastion-treasure": {
-    "message": "Treasure room"
-  },
-  "app.lab.seed-map.details.bastion-bridge": {
-    "message": "Bridge"
   },
   "app.lab.seed-map.details.layout-map": {
     "message": "Structure layout. Select a piece to highlight it on the map."
@@ -14644,5 +14629,383 @@
   },
   "app.lab.seed-map.copyright.view-license": {
     "message": "View MIT License"
+  },
+  "app.lab.seed-map.names.unknown-piece": {
+    "message": "Structure piece"
+  },
+  "app.lab.seed-map.names.unknown-item": {
+    "message": "Unknown item"
+  },
+  "app.lab.seed-map.names.unknown-enchantment": {
+    "message": "Unknown enchantment"
+  },
+  "app.lab.seed-map.names.unknown-effect": {
+    "message": "Unknown status effect"
+  },
+  "app.lab.seed-map.names.unknown-table": {
+    "message": "Unrecognized loot table"
+  },
+  "app.lab.seed-map.names.no-mirror": {
+    "message": "No mirror"
+  },
+  "app.lab.seed-map.names.mirrored": {
+    "message": "Mirrored"
+  },
+  "app.lab.seed-map.names.unknown-mirror": {
+    "message": "Unknown mirror mode"
+  },
+  "app.lab.seed-map.names.unknown-rotation": {
+    "message": "Unknown rotation"
+  },
+  "app.lab.seed-map.names.rotation": {
+    "message": "{degrees}°"
+  },
+  "app.lab.seed-map.names.portal": {
+    "message": "Ruined portal {number}"
+  },
+  "app.lab.seed-map.names.giant-portal": {
+    "message": "Giant ruined portal {number}"
+  },
+  "app.lab.seed-map.names.city-center": {
+    "message": "City center {number}"
+  },
+  "app.lab.seed-map.names.trial-end": {
+    "message": "End corridor {number}"
+  },
+  "app.lab.seed-map.names.fossil": {
+    "message": "Nether fossil {number}"
+  },
+  "app.lab.seed-map.names.tent": {
+    "message": "Tent {number}"
+  },
+  "app.lab.seed-map.names.campsite": {
+    "message": "Campsite {number}"
+  },
+  "app.lab.seed-map.names.campsite-barrel": {
+    "message": "Barrel campsite {number}"
+  },
+  "app.lab.seed-map.names.campsite-chest": {
+    "message": "Chest campsite {number}"
+  },
+  "app.lab.seed-map.names.campsite-special": {
+    "message": "Special campsite {number}"
+  },
+  "app.lab.seed-map.names.meeting": {
+    "message": "Village meeting point {number}"
+  },
+  "app.lab.seed-map.names.fountain": {
+    "message": "Village fountain"
+  },
+  "app.lab.seed-map.names.units": {
+    "message": "Housing units"
+  },
+  "app.lab.seed-map.names.stable": {
+    "message": "Hoglin stable"
+  },
+  "app.lab.seed-map.names.treasure": {
+    "message": "Treasure room"
+  },
+  "app.lab.seed-map.names.bastion-bridge": {
+    "message": "Bridge"
+  },
+  "app.lab.seed-map.names.desert-pyramid": {
+    "message": "Desert pyramid"
+  },
+  "app.lab.seed-map.names.jungle-temple": {
+    "message": "Jungle temple"
+  },
+  "app.lab.seed-map.names.swamp-hut": {
+    "message": "Swamp hut"
+  },
+  "app.lab.seed-map.names.buried-treasure": {
+    "message": "Buried treasure chest"
+  },
+  "app.lab.seed-map.names.ruined-portal": {
+    "message": "Ruined portal"
+  },
+  "app.lab.seed-map.names.igloo-top": {
+    "message": "Igloo"
+  },
+  "app.lab.seed-map.names.igloo-middle": {
+    "message": "Basement shaft"
+  },
+  "app.lab.seed-map.names.igloo-bottom": {
+    "message": "Basement"
+  },
+  "app.lab.seed-map.names.watchtower": {
+    "message": "Watchtower"
+  },
+  "app.lab.seed-map.names.stronghold-straight": {
+    "message": "Straight corridor"
+  },
+  "app.lab.seed-map.names.stronghold-prison": {
+    "message": "Prison hall"
+  },
+  "app.lab.seed-map.names.stronghold-left": {
+    "message": "Left turn"
+  },
+  "app.lab.seed-map.names.stronghold-right": {
+    "message": "Right turn"
+  },
+  "app.lab.seed-map.names.stronghold-crossing": {
+    "message": "Crossing room"
+  },
+  "app.lab.seed-map.names.stronghold-stairs-straight": {
+    "message": "Straight descending stairs"
+  },
+  "app.lab.seed-map.names.stronghold-stairs": {
+    "message": "Spiral stairs"
+  },
+  "app.lab.seed-map.names.stronghold-five": {
+    "message": "Five-way crossing"
+  },
+  "app.lab.seed-map.names.stronghold-chest": {
+    "message": "Chest corridor"
+  },
+  "app.lab.seed-map.names.stronghold-library": {
+    "message": "Library"
+  },
+  "app.lab.seed-map.names.stronghold-portal": {
+    "message": "End portal room"
+  },
+  "app.lab.seed-map.names.stronghold-filler": {
+    "message": "Connecting corridor"
+  },
+  "app.lab.seed-map.names.fortress-start": {
+    "message": "Fortress starting crossing"
+  },
+  "app.lab.seed-map.names.fortress-bridge": {
+    "message": "Straight bridge"
+  },
+  "app.lab.seed-map.names.fortress-crossing": {
+    "message": "Bridge crossing"
+  },
+  "app.lab.seed-map.names.fortress-fortified": {
+    "message": "Fortified bridge crossing"
+  },
+  "app.lab.seed-map.names.fortress-stairs": {
+    "message": "Bridge stairs"
+  },
+  "app.lab.seed-map.names.fortress-spawner": {
+    "message": "Blaze spawner platform"
+  },
+  "app.lab.seed-map.names.fortress-entrance": {
+    "message": "Corridor entrance"
+  },
+  "app.lab.seed-map.names.fortress-corridor": {
+    "message": "Straight corridor"
+  },
+  "app.lab.seed-map.names.fortress-corridor-crossing": {
+    "message": "Corridor crossing"
+  },
+  "app.lab.seed-map.names.fortress-right": {
+    "message": "Right-turn corridor"
+  },
+  "app.lab.seed-map.names.fortress-left": {
+    "message": "Left-turn corridor"
+  },
+  "app.lab.seed-map.names.fortress-corridor-stairs": {
+    "message": "Corridor stairs"
+  },
+  "app.lab.seed-map.names.fortress-t": {
+    "message": "T-junction"
+  },
+  "app.lab.seed-map.names.fortress-wart": {
+    "message": "Nether wart room"
+  },
+  "app.lab.seed-map.names.fortress-end": {
+    "message": "Bridge end"
+  },
+  "app.lab.seed-map.names.end-base-floor": {
+    "message": "Base floor"
+  },
+  "app.lab.seed-map.names.end-base-roof": {
+    "message": "Base roof"
+  },
+  "app.lab.seed-map.names.end-bridge-end": {
+    "message": "Bridge end"
+  },
+  "app.lab.seed-map.names.end-gentle": {
+    "message": "Gently sloping bridge stairs"
+  },
+  "app.lab.seed-map.names.end-bridge": {
+    "message": "Bridge section"
+  },
+  "app.lab.seed-map.names.end-steep": {
+    "message": "Steep bridge stairs"
+  },
+  "app.lab.seed-map.names.end-fat-base": {
+    "message": "Large tower base"
+  },
+  "app.lab.seed-map.names.end-fat-middle": {
+    "message": "Large tower middle"
+  },
+  "app.lab.seed-map.names.end-fat-top": {
+    "message": "Large tower top"
+  },
+  "app.lab.seed-map.names.end-second-1": {
+    "message": "Second floor 1"
+  },
+  "app.lab.seed-map.names.end-second-2": {
+    "message": "Second floor 2"
+  },
+  "app.lab.seed-map.names.end-second-roof": {
+    "message": "Second-floor roof"
+  },
+  "app.lab.seed-map.names.end-ship": {
+    "message": "End ship"
+  },
+  "app.lab.seed-map.names.end-third-1": {
+    "message": "Third floor 1"
+  },
+  "app.lab.seed-map.names.end-third-2": {
+    "message": "Third floor 2"
+  },
+  "app.lab.seed-map.names.end-third-roof": {
+    "message": "Third-floor roof"
+  },
+  "app.lab.seed-map.names.end-tower-base": {
+    "message": "Tower base"
+  },
+  "app.lab.seed-map.names.end-tower-floor": {
+    "message": "Tower floor"
+  },
+  "app.lab.seed-map.names.end-tower-piece": {
+    "message": "Tower section"
+  },
+  "app.lab.seed-map.names.end-tower-top": {
+    "message": "Tower top"
+  },
+  "app.lab.seed-map.names.bastion-wall": {
+    "message": "Housing unit wall base"
+  },
+  "app.lab.seed-map.names.bastion-rampart": {
+    "message": "Hoglin stable rampart"
+  },
+  "app.lab.seed-map.names.bastion-mid-wall": {
+    "message": "Treasure room main wall"
+  },
+  "app.lab.seed-map.names.bastion-entrance": {
+    "message": "Bridge entrance"
+  },
+  "app.lab.seed-map.names.ship-mast": {
+    "message": "Shipwreck with mast"
+  },
+  "app.lab.seed-map.names.ship-up-full": {
+    "message": "Upside-down shipwreck"
+  },
+  "app.lab.seed-map.names.ship-up-front": {
+    "message": "Upside-down bow"
+  },
+  "app.lab.seed-map.names.ship-up-back": {
+    "message": "Upside-down stern"
+  },
+  "app.lab.seed-map.names.ship-side-full": {
+    "message": "Sideways shipwreck"
+  },
+  "app.lab.seed-map.names.ship-side-front": {
+    "message": "Sideways bow"
+  },
+  "app.lab.seed-map.names.ship-side-back": {
+    "message": "Sideways stern"
+  },
+  "app.lab.seed-map.names.ship-full": {
+    "message": "Upright shipwreck"
+  },
+  "app.lab.seed-map.names.ship-front": {
+    "message": "Upright bow"
+  },
+  "app.lab.seed-map.names.ship-back": {
+    "message": "Upright stern"
+  },
+  "app.lab.seed-map.names.degraded": {
+    "message": "{name} (degraded)"
+  },
+  "app.lab.seed-map.names.biome-name": {
+    "message": "{biome} · {name}"
+  },
+  "app.lab.seed-map.names.loot-desert": {
+    "message": "Desert pyramid chest"
+  },
+  "app.lab.seed-map.names.loot-jungle": {
+    "message": "Jungle temple chest"
+  },
+  "app.lab.seed-map.names.loot-dispenser": {
+    "message": "Jungle temple dispenser"
+  },
+  "app.lab.seed-map.names.loot-igloo": {
+    "message": "Igloo basement chest"
+  },
+  "app.lab.seed-map.names.loot-outpost": {
+    "message": "Outpost chest"
+  },
+  "app.lab.seed-map.names.loot-ship-supply": {
+    "message": "Shipwreck supply chest"
+  },
+  "app.lab.seed-map.names.loot-ship-map": {
+    "message": "Shipwreck map chest"
+  },
+  "app.lab.seed-map.names.loot-ship-treasure": {
+    "message": "Shipwreck treasure chest"
+  },
+  "app.lab.seed-map.names.loot-fortress": {
+    "message": "Nether fortress chest"
+  },
+  "app.lab.seed-map.names.loot-bastion": {
+    "message": "Bastion chest"
+  },
+  "app.lab.seed-map.names.loot-bastion-bridge": {
+    "message": "Bastion bridge chest"
+  },
+  "app.lab.seed-map.names.loot-bastion-treasure": {
+    "message": "Bastion treasure chest"
+  },
+  "app.lab.seed-map.names.loot-bastion-stable": {
+    "message": "Hoglin stable chest"
+  },
+  "app.lab.seed-map.names.loot-end": {
+    "message": "End city chest"
+  },
+  "app.lab.seed-map.names.loot-library": {
+    "message": "Stronghold library chest"
+  },
+  "app.lab.seed-map.names.loot-corridor": {
+    "message": "Stronghold corridor chest"
+  },
+  "app.lab.seed-map.names.loot-crossing": {
+    "message": "Stronghold crossing chest"
+  },
+  "app.lab.seed-map.names.loot-buried": {
+    "message": "Buried treasure chest"
+  },
+  "app.lab.seed-map.names.loot-portal": {
+    "message": "Ruined portal chest"
+  },
+  "app.lab.seed-map.names.loot-camp-barrel": {
+    "message": "Abandoned camp barrel"
+  },
+  "app.lab.seed-map.names.loot-camp-common": {
+    "message": "Abandoned camp chest"
+  },
+  "app.lab.seed-map.names.loot-camp-special": {
+    "message": "Abandoned camp special chest"
+  },
+  "app.lab.seed-map.names.loot-camp-treasure": {
+    "message": "Abandoned camp treasure chest"
+  },
+  "app.lab.seed-map.details.named-container": {
+    "message": "{name} {number} · {x}, {z}"
+  },
+  "app.lab.seed-map.details.technical-identifiers": {
+    "message": "Technical identifiers"
+  },
+  "app.lab.seed-map.details.effect-duration": {
+    "message": "{name} · {duration}"
+  },
+  "app.lab.seed-map.details.enchantment-level": {
+    "message": "{name} {level}"
+  },
+  "app.lab.seed-map.names.loot-camp-secret": {
+    "message": "Abandoned camp hidden chest"
   }
 }

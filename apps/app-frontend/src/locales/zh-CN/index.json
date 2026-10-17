@@ -14510,9 +14510,6 @@
   "app.lab.seed-map.details.containers": {
     "message": "{count} 个容器"
   },
-  "app.lab.seed-map.details.container": {
-    "message": "容器 {number} · {x}, {z}"
-  },
   "app.lab.seed-map.details.no-layout": {
     "message": "引擎尚未模拟此结构的内部布局。"
   },
@@ -14536,18 +14533,6 @@
   },
   "app.lab.seed-map.details.truncated": {
     "message": "已达到结构块数量上限，可能遗漏更多结构块。"
-  },
-  "app.lab.seed-map.details.bastion-units": {
-    "message": "居住区"
-  },
-  "app.lab.seed-map.details.bastion-stable": {
-    "message": "疣猪兽棚"
-  },
-  "app.lab.seed-map.details.bastion-treasure": {
-    "message": "藏宝室"
-  },
-  "app.lab.seed-map.details.bastion-bridge": {
-    "message": "桥梁"
   },
   "app.lab.seed-map.details.layout-map": {
     "message": "结构平面布局。选择结构块可在地图上高亮。"
@@ -14665,5 +14650,383 @@
   },
   "app.lab.seed-map.copyright.view-license": {
     "message": "查看 MIT 许可证"
+  },
+  "app.lab.seed-map.names.unknown-piece": {
+    "message": "结构部件"
+  },
+  "app.lab.seed-map.names.unknown-item": {
+    "message": "未知物品"
+  },
+  "app.lab.seed-map.names.unknown-enchantment": {
+    "message": "未知附魔"
+  },
+  "app.lab.seed-map.names.unknown-effect": {
+    "message": "未知状态效果"
+  },
+  "app.lab.seed-map.names.unknown-table": {
+    "message": "未知战利品表"
+  },
+  "app.lab.seed-map.names.no-mirror": {
+    "message": "无镜像"
+  },
+  "app.lab.seed-map.names.mirrored": {
+    "message": "已镜像"
+  },
+  "app.lab.seed-map.names.unknown-mirror": {
+    "message": "未知镜像方式"
+  },
+  "app.lab.seed-map.names.unknown-rotation": {
+    "message": "未知旋转方式"
+  },
+  "app.lab.seed-map.names.rotation": {
+    "message": "{degrees}°"
+  },
+  "app.lab.seed-map.names.portal": {
+    "message": "废弃传送门 {number}"
+  },
+  "app.lab.seed-map.names.giant-portal": {
+    "message": "巨型废弃传送门 {number}"
+  },
+  "app.lab.seed-map.names.city-center": {
+    "message": "城市中心 {number}"
+  },
+  "app.lab.seed-map.names.trial-end": {
+    "message": "末端走廊 {number}"
+  },
+  "app.lab.seed-map.names.fossil": {
+    "message": "下界化石 {number}"
+  },
+  "app.lab.seed-map.names.tent": {
+    "message": "帐篷 {number}"
+  },
+  "app.lab.seed-map.names.campsite": {
+    "message": "营地设施 {number}"
+  },
+  "app.lab.seed-map.names.campsite-barrel": {
+    "message": "木桶营地 {number}"
+  },
+  "app.lab.seed-map.names.campsite-chest": {
+    "message": "箱子营地 {number}"
+  },
+  "app.lab.seed-map.names.campsite-special": {
+    "message": "特殊营地 {number}"
+  },
+  "app.lab.seed-map.names.meeting": {
+    "message": "村庄集会点 {number}"
+  },
+  "app.lab.seed-map.names.fountain": {
+    "message": "村庄喷泉"
+  },
+  "app.lab.seed-map.names.units": {
+    "message": "居住区"
+  },
+  "app.lab.seed-map.names.stable": {
+    "message": "疣猪兽棚"
+  },
+  "app.lab.seed-map.names.treasure": {
+    "message": "藏宝室"
+  },
+  "app.lab.seed-map.names.bastion-bridge": {
+    "message": "桥梁"
+  },
+  "app.lab.seed-map.names.desert-pyramid": {
+    "message": "沙漠神殿"
+  },
+  "app.lab.seed-map.names.jungle-temple": {
+    "message": "丛林神庙"
+  },
+  "app.lab.seed-map.names.swamp-hut": {
+    "message": "沼泽小屋"
+  },
+  "app.lab.seed-map.names.buried-treasure": {
+    "message": "埋藏的宝箱"
+  },
+  "app.lab.seed-map.names.ruined-portal": {
+    "message": "废弃传送门"
+  },
+  "app.lab.seed-map.names.igloo-top": {
+    "message": "雪屋"
+  },
+  "app.lab.seed-map.names.igloo-middle": {
+    "message": "地下室通道"
+  },
+  "app.lab.seed-map.names.igloo-bottom": {
+    "message": "地下室"
+  },
+  "app.lab.seed-map.names.watchtower": {
+    "message": "瞭望塔"
+  },
+  "app.lab.seed-map.names.stronghold-straight": {
+    "message": "直走廊"
+  },
+  "app.lab.seed-map.names.stronghold-prison": {
+    "message": "监狱走廊"
+  },
+  "app.lab.seed-map.names.stronghold-left": {
+    "message": "左转走廊"
+  },
+  "app.lab.seed-map.names.stronghold-right": {
+    "message": "右转走廊"
+  },
+  "app.lab.seed-map.names.stronghold-crossing": {
+    "message": "交叉房间"
+  },
+  "app.lab.seed-map.names.stronghold-stairs-straight": {
+    "message": "直行下行楼梯"
+  },
+  "app.lab.seed-map.names.stronghold-stairs": {
+    "message": "螺旋楼梯"
+  },
+  "app.lab.seed-map.names.stronghold-five": {
+    "message": "五向交叉路口"
+  },
+  "app.lab.seed-map.names.stronghold-chest": {
+    "message": "宝箱走廊"
+  },
+  "app.lab.seed-map.names.stronghold-library": {
+    "message": "图书馆"
+  },
+  "app.lab.seed-map.names.stronghold-portal": {
+    "message": "末地传送门房间"
+  },
+  "app.lab.seed-map.names.stronghold-filler": {
+    "message": "连接走廊"
+  },
+  "app.lab.seed-map.names.fortress-start": {
+    "message": "下界要塞起始路口"
+  },
+  "app.lab.seed-map.names.fortress-bridge": {
+    "message": "直桥"
+  },
+  "app.lab.seed-map.names.fortress-crossing": {
+    "message": "桥梁交叉路口"
+  },
+  "app.lab.seed-map.names.fortress-fortified": {
+    "message": "围墙桥梁路口"
+  },
+  "app.lab.seed-map.names.fortress-stairs": {
+    "message": "桥梁楼梯"
+  },
+  "app.lab.seed-map.names.fortress-spawner": {
+    "message": "烈焰人刷怪平台"
+  },
+  "app.lab.seed-map.names.fortress-entrance": {
+    "message": "走廊入口"
+  },
+  "app.lab.seed-map.names.fortress-corridor": {
+    "message": "直走廊"
+  },
+  "app.lab.seed-map.names.fortress-corridor-crossing": {
+    "message": "走廊交叉路口"
+  },
+  "app.lab.seed-map.names.fortress-right": {
+    "message": "右转走廊"
+  },
+  "app.lab.seed-map.names.fortress-left": {
+    "message": "左转走廊"
+  },
+  "app.lab.seed-map.names.fortress-corridor-stairs": {
+    "message": "走廊楼梯"
+  },
+  "app.lab.seed-map.names.fortress-t": {
+    "message": "丁字路口"
+  },
+  "app.lab.seed-map.names.fortress-wart": {
+    "message": "下界疣房间"
+  },
+  "app.lab.seed-map.names.fortress-end": {
+    "message": "桥梁末端"
+  },
+  "app.lab.seed-map.names.end-base-floor": {
+    "message": "底层"
+  },
+  "app.lab.seed-map.names.end-base-roof": {
+    "message": "底层屋顶"
+  },
+  "app.lab.seed-map.names.end-bridge-end": {
+    "message": "桥梁末端"
+  },
+  "app.lab.seed-map.names.end-gentle": {
+    "message": "缓坡桥梯"
+  },
+  "app.lab.seed-map.names.end-bridge": {
+    "message": "桥梁段"
+  },
+  "app.lab.seed-map.names.end-steep": {
+    "message": "陡坡桥梯"
+  },
+  "app.lab.seed-map.names.end-fat-base": {
+    "message": "大型塔基"
+  },
+  "app.lab.seed-map.names.end-fat-middle": {
+    "message": "大型塔中段"
+  },
+  "app.lab.seed-map.names.end-fat-top": {
+    "message": "大型塔顶"
+  },
+  "app.lab.seed-map.names.end-second-1": {
+    "message": "二层 1"
+  },
+  "app.lab.seed-map.names.end-second-2": {
+    "message": "二层 2"
+  },
+  "app.lab.seed-map.names.end-second-roof": {
+    "message": "二层屋顶"
+  },
+  "app.lab.seed-map.names.end-ship": {
+    "message": "末地船"
+  },
+  "app.lab.seed-map.names.end-third-1": {
+    "message": "三层 1"
+  },
+  "app.lab.seed-map.names.end-third-2": {
+    "message": "三层 2"
+  },
+  "app.lab.seed-map.names.end-third-roof": {
+    "message": "三层屋顶"
+  },
+  "app.lab.seed-map.names.end-tower-base": {
+    "message": "塔基"
+  },
+  "app.lab.seed-map.names.end-tower-floor": {
+    "message": "塔楼层"
+  },
+  "app.lab.seed-map.names.end-tower-piece": {
+    "message": "塔身段"
+  },
+  "app.lab.seed-map.names.end-tower-top": {
+    "message": "塔顶"
+  },
+  "app.lab.seed-map.names.bastion-wall": {
+    "message": "居住区墙基"
+  },
+  "app.lab.seed-map.names.bastion-rampart": {
+    "message": "疣猪兽棚城墙"
+  },
+  "app.lab.seed-map.names.bastion-mid-wall": {
+    "message": "藏宝室主墙"
+  },
+  "app.lab.seed-map.names.bastion-entrance": {
+    "message": "桥梁入口"
+  },
+  "app.lab.seed-map.names.ship-mast": {
+    "message": "带桅杆沉船"
+  },
+  "app.lab.seed-map.names.ship-up-full": {
+    "message": "倒置完整沉船"
+  },
+  "app.lab.seed-map.names.ship-up-front": {
+    "message": "倒置船首"
+  },
+  "app.lab.seed-map.names.ship-up-back": {
+    "message": "倒置船尾"
+  },
+  "app.lab.seed-map.names.ship-side-full": {
+    "message": "侧翻完整沉船"
+  },
+  "app.lab.seed-map.names.ship-side-front": {
+    "message": "侧翻船首"
+  },
+  "app.lab.seed-map.names.ship-side-back": {
+    "message": "侧翻船尾"
+  },
+  "app.lab.seed-map.names.ship-full": {
+    "message": "正向完整沉船"
+  },
+  "app.lab.seed-map.names.ship-front": {
+    "message": "正向船首"
+  },
+  "app.lab.seed-map.names.ship-back": {
+    "message": "正向船尾"
+  },
+  "app.lab.seed-map.names.degraded": {
+    "message": "{name}（破损）"
+  },
+  "app.lab.seed-map.names.biome-name": {
+    "message": "{biome} · {name}"
+  },
+  "app.lab.seed-map.names.loot-desert": {
+    "message": "沙漠神殿宝箱"
+  },
+  "app.lab.seed-map.names.loot-jungle": {
+    "message": "丛林神庙宝箱"
+  },
+  "app.lab.seed-map.names.loot-dispenser": {
+    "message": "丛林神庙发射器"
+  },
+  "app.lab.seed-map.names.loot-igloo": {
+    "message": "雪屋地下室宝箱"
+  },
+  "app.lab.seed-map.names.loot-outpost": {
+    "message": "前哨站宝箱"
+  },
+  "app.lab.seed-map.names.loot-ship-supply": {
+    "message": "沉船补给箱"
+  },
+  "app.lab.seed-map.names.loot-ship-map": {
+    "message": "沉船地图箱"
+  },
+  "app.lab.seed-map.names.loot-ship-treasure": {
+    "message": "沉船宝藏箱"
+  },
+  "app.lab.seed-map.names.loot-fortress": {
+    "message": "下界要塞宝箱"
+  },
+  "app.lab.seed-map.names.loot-bastion": {
+    "message": "堡垒遗迹宝箱"
+  },
+  "app.lab.seed-map.names.loot-bastion-bridge": {
+    "message": "堡垒遗迹桥梁宝箱"
+  },
+  "app.lab.seed-map.names.loot-bastion-treasure": {
+    "message": "堡垒遗迹藏宝箱"
+  },
+  "app.lab.seed-map.names.loot-bastion-stable": {
+    "message": "疣猪兽棚宝箱"
+  },
+  "app.lab.seed-map.names.loot-end": {
+    "message": "末地城宝箱"
+  },
+  "app.lab.seed-map.names.loot-library": {
+    "message": "要塞图书馆宝箱"
+  },
+  "app.lab.seed-map.names.loot-corridor": {
+    "message": "要塞走廊宝箱"
+  },
+  "app.lab.seed-map.names.loot-crossing": {
+    "message": "要塞交叉房间宝箱"
+  },
+  "app.lab.seed-map.names.loot-buried": {
+    "message": "埋藏的宝箱"
+  },
+  "app.lab.seed-map.names.loot-portal": {
+    "message": "废弃传送门宝箱"
+  },
+  "app.lab.seed-map.names.loot-camp-barrel": {
+    "message": "废弃营地木桶"
+  },
+  "app.lab.seed-map.names.loot-camp-common": {
+    "message": "废弃营地普通宝箱"
+  },
+  "app.lab.seed-map.names.loot-camp-special": {
+    "message": "废弃营地特殊宝箱"
+  },
+  "app.lab.seed-map.names.loot-camp-treasure": {
+    "message": "废弃营地宝藏箱"
+  },
+  "app.lab.seed-map.details.named-container": {
+    "message": "{name} {number} · {x}, {z}"
+  },
+  "app.lab.seed-map.details.technical-identifiers": {
+    "message": "技术标识"
+  },
+  "app.lab.seed-map.details.effect-duration": {
+    "message": "{name} · {duration}"
+  },
+  "app.lab.seed-map.details.enchantment-level": {
+    "message": "{name} {level}"
+  },
+  "app.lab.seed-map.names.loot-camp-secret": {
+    "message": "废弃营地隐藏宝箱"
   }
 }

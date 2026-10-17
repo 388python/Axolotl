@@ -54,7 +54,7 @@ for (const [id, readable] of readableById) {
 }
 
 for (const key of Object.keys(enUs)) {
-    if (!/^item\.minecraft\.(?:potion|splash_potion|lingering_potion)\.effect\./.test(key)) continue
+    if (!/^(?:item\.minecraft\.(?:potion|splash_potion|lingering_potion)\.effect\.|enchantment\.|effect\.)/.test(key)) continue
     itemNameIndex.en_us[key] = enUs[key]
     itemNameIndex.zh_cn[key] = zhCn[key] ?? enUs[key]
 }

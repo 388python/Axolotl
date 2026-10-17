@@ -4,7 +4,6 @@ import { Button, Combobox, defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
 import { loadMinecraftItemImage } from '@/lab/recipe-generator/item-images'
-import { resolveRecipeItemName } from '@/lab/recipe-generator/item-names'
 import {
     getSeedMapContainerLoot,
     getSeedMapStructureDetails,
@@ -14,6 +13,7 @@ import {
     type SeedMapStructureQuery,
 } from '@/lab/seed-map/advanced'
 import type { SeedMapFeatureKind } from '@/lab/seed-map/features'
+import { createSeedMapLabels, seedMapEffectDuration } from '@/lab/seed-map/structure-labels'
 
 const props = defineProps<{
     query: SeedMapStructureQuery
@@ -51,8 +51,20 @@ const messages = defineMessages({
     pieces: { id: 'app.lab.seed-map.details.pieces', defaultMessage: '{count} structure pieces' },
     containers: { id: 'app.lab.seed-map.details.containers', defaultMessage: '{count} containers' },
     container: {
-        id: 'app.lab.seed-map.details.container',
-        defaultMessage: 'Container {number} · {x}, {z}',
+        id: 'app.lab.seed-map.details.named-container',
+        defaultMessage: '{name} {number} · {x}, {z}',
+    },
+    technical: {
+        id: 'app.lab.seed-map.details.technical-identifiers',
+        defaultMessage: 'Technical identifiers',
+    },
+    effectDuration: {
+        id: 'app.lab.seed-map.details.effect-duration',
+        defaultMessage: '{name} · {duration}',
+    },
+    enchanted: {
+        id: 'app.lab.seed-map.details.enchantment-level',
+        defaultMessage: '{name} {level}',
     },
     noLayout: {
         id: 'app.lab.seed-map.details.no-layout',
@@ -100,10 +112,6 @@ const messages = defineMessages({
         defaultMessage:
             'The engine provides container locations but no piece positions for this structure.',
     },
-    units: { id: 'app.lab.seed-map.details.bastion-units', defaultMessage: 'Housing units' },
-    stable: { id: 'app.lab.seed-map.details.bastion-stable', defaultMessage: 'Hoglin stable' },
-    treasure: { id: 'app.lab.seed-map.details.bastion-treasure', defaultMessage: 'Treasure room' },
-    bridge: { id: 'app.lab.seed-map.details.bastion-bridge', defaultMessage: 'Bridge' },
     layoutMap: {
         id: 'app.lab.seed-map.details.layout-map',
         defaultMessage: 'Structure layout. Select a piece to highlight it on the map.',
@@ -120,6 +128,32 @@ const lootFailed = ref(false)
 const containerId = ref<number>()
 const selectedPiece = ref<number>()
 const copied = ref(false)
+const technicalOpen = ref(false)
+const labels = computed(() =>
+    createSeedMapLabels((message, values) => formatMessage(message, values), locale.value),
+)
+const variantLabel = computed(() =>
+    details.value?.variant
+        ? labels.value.variant(props.kind, details.value.variant, details.value.pieces)
+        : undefined,
+)
+const technicalIdentifiers = computed(() =>
+    JSON.stringify(
+        {
+            kind: props.kind,
+            variant: details.value?.variant,
+            pieces: details.value?.pieces.map((piece) => ({
+                id: piece.id,
+                engineName: piece.name,
+                identifier: labels.value.pieceId(piece.name, details.value?.variant),
+            })),
+            containers: details.value?.containers,
+            loot: loot.value,
+        },
+        null,
+        2,
+    ),
+)
 const itemImages = ref<Record<string, string>>({})
 const lootCache = new Map<number, SeedMapLoot>()
 let generation = 0
@@ -180,6 +214,7 @@ watch(
         details.value = null
         loot.value = null
         selectedPiece.value = undefined
+        technicalOpen.value = false
         lootCache.clear()
         void loadDetails()
     },
@@ -224,6 +259,17 @@ const portalEyes = computed(
     () => details.value?.pieces.find((piece) => piece.portalEyes !== undefined)?.portalEyes,
 )
 const hasShip = computed(() => details.value?.pieces.some((piece) => piece.name.includes('ship')))
+function pieceLabel(piece: SeedMapStructurePiece) {
+    return labels.value.piece(props.kind, piece.name, details.value?.variant)
+}
+function effectLabel(effect: string, duration?: number) {
+    const name = labels.value.effect(effect)
+    const instant = ['instant_health', 'instant_damage', 'saturation'].includes(
+        effect.replace(/^minecraft:/, ''),
+    )
+    const time = duration === undefined || instant ? undefined : seedMapEffectDuration(duration)
+    return time ? formatMessage(messages.effectDuration, { name, duration: time }) : name
+}
 function focus(piece: SeedMapStructurePiece) {
     if (!piece.positionKnown) return
     selectedPiece.value = piece.id
@@ -301,25 +347,25 @@ async function copyLoot() {
                 </p>
                 <div v-if="tab === 'overview'" class="flex flex-col gap-3 text-sm">
                     <dl v-if="details.variant" class="m-0 grid grid-cols-2 gap-2">
-                        <dt>{{ formatMessage(messages.rotation) }}</dt>
-                        <dd class="m-0">{{ details.variant.rotation }}°</dd>
-                        <dt>{{ formatMessage(messages.mirror) }}</dt>
-                        <dd class="m-0">{{ details.variant.mirror }}</dd>
-                        <dt>{{ formatMessage(messages.variant) }}</dt>
-                        <dd class="m-0">
-                            {{
-                                kind === 'bastion'
-                                    ? formatMessage(
-                                          [
-                                              messages.units,
-                                              messages.stable,
-                                              messages.treasure,
-                                              messages.bridge,
-                                          ][details.variant.start] ?? messages.variant,
-                                      )
-                                    : details.variant.start
-                            }}
-                        </dd>
+                        <template v-if="labels.hasRotation(kind)">
+                            <dt>{{ formatMessage(messages.rotation) }}</dt>
+                            <dd class="m-0">{{ labels.rotation(details.variant.rotation) }}</dd>
+                        </template>
+                        <template v-if="labels.hasMirror(kind)">
+                            <dt>{{ formatMessage(messages.mirror) }}</dt>
+                            <dd class="m-0">{{ labels.mirror(details.variant.mirror) }}</dd>
+                        </template>
+                        <template v-if="variantLabel">
+                            <dt>{{ formatMessage(messages.variant) }}</dt>
+                            <dd class="m-0 min-w-0">
+                                {{ variantLabel.name }}
+                                <code
+                                    v-if="variantLabel.id"
+                                    class="block break-all text-xs text-[var(--color-text-tertiary)]"
+                                    >{{ variantLabel.id }}</code
+                                >
+                            </dd>
+                        </template>
                     </dl>
                     <span v-for="flag in flags" :key="flag">{{
                         formatMessage(messages[flag])
@@ -374,7 +420,7 @@ async function copyLoot() {
                             stroke-width="0.5"
                             role="button"
                             tabindex="0"
-                            :aria-label="piece.name"
+                            :aria-label="pieceLabel(piece)"
                             @click="focus(piece)"
                             @keydown.enter="focus(piece)"
                         />
@@ -385,10 +431,10 @@ async function copyLoot() {
                         class="flex flex-col gap-1 rounded-lg border border-surface-4 bg-surface-3 p-2 text-left text-xs hover:bg-surface-4"
                         @click="focus(piece)"
                     >
-                        <strong class="break-all">{{ piece.name }}</strong
+                        <strong class="break-words">{{ pieceLabel(piece) }}</strong
                         ><span v-if="piece.positionKnown"
                             >{{ piece.position.x }}, {{ piece.position.z }} ·
-                            {{ piece.rotation }}°</span
+                            {{ labels.rotation(piece.rotation) }}</span
                         ><span v-if="piece.portalEyes !== undefined">{{
                             formatMessage(messages.eyes, { count: piece.portalEyes })
                         }}</span>
@@ -413,6 +459,7 @@ async function copyLoot() {
                                 value: String(container.id),
                                 label: formatMessage(messages.container, {
                                     number: index + 1,
+                                    name: labels.table(container.table),
                                     x: container.x,
                                     z: container.z,
                                 }),
@@ -433,9 +480,12 @@ async function copyLoot() {
                         </p>
                         <p v-if="loot.unresolvedTables?.length" class="m-0">
                             {{ formatMessage(messages.unresolved)
-                            }}<span class="block break-all text-xs">{{
-                                loot.unresolvedTables.join(', ')
-                            }}</span>
+                            }}<span
+                                v-for="table in loot.unresolvedTables"
+                                :key="table"
+                                class="block text-xs"
+                                >{{ labels.table(table) }}</span
+                            >
                         </p>
                         <div
                             v-for="(item, index) in loot.items"
@@ -450,17 +500,20 @@ async function copyLoot() {
                             />
                             <div class="min-w-0">
                                 <strong class="break-words"
-                                    >{{ resolveRecipeItemName(item.id, locale, item.id) }} ×{{
-                                        item.count
-                                    }}</strong
+                                    >{{ labels.item(item.id) }} ×{{ item.count }}</strong
                                 ><span
                                     v-for="enchantment in item.enchantments"
                                     :key="enchantment.id"
                                     class="block text-xs text-[var(--color-text-tertiary)]"
-                                    >{{ enchantment.id }} {{ enchantment.level }}</span
-                                ><span v-if="item.effect" class="block text-xs"
-                                    >{{ item.effect }} · {{ item.duration }}</span
-                                >
+                                    >{{
+                                        formatMessage(messages.enchanted, {
+                                            name: labels.enchantment(enchantment.id),
+                                            level: labels.level(enchantment.level),
+                                        })
+                                    }}</span
+                                ><span v-if="item.effect" class="block text-xs">{{
+                                    effectLabel(item.effect, item.duration)
+                                }}</span>
                             </div>
                         </div>
                         <Button v-if="loot.supported" type="outlined" size="2xs" @click="copyLoot"
@@ -495,6 +548,18 @@ async function copyLoot() {
                         {{ formatMessage(messages.truncated) }}
                     </p>
                 </div>
+                <details
+                    :open="technicalOpen"
+                    class="mt-3 text-xs text-[var(--color-text-tertiary)]"
+                    @toggle="technicalOpen = ($event.target as HTMLDetailsElement).open"
+                >
+                    <summary class="cursor-pointer">
+                        {{ formatMessage(messages.technical) }}
+                    </summary>
+                    <pre v-if="technicalOpen" class="m-0 mt-2 whitespace-pre-wrap break-all">{{
+                        technicalIdentifiers
+                    }}</pre>
+                </details>
             </template>
         </div>
     </aside>
