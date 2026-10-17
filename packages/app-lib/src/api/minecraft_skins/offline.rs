@@ -64,7 +64,11 @@ impl MinecraftReleaseVersion {
 
     fn resource_pack_format(self) -> u32 {
         if self.major > 1 {
-            return 75;
+            return match self.minor {
+                0..=1 => 84,
+                2 => 88,
+                _ => 97,
+            };
         }
 
         match self.minor {
@@ -194,12 +198,20 @@ fn build_resource_pack(
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated);
     let pack_format = version.resource_pack_format();
-    let metadata = json!({
+    let mut metadata = json!({
         "pack": {
             "pack_format": pack_format,
             "description": "Axolotl Launcher offline skin"
         }
     });
+
+    if version.major >= 26 || (version.minor == 21 && version.patch >= 9) {
+        let minor = u32::from(version.major == 26 && version.minor >= 3);
+        let pack = metadata["pack"].as_object_mut().unwrap();
+        pack.remove("pack_format");
+        pack.insert("min_format".into(), json!([pack_format, minor]));
+        pack.insert("max_format".into(), json!([pack_format, minor]));
+    }
 
     start_zip_file(&mut zip, "pack.mcmeta", options)?;
     zip.write_all(&serde_json::to_vec(&metadata)?)?;
@@ -264,6 +276,26 @@ mod tests {
         let version = MinecraftReleaseVersion::parse("1.21.8").unwrap();
         assert_eq!(version.resource_pack_format(), 64);
         assert!(version.uses_modern_pack_id());
+    }
+
+    #[test]
+    fn generated_packs_use_release_specific_modern_formats() {
+        for (release, format) in
+            [("26.1", [84, 0]), ("26.2", [88, 0]), ("26.3", [97, 1])]
+        {
+            let pack = build_resource_pack(
+                b"texture",
+                MinecraftReleaseVersion::parse(release).unwrap(),
+            )
+            .unwrap();
+            let mut archive = zip::ZipArchive::new(Cursor::new(pack)).unwrap();
+            let mut entry = archive.by_name("pack.mcmeta").unwrap();
+            let metadata: serde_json::Value =
+                serde_json::from_reader(&mut entry).unwrap();
+            assert_eq!(metadata["pack"]["min_format"], json!(format));
+            assert_eq!(metadata["pack"]["max_format"], json!(format));
+            assert!(metadata["pack"].get("pack_format").is_none());
+        }
     }
 
     #[test]
