@@ -14538,7 +14538,7 @@
     "message": "Explore structure details"
   },
   "app.onboarding.seed-map.description": {
-    "message": "Zoom in to see supported 2D structure layouts directly on the map. Select a structure to open its capabilities and details beside the map; drag the divider to resize. The Layout tab provides an interactive 3D bounds preview where available. Heights may be relative or placeholders."
+    "message": "Zoom in to see supported 2D structure layouts directly on the map. Select a structure to open its capabilities and details beside the map; drag the divider to resize. In Layout, supported structures can switch between frames and original template blocks colored from their textures. Partial layouts, representative palettes and height limits are explained in the preview."
   },
   "app.onboarding.seed-map-underground.title": {
     "message": "Look below the surface"
@@ -15036,16 +15036,16 @@
     "message": "Structure variants"
   },
   "app.lab.seed-map.details.capability.projection": {
-    "message": "2D map projection"
+    "message": "2D structure projection"
   },
   "app.lab.seed-map.details.capability.volume": {
-    "message": "3D piece bounds"
+    "message": "3D structure bounds"
   },
   "app.lab.seed-map.details.capability.containers": {
     "message": "Container list"
   },
   "app.lab.seed-map.details.capability.complete": {
-    "message": "Complete piece layout"
+    "message": "Complete inner structure piece layout"
   },
   "app.lab.seed-map.details.capability.absolute-height": {
     "message": "Verified world heights"
@@ -15061,5 +15061,59 @@
   },
   "app.lab.seed-map.details.relative-height": {
     "message": "Vertical relationships are relative; the final world height is not predicted."
+  },
+  "app.lab.seed-map.details.supported-count": {
+    "message": "{count, plural, one {# feature supported} other {# features supported}}"
+  },
+  "app.lab.seed-map.details.unsupported-count": {
+    "message": "{count, plural, one {# feature not supported} other {# features not supported}}"
+  },
+  "app.lab.seed-map.preview.frames": {
+    "message": "Structure frames"
+  },
+  "app.lab.seed-map.preview.blocks": {
+    "message": "Real structure"
+  },
+  "app.lab.seed-map.preview.loading-blocks": {
+    "message": "Building structure…"
+  },
+  "app.lab.seed-map.preview.blocks-failed": {
+    "message": "Could not load the structure. Frames are still available."
+  },
+  "app.lab.seed-map.preview.retry-blocks": {
+    "message": "Retry structure"
+  },
+  "app.lab.seed-map.preview.template-note": {
+    "message": "Original {version} template blocks colored from their textures. Heights follow the predicted layout; entities are not shown."
+  },
+  "app.lab.seed-map.preview.missing-models": {
+    "message": "{count, plural, one {# block type has no preview model and is omitted.} other {# block types have no preview model and are omitted.}}"
+  },
+  "app.lab.seed-map.preview.shipwreck-limit": {
+    "message": "Template shape is predicted. A representative original palette is shown; the engine does not return the selected wood palette."
+  },
+  "app.lab.seed-map.preview.outpost-limit": {
+    "message": "Only the main watchtower is shown. Overgrowth, foundations and surrounding buildings are not reconstructed."
+  },
+  "app.lab.seed-map.preview.portal-limit": {
+    "message": "Portal template only. Weathering, random block replacements and surrounding terrain are not reconstructed; Y is a placeholder."
+  },
+  "app.lab.seed-map.preview.axes": {
+    "message": "World axes: +X east, +Y up, +Z south"
+  },
+  "app.lab.seed-map.preview.chest-xray": {
+    "message": "Chest X-ray ({count})"
+  },
+  "app.lab.seed-map.preview.chest-loading": {
+    "message": "Locating chests…"
+  },
+  "app.lab.seed-map.preview.chest-failed": {
+    "message": "Chest positions could not be loaded."
+  },
+  "app.lab.seed-map.preview.chest-retry": {
+    "message": "Retry chest positions"
+  },
+  "app.lab.seed-map.preview.chest-height-unknown": {
+    "message": "{count, plural, one {# container has no known Y coordinate and is not highlighted in 3D.} other {# containers have no known Y coordinates and are not highlighted in 3D.}}"
   }
 }

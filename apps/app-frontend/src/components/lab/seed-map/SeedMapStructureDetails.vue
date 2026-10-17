@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ClipboardCopyIcon, RefreshCwIcon, XIcon } from '@modrinth/assets'
+import {
+    CheckCircleIcon,
+    ChevronDownIcon,
+    ClipboardCopyIcon,
+    RefreshCwIcon,
+    XCircleIcon,
+    XIcon,
+} from '@modrinth/assets'
 import { Button, Combobox, defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
@@ -13,8 +20,10 @@ import {
     type SeedMapStructureQuery,
 } from '@/lab/seed-map/advanced'
 import type { SeedMapFeatureKind } from '@/lab/seed-map/features'
+import { seedMapTemplatePieces } from '@/lab/seed-map/structure-blocks'
 import { createSeedMapLabels, seedMapEffectDuration } from '@/lab/seed-map/structure-labels'
 import {
+    seedMapKnownLayoutChests,
     seedMapLayoutPieces,
     seedMapStructureCapabilities,
     seedMapVolumePieces,
@@ -32,6 +41,15 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; focus: [piece: SeedMapStructurePiece] }>()
 const { formatMessage, locale } = useVIntl()
 const messages = defineMessages({
+    supportedCount: {
+        id: 'app.lab.seed-map.details.supported-count',
+        defaultMessage: '{count, plural, one {# feature supported} other {# features supported}}',
+    },
+    unsupportedCount: {
+        id: 'app.lab.seed-map.details.unsupported-count',
+        defaultMessage:
+            '{count, plural, one {# feature not supported} other {# features not supported}}',
+    },
     supportedFeatures: {
         id: 'app.lab.seed-map.details.supported-features',
         defaultMessage: 'Supported',
@@ -185,6 +203,7 @@ const containerId = ref<number>()
 const selectedPiece = ref<number>()
 const copied = ref(false)
 const technicalOpen = ref(false)
+const capabilitiesOpen = ref(false)
 const labels = computed(() =>
     createSeedMapLabels((message, values) => formatMessage(message, values), locale.value),
 )
@@ -226,6 +245,7 @@ async function loadDetails() {
         details.value = result
         selectedPiece.value = props.selected
         containerId.value = result.containers[0]?.id
+        if (!result.supported) tab.value = 'overview'
         if (tab.value === 'loot') void loadLoot()
     } catch {
         if (token === generation) failed.value = true
@@ -235,7 +255,7 @@ async function loadDetails() {
 }
 
 async function loadLoot() {
-    if (containerId.value === undefined || tab.value !== 'loot') return
+    if (!details.value?.supported || containerId.value === undefined || tab.value !== 'loot') return
     const token = ++lootGeneration
     const container = containerId.value
     const query = { ...props.query }
@@ -270,8 +290,12 @@ watch(
         lootGeneration++
         details.value = null
         loot.value = null
+        lootBusy.value = false
+        lootFailed.value = false
+        containerId.value = undefined
         selectedPiece.value = undefined
         technicalOpen.value = false
+        capabilitiesOpen.value = false
         lootCache.clear()
         void loadDetails()
     },
@@ -291,9 +315,19 @@ watch(
 )
 const positionedPieces = computed(() => seedMapLayoutPieces(details.value))
 const volumePieces = computed(() => seedMapVolumePieces(details.value))
+const knownChests = computed(() => seedMapKnownLayoutChests(details.value, props.kind))
+const templatePieces = computed(() => seedMapTemplatePieces(details.value, props.query, props.kind))
+const previewPieces = computed(() =>
+    templatePieces.value.length ? templatePieces.value : volumePieces.value,
+)
+const layoutList = computed(() =>
+    templatePieces.value.length ? templatePieces.value : (details.value?.pieces ?? []),
+)
 const capabilities = computed(() => {
     if (!details.value) return []
-    return Object.entries(seedMapStructureCapabilities(details.value)).map(([key, supported]) => ({
+    return Object.entries(
+        seedMapStructureCapabilities(details.value, props.query.version, props.kind, props.query),
+    ).map(([key, supported]) => ({
         key,
         supported,
         message:
@@ -374,7 +408,11 @@ async function copyLoot() {
                 ><XIcon
             /></Button>
         </div>
-        <div class="flex shrink-0 gap-1 border-b border-surface-4 p-2" role="tablist">
+        <div
+            v-if="details?.supported"
+            class="flex shrink-0 gap-1 border-b border-surface-4 p-2"
+            role="tablist"
+        >
             <Button
                 v-for="value in ['overview', 'layout', 'loot'] as const"
                 :key="value"
@@ -399,38 +437,81 @@ async function copyLoot() {
                 >
             </div>
             <div class="mb-3 flex flex-col gap-2"><slot name="actions" /></div>
-            <template v-if="details">
+            <div
+                v-if="details && !details.supported"
+                class="rounded-lg border border-surface-4 bg-surface-3 p-3 text-sm text-[var(--color-text-tertiary)]"
+                data-testid="seed-map-details-unavailable"
+            >
+                <p class="m-0">{{ formatMessage(messages.unsupported) }}</p>
+            </div>
+            <template v-else-if="details?.supported">
                 <div
-                    class="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-surface-4 bg-surface-3 p-3 text-xs"
+                    class="mb-4 overflow-hidden rounded-lg border border-surface-4 bg-surface-3 text-xs"
                     data-testid="seed-map-structure-capabilities"
                 >
-                    <div
-                        v-for="supported in [true, false]"
-                        :key="String(supported)"
-                        class="flex flex-col gap-1"
+                    <button
+                        type="button"
+                        class="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-3 bg-transparent p-3 text-left text-inherit hover:bg-surface-4"
+                        :aria-expanded="capabilitiesOpen"
+                        @click="capabilitiesOpen = !capabilitiesOpen"
                     >
-                        <strong>{{
-                            formatMessage(
-                                supported
-                                    ? messages.supportedFeatures
-                                    : messages.unsupportedFeatures,
-                            )
-                        }}</strong>
                         <span
-                            v-for="capability in capabilities.filter(
-                                (entry) => entry.supported === supported,
-                            )"
-                            :key="capability.key"
-                            >{{ formatMessage(capability.message) }}</span
+                            v-for="supported in [true, false]"
+                            :key="String(supported)"
+                            class="flex min-w-0 items-center gap-1.5 font-semibold"
                         >
-                        <span v-if="supported && !capabilities.some((entry) => entry.supported)">{{
-                            formatMessage(messages.none)
-                        }}</span>
+                            <component
+                                :is="supported ? CheckCircleIcon : XCircleIcon"
+                                class="size-3.5 shrink-0"
+                                aria-hidden="true"
+                            />
+                            <span>{{
+                                formatMessage(
+                                    capabilitiesOpen
+                                        ? supported
+                                            ? messages.supportedFeatures
+                                            : messages.unsupportedFeatures
+                                        : supported
+                                          ? messages.supportedCount
+                                          : messages.unsupportedCount,
+                                    {
+                                        count: capabilities.filter(
+                                            (entry) => entry.supported === supported,
+                                        ).length,
+                                    },
+                                )
+                            }}</span>
+                        </span>
+                        <ChevronDownIcon
+                            class="size-4 shrink-0"
+                            :class="{ 'rotate-180': capabilitiesOpen }"
+                            aria-hidden="true"
+                        />
+                    </button>
+                    <div
+                        v-if="capabilitiesOpen"
+                        class="grid grid-cols-2 gap-3 border-t border-surface-4 p-3"
+                        data-testid="seed-map-capability-list"
+                    >
+                        <div
+                            v-for="supported in [true, false]"
+                            :key="String(supported)"
+                            class="flex flex-col gap-1"
+                        >
+                            <span
+                                v-for="capability in capabilities.filter(
+                                    (entry) => entry.supported === supported,
+                                )"
+                                :key="capability.key"
+                                >{{ formatMessage(capability.message) }}</span
+                            >
+                            <span
+                                v-if="supported && !capabilities.some((entry) => entry.supported)"
+                                >{{ formatMessage(messages.none) }}</span
+                            >
+                        </div>
                     </div>
                 </div>
-                <p v-if="!details.supported" class="m-0 text-sm">
-                    {{ formatMessage(messages.unsupported) }}
-                </p>
                 <div v-if="tab === 'overview'" class="flex flex-col gap-3 text-sm">
                     <dl v-if="details.variant" class="m-0 grid grid-cols-2 gap-2">
                         <template v-if="labels.hasRotation(kind)">
@@ -470,7 +551,10 @@ async function copyLoot() {
                     }}</span>
                 </div>
                 <div v-else-if="tab === 'layout'" class="flex flex-col gap-2">
-                    <p v-if="!positionedPieces.length" class="m-0 text-sm">
+                    <p
+                        v-if="!positionedPieces.length && !templatePieces.length"
+                        class="m-0 text-sm"
+                    >
                         {{ formatMessage(messages.noLayout) }}
                     </p>
                     <p
@@ -486,20 +570,22 @@ async function copyLoot() {
                         {{ formatMessage(messages.height) }}
                     </p>
                     <SeedMapLayoutPreview
-                        v-if="volumePieces.length"
-                        :pieces="volumePieces"
+                        v-if="previewPieces.length"
+                        :pieces="previewPieces"
                         :selected="selectedPiece"
                         :label="pieceLabel"
+                        :version="query.version"
+                        :kind="kind"
+                        :chests="knownChests"
+                        :unknown-chest-heights="
+                            templatePieces.length
+                                ? 0
+                                : Math.max(details.containers.length - knownChests.length, 0)
+                        "
                         @select="focus"
                     />
-                    <p
-                        v-if="positionedPieces.length"
-                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
-                    >
-                        {{ formatMessage(messages.projectionHint) }}
-                    </p>
                     <button
-                        v-for="piece in details.pieces"
+                        v-for="piece in layoutList"
                         :key="piece.id"
                         :data-piece-id="piece.id"
                         :aria-pressed="selectedPiece === piece.id"
@@ -522,9 +608,6 @@ async function copyLoot() {
                     class="flex flex-col gap-3 text-sm"
                     data-onboarding-id="seed-map-container-loot"
                 >
-                    <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                        {{ formatMessage(messages.predictedLoot) }}
-                    </p>
                     <p v-if="!details.containers.length" class="m-0">
                         {{ formatMessage(messages.noLoot) }}
                     </p>

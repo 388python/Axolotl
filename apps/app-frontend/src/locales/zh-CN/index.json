@@ -14559,7 +14559,7 @@
     "message": "探索结构详情"
   },
   "app.onboarding.seed-map.description": {
-    "message": "放大地图即可直接查看受支持结构的 2D 布局。选中结构后，地图旁会显示能力说明和详情，可拖动分隔条调整宽度。在支持的情况下，“布局”页签提供可交互的 3D 包围盒预览。高度可能为相对值或占位值。"
+    "message": "放大后可直接在地图上查看支持的 2D 结构布局。选择结构，在地图旁查看支持能力与详情，并拖动分隔条调整宽度。“布局”页中，支持的结构可切换结构框与按原版贴图取色的模板方块。预览会说明部分布局、代表调色板及高度限制。"
   },
   "app.onboarding.seed-map-underground.title": {
     "message": "查看地表之下"
@@ -15057,30 +15057,84 @@
     "message": "结构变体"
   },
   "app.lab.seed-map.details.capability.projection": {
-    "message": "地图 2D 投影"
+    "message": "2D 内部结构"
   },
   "app.lab.seed-map.details.capability.volume": {
-    "message": "3D 结构块包围盒"
+    "message": "3D 内部结构"
   },
   "app.lab.seed-map.details.capability.containers": {
     "message": "容器列表"
   },
   "app.lab.seed-map.details.capability.complete": {
-    "message": "完整结构块布局"
+    "message": "完整内部结构布局"
   },
   "app.lab.seed-map.details.capability.absolute-height": {
-    "message": "经过验证的世界高度"
+    "message": "已验证确认的世界高度"
   },
   "app.lab.seed-map.details.capability.blocks": {
     "message": "单个方块模型"
   },
   "app.lab.seed-map.details.capability.none": {
-    "message": "暂无额外预测能力"
+    "message": "暂无引擎支持的功能"
   },
   "app.lab.seed-map.details.projection-hint": {
     "message": "放大至每像素 2 个方块或更近时，地图将显示 2D 布局。再次点击重叠处可选择下一个结构块。"
   },
   "app.lab.seed-map.details.relative-height": {
     "message": "垂直关系为相对关系，未预测结构在世界中的最终高度。"
+  },
+  "app.lab.seed-map.details.supported-count": {
+    "message": "支持 {count} 个功能"
+  },
+  "app.lab.seed-map.details.unsupported-count": {
+    "message": "不支持 {count} 个功能"
+  },
+  "app.lab.seed-map.preview.frames": {
+    "message": "结构框"
+  },
+  "app.lab.seed-map.preview.blocks": {
+    "message": "真实结构"
+  },
+  "app.lab.seed-map.preview.loading-blocks": {
+    "message": "正在构建结构…"
+  },
+  "app.lab.seed-map.preview.blocks-failed": {
+    "message": "无法加载真实结构，仍可查看结构框。"
+  },
+  "app.lab.seed-map.preview.retry-blocks": {
+    "message": "重试加载结构"
+  },
+  "app.lab.seed-map.preview.template-note": {
+    "message": "使用原版 {version} 模板方块，颜色取自各自贴图。高度沿用预测布局；不显示实体。"
+  },
+  "app.lab.seed-map.preview.missing-models": {
+    "message": "有 {count} 种方块缺少预览模型，暂未显示。"
+  },
+  "app.lab.seed-map.preview.shipwreck-limit": {
+    "message": "按预测模板展示结构形状，使用一套原版代表调色板；引擎未返回实际选中的木材调色板。"
+  },
+  "app.lab.seed-map.preview.outpost-limit": {
+    "message": "仅显示前哨站主塔，未还原植被覆盖、地基及周围附属建筑。"
+  },
+  "app.lab.seed-map.preview.portal-limit": {
+    "message": "仅显示传送门模板，未还原风化、随机方块替换及周围地形；Y 为占位高度。"
+  },
+  "app.lab.seed-map.preview.axes": {
+    "message": "世界坐标轴：+X 向东，+Y 向上，+Z 向南"
+  },
+  "app.lab.seed-map.preview.chest-xray": {
+    "message": "箱子透视高亮（{count}）"
+  },
+  "app.lab.seed-map.preview.chest-loading": {
+    "message": "正在定位箱子…"
+  },
+  "app.lab.seed-map.preview.chest-failed": {
+    "message": "无法加载箱子位置。"
+  },
+  "app.lab.seed-map.preview.chest-retry": {
+    "message": "重试箱子位置"
+  },
+  "app.lab.seed-map.preview.chest-height-unknown": {
+    "message": "{count} 个容器没有已知的 Y 坐标，因此不会在 3D 中高亮。"
   }
 }
