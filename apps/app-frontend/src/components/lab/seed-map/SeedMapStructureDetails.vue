@@ -157,6 +157,10 @@ const messages = defineMessages({
         id: 'app.lab.seed-map.details.predicted-loot',
         defaultMessage: 'Predicted item list; chest slot positions are not reconstructed.',
     },
+    estimatedLoot: {
+        id: 'app.lab.seed-map.details.estimated-loot',
+        defaultMessage: 'The loot seed is estimated; the item list may differ from the game.',
+    },
     unresolved: {
         id: 'app.lab.seed-map.details.unresolved',
         defaultMessage: 'Some loot subtables are missing; this list is incomplete.',
@@ -196,6 +200,7 @@ const tab = ref<'overview' | 'layout' | 'loot'>('overview')
 const details = ref<SeedMapStructureDetails | null>(null)
 const sparseBlocks = ref<SeedMapStructureDetails['blocks']>()
 const loot = ref<SeedMapLoot | null>(null)
+const hoverLoot = ref<{ containerId: number; result: SeedMapLoot }>()
 const busy = ref(false)
 const lootBusy = ref(false)
 const failed = ref(false)
@@ -234,6 +239,7 @@ const itemImages = ref<Record<string, string>>({})
 const lootCache = new Map<number, SeedMapLoot>()
 let generation = 0
 let lootGeneration = 0
+let hoverLootGeneration = 0
 
 async function loadDetails() {
     const token = ++generation
@@ -278,23 +284,58 @@ async function loadLoot() {
     lootFailed.value = false
     copied.value = false
     try {
-        const result = lootCache.get(container) ?? (await getSeedMapContainerLoot(query, container))
+        const result = await fetchContainerLoot(container, query)
         if (token !== lootGeneration) return
         loot.value = result
-        if (lootCache.size >= 32) lootCache.delete(lootCache.keys().next().value!)
-        lootCache.set(container, result)
-        for (const item of result.items ?? []) {
-            if (itemImages.value[item.id]) continue
-            void loadMinecraftItemImage(item.id)
-                .then((image) => {
-                    itemImages.value[item.id] = image.src
-                })
-                .catch(() => {})
-        }
     } catch {
         if (token === lootGeneration) lootFailed.value = true
     } finally {
         if (token === lootGeneration) lootBusy.value = false
+    }
+}
+
+async function fetchContainerLoot(container: number, query = props.query) {
+    const cached = lootCache.get(container)
+    if (cached) return cached
+    const result = await getSeedMapContainerLoot({ ...query }, container)
+    if (lootCache.size >= 32) lootCache.delete(lootCache.keys().next().value!)
+    lootCache.set(container, result)
+    for (const item of result.items ?? []) {
+        if (itemImages.value[item.id]) continue
+        void Promise.resolve()
+            .then(() => loadMinecraftItemImage(item.id))
+            .then((image) => {
+                if (image) itemImages.value[item.id] = image.src
+            })
+            .catch(() => {})
+    }
+    return result
+}
+
+async function previewContainerLoot(containerId: number | undefined) {
+    const token = ++hoverLootGeneration
+    hoverLoot.value = undefined
+    if (containerId === undefined || !details.value?.supported) return
+    try {
+        const result = await fetchContainerLoot(containerId)
+        if (token === hoverLootGeneration && result.supported)
+            hoverLoot.value = { containerId, result }
+    } catch {
+        if (token === hoverLootGeneration) hoverLoot.value = undefined
+    }
+}
+
+async function openContainerLoot(container: number) {
+    if (!details.value?.supported) return
+    try {
+        const result = await fetchContainerLoot(container)
+        if (!result.supported) return
+        containerId.value = container
+        tab.value = 'loot'
+        loot.value = result
+    } catch {
+        containerId.value = container
+        tab.value = 'loot'
     }
 }
 
@@ -303,9 +344,11 @@ watch(
     () => {
         generation++
         lootGeneration++
+        hoverLootGeneration++
         details.value = null
         sparseBlocks.value = undefined
         loot.value = null
+        hoverLoot.value = undefined
         lootBusy.value = false
         lootFailed.value = false
         containerId.value = undefined
@@ -594,12 +637,18 @@ async function copyLoot() {
                         :kind="kind"
                         :sparse-blocks="sparseBlocks"
                         :chests="knownChests"
+                        :containers="details.containers"
+                        :hover-loot="hoverLoot"
+                        :item-images="itemImages"
+                        :item-label="labels.item"
                         :unknown-chest-heights="
                             templatePieces.length
                                 ? 0
                                 : Math.max(details.containers.length - knownChests.length, 0)
                         "
                         @select="focus"
+                        @chest-hover="previewContainerLoot"
+                        @chest-click="openContainerLoot"
                         @request-blocks="loadSparseBlocks"
                     />
                     <button
@@ -637,7 +686,7 @@ async function copyLoot() {
                                 value: String(container.id),
                                 label: formatMessage(messages.container, {
                                     number: index + 1,
-                                    name: labels.table(container.table),
+                                    name: labels.table(container.table ?? 'chests/ancient_city'),
                                     x: container.x,
                                     z: container.z,
                                 }),
@@ -653,6 +702,12 @@ async function copyLoot() {
                         }}</Button>
                     </div>
                     <template v-if="loot">
+                        <p
+                            v-if="loot.estimated"
+                            class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                        >
+                            {{ formatMessage(messages.estimatedLoot) }}
+                        </p>
                         <p v-if="!loot.supported" class="m-0">
                             {{ formatMessage(messages.noLoot) }}
                         </p>

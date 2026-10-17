@@ -110,6 +110,7 @@ int32_t axolotl_seed_map_capability(int32_t mc, int32_t capability, int32_t valu
 
 char *axolotl_seed_map_structure_details(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, uint32_t feature, int32_t container);
 char *axolotl_seed_map_ancient_city_layout(uint64_t seed, int32_t mc, int32_t x, int32_t z, const char *layout_json, size_t layout_len);
+char *axolotl_seed_map_generate_loot(const char *table_json, size_t table_len, uint64_t seed, int32_t mc);
 void axolotl_seed_map_free_result(char *result);
 int32_t axolotl_seed_map_underground(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, int32_t scale, int32_t width, int32_t height, int32_t y, uint32_t layers, uint8_t *rgba, uint64_t length);
 

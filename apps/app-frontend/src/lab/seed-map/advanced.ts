@@ -29,7 +29,15 @@ export type SeedMapStructurePiece = {
     mirror?: boolean
 }
 
-export type SeedMapContainer = { id: number; piece: number; x: number; z: number; table: string }
+export type SeedMapContainer = {
+    id: number
+    piece: number
+    x: number
+    z: number
+    table?: string | null
+    estimated?: boolean
+    fixedItems?: { id: string; count: number }[]
+}
 export type SeedMapStructureDetails = {
     supported: boolean
     capabilities?: { variant: boolean; containers: boolean }
@@ -65,6 +73,7 @@ export type SeedMapStructureDetails = {
 export type SeedMapLoot = {
     supported: boolean
     truncated: boolean
+    estimated?: boolean
     items?: {
         id: string
         count: number

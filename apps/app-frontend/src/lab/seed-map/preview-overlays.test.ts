@@ -123,10 +123,11 @@ test('chest markers use final template blocks after air processing, mirror and r
     const chests = structureChestBlocks(assembleStructureBlocks(pieces, pack))
     assert.deepEqual(
         chests.map((chest) => chest.position),
-        [
-            [-100, 70, 19],
-            [-100, 70, 18],
-        ],
+        [[-100, 70, 19]],
     )
     assert.ok(chests.every((chest) => chest.pieceId === 0))
+    assert.deepEqual(
+        chests.map((chest) => chest.name),
+        ['minecraft:trapped_chest'],
+    )
 })

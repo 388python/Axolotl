@@ -119,9 +119,8 @@ fn ancient_city_layout(
         .map_err(io::Error::other)
 }
 
-fn ancient_city_blocks(
+fn ancient_city_block_pack(
     query: &StructureQuery,
-    pieces: &serde_json::Value,
 ) -> io::Result<serde_json::Value> {
     let compressed: &[u8] = match query.version.as_str() {
         "26.3" => {
@@ -183,6 +182,13 @@ fn ancient_city_blocks(
             "Ancient city block template version mismatch.",
         ));
     }
+    Ok(pack)
+}
+
+fn ancient_city_blocks(
+    pieces: &serde_json::Value,
+    pack: &serde_json::Value,
+) -> io::Result<serde_json::Value> {
     let mut blocks =
         std::collections::HashMap::<[i64; 3], serde_json::Value>::new();
     for piece in pieces.as_array().into_iter().flatten() {
@@ -277,6 +283,158 @@ fn ancient_city_blocks(
     Ok(serde_json::Value::Array(blocks))
 }
 
+fn ancient_city_containers(
+    pieces: &serde_json::Value,
+    pack: &serde_json::Value,
+) -> io::Result<serde_json::Value> {
+    let mut containers = Vec::new();
+    for piece in pieces.as_array().into_iter().flatten() {
+        let template_id = piece["templateId"].as_str().ok_or_else(|| {
+            io::Error::other("Ancient city template ID is missing.")
+        })?;
+        let template = pack["templates"].get(template_id).ok_or_else(|| {
+            io::Error::other(format!(
+                "Ancient city template {template_id} is missing."
+            ))
+        })?;
+        let origin = piece["position"].as_array().ok_or_else(|| {
+            io::Error::other("Ancient city template position is invalid.")
+        })?;
+        let origin = [
+            origin[0].as_i64().unwrap_or_default(),
+            origin[1].as_i64().unwrap_or_default(),
+            origin[2].as_i64().unwrap_or_default(),
+        ];
+        let rotation = piece["rotation"]
+            .as_i64()
+            .unwrap_or_default()
+            .rem_euclid(360);
+        for chest in template["chests"].as_array().into_iter().flatten() {
+            if containers.len() >= 8192 {
+                return Err(io::Error::other(
+                    "Ancient city container limit exceeded.",
+                ));
+            }
+            let local = chest["position"].as_array().ok_or_else(|| {
+                io::Error::other("Ancient city chest position is invalid.")
+            })?;
+            let local = [
+                local[0].as_i64().unwrap_or_default(),
+                local[1].as_i64().unwrap_or_default(),
+                local[2].as_i64().unwrap_or_default(),
+            ];
+            let (x, z) = match rotation {
+                0 => (local[0], local[2]),
+                90 => (-local[2], local[0]),
+                180 => (-local[0], -local[2]),
+                270 => (local[2], -local[0]),
+                _ => {
+                    return Err(io::Error::other(
+                        "Ancient city rotation is invalid.",
+                    ));
+                }
+            };
+            let table = chest["lootTable"].as_str();
+            if table.is_none()
+                && chest["items"].as_array().is_none_or(Vec::is_empty)
+            {
+                continue;
+            }
+            containers.push(serde_json::json!({
+                "id": containers.len(),
+                "piece": piece["id"],
+                "x": origin[0] + x,
+                "y": origin[1] + local[1],
+                "z": origin[2] + z,
+                "table": table,
+                "estimated": table.is_some(),
+                "fixedItems": chest["items"],
+            }));
+        }
+    }
+    Ok(serde_json::Value::Array(containers))
+}
+
+fn estimate_ancient_city_loot_seed(
+    seed: u64,
+    container: &serde_json::Value,
+) -> u64 {
+    let x = container["x"].as_i64().unwrap_or_default() as u64;
+    let y = container["y"].as_i64().unwrap_or_default() as u64;
+    let z = container["z"].as_i64().unwrap_or_default() as u64;
+    let mut value =
+        seed ^ x.rotate_left(17) ^ y.rotate_left(31) ^ z.rotate_left(47);
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d049bb133111eb);
+    value ^ (value >> 31)
+}
+
+fn ancient_city_container_loot(
+    query: &StructureQuery,
+    mc: i32,
+    container_id: u32,
+    layout: &serde_json::Value,
+    pack: &serde_json::Value,
+) -> io::Result<serde_json::Value> {
+    let containers = ancient_city_containers(&layout["pieces"], pack)?;
+    let container = containers
+        .as_array()
+        .and_then(|containers| containers.get(container_id as usize))
+        .ok_or_else(|| {
+            io::Error::other("Ancient city container is unavailable.")
+        })?;
+    if let Some(items) = container["fixedItems"]
+        .as_array()
+        .filter(|items| !items.is_empty())
+    {
+        return Ok(serde_json::json!({
+            "supported": true,
+            "estimated": false,
+            "truncated": false,
+            "items": items.iter().map(|item| serde_json::json!({
+                "id": item["id"],
+                "count": item["count"],
+                "enchantments": [],
+            })).collect::<Vec<_>>(),
+            "unresolvedTables": [],
+            "limits": [],
+        }));
+    }
+    let table_name = container["table"].as_str().ok_or_else(|| {
+        io::Error::other("Ancient city loot table is unavailable.")
+    })?;
+    let table = pack["lootTables"].get(table_name).ok_or_else(|| {
+        io::Error::other(format!(
+            "Ancient city loot table {table_name} is not bundled."
+        ))
+    })?;
+    let table_json =
+        CString::new(serde_json::to_vec(table).map_err(io::Error::other)?)
+            .map_err(io::Error::other)?;
+    let result = NativeResult(unsafe {
+        super::axolotl_seed_map_generate_loot(
+            table_json.as_ptr(),
+            table_json.as_bytes().len(),
+            estimate_ancient_city_loot_seed(parse_seed(&query.seed), container),
+            mc,
+        )
+    });
+    if result.0.is_null() {
+        return Err(io::Error::other(
+            "The ancient city loot table could not be parsed.",
+        ));
+    }
+    let mut loot: serde_json::Value =
+        serde_json::from_slice(unsafe { CStr::from_ptr(result.0) }.to_bytes())
+            .map_err(io::Error::other)?;
+    if loot["supported"] != true {
+        return Err(io::Error::other(
+            "The ancient city loot table is unsupported.",
+        ));
+    }
+    Ok(std::mem::take(&mut loot))
+}
+
 pub fn structure_details(
     query: StructureQuery,
     container: Option<u32>,
@@ -303,11 +461,31 @@ pub fn structure_details(
             "Structure calculation was interrupted. Retry this query.",
         )
     })?;
-    if query.feature_mask == super::FEATURE_ANCIENT_CITY && container.is_none()
-    {
-        let mut result = ancient_city_layout(&query, mc)?;
+    if query.feature_mask == super::FEATURE_ANCIENT_CITY {
+        let layout = ancient_city_layout(&query, mc)?;
+        let pack = ancient_city_block_pack(&query)?;
+        if let Some(container) = container {
+            return ancient_city_container_loot(
+                &query, mc, container, &layout, &pack,
+            );
+        }
+        let mut result = layout;
+        let containers = ancient_city_containers(&result["pieces"], &pack)?;
+        let has_containers = !containers.as_array().is_none_or(Vec::is_empty);
+        result["containers"] = containers.clone();
+        result["capabilities"]["containers"] =
+            serde_json::Value::Bool(has_containers);
+        if containers.as_array().is_some_and(|containers| {
+            containers
+                .iter()
+                .any(|container| container["estimated"] == true)
+        }) {
+            if let Some(limits) = result["limits"].as_array_mut() {
+                limits.push(serde_json::json!("loot_seed_estimated"));
+            }
+        }
         if query.include_blocks {
-            result["blocks"] = ancient_city_blocks(&query, &result["pieces"])?;
+            result["blocks"] = ancient_city_blocks(&result["pieces"], &pack)?;
             result["complete"] = serde_json::Value::Bool(false);
             if let Some(limits) = result["limits"].as_array_mut() {
                 limits.push(serde_json::json!(
@@ -354,13 +532,12 @@ pub fn structure_details(
                     piece["max"] = to_position(max_values);
                 }
             }
-            object.insert("containers".into(), serde_json::json!([]));
             object.insert("truncated".into(), serde_json::json!(false));
             object.insert(
                 "capabilities".into(),
                 serde_json::json!({
                     "variant": true,
-                    "containers": false,
+                    "containers": has_containers,
                     "projection": true,
                     "blocks": true
                 }),
@@ -613,6 +790,61 @@ mod tests {
                 "{version}"
             );
         }
+    }
+    #[test]
+    fn ancient_city_nbt_chests_expose_estimated_loot_and_fixed_items() {
+        let query = query(
+            "10292992",
+            "26.3",
+            0,
+            0,
+            super::super::FEATURE_ANCIENT_CITY,
+        );
+        let pack = ancient_city_block_pack(&query).unwrap();
+        let barracks = serde_json::json!([{
+            "id": 0,
+            "templateId": "minecraft:ancient_city/structures/barracks",
+            "position": [120, -40, -88],
+            "rotation": 90,
+        }]);
+        let containers = ancient_city_containers(&barracks, &pack).unwrap();
+        assert_eq!(containers.as_array().unwrap().len(), 2);
+        assert_eq!(containers[0]["x"], 105);
+        assert_eq!(containers[0]["y"], -36);
+        assert_eq!(containers[0]["z"], -84);
+        assert_eq!(containers[0]["table"], "chests/ancient_city");
+        assert_eq!(containers[0]["estimated"], true);
+        let layout = serde_json::json!({ "pieces": barracks });
+        let loot = ancient_city_container_loot(
+            &query,
+            resolve_java_version("26.3").unwrap().0,
+            0,
+            &layout,
+            &pack,
+        )
+        .unwrap();
+        assert_eq!(loot["supported"], true);
+        assert_eq!(loot["estimated"], true);
+        assert!(!loot["items"].as_array().unwrap().is_empty());
+
+        let city_center = serde_json::json!([{
+            "id": 0,
+            "templateId": "minecraft:ancient_city/city_center/city_center_2",
+            "position": [0, 0, 0],
+            "rotation": 0,
+        }]);
+        let layout = serde_json::json!({ "pieces": city_center });
+        let fixed = ancient_city_container_loot(
+            &query,
+            resolve_java_version("26.3").unwrap().0,
+            0,
+            &layout,
+            &pack,
+        )
+        .unwrap();
+        assert_eq!(fixed["estimated"], false);
+        assert_eq!(fixed["items"][0]["id"], "minecraft:golden_apple");
+        assert_eq!(fixed["items"][0]["count"], 1);
     }
     #[test]
     fn outpost_loot_matches_upstream_enchantment_fixture() {

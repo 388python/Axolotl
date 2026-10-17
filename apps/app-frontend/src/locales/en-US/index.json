@@ -14495,6 +14495,9 @@
   "app.lab.seed-map.details.predicted-loot": {
     "message": "Predicted item list; chest slot positions are not reconstructed."
   },
+  "app.lab.seed-map.details.estimated-loot": {
+    "message": "The loot seed is estimated; the item list may differ from the game."
+  },
   "app.lab.seed-map.details.unresolved": {
     "message": "Some loot subtables are missing; this list is incomplete."
   },
@@ -15118,5 +15121,17 @@
   },
   "app.lab.seed-map.preview.chest-height-unknown": {
     "message": "{count, plural, one {# container has no known Y coordinate and is not highlighted in 3D.} other {# containers have no known Y coordinates and are not highlighted in 3D.}}"
+  },
+  "app.lab.seed-map.preview.chest-loot": {
+    "message": "Predicted loot"
+  },
+  "app.lab.seed-map.preview.chest-loot-limit": {
+    "message": "Items are listed in generation order, not chest slots."
+  },
+  "app.lab.seed-map.preview.more-loot": {
+    "message": "+{count} more items"
+  },
+  "app.lab.seed-map.preview.estimated-loot": {
+    "message": "Loot seed is estimated; items may differ from the game."
   }
 }

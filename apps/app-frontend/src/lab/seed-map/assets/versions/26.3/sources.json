@@ -2,7 +2,7 @@
     "source": "Minecraft Java Edition 26.3 client JAR",
     "copyright": "Minecraft assets © Mojang AB / Microsoft. All rights reserved.",
     "jarSha256": "4508d006323f24fa02876310c192d739af56516eb259000ac50f0909a68c9a2d",
-    "assetSha256": "c0ac61ac32badc04a31aab6dde3c205bbf29f8692bd4f548744c873c4c915fa4",
+    "assetSha256": "f8c078f2c0ba84d2bd2a6a0d99cde2cec6aae8c56765f4a86d2447071973fbce",
     "version": "26.3",
     "dataVersion": 5023,
     "templates": {
@@ -147,7 +147,7 @@
         "shipwreck/with_mast": "3bf05be24f1b85d68ad259305cd54bb7cc6fac69ab655b468e5bcf5c33f5073d"
     },
     "ancientCityLayoutSha256": "8c75e79e497b380e41a2a788dc811824ffe718b2d3ee14a1fa645d4bb0f9e05d",
-    "ancientCityBlocksSha256": "aba306f67f7ad6c6e9bd29de7fe28965d643eea1aeb5c3bcf9f6a26503eacdac",
+    "ancientCityBlocksSha256": "00af24ac06c7c6d003da637c654d6fdd60575d6adf05ab47f9be77a94c24149d",
     "colorAlgorithm": "alpha-weighted linear-sRGB mean of nontransparent pixels, weighted by animation frame duration; per model face texture",
     "textureCount": 2043,
     "placementRules": "template-v1: EndCityPiece air processors; Shipwreck pivot (4,0,15) encoded by engine origin; Igloo pivots and offsets from IglooPieces; Outpost main tower only; RuinedPortal center pivot and FRONT_BACK mirror, excluding terrain processors; NetherFossil variant; Ancient City pools and jigsaw connectors are bundled separately for native layout expansion. Verify rules against each new game version.",

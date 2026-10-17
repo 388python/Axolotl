@@ -528,7 +528,23 @@ it('shows camera-relative positive axes and toggles depth-independent chest high
             version: '26.3',
             selected: 0,
             label: (piece) => piece.name,
-            chests: [{ pieceId: 0, position: [0, 62, 0], name: 'minecraft:chest' }],
+            chests: [
+                {
+                    pieceId: 0,
+                    position: [0, 64, 0],
+                    name: 'minecraft:chest',
+                    containerId: 4,
+                },
+            ],
+            hoverLoot: {
+                containerId: 4,
+                result: {
+                    supported: true,
+                    truncated: false,
+                    items: [{ id: 'minecraft:diamond', count: 3, enchantments: [] }],
+                    limits: [],
+                },
+            },
             unknownChestHeights: 2,
         },
         attachTo: document.body,
@@ -538,6 +554,17 @@ it('shows camera-relative positive axes and toggles depth-independent chest high
         'width: 430px; background: var(--surface-2); color: var(--color-text-primary); padding: 12px'
     const canvas = wrapper.get('canvas').element as HTMLCanvasElement
     await vi.waitFor(() => expect(canvas.dataset.ready).toBe('true'))
+    const canvasRect = canvas.getBoundingClientRect()
+    canvas.dispatchEvent(
+        new PointerEvent('pointermove', {
+            clientX: canvasRect.left + canvasRect.width / 2,
+            clientY: canvasRect.top + canvasRect.height / 2,
+            bubbles: true,
+        }),
+    )
+    await vi.waitFor(() => expect(wrapper.emitted('chestHover')?.[0]).toEqual([4]))
+    expect(wrapper.find('[data-testid="seed-map-chest-loot-preview"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="seed-map-chest-loot-preview"]').text()).toContain('3')
     const axis = wrapper.get('[data-testid="seed-map-axis-indicator"]')
     expect(axis.attributes('aria-label')).toContain('+X east')
     for (const name of ['X', 'Y', 'Z'])
@@ -993,6 +1020,45 @@ it.each(['en-US', 'zh-CN'])(
         expect(wrapper.text()).toContain('minecraft:fortune')
     },
 )
+
+it('opens the matching loot container when a highlighted chest is clicked', async () => {
+    calls.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        limits: [],
+        pieces: [
+            {
+                id: 0,
+                name: 'NeSCLT',
+                positionKnown: true,
+                rotation: 0,
+                position: { x: 12, y: 50, z: 20 },
+                min: { x: 12, y: 50, z: 20 },
+                max: { x: 18, y: 55, z: 26 },
+            },
+        ],
+        containers: [{ id: 7, piece: 0, x: 14, z: 22, table: 'chests/nether_bridge' }],
+    })
+    calls.loot.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        items: [{ id: 'minecraft:diamond', count: 3, enchantments: [] }],
+        limits: [],
+    })
+    const wrapper = render()
+    await wrapper.setProps({ kind: 'fortress' })
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
+    const preview = wrapper.findComponent(SeedMapLayoutPreview)
+    expect(preview.exists()).toBe(true)
+    preview.vm.$emit('chestClick', 7)
+    await vi.waitFor(() =>
+        expect(wrapper.get('[role="tab"][aria-selected="true"]').text()).toBe('Loot'),
+    )
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Diamond ×3'))
+    expect(wrapper.get('[data-combobox]').text()).toContain('Nether fortress chest 1 · 14, 22')
+    expect(calls.loot).toHaveBeenCalledWith(expect.objectContaining({ x: 0, z: 0 }), 7)
+})
 
 it('names numbered portal variants and mirror state and resolves camp placeholders', async () => {
     language.current = 'zh-CN'

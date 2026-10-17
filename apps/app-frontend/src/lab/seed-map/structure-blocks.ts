@@ -31,7 +31,12 @@ export type StructureBlock = {
     pieceId: number
 }
 export type StructureBlockMesh = { pieceId: number; positions: Float32Array; colors: Float32Array }
-export type StructureChest = { pieceId: number; position: BlockPosition; name: string }
+export type StructureChest = {
+    pieceId: number
+    position: BlockPosition
+    name: string
+    containerId?: number
+}
 export type StructureBlocksResult = {
     meshes: StructureBlockMesh[]
     origin: BlockPosition
@@ -255,9 +260,7 @@ export function structureBlockKey(position: BlockPosition) {
 export function structureChestBlocks(blocks: Map<string, StructureBlock>): StructureChest[] {
     return [...blocks.values()]
         .filter((block) =>
-            ['minecraft:chest', 'minecraft:trapped_chest', 'minecraft:ender_chest'].includes(
-                block.state.name,
-            ),
+            ['minecraft:chest', 'minecraft:trapped_chest'].includes(block.state.name),
         )
         .map((block) => ({
             pieceId: block.pieceId,

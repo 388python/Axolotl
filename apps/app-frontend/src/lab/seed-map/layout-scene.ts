@@ -54,12 +54,20 @@ export class SeedMapLayoutScene {
         depthTest: false,
         depthWrite: false,
     })
+    private chestTargets: StructureChest[] = []
+    private chestBounds: THREE.Box3[] = []
+    private hoveredChest?: StructureChest
 
     constructor(
         private readonly canvas: HTMLCanvasElement,
         private readonly pieces: SeedMapStructurePiece[],
         private readonly onSelect: (piece: SeedMapStructurePiece) => void,
         private readonly onOrientation?: (axes: PreviewAxis[]) => void,
+        private readonly onChestHover?: (
+            chest: StructureChest | undefined,
+            point?: { x: number; y: number },
+        ) => void,
+        private readonly onChestClick?: (containerId: number) => void,
     ) {
         this.renderer = new THREE.WebGLRenderer({
             canvas,
@@ -135,6 +143,8 @@ export class SeedMapLayoutScene {
         this.observer.observe(canvas)
         canvas.addEventListener('pointerdown', this.pointerDown)
         canvas.addEventListener('pointerup', this.pointerUp)
+        canvas.addEventListener('pointermove', this.pointerMove)
+        canvas.addEventListener('pointerleave', this.pointerLeave)
         this.resize()
         this.fit()
     }
@@ -221,6 +231,17 @@ export class SeedMapLayoutScene {
 
     setChests(chests: StructureChest[]) {
         this.clearChests()
+        this.chestTargets = chests
+        this.chestBounds = chests.map((chest) => {
+            const center = new THREE.Vector3(
+                chest.position[0] - this.center.x + 0.5,
+                chest.position[1] - this.center.y + 0.5,
+                chest.position[2] - this.center.z + 0.5,
+            )
+            return new THREE.Box3(center.clone().addScalar(-0.52), center.clone().addScalar(0.52))
+        })
+        this.hoveredChest = undefined
+        this.onChestHover?.(undefined)
         if (!chests.length) {
             this.render()
             return
@@ -255,6 +276,7 @@ export class SeedMapLayoutScene {
 
     showChests(show: boolean) {
         this.chests.visible = show
+        if (!show) this.pointerLeave()
         this.render()
     }
 
@@ -274,6 +296,53 @@ export class SeedMapLayoutScene {
     private pointerDown = (event: PointerEvent) => {
         this.start = { x: event.clientX, y: event.clientY }
     }
+    private pointerMove = (event: PointerEvent) => {
+        if (!this.chests.visible || !this.chestTargets.length) {
+            this.pointerLeave()
+            return
+        }
+        const rect = this.canvas.getBoundingClientRect()
+        const index = this.chestIndexAtPointer(event)
+        const chest = index === undefined ? undefined : this.chestTargets[index]
+        if (chest !== this.hoveredChest) {
+            this.hoveredChest = chest
+            this.onChestHover?.(chest, {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top,
+            })
+        } else if (chest) {
+            this.onChestHover?.(chest, {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top,
+            })
+        }
+    }
+    private pointerLeave = () => {
+        this.hoveredChest = undefined
+        this.onChestHover?.(undefined)
+    }
+    private chestIndexAtPointer(event: PointerEvent) {
+        const rect = this.canvas.getBoundingClientRect()
+        if (!rect.width || !rect.height) return undefined
+        this.pointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            (-(event.clientY - rect.top) / rect.height) * 2 + 1,
+        )
+        this.camera.updateMatrixWorld()
+        this.raycaster.setFromCamera(this.pointer, this.camera)
+        const point = new THREE.Vector3()
+        let nearest = Number.POSITIVE_INFINITY
+        let index: number | undefined
+        this.chestBounds.forEach((bounds, candidate) => {
+            const hit = this.raycaster.ray.intersectBox(bounds, point)
+            if (!hit) return
+            const distance = this.raycaster.ray.origin.distanceToSquared(hit)
+            if (distance >= nearest) return
+            nearest = distance
+            index = candidate
+        })
+        return index
+    }
     private pointerUp = (event: PointerEvent) => {
         if (
             event.button !== 0 ||
@@ -282,11 +351,21 @@ export class SeedMapLayoutScene {
         )
             return
         this.start = undefined
+        if (this.chests.visible) {
+            const chestIndex = this.chestIndexAtPointer(event)
+            const chest = chestIndex === undefined ? undefined : this.chestTargets[chestIndex]
+            if (chest?.containerId !== undefined) {
+                this.onChestClick?.(chest.containerId)
+                return
+            }
+        }
         const rect = this.canvas.getBoundingClientRect()
+        if (!rect.width || !rect.height) return
         this.pointer.set(
             ((event.clientX - rect.left) / rect.width) * 2 - 1,
             (-(event.clientY - rect.top) / rect.height) * 2 + 1,
         )
+        this.camera.updateMatrixWorld()
         this.raycaster.setFromCamera(this.pointer, this.camera)
         if (this.blocks.visible) {
             const hit = this.raycaster.intersectObjects(this.blocks.children)[0]
@@ -306,6 +385,8 @@ export class SeedMapLayoutScene {
         this.controls.dispose()
         this.canvas.removeEventListener('pointerdown', this.pointerDown)
         this.canvas.removeEventListener('pointerup', this.pointerUp)
+        this.canvas.removeEventListener('pointermove', this.pointerMove)
+        this.canvas.removeEventListener('pointerleave', this.pointerLeave)
         this.mesh.dispose()
         this.geometry.dispose()
         this.edges.geometry.dispose()

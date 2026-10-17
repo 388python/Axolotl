@@ -11,6 +11,7 @@ import {
     hitSeedMapLayout,
     seedMapLayoutPieces,
     seedMapLayoutPieceStyle,
+    seedMapLootContainerForChest,
     seedMapStructureBadgePositions,
     seedMapStructureCapabilities,
 } from './structure-layout.ts'
@@ -56,6 +57,18 @@ const query: SeedMapStructureQuery = {
     z: 8,
     featureMask: 512,
 }
+
+test('End City template chests match Cubiomes loot coordinates across the shifted origin', () => {
+    const chest = {
+        pieceId: 4,
+        position: [19, 51, -29] as [number, number, number],
+        name: 'minecraft:chest',
+    }
+    const containers = [{ id: 12, piece: 4, x: 18, z: -30, table: 'chests/end_city_treasure' }]
+
+    assert.equal(seedMapLootContainerForChest(chest, containers, 'end-city')?.id, 12)
+    assert.equal(seedMapLootContainerForChest(chest, containers, 'stronghold'), undefined)
+})
 
 test('End portal room projections use a distinct color while selection keeps priority', () => {
     const palette = { normal: '#4b83c3', selected: '#e28b38', portal: '#18a765' }

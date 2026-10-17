@@ -1,8 +1,26 @@
-import type { SeedMapStructureDetails, SeedMapStructurePiece } from './advanced.ts'
+import type {
+    SeedMapContainer,
+    SeedMapStructureDetails,
+    SeedMapStructurePiece,
+} from './advanced.ts'
 import type { StructureChest } from './structure-blocks.ts'
 import { seedMapTemplatePieces } from './structure-blocks.ts'
 
 export const SEED_MAP_LAYOUT_MAX_SCALE = 2
+
+export function seedMapLootContainerForChest(
+    chest: StructureChest,
+    containers: SeedMapContainer[],
+    kind: string,
+) {
+    const originOffset = kind === 'end-city' ? -1 : 0
+    return containers.find(
+        (container) =>
+            container.piece === chest.pieceId &&
+            container.x === chest.position[0] + originOffset &&
+            container.z === chest.position[2] + originOffset,
+    )
+}
 
 /** Vanilla Nether fortress turn rooms place chests at local Y=2 above the piece minimum. */
 export function seedMapKnownLayoutChests(
@@ -22,7 +40,7 @@ export function seedMapKnownLayoutChests(
             return []
         const position: [number, number, number] = [container.x, piece.min.y + 2, container.z]
         return position.every(Number.isSafeInteger)
-            ? [{ pieceId: piece.id, position, name: 'minecraft:chest' }]
+            ? [{ pieceId: piece.id, position, name: 'minecraft:chest', containerId: container.id }]
             : []
     })
 }

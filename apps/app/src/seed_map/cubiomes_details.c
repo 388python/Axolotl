@@ -2,6 +2,8 @@
 #include "finders.h"
 #include "features/stronghold.h"
 #include "loot/loot_tables.h"
+#include "loot/mc_loot.h"
+#include "loot/loot_table_parser.h"
 #include "loot/cjson/cJSON.h"
 #include "carver.h"
 
@@ -206,6 +208,68 @@ finish:
 }
 
 void axolotl_seed_map_free_result(char *result) { cJSON_free(result); }
+
+char *axolotl_seed_map_generate_loot(
+    const char *table_json, size_t table_len, uint64_t seed, int32_t mc
+) {
+    if (!table_json || !table_len || table_len > 1024 * 1024) return NULL;
+    LootTableContext context = {0};
+    char *copy = malloc(table_len + 1);
+    if (!copy) return NULL;
+    memcpy(copy, table_json, table_len);
+    copy[table_len] = '\0';
+    if (init_loot_table(copy, &context, mc) != 0) {
+        free(copy);
+        return NULL;
+    }
+    free(copy);
+    set_loot_seed(&context, seed);
+    generate_loot(&context);
+
+    cJSON *result = cJSON_CreateObject();
+    cJSON_AddBoolToObject(result, "supported", 1);
+    cJSON_AddBoolToObject(result, "estimated", 1);
+    cJSON_AddBoolToObject(result, "truncated", context.generated_item_count > 27);
+    cJSON *items = cJSON_AddArrayToObject(result, "items");
+    cJSON *unresolved = cJSON_AddArrayToObject(result, "unresolvedTables");
+    cJSON_AddItemToArray(
+        cJSON_AddArrayToObject(result, "limits"),
+        cJSON_CreateString("loot_seed_estimated"));
+    for (int i = 0; i < context.generated_item_count && i < 27; i++) {
+        const ItemStack stack = context.generated_items[i];
+        const char *name = get_item_name(&context, stack.item);
+        if (stack.count <= 0 || !name) continue;
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddStringToObject(item, "id", name);
+        cJSON_AddNumberToObject(item, "count", stack.count);
+        cJSON *enchantments = cJSON_AddArrayToObject(item, "enchantments");
+        for (int e = 0; e < stack.enchantment_count && e < 16; e++) {
+            cJSON *enchantment = cJSON_CreateObject();
+            const char *enchantment_name =
+                get_enchantment_name(stack.enchantments[e].enchantment);
+            cJSON_AddStringToObject(
+                enchantment, "id", enchantment_name ? enchantment_name : "unknown");
+            cJSON_AddNumberToObject(enchantment, "level", stack.enchantments[e].level);
+            cJSON_AddItemToArray(enchantments, enchantment);
+        }
+        if (stack.mob_effect.duration > 0 && stack.mob_effect.effect >= 0 &&
+            stack.mob_effect.effect < EFFECT_NUM) {
+            cJSON_AddStringToObject(
+                item, "effect", MOB_EFFECTS[stack.mob_effect.effect].effect_name);
+            cJSON_AddNumberToObject(item, "duration", stack.mob_effect.duration);
+        }
+        cJSON_AddItemToArray(items, item);
+    }
+    for (int i = 0; i < context.unresolved_subtable_count && i < 8; i++) {
+        cJSON_AddItemToArray(
+            unresolved,
+            cJSON_CreateString(context.unresolved_subtable_names[i]));
+    }
+    free_loot_table(&context);
+    char *json = cJSON_PrintUnformatted(result);
+    cJSON_Delete(result);
+    return json;
+}
 
 int32_t axolotl_seed_map_underground(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,

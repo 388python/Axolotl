@@ -14516,6 +14516,9 @@
   "app.lab.seed-map.details.predicted-loot": {
     "message": "预测物品清单；未还原箱子的槽位排列。"
   },
+  "app.lab.seed-map.details.estimated-loot": {
+    "message": "战利品随机种子为估算值，物品清单可能与游戏内结果不同。"
+  },
   "app.lab.seed-map.details.unresolved": {
     "message": "部分战利品子表缺失，清单不完整。"
   },
@@ -15139,5 +15142,17 @@
   },
   "app.lab.seed-map.preview.chest-height-unknown": {
     "message": "{count} 个容器没有已知的 Y 坐标，因此不会在 3D 中高亮。"
+  },
+  "app.lab.seed-map.preview.chest-loot": {
+    "message": "预测战利品"
+  },
+  "app.lab.seed-map.preview.chest-loot-limit": {
+    "message": "物品按生成顺序排列，未还原箱子槽位。"
+  },
+  "app.lab.seed-map.preview.more-loot": {
+    "message": "另有 {count} 件物品"
+  },
+  "app.lab.seed-map.preview.estimated-loot": {
+    "message": "战利品随机种子为估算值，物品可能与游戏内结果不同。"
   }
 }

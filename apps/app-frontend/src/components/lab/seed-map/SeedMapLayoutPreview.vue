@@ -2,7 +2,7 @@
 import { Button, defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from 'vue'
 
-import type { SeedMapStructurePiece } from '@/lab/seed-map/advanced'
+import type { SeedMapContainer, SeedMapLoot, SeedMapStructurePiece } from '@/lab/seed-map/advanced'
 import type { SeedMapLayoutScene } from '@/lab/seed-map/layout-scene'
 import type { PreviewAxis } from '@/lab/seed-map/preview-overlays'
 import {
@@ -12,6 +12,7 @@ import {
     type StructureChest,
     supportsStructureBlocks,
 } from '@/lab/seed-map/structure-blocks'
+import { seedMapLootContainerForChest } from '@/lab/seed-map/structure-layout'
 
 import SeedMapOrientation from './SeedMapOrientation.vue'
 
@@ -22,10 +23,19 @@ const props = defineProps<{
     version?: string
     kind?: string
     chests?: StructureChest[]
+    containers?: SeedMapContainer[]
+    hoverLoot?: { containerId: number; result: SeedMapLoot }
+    itemImages?: Record<string, string>
+    itemLabel?: (id: string) => string
     unknownChestHeights?: number
     sparseBlocks?: StructureBlock[]
 }>()
-const emit = defineEmits<{ select: [piece: SeedMapStructurePiece]; requestBlocks: [] }>()
+const emit = defineEmits<{
+    select: [piece: SeedMapStructurePiece]
+    requestBlocks: []
+    chestHover: [containerId: number | undefined]
+    chestClick: [containerId: number]
+}>()
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
     title: { id: 'app.lab.seed-map.preview.title', defaultMessage: '3D layout preview' },
@@ -105,8 +115,20 @@ const messages = defineMessages({
         defaultMessage:
             '{count, plural, one {# container has no known Y coordinate and is not highlighted in 3D.} other {# containers have no known Y coordinates and are not highlighted in 3D.}}',
     },
+    chestLoot: { id: 'app.lab.seed-map.preview.chest-loot', defaultMessage: 'Predicted loot' },
+    chestLootLimit: {
+        id: 'app.lab.seed-map.preview.chest-loot-limit',
+        defaultMessage: 'Items are listed in generation order, not chest slots.',
+    },
+    moreLoot: { id: 'app.lab.seed-map.preview.more-loot', defaultMessage: '+{count} more items' },
+    estimatedLoot: {
+        id: 'app.lab.seed-map.preview.estimated-loot',
+        defaultMessage: 'Loot seed is estimated; items may differ from the game.',
+    },
 })
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
+const preview = useTemplateRef<HTMLDivElement>('preview')
+const chestAnchor = ref<{ containerId: number; x: number; y: number }>()
 const failed = ref(false)
 const ready = ref(false)
 const axes = ref<PreviewAxis[]>([])
@@ -151,11 +173,49 @@ function stopChestWork() {
 }
 function applyChests(chests: StructureChest[]) {
     chestFailed.value = false
-    chestPositions.value = chests
+    chestPositions.value = mapChestContainers(chests)
     chestsLoaded = true
-    scene?.setChests(chests)
+    scene?.setChests(chestPositions.value)
     scene?.showChests(chestXray.value)
 }
+function mapChestContainers(chests: StructureChest[]) {
+    return chests.map((chest) => {
+        const container = seedMapLootContainerForChest(
+            chest,
+            props.containers ?? [],
+            props.kind ?? '',
+        )
+        return container ? { ...chest, containerId: container.id } : chest
+    })
+}
+function hoverChest(chest: StructureChest | undefined, point?: { x: number; y: number }) {
+    if (chest?.containerId === undefined || !point) {
+        const wasActive = chestAnchor.value !== undefined
+        chestAnchor.value = undefined
+        if (wasActive) emit('chestHover', undefined)
+        return
+    }
+    if (chestAnchor.value?.containerId === chest.containerId) return
+    chestAnchor.value = { containerId: chest.containerId, ...point }
+    emit('chestHover', chest.containerId)
+}
+function cardPosition() {
+    const anchor = chestAnchor.value
+    const bounds = preview.value?.getBoundingClientRect()
+    if (!anchor || !bounds) return {}
+    const width = Math.max(0, Math.min(272, bounds.width - 16))
+    const height = 180
+    return {
+        left: `${Math.max(8, Math.min(bounds.width - width - 8, anchor.x + 14))}px`,
+        top: `${Math.max(8, Math.min(bounds.height - height - 8, anchor.y + 14))}px`,
+    }
+}
+const visibleLoot = computed(() =>
+    props.hoverLoot?.result.supported &&
+    chestAnchor.value?.containerId === props.hoverLoot.containerId
+        ? (props.hoverLoot.result.items?.slice(0, 27) ?? [])
+        : [],
+)
 function loadChests() {
     if (!scene || !blocksAvailable.value || chestsLoaded || chestBusy.value) return
     stopChestWork()
@@ -292,6 +352,8 @@ async function initialize() {
             (value) => {
                 axes.value = value
             },
+            hoverChest,
+            (containerId) => emit('chestClick', containerId),
         )
         scene.select(props.selected)
         scene.setChests(chestPositions.value)
@@ -322,16 +384,25 @@ const bounds = computed(() => {
     return `${minX - 4} ${minZ - 4} ${maxX - minX + 8} ${maxZ - minZ + 8}`
 })
 onMounted(initialize)
-watch([() => props.pieces, () => props.version, () => props.kind, () => props.chests], () => {
-    blockResult = undefined
-    blocksEnabled.value = false
-    blocksFailed.value = false
-    missingModels.value = 0
-    chestPositions.value = props.chests ?? []
-    chestsLoaded = false
-    chestFailed.value = false
-    initialize()
-})
+watch(
+    [
+        () => props.pieces,
+        () => props.version,
+        () => props.kind,
+        () => props.chests,
+        () => props.containers,
+    ],
+    () => {
+        blockResult = undefined
+        blocksEnabled.value = false
+        blocksFailed.value = false
+        missingModels.value = 0
+        chestPositions.value = mapChestContainers(props.chests ?? [])
+        chestsLoaded = false
+        chestFailed.value = false
+        initialize()
+    },
+)
 watch(
     () => props.sparseBlocks,
     (blocks) => {
@@ -402,6 +473,7 @@ onBeforeUnmount(() => {
             >
         </div>
         <div
+            ref="preview"
             class="relative aspect-[4/3] min-h-[14rem] overflow-hidden rounded-lg border border-surface-4 bg-surface-1"
         >
             <canvas
@@ -420,6 +492,70 @@ onBeforeUnmount(() => {
                 @contextmenu.prevent
             />
             <SeedMapOrientation v-if="!failed && ready" :axes="axes" />
+            <svg
+                v-if="visibleLoot.length && chestAnchor"
+                class="pointer-events-none absolute inset-0 size-full"
+                aria-hidden="true"
+            >
+                <path
+                    :d="`M ${chestAnchor.x} ${chestAnchor.y} L ${Number.parseFloat(String(cardPosition().left)) + 8} ${Number.parseFloat(String(cardPosition().top)) + 8}`"
+                    fill="none"
+                    stroke="var(--color-brand)"
+                    stroke-width="1.5"
+                />
+                <circle :cx="chestAnchor.x" :cy="chestAnchor.y" r="3" fill="var(--color-brand)" />
+            </svg>
+            <div
+                v-if="visibleLoot.length && chestAnchor"
+                class="pointer-events-none absolute z-10 w-[17rem] max-w-[calc(100%-1rem)] rounded-md border border-surface-4 bg-surface-2 p-2 shadow-lg"
+                :style="cardPosition()"
+                data-testid="seed-map-chest-loot-preview"
+            >
+                <div class="mb-2 flex items-center justify-between gap-2 text-xs">
+                    <strong>{{ formatMessage(messages.chestLoot) }}</strong>
+                    <span class="text-[var(--color-text-tertiary)]">{{
+                        props.hoverLoot?.result.items?.length ?? visibleLoot.length
+                    }}</span>
+                </div>
+                <div class="grid grid-cols-9 gap-0.5">
+                    <div
+                        v-for="(item, index) in visibleLoot"
+                        :key="`${item.id}-${index}`"
+                        class="relative flex aspect-square min-w-0 items-center justify-center rounded-sm bg-surface-3"
+                        :title="`${itemLabel?.(item.id) ?? item.id} ×${item.count}`"
+                    >
+                        <img
+                            v-if="itemImages?.[item.id]"
+                            :src="itemImages[item.id]"
+                            alt=""
+                            class="size-6 [image-rendering:pixelated]"
+                        />
+                        <span
+                            class="absolute bottom-0 right-0 text-[9px] leading-none text-white drop-shadow"
+                            >{{ item.count }}</span
+                        >
+                    </div>
+                </div>
+                <span
+                    v-if="props.hoverLoot!.result.items!.length > 27"
+                    class="mt-1 block text-[10px] text-[var(--color-text-tertiary)]"
+                >
+                    {{
+                        formatMessage(messages.moreLoot, {
+                            count: props.hoverLoot!.result.items!.length - 27,
+                        })
+                    }}
+                </span>
+                <span class="mt-1 block text-[10px] text-[var(--color-text-tertiary)]">{{
+                    formatMessage(messages.chestLootLimit)
+                }}</span>
+                <span
+                    v-if="props.hoverLoot?.result.estimated"
+                    class="mt-1 block text-[10px] text-[var(--color-text-tertiary)]"
+                >
+                    {{ formatMessage(messages.estimatedLoot) }}
+                </span>
+            </div>
             <span
                 v-if="blocksBusy"
                 role="status"

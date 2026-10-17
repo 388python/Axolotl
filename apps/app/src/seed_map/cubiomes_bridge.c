@@ -133,7 +133,7 @@ static const AxolotlStructureDefinition AXOLOTL_STRUCTURES[] = {
     {Nether_Fossil, AXOLOTL_FEATURE_NETHER_FOSSIL},
 };
 
-uint32_t axolotl_seed_map_abi_version(void) { return 1; }
+uint32_t axolotl_seed_map_abi_version(void) { return 2; }
 uint64_t axolotl_seed_map_engine_revision(void) { return UINT64_C(0xa49d5bc5b709e6e2); }
 
 int32_t axolotl_seed_map_java_version(int32_t version) {

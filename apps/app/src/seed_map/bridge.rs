@@ -31,7 +31,7 @@ pub(super) fn ensure_available() -> std::io::Result<()> {
                             unsafe extern "C" fn() -> u64,
                         > = library
                             .get(b"axolotl_seed_map_engine_revision\0")?;
-                        if version() != 1 || revision() != 0xa49d5bc5b709e6e2 {
+                        if version() != 2 || revision() != 0xa49d5bc5b709e6e2 {
                             return Err(libloading::Error::IncompatibleSize);
                         }
                         let _: libloading::Symbol<*const ()> =
@@ -53,6 +53,8 @@ pub(super) fn ensure_available() -> std::io::Result<()> {
                             .get(b"axolotl_seed_map_structure_details\0")?;
                         let _: libloading::Symbol<*const ()> = library
                             .get(b"axolotl_seed_map_ancient_city_layout\0")?;
+                        let _: libloading::Symbol<*const ()> =
+                            library.get(b"axolotl_seed_map_generate_loot\0")?;
                         let _: libloading::Symbol<*const ()> =
                             library.get(b"axolotl_seed_map_free_result\0")?;
                         let _: libloading::Symbol<*const ()> =
@@ -146,5 +148,6 @@ engine_function!(axolotl_seed_map_capability(mc: i32, capability: i32, value: i3
 
 engine_function!(axolotl_seed_map_structure_details(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, feature: u32, container: i32) -> *mut c_char, std::ptr::null_mut());
 engine_function!(axolotl_seed_map_ancient_city_layout(seed: u64, mc: i32, x: i32, z: i32, layout_json: *const c_char, layout_len: usize) -> *mut c_char, std::ptr::null_mut());
+engine_function!(axolotl_seed_map_generate_loot(table_json: *const c_char, table_len: usize, seed: u64, mc: i32) -> *mut c_char, std::ptr::null_mut());
 engine_function!(axolotl_seed_map_free_result(result: *mut c_char) -> (), ());
 engine_function!(axolotl_seed_map_underground(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, scale: i32, width: i32, height: i32, y: i32, layers: u32, rgba: *mut u8, length: u64) -> i32, -1);

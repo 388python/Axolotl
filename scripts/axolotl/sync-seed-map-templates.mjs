@@ -25,6 +25,7 @@ const entries = unzipSync(jar, {
         /^data\/minecraft\/worldgen\/(template_pool\/ancient_city\/.+|structure\/ancient_city|processor_list\/ancient_city_(generic|start|walls)_degradation)\.json$/.test(
             name,
         ) ||
+        /^data\/minecraft\/loot_table\/chests\/ancient_city(?:_ice_box)?\.json$/.test(name) ||
         /^assets\/minecraft\/(blockstates|models)\/.+\.json$/.test(name) ||
         /^assets\/minecraft\/textures\/(block|entity)\/.+\.png(\.mcmeta)?$/.test(name),
 })
@@ -70,6 +71,25 @@ for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeC
         palette: palettes[0],
         ...(palettes.length > 1 ? { alternativePalettes: palettes } : {}),
         blocks,
+        ...(id.startsWith('ancient_city/')
+            ? {
+                  chests: source.blocks.flatMap((block) => {
+                      const state = palettes[0][block.state]
+                      if (state?.name !== 'minecraft:chest' || !block.nbt?.id?.endsWith(':chest'))
+                          return []
+                      return [
+                          {
+                              position: block.pos,
+                              lootTable: block.nbt.LootTable?.replace(/^minecraft:/, ''),
+                              items: (block.nbt.Items ?? []).map((item) => ({
+                                  id: item.id,
+                                  count: item.count ?? 1,
+                              })),
+                          },
+                      ]
+                  }),
+              }
+            : {}),
         overwriteAir: id.startsWith('ancient_city/')
             ? true
             : id.startsWith('end_city/')
@@ -255,6 +275,12 @@ const ancientCityBlocks = gzipSync(
             Object.entries(templates)
                 .filter(([id]) => id.startsWith('ancient_city/'))
                 .map(([id, template]) => [`minecraft:${id}`, template]),
+        ),
+        lootTables: Object.fromEntries(
+            ['ancient_city', 'ancient_city_ice_box'].flatMap((id) => {
+                const path = `data/minecraft/loot_table/chests/${id}.json`
+                return entries[path] ? [[`chests/${id}`, readJson(path)]] : []
+            }),
         ),
     }),
     { level: 9 },
