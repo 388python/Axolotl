@@ -551,45 +551,54 @@ mod tests {
 
     #[test]
     fn ancient_city_details_expand_versioned_jigsaw_templates() {
-        let feature = super::super::find_features(super::super::FeatureQuery {
-            seed: "10292992".into(),
-            edition: Edition::Java,
-            version: "26.3".into(),
-            dimension: Dimension::Overworld,
-            min_x: -8192,
-            min_z: -8192,
-            max_x: 8192,
-            max_z: 8192,
-            feature_mask: Some(super::super::FEATURE_ANCIENT_CITY),
-        })
-        .unwrap()
-        .into_iter()
-        .next()
-        .unwrap();
-        let mut structure_query = query(
-            "10292992",
-            "26.3",
-            feature.x,
-            feature.z,
-            super::super::FEATURE_ANCIENT_CITY,
-        );
-        let result = structure_details(structure_query.clone(), None).unwrap();
-        assert_eq!(result["supported"], true);
-        assert!(result["pieces"].as_array().unwrap().len() >= 1);
-        assert!(
-            result["pieces"][0]["templateId"]
-                .as_str()
+        for version in ["1.19.4", "1.21.11", "26.2", "26.3"] {
+            let feature =
+                super::super::find_features(super::super::FeatureQuery {
+                    seed: "10292992".into(),
+                    edition: Edition::Java,
+                    version: version.into(),
+                    dimension: Dimension::Overworld,
+                    min_x: -8192,
+                    min_z: -8192,
+                    max_x: 8192,
+                    max_z: 8192,
+                    feature_mask: Some(super::super::FEATURE_ANCIENT_CITY),
+                })
                 .unwrap()
-                .contains("ancient_city")
-        );
-        assert!(result["pieces"][0]["min"]["x"].is_number());
-        structure_query.include_blocks = true;
-        let detailed = structure_details(structure_query, None).unwrap();
-        assert!(
-            detailed["blocks"]
-                .as_array()
-                .is_some_and(|blocks| !blocks.is_empty())
-        );
+                .into_iter()
+                .next()
+                .unwrap();
+            let mut structure_query = query(
+                "10292992",
+                version,
+                feature.x,
+                feature.z,
+                super::super::FEATURE_ANCIENT_CITY,
+            );
+            let result =
+                structure_details(structure_query.clone(), None).unwrap();
+            assert_eq!(result["supported"], true, "{version}");
+            assert!(
+                !result["pieces"].as_array().unwrap().is_empty(),
+                "{version}"
+            );
+            assert!(
+                result["pieces"][0]["templateId"]
+                    .as_str()
+                    .unwrap()
+                    .contains("ancient_city"),
+                "{version}"
+            );
+            assert!(result["pieces"][0]["min"]["x"].is_number(), "{version}");
+            structure_query.include_blocks = true;
+            let detailed = structure_details(structure_query, None).unwrap();
+            assert!(
+                detailed["blocks"]
+                    .as_array()
+                    .is_some_and(|blocks| !blocks.is_empty()),
+                "{version}"
+            );
+        }
     }
     #[test]
     fn outpost_loot_matches_upstream_enchantment_fixture() {
