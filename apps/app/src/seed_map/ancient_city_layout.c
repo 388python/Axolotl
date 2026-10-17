@@ -29,14 +29,8 @@ typedef struct {
     uint64_t random;
 } AncientContext;
 
-static uint64_t next_random(AncientContext *ctx) {
-    ctx->random = ctx->random * UINT64_C(6364136223846793005) + UINT64_C(1442695040888963407);
-    return ctx->random;
-}
-
 static int next_int(AncientContext *ctx, int bound) {
-    if (bound <= 1) return 0;
-    return (int)((next_random(ctx) >> 33) % (uint64_t)bound);
+    return bound <= 1 ? 0 : nextInt(&ctx->random, bound);
 }
 
 static cJSON *object(cJSON *parent, const char *name) {
@@ -240,7 +234,7 @@ char *axolotl_seed_map_ancient_city_layout(
     cJSON *layout = cJSON_ParseWithLength(copy, layout_len);
     free(copy);
     if (!layout) return NULL;
-    AncientContext ctx = {.layout = layout, .templates = object(layout, "templates"), .pools = object(layout, "pools"), .random = seed ^ ((uint64_t)(uint32_t)x << 32) ^ (uint32_t)z};
+    AncientContext ctx = {.layout = layout, .templates = object(layout, "templates"), .pools = object(layout, "pools"), .random = chunkGenerateRnd(seed, x >> 4, z >> 4)};
     if (!ctx.templates || !ctx.pools) { cJSON_Delete(layout); return NULL; }
     StructureVariant variant;
     if (!getVariant(&variant, Ancient_City, mc, seed, x, z, -1)) { cJSON_Delete(layout); return NULL; }

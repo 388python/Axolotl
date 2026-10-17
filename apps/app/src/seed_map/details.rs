@@ -230,6 +230,7 @@ pub fn structure_details(
         let mut result = ancient_city_layout(&query, mc)?;
         if query.include_blocks {
             result["blocks"] = ancient_city_blocks(&query, &result["pieces"])?;
+            result["complete"] = serde_json::Value::Bool(false);
             if let Some(limits) = result["limits"].as_array_mut() {
                 limits.push(serde_json::json!(
                     "terrain_dependent_processors_not_applied"
