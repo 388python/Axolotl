@@ -7082,6 +7082,7 @@ dependencies = [
  "image",
  "keyring",
  "libc",
+ "libloading",
  "native-dialog",
  "notify",
  "objc2-app-kit",

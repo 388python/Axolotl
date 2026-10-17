@@ -123,3 +123,5 @@ apps/app/resources/blockbench-skin/
 
 #local development script
 start-dev.ps1
+
+apps/app/resources/seed-map/

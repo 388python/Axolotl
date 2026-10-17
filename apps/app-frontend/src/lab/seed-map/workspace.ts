@@ -12,7 +12,7 @@ export type SeedMapMarker = {
 }
 
 export type SeedMapWorkspace = {
-    version: 3
+    version: 4
     seed: string
     edition: SeedMapEdition
     gameVersion: string
@@ -48,7 +48,7 @@ export const SEED_MAP_ELEVATIONS = [128, 16, -32] as const
 
 export function createDefaultSeedMapWorkspace(): SeedMapWorkspace {
     return {
-        version: 3,
+        version: 4,
         seed: '10292992',
         edition: 'java',
         gameVersion: SEED_MAP_DEFAULT_VERSION,
@@ -134,7 +134,7 @@ export function sanitizeSeedMapWorkspace(
     const oreYMin = nullableInteger(source.oreYMin, -144, 319)
     const oreYMax = nullableInteger(source.oreYMax, -144, 319)
     return {
-        version: 3,
+        version: 4,
         seed:
             typeof source.seed === 'string' && source.seed.trim()
                 ? source.seed.trim().slice(0, 256)

@@ -102,7 +102,7 @@ test('seed map migrates legacy biome highlighting and terrain defaults', () => {
     assert.deepEqual(state.highlightedBiomes, [21])
     assert.equal(state.highlightBiomeEnabled, true)
     assert.equal(state.terrainEstimation, true)
-    assert.equal(state.version, 3)
+    assert.equal(state.version, 4)
 })
 
 test('seed map share queries preserve useful map state', () => {
@@ -140,6 +140,7 @@ test('fallback profiles gate dimensions, ores, and large biomes by version', () 
     const modern = profiles.find(
         (profile) => profile.edition === 'java' && profile.version === '1.21.3',
     )
+    assert.equal(modern?.available, false)
     assert.deepEqual(modern?.dimensions, ['overworld', 'nether', 'end'])
     assert.equal(modern?.ores, true)
     const legacy = profiles.find(
@@ -214,4 +215,21 @@ test('slime chunks are the first layer in every dimension', () => {
         )
         assert.equal(visible[0]?.kind, 'slime-chunk')
     }
+})
+
+test('v3 migration retains version, markers and completion records', () => {
+    const previous = {
+        ...createDefaultSeedMapWorkspace(),
+        version: 3,
+        gameVersion: '26.2',
+        markers: [{ id: 'camp', name: 'Home', x: -20, z: 42, color: '#FF0000' }],
+        completedFeatures: ['village:1:2'],
+        completedOres: ['diamond:3:-40:5'],
+    }
+    const migrated = sanitizeSeedMapWorkspace(previous)
+    assert.equal(migrated.version, 4)
+    assert.equal(migrated.gameVersion, '26.2')
+    assert.deepEqual(migrated.markers, previous.markers)
+    assert.deepEqual(migrated.completedFeatures, previous.completedFeatures)
+    assert.deepEqual(migrated.completedOres, previous.completedOres)
 })

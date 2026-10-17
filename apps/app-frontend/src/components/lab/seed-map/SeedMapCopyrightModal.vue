@@ -32,7 +32,7 @@ const messages = defineMessages({
     engineBody: {
         id: 'app.lab.seed-map.copyright.engine-body',
         defaultMessage:
-            'Biome, terrain, spawn, and structure data is generated locally with cubiomes, Copyright (c) 2020 Cubitect, provided under the MIT License, together with the Axolotl native integration.',
+            'Map predictions are computed locally with xpple/cubiomes, based on cubiomes by Cubitect (MIT License), together with the Axolotl native integration.',
     },
     viewCubiomes: {
         id: 'app.lab.seed-map.copyright.view-cubiomes',
@@ -84,7 +84,7 @@ defineExpose({
                     <Button
                         type="outlined"
                         size="2xs"
-                        @click="openUrl('https://github.com/Cubitect/cubiomes')"
+                        @click="openUrl('https://github.com/xpple/cubiomes')"
                         >{{ formatMessage(messages.viewCubiomes) }}
                         <ExternalIcon />
                     </Button>

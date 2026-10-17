@@ -37,6 +37,26 @@ runs:
       run: |
         sudo apt-get -o Acquire::ForceIPv4=true update
         sudo apt-get -o Acquire::ForceIPv4=true install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils
+    - id: seed-map-toolchain
+      uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+      if: runner.os == 'Windows' && inputs.package-only != 'true'
+      with:
+        msystem: UCRT64
+        update: false
+    - name: Install pinned seed map compiler
+      if: runner.os == 'Windows' && inputs.package-only != 'true'
+      shell: msys2 {0}
+      run: |
+        pacman -U --noconfirm --needed \
+          https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-16.2.0-6-any.pkg.tar.zst \
+          https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-libs-16.2.0-6-any.pkg.tar.zst
+    - name: Select native seed map compiler
+      if: runner.os == 'Windows' && inputs.package-only != 'true'
+      shell: pwsh
+      run: |
+        $compiler = Join-Path '${{ steps.seed-map-toolchain.outputs.msys2-location }}' 'ucrt64/bin/gcc.exe'
+        if (!(Test-Path $compiler)) { throw "Seed map compiler is missing: $compiler" }
+        "AXOLOTL_CUBIOMES_CC=$compiler" >> $env:GITHUB_ENV
     - shell: bash
       run: pnpm install --frozen-lockfile
     - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

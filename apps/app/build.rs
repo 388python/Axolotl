@@ -136,6 +136,127 @@ fn build_blockbench_skin_editor() {
     );
 }
 
+fn collect_engine_sources(
+    path: &std::path::Path,
+    sources: &mut Vec<std::path::PathBuf>,
+) {
+    for entry in std::fs::read_dir(path).expect("Read cubiomes sources") {
+        let entry = entry.expect("Read cubiomes entry");
+        let path = entry.path();
+        if path.is_dir() {
+            if matches!(
+                entry.file_name().to_str(),
+                Some(
+                    "features"
+                        | "loot"
+                        | "loot_tables"
+                        | "barrels"
+                        | "chests"
+                        | "trial_chambers"
+                        | "cjson"
+                )
+            ) {
+                collect_engine_sources(&path, sources);
+            }
+        } else if path.extension().is_some_and(|extension| extension == "c")
+            && path.file_name().is_some_and(|name| name != "tests.c")
+        {
+            sources.push(path);
+        }
+    }
+}
+
+fn build_seed_map_engine() {
+    let source = std::path::Path::new("vendor/cubiomes");
+    let out = std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+    let compatibility_header = out.join("cubiomes-loot-functions.h");
+    let header = std::fs::read_to_string(source.join("loot/loot_functions.h"))
+        .expect("Read loot header");
+    let rng =
+        std::fs::canonicalize(source.join("rng.h")).expect("Locate RNG header");
+    let header = header
+        .replace(
+            "RandomSource*, const int min",
+            "RandomSource *unused_rnd, const int min",
+        )
+        .replace(
+            "\"../rng.h\"",
+            &format!("\"{}\"", rng.display().to_string().replace('\\', "/")),
+        );
+    std::fs::write(&compatibility_header, header)
+        .expect("Write pre-C23 compatibility header");
+    let mut sources =
+        vec![std::path::PathBuf::from("src/seed_map/cubiomes_bridge.c")];
+    collect_engine_sources(source, &mut sources);
+    sources.sort();
+    println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.c");
+    println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
+    println!("cargo:rerun-if-changed=vendor/cubiomes");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        println!("cargo:rerun-if-env-changed=AXOLOTL_CUBIOMES_CC");
+        let compiler = std::env::var_os("AXOLOTL_CUBIOMES_CC")
+            .unwrap_or_else(|| "gcc".into());
+        let out =
+            std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+        let dll = out.join("axolotl-cubiomes.dll");
+        let architecture = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
+        let target = Command::new(&compiler)
+            .arg("-dumpmachine")
+            .output()
+            .expect("Inspect MinGW target");
+        let machine = String::from_utf8_lossy(&target.stdout);
+        let prefix = if architecture == "x86_64" {
+            "x86_64"
+        } else if architecture == "aarch64" {
+            "aarch64"
+        } else {
+            panic!("Unsupported Windows seed map architecture: {architecture}")
+        };
+        assert!(
+            target.status.success() && machine.starts_with(prefix),
+            "Seed map compiler architecture does not match Rust target: {machine}"
+        );
+        run_command(
+            Command::new(compiler)
+                .args([
+                    "-shared",
+                    "-O3",
+                    "-std=gnu11",
+                    "-fwrapv",
+                    "-static-libgcc",
+                    "-Wl,--export-all-symbols",
+                    "-Ivendor/cubiomes",
+                ])
+                .arg("-include")
+                .arg(&compatibility_header)
+                .args(&sources)
+                .arg("-o")
+                .arg(&dll),
+            "MinGW cubiomes engine build",
+        );
+        let resources = std::path::Path::new("resources/seed-map");
+        std::fs::create_dir_all(resources).expect("Create seed map resources");
+        std::fs::copy(&dll, resources.join("axolotl-cubiomes.dll"))
+            .expect("Bundle seed map DLL");
+        println!(
+            "cargo:rustc-env=AXOLOTL_CUBIOMES_BUILD_DLL={}",
+            dll.display()
+        );
+    } else {
+        cc::Build::new()
+            .flag("-include")
+            .flag(compatibility_header.to_str().unwrap())
+            .include(source)
+            .files(&sources)
+            .opt_level(3)
+            .flag_if_supported("-fwrapv")
+            .flag_if_supported("-std=gnu11")
+            .warnings(false)
+            .compile("axolotl-cubiomes");
+        println!("cargo:rustc-link-lib=m");
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-env-changed=CI");
     println!("cargo:rerun-if-changed=tauri.conf.json");
@@ -166,42 +287,7 @@ fn main() {
         .expect("Failed to create the frontend distribution directory");
     build_blockbench_skin_editor();
 
-    let cubiomes_dir = std::path::Path::new("vendor/cubiomes");
-    cc::Build::new()
-        .include(cubiomes_dir)
-        .include(cubiomes_dir.join("tables"))
-        .file("src/seed_map/cubiomes_bridge.c")
-        .files([
-            "vendor/cubiomes/biomenoise.c",
-            "vendor/cubiomes/biomes.c",
-            "vendor/cubiomes/finders.c",
-            "vendor/cubiomes/generator.c",
-            "vendor/cubiomes/layers.c",
-            "vendor/cubiomes/noise.c",
-            "vendor/cubiomes/quadbase.c",
-            "vendor/cubiomes/util.c",
-        ])
-        .opt_level(
-            if std::env::var_os("CI").is_some()
-                && std::env::var("OPT_LEVEL").as_deref() == Ok("0")
-            {
-                0
-            } else {
-                3
-            },
-        )
-        .flag_if_supported("-fwrapv")
-        .warnings(false)
-        .compile("axolotl-cubiomes");
-
-    println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.c");
-    println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
-    println!("cargo:rerun-if-changed=vendor/cubiomes");
-    // Build scripts run for the host, so use Cargo's target metadata rather
-    // than `cfg(target_os = ...)` when deciding whether libm is needed.
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
-        println!("cargo:rustc-link-lib=m");
-    }
+    build_seed_map_engine();
 
     // Sadly, there is no better way to do it right now
     // You could try parsing source code here and detecting #[tauri::command]

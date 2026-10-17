@@ -58,6 +58,7 @@ import SeedMapCopyrightModal from '@/components/lab/seed-map/SeedMapCopyrightMod
 import SeedMapWorldImportModal, {
     type SeedMapWorldImport,
 } from '@/components/lab/seed-map/SeedMapWorldImportModal.vue'
+import { loadMinecraftItemImage } from '@/lab/recipe-generator/item-images'
 import {
     applyShareQuery,
     clearSeedMapHistory,
@@ -221,6 +222,7 @@ const formatRelativeTime = useRelativeTime()
 const {
     hits: oreHits,
     scanning: oreScanning,
+    truncated: oreScanTruncated,
     scannedChunks: oreScannedChunks,
     totalChunks: oreTotalChunks,
     refresh: refreshOreLayer,
@@ -321,11 +323,18 @@ const messages = defineMessages({
         id: 'app.lab.seed-map.ore-scan-failed',
         defaultMessage: 'Ore scanning failed. Try refreshing the map.',
     },
-    oreVerified: { id: 'app.lab.seed-map.ore-verified', defaultMessage: 'Verified' },
-    oreLikely: { id: 'app.lab.seed-map.ore-likely', defaultMessage: 'Likely' },
-    orePrecision: {
-        id: 'app.lab.seed-map.ore-precision',
-        defaultMessage: '{precision}% precision',
+    versionUnavailable: {
+        id: 'app.lab.seed-map.version-unavailable',
+        defaultMessage:
+            'The engine cannot calculate this version. Choose a supported version to continue.',
+    },
+    oreTruncated: {
+        id: 'app.lab.seed-map.ore-truncated',
+        defaultMessage: 'Result limit reached. Select fewer ore types to see more positions.',
+    },
+    oreCandidate: {
+        id: 'app.lab.seed-map.ore-candidate',
+        defaultMessage: 'Predicted position; terrain and block replacement are unverified',
     },
     oreCoverage: {
         id: 'app.lab.seed-map.ore-coverage',
@@ -426,6 +435,21 @@ const messages = defineMessages({
         defaultMessage: 'End city (without ship)',
     },
     endGateway: { id: 'app.lab.seed-map.feature.end-gateway', defaultMessage: 'End gateway' },
+    oreEmerald: { id: 'app.lab.seed-map.ore.emerald', defaultMessage: 'Emerald ore' },
+    oreQuartz: { id: 'app.lab.seed-map.ore.quartz', defaultMessage: 'Nether quartz ore' },
+    oreNetherGold: { id: 'app.lab.seed-map.ore.nether_gold', defaultMessage: 'Nether gold ore' },
+    oreAndesite: { id: 'app.lab.seed-map.ore.andesite', defaultMessage: 'Andesite' },
+    oreDiorite: { id: 'app.lab.seed-map.ore.diorite', defaultMessage: 'Diorite' },
+    oreGranite: { id: 'app.lab.seed-map.ore.granite', defaultMessage: 'Granite' },
+    oreDirt: { id: 'app.lab.seed-map.ore.dirt', defaultMessage: 'Dirt' },
+    oreGravel: { id: 'app.lab.seed-map.ore.gravel', defaultMessage: 'Gravel' },
+    oreInfested: { id: 'app.lab.seed-map.ore.infested', defaultMessage: 'Infested stone' },
+    oreDeepslate: { id: 'app.lab.seed-map.ore.deepslate', defaultMessage: 'Deepslate' },
+    oreTuff: { id: 'app.lab.seed-map.ore.tuff', defaultMessage: 'Tuff' },
+    oreClay: { id: 'app.lab.seed-map.ore.clay', defaultMessage: 'Clay' },
+    oreBlackstone: { id: 'app.lab.seed-map.ore.blackstone', defaultMessage: 'Blackstone' },
+    oreMagma: { id: 'app.lab.seed-map.ore.magma', defaultMessage: 'Magma block' },
+    oreSoulSand: { id: 'app.lab.seed-map.ore.soul_sand', defaultMessage: 'Soul sand' },
     oreDiamond: { id: 'app.lab.seed-map.ore.diamond', defaultMessage: 'Diamond ore' },
     oreNetherite: { id: 'app.lab.seed-map.ore.netherite', defaultMessage: 'Ancient debris' },
     oreIron: { id: 'app.lab.seed-map.ore.iron', defaultMessage: 'Iron ore' },
@@ -466,6 +490,21 @@ const featureMessages: Record<SeedMapFeatureKind, (typeof messages)[keyof typeof
 }
 
 const oreMessages: Record<SeedMapOreKind, (typeof messages)[keyof typeof messages]> = {
+    emerald: messages.oreEmerald,
+    quartz: messages.oreQuartz,
+    nether_gold: messages.oreNetherGold,
+    andesite: messages.oreAndesite,
+    diorite: messages.oreDiorite,
+    granite: messages.oreGranite,
+    dirt: messages.oreDirt,
+    gravel: messages.oreGravel,
+    infested: messages.oreInfested,
+    deepslate: messages.oreDeepslate,
+    tuff: messages.oreTuff,
+    clay: messages.oreClay,
+    blackstone: messages.oreBlackstone,
+    magma: messages.oreMagma,
+    soul_sand: messages.oreSoulSand,
     diamond: messages.oreDiamond,
     netherite: messages.oreNetherite,
     iron: messages.oreIron,
@@ -525,11 +564,23 @@ const mapScaleLabel = computed(() =>
         ? String(Math.round(scale.value))
         : scale.value.toFixed(2).replace(/\.00$/, ''),
 )
+const dimensionsIndex = computed(() =>
+    workspace.dimension === 'nether' ? 1 : workspace.dimension === 'end' ? 2 : 0,
+)
 const dimensionFeatures = computed(() =>
-    SEED_MAP_FEATURES.filter((feature) => feature.dimensions.includes(workspace.dimension)),
+    SEED_MAP_FEATURES.filter(
+        (feature) =>
+            feature.dimensions.includes(workspace.dimension) &&
+            (selectedProfile.value?.featureMasks === undefined ||
+                (selectedProfile.value.featureMasks[dimensionsIndex.value] & feature.mask) !== 0),
+    ),
 )
 const requestedFeatures = computed(() =>
-    visibleFeatureDefinitions(workspace.visibleFeatures, workspace.dimension, tileScale.value),
+    visibleFeatureDefinitions(
+        workspace.visibleFeatures,
+        workspace.dimension,
+        tileScale.value,
+    ).filter((feature) => dimensionFeatures.value.includes(feature)),
 )
 const requestedFeatureKinds = computed(
     () => new Set(requestedFeatures.value.map((feature) => feature.kind)),
@@ -542,7 +593,13 @@ const activeFeatureMask = computed(() =>
 )
 const oreModeSupported = computed(() => selectedProfile.value?.ores !== false)
 const dimensionOres = computed(() =>
-    oreModeSupported.value ? seedMapOresForDimension(workspace.dimension) : [],
+    oreModeSupported.value
+        ? seedMapOresForDimension(workspace.dimension).filter(
+              (ore) =>
+                  !selectedProfile.value?.oreKinds ||
+                  selectedProfile.value.oreKinds.includes(ore.kind),
+          )
+        : [],
 )
 const activeSelectedOres = computed(() => {
     const available = new Set(dimensionOres.value.map((ore) => ore.kind))
@@ -572,9 +629,11 @@ const oreZoomLimited = computed(
 )
 const mapBusy = computed(() => loading.value || oreScanning.value)
 const availableBiomes = computed(() =>
-    SEED_MAP_BIOMES.filter((biome) => biome.dimensions.includes(workspace.dimension)).map(
-        (biome) => biome.id,
-    ),
+    SEED_MAP_BIOMES.filter(
+        (biome) =>
+            biome.dimensions.includes(workspace.dimension) &&
+            (!selectedProfile.value?.biomes || selectedProfile.value.biomes.includes(biome.id)),
+    ).map((biome) => biome.id),
 )
 const activeHighlightedBiomes = computed(() =>
     workspace.highlightedBiomes.filter((biome) => availableBiomes.value.includes(biome)),
@@ -904,12 +963,13 @@ onUnmounted(() => {
 
 function ensureProfile() {
     if (selectedProfile.value) return
-    const replacement =
-        profiles.value.find((item) => item.edition === workspace.edition) ?? profiles.value[0]
-    if (!replacement) return
-    workspace.edition = replacement.edition
-    workspace.gameVersion = replacement.version
-    workspace.dimension = replacement.dimensions[0] ?? 'overworld'
+    profiles.value.push({
+        edition: workspace.edition,
+        version: workspace.gameVersion,
+        available: false,
+        dimensions: [workspace.dimension],
+        ores: false,
+    })
 }
 
 function editionLabel(edition: SeedMapEdition) {
@@ -964,6 +1024,11 @@ function featureImageSource(kind: SeedMapFeatureKind) {
     return featureImageSources[kind]
 }
 
+const itemImageSources = ref<Record<string, string>>({})
+function oreImageSource(source: string) {
+    return itemImageSources.value[source] ?? (source.startsWith('minecraft:') ? undefined : source)
+}
+
 function preloadMapIcons() {
     const preloadFeatureImage = (key: string, source: string) => {
         const image = new Image()
@@ -994,7 +1059,14 @@ function preloadMapIcons() {
                 oreImages.set(`${ore.kind}:${variant}`, image)
                 redraw()
             }
-            image.src = source
+            if (source.startsWith('minecraft:')) {
+                void loadMinecraftItemImage(source)
+                    .then((loaded) => {
+                        itemImageSources.value[source] = loaded.src
+                        image.src = loaded.src
+                    })
+                    .catch(() => {})
+            } else image.src = source
         }
     }
     const image = new Image()
@@ -1289,7 +1361,7 @@ function drawOres(context: CanvasRenderingContext2D) {
         const image = oreImages.get(`${hit.ore}:${variant}`)
         const size = Math.max(10, Math.min(18, 1.2 / scale.value)) + (selected ? 4 : 0)
         context.save()
-        context.globalAlpha = completed ? 0.42 : hit.verified ? 1 : 0.78
+        context.globalAlpha = completed ? 0.42 : 0.78
         context.imageSmoothingEnabled = false
         if (image) {
             context.drawImage(image, point.x - size / 2, point.y - size / 2, size, size)
@@ -1441,6 +1513,7 @@ function refreshMap() {
         return
     }
     if (!selectedProfile.value?.available) {
+        mapError.value = selectedProfile.value?.note ?? formatMessage(messages.versionUnavailable)
         features.value = []
         spawn.value = null
         refreshCurrentOreLayer(0)
@@ -1464,6 +1537,7 @@ function refreshCurrentOreLayer(delay = 180) {
         {
             enabled: workspace.displayMode === 'ores',
             seed: workspace.seed,
+            edition: workspace.edition,
             version: workspace.gameVersion,
             dimension: workspace.dimension,
             scale: scale.value,
@@ -2144,14 +2218,8 @@ function randomizeSeed() {
 
 function onWorldImported(selection: SeedMapWorldImport) {
     workspace.edition = 'java'
-    if (
-        selection.version &&
-        profiles.value.some(
-            (profile) => profile.edition === 'java' && profile.version === selection.version,
-        )
-    ) {
-        workspace.gameVersion = selection.version
-    }
+    if (selection.version) workspace.gameVersion = selection.version
+    ensureProfile()
     pendingHistorySource = 'instance'
     pendingHistoryLabels = {
         instanceName: selection.instance.name,
@@ -2198,13 +2266,8 @@ function applyHistoryEntry(entry: SeedMapHistoryEntry) {
     pendingHistorySource = entry.source
     pendingHistoryLabels = { instanceName: entry.instanceName, worldName: entry.worldName }
     workspace.edition = entry.edition
-    if (
-        profiles.value.some(
-            (profile) => profile.edition === entry.edition && profile.version === entry.gameVersion,
-        )
-    ) {
-        workspace.gameVersion = entry.gameVersion
-    }
+    workspace.gameVersion = entry.gameVersion
+    ensureProfile()
     if (workspace.seed === entry.seed) {
         if (activeHistoryId !== entry.id) {
             stashActiveProgress()
@@ -2722,9 +2785,10 @@ function clampWorldCoordinate(value: number) {
                             :aria-pressed="workspace.selectedOres.includes(ore.kind)"
                             @click="toggleOre(ore.kind)"
                         >
-                            <img :src="ore.image" alt="" /><span v-if="showLayerNames">{{
-                                oreLabel(ore.kind)
-                            }}</span>
+                            <img :src="oreImageSource(ore.image)" alt="" /><span
+                                v-if="showLayerNames"
+                                >{{ oreLabel(ore.kind) }}</span
+                            >
                         </Button>
                     </template>
                     <span
@@ -2811,7 +2875,7 @@ function clampWorldCoordinate(value: number) {
                                 @update:model-value="toggleOre(ore.kind)"
                             >
                                 <span class="layer-checklist-label flex min-w-0 items-center gap-2">
-                                    <img :src="ore.image" alt="" />
+                                    <img :src="oreImageSource(ore.image)" alt="" />
                                     <span>{{ oreLabel(ore.kind) }}</span>
                                     <small>Y {{ ore.yMin }}~{{ ore.yMax }}</small>
                                 </span>
@@ -2978,6 +3042,16 @@ function clampWorldCoordinate(value: number) {
                             : formatMessage(messages.loading)
                     }}
                 </div>
+                <div
+                    v-if="workspace.displayMode === 'ores' && !mapBusy && !oreZoomLimited"
+                    class="map-status map-ore-status"
+                >
+                    {{
+                        formatMessage(
+                            oreScanTruncated ? messages.oreTruncated : messages.oreCandidate,
+                        )
+                    }}
+                </div>
                 <div v-if="rulerDistance !== null" class="map-status map-ruler-status">
                     <ScaleIcon class="size-3" />{{
                         formatMessage(messages.distance, { distance: rulerDistance })
@@ -3035,20 +3109,7 @@ function clampWorldCoordinate(value: number) {
                         /></Button>
                     </div>
                     <div v-if="selection.ore" class="ore-hit-details">
-                        <span :class="{ verified: selection.ore.verified }">
-                            {{
-                                formatMessage(
-                                    selection.ore.verified
-                                        ? messages.oreVerified
-                                        : messages.oreLikely,
-                                )
-                            }}
-                        </span>
-                        <span>{{
-                            formatMessage(messages.orePrecision, {
-                                precision: selection.ore.precision,
-                            })
-                        }}</span>
+                        <span>{{ formatMessage(messages.oreCandidate) }}</span>
                         <span>{{
                             formatMessage(messages.oreCoverage, {
                                 min: selection.ore.yMin,
@@ -3180,6 +3241,8 @@ function clampWorldCoordinate(value: number) {
                         :dimension="workspace.dimension"
                         :enabled="workspace.highlightBiomeEnabled"
                         :highlighted-biomes="workspace.highlightedBiomes"
+                        :available-biome-ids="selectedProfile?.biomes"
+                        :available-dimensions="dimensions"
                         :container="isFullscreen ? fullscreenContainer : undefined"
                         @update:dimension="workspace.dimension = $event"
                         @update:enabled="workspace.highlightBiomeEnabled = $event"

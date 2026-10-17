@@ -7,7 +7,6 @@ use quartz_nbt::{NbtCompound, NbtTag};
 use serde::{Deserialize, Serialize};
 
 pub mod ores;
-pub mod rng;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -19,73 +18,8 @@ struct BridgeFeature {
     end_ship: i8,
 }
 
-unsafe extern "C" {
-    fn axolotl_seed_map_java_version(version: i32) -> i32;
-    fn axolotl_seed_map_render(
-        seed: u64,
-        minecraft_version: i32,
-        generator_flags: i32,
-        dimension: i32,
-        x: i32,
-        z: i32,
-        scale: i32,
-        width: i32,
-        height: i32,
-        elevation: i32,
-        terrain: i32,
-        contours: i32,
-        highlight_mask: *const u8,
-        rgb: *mut u8,
-        rgb_len: usize,
-    ) -> i32;
-    fn axolotl_seed_map_find_features(
-        seed: u64,
-        minecraft_version: i32,
-        generator_flags: i32,
-        dimension: i32,
-        min_x: i32,
-        min_z: i32,
-        max_x: i32,
-        max_z: i32,
-        feature_mask: u32,
-        out: *mut BridgeFeature,
-        out_len: usize,
-    ) -> usize;
-    fn axolotl_seed_map_get_spawn(
-        seed: u64,
-        minecraft_version: i32,
-        generator_flags: i32,
-        x: *mut i32,
-        z: *mut i32,
-    ) -> i32;
-    fn axolotl_seed_map_biome_at(
-        seed: u64,
-        minecraft_version: i32,
-        generator_flags: i32,
-        dimension: i32,
-        x: i32,
-        y: i32,
-        z: i32,
-    ) -> i32;
-    fn axolotl_seed_map_surface_heights(
-        seed: u64,
-        minecraft_version: i32,
-        generator_flags: i32,
-        x: i32,
-        z: i32,
-        width: i32,
-        height: i32,
-        out: *mut f32,
-    ) -> i32;
-    fn axolotl_seed_map_scan_vein(
-        seed: u64,
-        chunk_x: i32,
-        chunk_z: i32,
-        vein_kind: i32,
-        out_xyz: *mut i32,
-        out_cap: usize,
-    ) -> usize;
-}
+mod bridge;
+use bridge::*;
 
 pub const FEATURE_VILLAGE: u32 = 1 << 0;
 pub const FEATURE_OUTPOST: u32 = 1 << 1;
@@ -177,18 +111,43 @@ impl Dimension {
  * own engine versions.
  */
 const JAVA_VERSIONS: &[(&str, i32)] = &[
+    ("26.3", 260300),
     ("26.2", 260200),
-    ("26.1.2", 260102),
     ("26.1", 260100),
+    ("1.21.11", 12111),
     ("1.21.9", 12109),
     ("1.21.6", 12106),
     ("1.21.5", 12105),
     ("1.21.4", 12104),
     ("1.21.3", 12103),
     ("1.21.1", 12101),
-    ("1.20", 12000),
+    ("1.20.6", 12006),
     ("1.19.4", 11904),
     ("1.19.2", 11902),
+    ("1.18.2", 11802),
+    ("1.17.1", 11701),
+    ("1.16.5", 11605),
+    ("1.16.1", 11601),
+    ("1.15.2", 11502),
+    ("1.14.4", 11404),
+    ("1.13.2", 11302),
+    ("1.12.2", 11202),
+    ("1.11.2", 11102),
+    ("1.10.2", 11002),
+    ("1.9.4", 10904),
+    ("1.8.9", 10809),
+    ("1.7.10", 10710),
+    ("1.6.4", 10604),
+    ("1.5.2", 10502),
+    ("1.4.7", 10407),
+    ("1.3.2", 10302),
+    ("1.2.5", 10205),
+    ("1.1.0", 10100),
+    ("1.0.0", 10000),
+    ("b1.8", -10800),
+    ("b1.7", -10700),
+    ("26.1.2", 260102),
+    ("1.20", 12000),
     ("1.18", 11800),
     ("1.17", 11700),
     ("1.16", 11600),
@@ -273,6 +232,10 @@ pub struct VersionProfile {
     pub available: bool,
     pub dimensions: Vec<Dimension>,
     pub ores: bool,
+    pub ore_kinds: Vec<ores::OreKind>,
+    pub feature_masks: [u32; 3],
+    pub biomes: Vec<i32>,
+    pub engine_revision: &'static str,
     pub note: Option<String>,
 }
 
@@ -281,10 +244,14 @@ pub struct VersionProfile {
 pub struct LevelDatInfo {
     pub seed: String,
     pub version: Option<String>,
+    pub data_version: Option<i32>,
 }
 
 pub fn version_profiles() -> Vec<VersionProfile> {
     let mut profiles = Vec::new();
+    let availability = bridge::ensure_available();
+    let available = availability.is_ok();
+    let note = availability.err().map(|error| error.to_string());
     for edition in [Edition::Java, Edition::JavaLargeBiomes] {
         for &(version, code) in JAVA_VERSIONS {
             if matches!(edition, Edition::JavaLargeBiomes)
@@ -299,13 +266,38 @@ pub fn version_profiles() -> Vec<VersionProfile> {
             if code >= END_BIOMES_MIN_CODE {
                 dimensions.push(Dimension::End);
             }
+            let mc = if available {
+                unsafe { axolotl_seed_map_java_version(code) }
+            } else {
+                0
+            };
+            let capability = |kind, value| {
+                if available {
+                    unsafe { axolotl_seed_map_capability(mc, kind, value) }
+                } else {
+                    0
+                }
+            };
             profiles.push(VersionProfile {
                 edition,
                 version: version.to_owned(),
-                available: true,
+                available,
                 dimensions,
-                ores: ores::supports_ores(code, Dimension::Overworld),
-                note: None,
+                ores: available
+                    && ores::supports_ores(code, Dimension::Overworld),
+                ore_kinds: ores::ALL_ORE_KINDS
+                    .iter()
+                    .copied()
+                    .filter(|kind| capability(2, *kind as i32) != 0)
+                    .collect(),
+                feature_masks: [
+                    capability(1, 0) as u32,
+                    capability(1, -1) as u32,
+                    capability(1, 1) as u32,
+                ],
+                biomes: (0..256).filter(|id| capability(0, *id) != 0).collect(),
+                engine_revision: "a49d5bc5b709e6e28b5a74daddb3efb382fba7bb",
+                note: note.clone(),
             });
         }
     }
@@ -473,6 +465,7 @@ pub fn spawn(
 }
 
 pub(crate) fn resolve_java_version(version: &str) -> io::Result<(i32, i32)> {
+    bridge::ensure_available()?;
     let code = JAVA_VERSIONS
         .iter()
         .find(|(name, _)| *name == version)
@@ -514,6 +507,7 @@ pub fn read_level_dat(path: String) -> io::Result<LevelDatInfo> {
     Ok(LevelDatInfo {
         seed: seed.to_string(),
         version,
+        data_version: data.get::<_, i32>("DataVersion").ok(),
     })
 }
 
@@ -687,25 +681,20 @@ fn feature_name(feature: u32) -> Option<&'static str> {
 }
 
 fn normalize_level_dat_version(version: &str) -> Option<String> {
-    if JAVA_VERSIONS.iter().any(|(name, _)| *name == version) {
-        return Some(version.to_owned());
-    }
-    let mut parts = version.split('.');
-    let major = parts.next()?;
-    let minor = parts.next()?;
-    let prefix = format!("{major}.{minor}");
-    JAVA_VERSIONS
-        .iter()
-        .map(|(name, _)| *name)
-        .find(|supported| {
-            *supported == prefix || supported.starts_with(&format!("{prefix}."))
-        })
-        .map(str::to_owned)
+    let version = version.trim();
+    (!version.is_empty()).then(|| version.to_owned())
 }
 
 fn version_from_data_version(data_version: i32) -> Option<String> {
     let version = match data_version {
-        4_325.. => "1.21.5",
+        5_023 => "26.3",
+        4_903 => "26.2",
+        4_786 => "26.1",
+        4_671 => "1.21.11",
+        4_554 => "1.21.9",
+        4_437 => "1.21.6",
+        4_325 => "1.21.5",
+        4_326.. => return None,
         4_189.. => "1.21.4",
         4_082.. => "1.21.3",
         3_953.. => "1.21.1",
@@ -735,6 +724,59 @@ mod tests {
     fn text_seeds_use_minecrafts_java_hash() {
         assert_eq!(parse_seed("hello"), 99_162_322);
         assert_eq!(parse_seed("-42"), (-42_i64) as u64);
+    }
+
+    #[test]
+    fn modern_versions_select_distinct_generation_rules() {
+        let version = |name| resolve_java_version(name).unwrap().0;
+        assert_ne!(version("26.2"), version("26.3"));
+        assert_ne!(version("1.21.4"), version("1.21.5"));
+        assert_eq!(version("1.20"), version("1.20.6"));
+        assert_eq!(
+            biome_at(
+                "-3829811542736183482".into(),
+                Edition::Java,
+                "26.3".into(),
+                Dimension::Overworld,
+                68148,
+                77,
+                80990
+            )
+            .unwrap(),
+            188
+        );
+        assert_eq!(
+            biome_at(
+                "856461443495910397".into(),
+                Edition::Java,
+                "26.2".into(),
+                Dimension::End,
+                -371136,
+                64,
+                -64
+            )
+            .unwrap(),
+            43
+        );
+        assert_eq!(
+            biome_at(
+                "856461443495910397".into(),
+                Edition::Java,
+                "26.3".into(),
+                Dimension::End,
+                -371136,
+                64,
+                -64
+            )
+            .unwrap(),
+            42
+        );
+        assert_eq!(
+            normalize_level_dat_version("26.3-snapshot-6"),
+            Some("26.3-snapshot-6".into())
+        );
+        assert_eq!(version_from_data_version(5023), Some("26.3".into()));
+        assert_eq!(version_from_data_version(5005), None);
     }
 
     #[test]
@@ -1120,18 +1162,18 @@ mod tests {
     }
 
     #[test]
-    fn level_dat_versions_are_reduced_to_supported_profiles() {
+    fn level_dat_versions_preserve_actual_game_version() {
         assert_eq!(
             normalize_level_dat_version("1.21.3"),
             Some("1.21.3".to_owned())
         );
         assert_eq!(
             normalize_level_dat_version("1.20.4"),
-            Some("1.20".to_owned())
+            Some("1.20.4".to_owned())
         );
         assert_eq!(
             normalize_level_dat_version("1.17.1"),
-            Some("1.17".to_owned())
+            Some("1.17.1".to_owned())
         );
         assert_eq!(version_from_data_version(3_700), Some("1.20".to_owned()));
         assert_eq!(version_from_data_version(100), None);

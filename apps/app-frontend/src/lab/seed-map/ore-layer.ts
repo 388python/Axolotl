@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-import { scanSeedMapOres } from './backend.ts'
+import { scanSeedMapOres, SEED_MAP_ENGINE_REVISION, type SeedMapEdition } from './backend.ts'
 import type { SeedMapDimension } from './biomes.ts'
 import {
     preferSeedMapOreHit,
@@ -24,6 +24,7 @@ export type SeedMapOreViewport = {
 export type SeedMapOreLayerContext = {
     enabled: boolean
     seed: string
+    edition: SeedMapEdition
     version: string
     dimension: SeedMapDimension
     scale: number
@@ -36,7 +37,7 @@ export type SeedMapOreLayerContext = {
 
 type OreChunkCache = Map<SeedMapOreKind, SeedMapOreHit[]>
 
-const SCAN_BATCH_CHUNKS = 96
+const SCAN_BATCH_CHUNKS = 8
 
 export function useSeedMapOreLayer(options: {
     onUpdate: () => void
@@ -44,6 +45,7 @@ export function useSeedMapOreLayer(options: {
 }) {
     const hits = ref<SeedMapOreHit[]>([])
     const scanning = ref(false)
+    const truncated = ref(false)
     const progress = ref(0)
     const scannedChunks = ref(0)
     const totalChunks = ref(0)
@@ -59,9 +61,10 @@ export function useSeedMapOreLayer(options: {
         context = cloneContext(nextContext)
         refreshGeneration++
         if (refreshTimer) clearTimeout(refreshTimer)
-        const nextKey = `${nextContext.seed}|${nextContext.version}|${nextContext.dimension}`
+        const nextKey = `${SEED_MAP_ENGINE_REVISION}|${nextContext.seed}|${nextContext.edition}|${nextContext.version}|${nextContext.dimension}|${[...nextContext.selectedOres].sort().join(',')}`
         if (nextKey !== contextKey) {
             contextKey = nextKey
+            truncated.value = false
             chunkCache.clear()
         }
         rebuildVisibleHits()
@@ -88,6 +91,7 @@ export function useSeedMapOreLayer(options: {
         if (refreshTimer) clearTimeout(refreshTimer)
         if (rebuildTimer) clearTimeout(rebuildTimer)
         chunkCache.clear()
+        truncated.value = false
         hits.value = []
         scanning.value = false
         progress.value = 0
@@ -117,6 +121,7 @@ export function useSeedMapOreLayer(options: {
                 const batch = missing.slice(offset, offset + SCAN_BATCH_CHUNKS)
                 const results = await scanSeedMapOres({
                     seed: context.seed,
+                    edition: context.edition,
                     version: context.version,
                     dimension: context.dimension,
                     ores: [...context.selectedOres],
@@ -124,6 +129,7 @@ export function useSeedMapOreLayer(options: {
                 })
                 if (generation !== refreshGeneration) return
                 for (const cell of results) {
+                    truncated.value ||= cell.truncated
                     const cache = chunkCache.get(chunkKey(cell.cx, cell.cz)) ?? new Map()
                     const grouped = new Map<SeedMapOreKind, SeedMapOreHit[]>()
                     for (const hit of cell.hits) {
@@ -225,6 +231,7 @@ export function useSeedMapOreLayer(options: {
     return {
         hits,
         scanning,
+        truncated,
         progress,
         scannedChunks,
         totalChunks,

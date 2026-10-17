@@ -5169,7 +5169,7 @@
     "message": "非官方工具"
   },
   "app.lab.seed-map.copyright.engine-body": {
-    "message": "群系、地形、出生点与结构数据由 cubiomes 和 Axolotl 原生集成在本地生成。cubiomes 版权所有 (c) 2020 Cubitect，并依据 MIT 许可证提供。"
+    "message": "地图预测由 xpple/cubiomes 和 Axolotl 原生集成在本地计算；该引擎基于 Cubitect 的 cubiomes，以 MIT 许可证提供。"
   },
   "app.lab.seed-map.copyright.engine-heading": {
     "message": "本地地图引擎"
@@ -14392,5 +14392,59 @@
   },
   "app.logagent.controls.return-to-analysis": {
     "message": "返回分析"
+  },
+    "app.lab.seed-map.ore.emerald": {
+        "message": "绿宝石矿石"
+    },
+    "app.lab.seed-map.ore.quartz": {
+        "message": "下界石英矿石"
+    },
+    "app.lab.seed-map.ore.nether_gold": {
+        "message": "下界金矿石"
+    },
+    "app.lab.seed-map.ore.andesite": {
+        "message": "安山岩"
+    },
+    "app.lab.seed-map.ore.diorite": {
+        "message": "闪长岩"
+    },
+    "app.lab.seed-map.ore.granite": {
+        "message": "花岗岩"
+    },
+    "app.lab.seed-map.ore.dirt": {
+        "message": "泥土"
+    },
+    "app.lab.seed-map.ore.gravel": {
+        "message": "沙砾"
+    },
+    "app.lab.seed-map.ore.infested": {
+        "message": "虫蚀石头"
+    },
+    "app.lab.seed-map.ore.deepslate": {
+        "message": "深板岩"
+    },
+    "app.lab.seed-map.ore.tuff": {
+        "message": "凝灰岩"
+    },
+    "app.lab.seed-map.ore.clay": {
+        "message": "黏土块"
+    },
+    "app.lab.seed-map.ore.blackstone": {
+        "message": "黑石"
+    },
+    "app.lab.seed-map.ore.magma": {
+        "message": "岩浆块"
+    },
+    "app.lab.seed-map.ore.soul_sand": {
+        "message": "灵魂沙"
+    },
+    "app.lab.seed-map.ore-candidate": {
+        "message": "预测位置；尚未核验地形和方块替换条件"
+    },
+    "app.lab.seed-map.version-unavailable": {
+        "message": "当前引擎无法计算此版本，请选择受支持的版本后继续。"
+    },
+  "app.lab.seed-map.ore-truncated": {
+    "message": "已达到结果数量上限，请减少选中的矿物种类以查看更完整的位置。"
   }
 }
