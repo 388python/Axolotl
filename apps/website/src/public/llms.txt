@@ -39,7 +39,7 @@ Axolotl 支持并发与分段下载，减少准备游戏的等待。支持的资
 
 Find mods, modpacks, resource packs, and shaders from Modrinth and CurseForge, with additional content browsing through MCArchive and Planet Minecraft. Axolotl offers dependency previews, version management, operation history, and modpack export in MRPACK, CurseForge ZIP, or generic ZIP format. Availability varies by content source, and restricted files may require manual download.
 
-Concurrent and segmented downloads, Chinese mirrors such as BMCLAPI and MCIM, and optional DNS over HTTPS (DoH) provide download options for different connections. Import PCL2 or HMCL instances, link existing .minecraft folders, and review mod compatibility before an in-place or copy-based upgrade.
+Concurrent and segmented downloads, regional mirrors or official sources, and optional DNS over HTTPS (DoH) provide download options for different connections. Import instances from supported launchers, link existing .minecraft folders, and review mod compatibility before an in-place or copy-based upgrade.
 
 Supported local instances can use deduplicated snapshot backups with file exclusions and restore previews. Directly linked instances and instances with external game directories currently cannot use snapshot backups. Storage analysis and cache cleanup help manage disk space while keeping installed games, saves, backups, and files needed for offline use or recovery.
 

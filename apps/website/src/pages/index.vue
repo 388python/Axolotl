@@ -307,7 +307,7 @@ const messages = defineMessages({
     recentDownloadsDescription: {
         id: 'axolotl-marketing.recent.downloads.description',
         defaultMessage:
-            'Downloads are faster again, with Chinese mirror options and DoH support for a smoother setup. Check task progress from the top bar and revisit completed downloads in your history.',
+            'Faster downloads, alternative sources, and DoH support help you get ready to play with less waiting. Check task progress from the top bar and revisit completed downloads in your history.',
     },
     recentBackupsTitle: {
         id: 'axolotl-marketing.recent.backups.title',
@@ -406,11 +406,12 @@ const messages = defineMessages({
     },
     mirrorSupport: {
         id: 'axolotl-marketing.improvements.mirrors.title',
-        defaultMessage: 'Download with Chinese mirrors',
+        defaultMessage: 'Choose the best download route',
     },
     mirrorSupportDescription: {
         id: 'axolotl-marketing.improvements.mirrors.description',
-        defaultMessage: 'If downloads are unreliable, use Chinese mirrors for game resources and mods.',
+        defaultMessage:
+            'If downloads are unreliable, switch between available mirrors and official sources for game resources and mods.',
     },
     minecraftSupport: {
         id: 'axolotl-marketing.improvements.minecraft.title',
@@ -563,7 +564,7 @@ const messages = defineMessages({
     profileImportingDescription: {
         id: 'app-marketing.features.importing.description',
         defaultMessage:
-            'Bring instances from PCL2 or HMCL into Axolotl and keep playing. When you want a new Minecraft version, review mod compatibility and choose to upgrade the current instance or a copy.',
+            'Bring instances from supported launchers into Axolotl and keep playing. When you want a new Minecraft version, review mod compatibility and choose to upgrade the current instance or a copy.',
     },
     offlineMode: {
         id: 'app-marketing.features.offline.title',
@@ -572,7 +573,7 @@ const messages = defineMessages({
     offlineModeDescription: {
         id: 'app-marketing.features.offline.description',
         defaultMessage:
-            'Chinese search and project translation, drag-and-drop import, Java management, offline mode, and skin management are ready when you need them.',
+            'Localized content search and project translations, drag-and-drop import, Java management, offline mode, and skin management are ready when you need them.',
     },
     followProjects: {
         id: 'app-marketing.features.follow.title',
@@ -654,7 +655,7 @@ const messages = defineMessages({
     seoDescription: {
         id: 'axolotl-site.seo.description',
         defaultMessage:
-            'Download Axolotl Launcher for Windows, macOS, and Linux. Manage Minecraft mods and modpacks, use Chinese download mirrors, import existing games, and back up instances.',
+            'Download Axolotl Launcher for Windows, macOS, and Linux. Manage Minecraft mods and modpacks, choose alternative download sources, reuse existing game folders, and back up instances.',
     },
     socialImageAlt: {
         id: 'axolotl-site.seo.social-image-alt',
@@ -710,21 +711,21 @@ const messages = defineMessages({
     },
     faqNetworkQuestion: {
         id: 'axolotl-site.faq.network.question',
-        defaultMessage: 'Does Axolotl support Chinese mirrors and DoH?',
+        defaultMessage: 'Can I use alternative download sources and DoH?',
     },
     faqNetworkAnswer: {
         id: 'axolotl-site.faq.network.answer',
         defaultMessage:
-            'Yes. Resource settings offer Chinese mirrors, including BMCLAPI, MCIM, and Tianpao, for supported Minecraft resources and Modrinth or CurseForge downloads. Choose automatic, mirror-preferred, or official-source options as available. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
+            'Yes. For supported Minecraft resources and Modrinth or CurseForge downloads, resource settings let you choose automatic, mirror-preferred, or official sources. Available mirrors depend on your region. DNS over HTTPS (DoH) provides encrypted DNS resolution for download domains. These settings affect game resources; the download-source setting on this website selects the Axolotl installer source.',
     },
     faqMigrationQuestion: {
         id: 'axolotl-site.faq.migration.question',
-        defaultMessage: 'Can I move from PCL2 or HMCL and keep my .minecraft folder?',
+        defaultMessage: 'Can I keep my existing .minecraft folder?',
     },
     faqMigrationAnswer: {
         id: 'axolotl-site.faq.migration.answer',
         defaultMessage:
-            'Axolotl can directly link the .minecraft folders commonly used by Chinese launchers, so you can keep your existing game files without downloading them again or changing your settings.',
+            'Yes. Axolotl can directly link an existing .minecraft folder, so you can keep your game files without downloading them again or changing your settings.',
     },
     faqBackupsQuestion: {
         id: 'axolotl-site.faq.backups.question',
@@ -750,11 +751,12 @@ const messages = defineMessages({
     },
     structuredFeatureDownloads: {
         id: 'axolotl-site.structured-data.feature.downloads',
-        defaultMessage: 'Concurrent downloads, Chinese mirror support, and DNS over HTTPS (DoH)',
+        defaultMessage: 'Concurrent downloads, alternative download sources, and DNS over HTTPS (DoH)',
     },
     structuredFeatureMigration: {
         id: 'axolotl-site.structured-data.feature.migration',
-        defaultMessage: 'PCL2 and HMCL instance import, direct .minecraft folder linking, and instance version upgrades',
+        defaultMessage:
+            'Supported launcher imports, direct .minecraft folder linking, and instance version upgrades',
     },
     structuredFeatureBackups: {
         id: 'axolotl-site.structured-data.feature.backups',
@@ -807,7 +809,7 @@ const messages = defineMessages({
     seoKeywords: {
         id: 'axolotl-site.seo.keywords',
         defaultMessage:
-            'Axolotl Launcher, Minecraft Launcher, Modrinth, CurseForge, MCArchive, Planet Minecraft, Minecraft Java Edition, DoH, BMCLAPI, MCIM, instance backup, storage analysis, .minecraft, Axolotl Labs',
+            'Axolotl Launcher, Minecraft Launcher, Modrinth, CurseForge, MCArchive, Planet Minecraft, Minecraft Java Edition, DoH, alternative download sources, instance backup, storage analysis, .minecraft, Axolotl Labs',
     },
 })
 
