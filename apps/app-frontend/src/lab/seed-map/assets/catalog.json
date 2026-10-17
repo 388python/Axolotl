@@ -9,9 +9,474 @@
                 "igloo",
                 "outpost",
                 "ruined-portal",
-                "nether-fossil"
+                "nether-fossil",
+                "ancient-city"
             ],
             "templates": {
+                "ancient_city/city_center/city_center_1": {
+                    "size": [
+                        18,
+                        31,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/city_center_2": {
+                    "size": [
+                        18,
+                        31,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/city_center_3": {
+                    "size": [
+                        18,
+                        31,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_1": {
+                    "size": [
+                        14,
+                        24,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_2": {
+                    "size": [
+                        14,
+                        24,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_left_corner": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_right_corner_1": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_right_corner_2": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/bottom_right_corner": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/left": {
+                    "size": [
+                        18,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/right": {
+                    "size": [
+                        18,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/top_left_corner": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/top_right_corner": {
+                    "size": [
+                        14,
+                        24,
+                        14
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city_center/walls/top": {
+                    "size": [
+                        14,
+                        24,
+                        41
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_connector": {
+                    "size": [
+                        30,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_path_1": {
+                    "size": [
+                        35,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_path_2": {
+                    "size": [
+                        35,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_path_3": {
+                    "size": [
+                        35,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_path_4": {
+                    "size": [
+                        35,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/city/entrance/entrance_path_5": {
+                    "size": [
+                        35,
+                        15,
+                        39
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/barracks": {
+                    "size": [
+                        21,
+                        12,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/camp_1": {
+                    "size": [
+                        17,
+                        5,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/camp_2": {
+                    "size": [
+                        17,
+                        5,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/camp_3": {
+                    "size": [
+                        17,
+                        5,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/chamber_1": {
+                    "size": [
+                        19,
+                        10,
+                        15
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/chamber_2": {
+                    "size": [
+                        12,
+                        6,
+                        11
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/chamber_3": {
+                    "size": [
+                        10,
+                        6,
+                        11
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/ice_box_1": {
+                    "size": [
+                        19,
+                        10,
+                        15
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/large_pillar_1": {
+                    "size": [
+                        6,
+                        15,
+                        6
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/large_ruin_1": {
+                    "size": [
+                        17,
+                        5,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/medium_pillar_1": {
+                    "size": [
+                        7,
+                        11,
+                        8
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/medium_ruin_1": {
+                    "size": [
+                        8,
+                        5,
+                        13
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/medium_ruin_2": {
+                    "size": [
+                        16,
+                        5,
+                        11
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/sauna_1": {
+                    "size": [
+                        29,
+                        10,
+                        37
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/small_ruin_1": {
+                    "size": [
+                        7,
+                        5,
+                        8
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/small_ruin_2": {
+                    "size": [
+                        8,
+                        5,
+                        4
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/small_statue": {
+                    "size": [
+                        10,
+                        8,
+                        8
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/tall_ruin_1": {
+                    "size": [
+                        17,
+                        23,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/tall_ruin_2": {
+                    "size": [
+                        17,
+                        23,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/tall_ruin_3": {
+                    "size": [
+                        17,
+                        23,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/structures/tall_ruin_4": {
+                    "size": [
+                        17,
+                        23,
+                        17
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_corner_wall_1": {
+                    "size": [
+                        21,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_1": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_2": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_bridge": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_passage_1": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_stairs_1": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_stairs_2": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_stairs_3": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_horizontal_wall_stairs_4": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_intersection_wall_1": {
+                    "size": [
+                        21,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/intact_lshape_wall_1": {
+                    "size": [
+                        21,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_corner_wall_1": {
+                    "size": [
+                        21,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_corner_wall_2": {
+                    "size": [
+                        21,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_horizontal_wall_stairs_1": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_horizontal_wall_stairs_2": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_horizontal_wall_stairs_3": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
+                "ancient_city/walls/ruined_horizontal_wall_stairs_4": {
+                    "size": [
+                        18,
+                        15,
+                        21
+                    ],
+                    "paletteCount": 1
+                },
                 "end_city/base_floor": {
                     "size": [
                         10,

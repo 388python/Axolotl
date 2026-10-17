@@ -19,7 +19,10 @@ const jar = await fs.readFile(path)
 const entries = unzipSync(jar, {
     filter: ({ name }) =>
         name === 'version.json' ||
-        /^data\/minecraft\/structures?\/(end_city|shipwreck|igloo|pillager_outpost|ruined_portal|nether_fossils)\/\w+\.nbt$/.test(
+        /^data\/minecraft\/structures?\/(end_city|shipwreck|igloo|pillager_outpost|ruined_portal|nether_fossils|ancient_city)\/.+\.nbt$/.test(
+            name,
+        ) ||
+        /^data\/minecraft\/worldgen\/(template_pool\/ancient_city\/.+|structure\/ancient_city|processor_list\/ancient_city_(generic|start|walls)_degradation)\.json$/.test(
             name,
         ) ||
         /^assets\/minecraft\/(blockstates|models)\/.+\.json$/.test(name) ||
@@ -34,6 +37,7 @@ if (process.argv[3] && version.id !== process.argv[3])
 const templates = {}
 const hashes = {}
 const palette = new Map()
+const ancientCityTemplates = {}
 for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeCompare(b))) {
     if (!name.endsWith('.nbt')) continue
     const source = NbtFile.read(bytes).root.toSimplifiedJson()
@@ -66,7 +70,9 @@ for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeC
         palette: palettes[0],
         ...(palettes.length > 1 ? { alternativePalettes: palettes } : {}),
         blocks,
-        overwriteAir: id.startsWith('end_city/')
+        overwriteAir: id.startsWith('ancient_city/')
+            ? true
+            : id.startsWith('end_city/')
             ? ![
                   'second_floor_1',
                   'second_floor_2',
@@ -77,6 +83,23 @@ for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeC
             : !id.startsWith('pillager_outpost/'),
     }
     hashes[id] = createHash('sha256').update(bytes).digest('hex')
+    if (id.startsWith('ancient_city/')) {
+        ancientCityTemplates[`minecraft:${id}`] = {
+            size: source.size,
+            jigsaws: source.blocks.flatMap((block) => {
+                const state = sourcePalettes[0][block.state]
+                if ((state?.id ?? state?.Name) !== 'minecraft:jigsaw' || !block.nbt) return []
+                return [{
+                    position: block.pos,
+                    orientation: state.properties?.orientation ?? state.Properties?.orientation,
+                    name: block.nbt.name,
+                    target: block.nbt.target,
+                    pool: block.nbt.pool,
+                    joint: block.nbt.joint ?? 'rollable',
+                }]
+            }),
+        }
+    }
 }
 const required = [
     'base_floor',
@@ -102,6 +125,8 @@ const required = [
 ]
 if (required.some((name) => !templates[`end_city/${name}`]))
     throw new Error('Missing required End city templates')
+if (!templates['ancient_city/city_center/city_center_1'])
+    throw new Error('Missing required Ancient city templates')
 const resources = { blockDefinitions: {}, blockModels: {}, defaultBlockProperties: {} }
 const identifier = (id) => (id.includes(':') ? id : `minecraft:${id}`)
 const pendingModels = new Set()
@@ -170,6 +195,67 @@ const bytes = gzipSync(
     { level: 9 },
 )
 await fs.writeFile(new URL('structures.json.gz', output), bytes)
+const poolPrefix = 'data/minecraft/worldgen/template_pool/'
+const ancientCityPools = Object.fromEntries(
+    Object.entries(entries)
+        .filter(([name]) => name.startsWith(`${poolPrefix}ancient_city/`))
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, data]) => {
+            const id = `minecraft:${name.slice(poolPrefix.length, -5)}`
+            return [id, JSON.parse(new TextDecoder().decode(data))]
+        }),
+)
+const missingAncientCityTemplates = [
+    ...new Set(
+        Object.values(ancientCityPools).flatMap((pool) =>
+            (pool.elements ?? []).flatMap(({ element }) =>
+                element?.element_type === 'minecraft:single_pool_element' &&
+                !ancientCityTemplates[element.location]
+                    ? [element.location]
+                    : [],
+            ),
+        ),
+    ),
+].sort()
+const ancientCityFiles = Object.fromEntries(
+    Object.entries(entries)
+        .filter(([name]) =>
+            /^data\/minecraft\/worldgen\/(structure\/ancient_city|processor_list\/ancient_city_(generic|start|walls)_degradation)\.json$/.test(
+                name,
+            ),
+        )
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, data]) => [name, createHash('sha256').update(data).digest('hex')]),
+)
+const ancientCityLayout = gzipSync(
+    JSON.stringify({
+        schemaVersion: 1,
+        version: version.id,
+        dataVersion: version.world_version,
+        structure: readJson('data/minecraft/worldgen/structure/ancient_city.json'),
+        pools: ancientCityPools,
+        templates: ancientCityTemplates,
+        missingTemplates: missingAncientCityTemplates,
+        sources: ancientCityFiles,
+    }),
+    { level: 9 },
+)
+await fs.writeFile(new URL('ancient-city-layout.json.gz', output), ancientCityLayout)
+const nativeOutput = new URL(`../../apps/app/src/seed_map/assets/versions/${version.id}/`, import.meta.url)
+await fs.mkdir(nativeOutput, { recursive: true })
+await fs.writeFile(new URL('ancient-city-layout.json.gz', nativeOutput), ancientCityLayout)
+const ancientCityBlocks = gzipSync(
+    JSON.stringify({
+        schemaVersion: 1,
+        version: version.id,
+        dataVersion: version.world_version,
+        templates: Object.fromEntries(
+            Object.entries(templates).filter(([id]) => id.startsWith('ancient_city/')),
+        ),
+    }),
+    { level: 9 },
+)
+await fs.writeFile(new URL('ancient-city-blocks.json.gz', nativeOutput), ancientCityBlocks)
 await fs.writeFile(
     new URL('sources.json', output),
     JSON.stringify(
@@ -181,11 +267,13 @@ await fs.writeFile(
             version: version.id,
             dataVersion: version.world_version,
             templates: hashes,
+            ancientCityLayoutSha256: createHash('sha256').update(ancientCityLayout).digest('hex'),
+            ancientCityBlocksSha256: createHash('sha256').update(ancientCityBlocks).digest('hex'),
             colorAlgorithm:
                 'alpha-weighted linear-sRGB mean of nontransparent pixels, weighted by animation frame duration; per model face texture',
             textureCount: Object.keys(textureColors).length,
             placementRules:
-                'template-v1: EndCityPiece air processors; Shipwreck pivot (4,0,15) encoded by engine origin; Igloo pivots and offsets from IglooPieces; Outpost main tower only; RuinedPortal center pivot and FRONT_BACK mirror, excluding terrain processors; NetherFossil variant. Verify rules against each new game version.',
+                'template-v1: EndCityPiece air processors; Shipwreck pivot (4,0,15) encoded by engine origin; Igloo pivots and offsets from IglooPieces; Outpost main tower only; RuinedPortal center pivot and FRONT_BACK mirror, excluding terrain processors; NetherFossil variant; Ancient City pools and jigsaw connectors are bundled separately for native layout expansion. Verify rules against each new game version.',
             omitted: ['entities', 'block entity contents', 'data marker entities'],
         },
         null,
@@ -208,6 +296,7 @@ catalog.versions[version.id] = {
         outpost: 'pillager_outpost/watchtower',
         'ruined-portal': 'ruined_portal/portal_1',
         'nether-fossil': 'nether_fossils/fossil_1',
+        'ancient-city': 'ancient_city/city_center/city_center_1',
     })
         .filter(([, id]) => templates[id])
         .map(([kind]) => kind),
