@@ -1653,6 +1653,7 @@ async function replayOnboarding(mode) {
     onboardingReplay.value = true
     onboardingMode.value = mode
     if (mode === 'main') await router.replace('/')
+    if (mode === 'logagent') await router.replace('/settings#launch-defaults')
     showOnboarding.value = true
 }
 

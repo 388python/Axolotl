@@ -1,5 +1,7 @@
 //! AI provider catalog, credentials, and text-generation adapters.
 
+pub mod chat;
+
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

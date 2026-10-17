@@ -1248,7 +1248,7 @@
     "message": "AI 解释失败：{message}"
   },
   "app.crash-analysis.ai.settings.enabled": {
-    "message": "启用 AI 解释"
+    "message": "启用本地 LogAgent"
   },
   "app.crash-analysis.ai.settings.enabled-description": {
     "message": "不使用 AI 时，本地规则崩溃分析仍可用。"
@@ -1257,7 +1257,7 @@
     "message": "文本模型"
   },
   "app.crash-analysis.ai.settings.no-providers": {
-    "message": "请先在上方启用 Provider 和文本模型，再使用 AI 崩溃解释。"
+    "message": "请先在「设置 > AI」中启用服务商和支持工具调用的模型，再配置本地 LogAgent。"
   },
   "app.crash-analysis.ai.settings.provider": {
     "message": "AI Provider"
@@ -5697,22 +5697,22 @@
     "message": "AI 分析来源"
   },
   "app.log-share.settings.ai-source-custom": {
-    "message": "自定义 AI 服务商"
+    "message": "本地 LogAgent"
   },
   "app.log-share.settings.ai-source-description": {
-    "message": "LogShare AI 在云端分析；自定义则使用下方配置的服务商。"
+    "message": "本地 LogAgent 在启动器内运行，并将相关日志片段发送给你配置的模型服务商；云端 LogShare 会将日志发送到 LogShare。这是默认来源，每次分析时仍可临时切换。"
   },
   "app.log-share.settings.ai-source-logshare": {
-    "message": "LogShare AI"
+    "message": "云端 LogShare"
   },
   "app.log-share.settings.auto-upload": {
     "message": "自动上传以获取结构化摘要"
   },
   "app.log-share.settings.auto-upload-description": {
-    "message": "仅在 LogShare 模式下生效。"
+    "message": "崩溃后自动将日志上传到 LogShare，无需先启动 AI 分析。"
   },
   "app.log-share.settings.description": {
-    "message": "将崩溃诊断分享到 LogShare，获取结构化摘要与可选的 AI 分析。优先使用 LogShare，不可用时回退到 mclo.gs。"
+    "message": "选择本地 LogAgent 或云端 LogShare 分析崩溃；日志分享服务单独配置。"
   },
   "app.log-share.settings.multi-file": {
     "message": "多文件上传"
@@ -5736,7 +5736,7 @@
     "message": "显示 AI 分析进度"
   },
   "app.log-share.settings.show-progress-description": {
-    "message": "展示 LogAgent 运行期间的思考、工具及上限状态。"
+    "message": "显示易读的调查步骤，分析后保留进展记录。服务商支持流式响应时，诊断正文会逐步显示。"
   },
   "app.log-share.settings.title": {
     "message": "日志分享与 AI 分析"
@@ -14290,5 +14290,167 @@
   },
   "app.settings.storage.launcherData": {
     "message": "启动器设置与界面"
+  },
+  "app.logagent.cancel": {
+    "message": "取消分析"
+  },
+  "app.logagent.cancelled": {
+    "message": "启动器已取消本次分析。云端任务可能仍在服务器上运行。"
+  },
+  "app.logagent.local-unavailable": {
+    "message": "请在「设置 > 启动默认值」中启用本地 LogAgent 并选择支持工具调用的模型。"
+  },
+  "app.logagent.preparing": {
+    "message": "正在准备诊断快照…"
+  },
+  "app.logagent.run": {
+    "message": "使用 LogAgent 分析"
+  },
+  "app.logagent.settings.supported-models": {
+    "message": "请选择支持工具调用的模型。协议已适配不代表每个模型都接受工具调用；使用 Copilot 时需选择具体模型，不能使用 Auto。"
+  },
+  "app.logagent.settings.tour": {
+    "message": "了解分析来源"
+  },
+  "app.logagent.source-cloud": {
+    "message": "云端 LogShare"
+  },
+  "app.logagent.source-cloud-hint": {
+    "message": "崩溃日志会发送到 LogShare 进行云端分析。"
+  },
+  "app.logagent.source-label": {
+    "message": "本次分析来源"
+  },
+  "app.logagent.source-local": {
+    "message": "本地 LogAgent"
+  },
+  "app.logagent.source-local-hint": {
+    "message": "LogAgent 在启动器内运行，相关日志片段会发送给你配置的模型服务商。"
+  },
+  "app.onboarding.logagent-cloud.description": {
+    "message": "选择「云端 LogShare」后显示云端选项。不存储日志的分析仍会将内容发送到 LogShare，并停用自动摘要。取消分析会断开启动器连接，服务器上的任务可能继续运行。"
+  },
+  "app.onboarding.logagent-cloud.title": {
+    "message": "控制云端日志存储"
+  },
+  "app.onboarding.logagent-sharing.description": {
+    "message": "选择本地分析不会向 LogShare 上传日志。你仍可主动使用所选分享服务生成诊断链接。"
+  },
+  "app.onboarding.logagent-sharing.title": {
+    "message": "分享是独立操作"
+  },
+  "app.onboarding.logagent-source.description": {
+    "message": "本地 LogAgent 在启动器内使用你配置的模型检查日志，相关片段会发送给该模型服务商。云端 LogShare 在服务器上分析日志。崩溃窗口会实时显示进展，并将已完成的步骤保留在可折叠的记录中。这里设置默认来源，仍可为单次分析临时切换。"
+  },
+  "app.onboarding.logagent-source.title": {
+    "message": "选择分析在哪里运行"
+  },
+  "app.logagent.checking-logs": {
+    "message": "正在检查相关日志证据…"
+  },
+  "app.logagent.reviewing": {
+    "message": "正在核对证据并准备下一步…"
+  },
+  "app.logagent.activity.title": {
+    "message": "分析进展"
+  },
+  "app.logagent.activity.elapsed": {
+    "message": "已用时 {seconds, number} 秒"
+  },
+  "app.logagent.activity.model": {
+    "message": "核对已有证据"
+  },
+  "app.logagent.activity.list": {
+    "message": "确认可用日志"
+  },
+  "app.logagent.activity.read": {
+    "message": "读取相关日志上下文"
+  },
+  "app.logagent.activity.grep": {
+    "message": "搜索日志中的相关线索"
+  },
+  "app.logagent.activity.external": {
+    "message": "检查补充证据"
+  },
+  "app.logagent.activity.query": {
+    "message": "搜索：{query}"
+  },
+  "app.logagent.activity.lines": {
+    "message": "已返回 {count, number} 行"
+  },
+  "app.logagent.activity.range": {
+    "message": "从第 {line, number} 行开始"
+  },
+  "app.logagent.activity.done": {
+    "message": "已完成"
+  },
+  "app.logagent.activity.stopped": {
+    "message": "已停止"
+  },
+  "app.logagent.activity.working": {
+    "message": "进行中"
+  },
+  "app.logagent.settings.analysis-title": {
+    "message": "崩溃分析"
+  },
+  "app.logagent.settings.analysis-description": {
+    "message": "设置默认分析方式；每次分析时仍可临时切换。"
+  },
+  "app.logagent.settings.sharing-title": {
+    "message": "诊断分享"
+  },
+  "app.logagent.settings.sharing-description": {
+    "message": "在你主动分享诊断链接时使用。"
+  },
+  "app.logagent.settings.display-title": {
+    "message": "分析显示"
+  },
+  "app.logagent.settings.model-help": {
+    "message": "模型要求"
+  },
+  "app.logagent.settings.manage-models": {
+    "message": "配置 AI 服务商"
+  },
+  "app.logagent.picker.label": {
+    "message": "分析来源"
+  },
+  "app.logagent.picker.local-hint": {
+    "message": "使用你配置的模型，相关片段会发送给该服务商。"
+  },
+  "app.logagent.picker.cloud-hint": {
+    "message": "将崩溃日志发送到 LogShare 分析。"
+  },
+  "app.logagent.controls.change-source": {
+    "message": "更改"
+  },
+  "app.logagent.controls.source-done": {
+    "message": "完成"
+  },
+  "app.logagent.controls.configure-model": {
+    "message": "配置分析"
+  },
+  "app.logagent.controls.start": {
+    "message": "开始分析"
+  },
+  "app.logagent.controls.retry": {
+    "message": "重新分析"
+  },
+  "app.logagent.controls.local-sending": {
+    "message": "相关日志片段将发送给 {provider}。"
+  },
+  "app.logagent.controls.model-missing": {
+    "message": "请选择并启用模型，以使用本地分析。"
+  },
+  "app.logagent.controls.section": {
+    "message": "分析本次崩溃"
+  },
+  "app.logagent.settings.local-setup-title": {
+    "message": "本地 LogAgent"
+  },
+  "app.logagent.settings.local-setup-description": {
+    "message": "配置本地分析使用的模型，不改变默认分析来源。"
+  },
+  "app.logagent.controls.return-to-analysis": {
+    "message": "返回分析"
   }
 }
