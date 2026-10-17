@@ -241,6 +241,7 @@ const {
 })
 
 const messages = defineMessages({
+    retryMap: { id: 'app.lab.seed-map.retry-map', defaultMessage: 'Retry map calculation' },
     title: { id: 'app.lab.seed-map.title', defaultMessage: 'Seed map' },
     seed: { id: 'app.lab.seed-map.seed', defaultMessage: 'Seed' },
     seedPlaceholder: {
@@ -597,7 +598,7 @@ const undergroundMask = computed(
     () => selectedProfile.value?.undergroundMasks?.[dimensionsIndex.value] ?? 0,
 )
 const undergroundYRange = computed(
-    () => selectedProfile.value?.undergroundYRanges?.[dimensionsIndex.value] ?? [0, 127],
+    () => selectedProfile.value?.undergroundYRanges?.[dimensionsIndex.value] ?? [-64, 319],
 )
 const focusedPiece = ref<SeedMapStructurePiece | null>(null)
 const replayOnboarding = inject<(mode: 'seed-map') => Promise<void>>('replayOnboarding')
@@ -1607,6 +1608,20 @@ function drawRuler(context: CanvasRenderingContext2D) {
         context.fill()
     }
     context.restore()
+}
+
+async function retryMap() {
+    try {
+        profiles.value = await getSeedMapProfiles()
+        ensureProfile()
+        scheduleRefresh(0)
+    } catch (error) {
+        mapError.value = error instanceof Error ? error.message : String(error)
+    }
+}
+async function startMapGuide() {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    await replayOnboarding?.('seed-map')
 }
 
 function scheduleRefresh(delay = 80) {
@@ -2781,7 +2796,12 @@ function clampWorldCoordinate(value: number) {
             type="critical"
             :header="formatMessage(messages.mapFailed)"
             :body="mapError"
-        />
+            ><template #actions
+                ><Button type="outlined" size="2xs" @click="retryMap"
+                    ><RefreshCwIcon />{{ formatMessage(messages.retryMap) }}</Button
+                ></template
+            ></Admonition
+        >
 
         <section
             ref="fullscreenContainer"
@@ -2796,7 +2816,9 @@ function clampWorldCoordinate(value: number) {
                         formatMessage(
                             workspace.displayMode === 'structures'
                                 ? messages.layers
-                                : messages.oreLayers,
+                                : workspace.displayMode === 'ores'
+                                  ? messages.oreLayers
+                                  : messages.undergroundMode,
                         )
                     }}</span>
                     <div
@@ -2828,6 +2850,22 @@ function clampWorldCoordinate(value: number) {
                         >
                             <PickaxeIcon />{{ formatMessage(messages.ores) }}
                         </Button>
+                        <Button
+                            :type="workspace.displayMode === 'underground' ? 'colored' : 'quiet'"
+                            :disabled="!undergroundMask"
+                            size="2xs"
+                            data-onboarding-id="seed-map-underground-mode"
+                            @click="setDisplayMode('underground')"
+                            ><LayersIcon />{{ formatMessage(messages.undergroundMode) }}</Button
+                        >
+                        <Button
+                            type="quiet"
+                            icon-only
+                            :aria-label="formatMessage(messages.advancedTour)"
+                            data-onboarding-id="seed-map-advanced-guide"
+                            @click="startMapGuide"
+                            ><InfoIcon
+                        /></Button>
                     </div>
                     <div class="flex items-center gap-1">
                         <Button
@@ -2868,7 +2906,7 @@ function clampWorldCoordinate(value: number) {
                         /></Button>
                     </div>
                 </div>
-                <div class="layer-options">
+                <div v-if="workspace.displayMode !== 'underground'" class="layer-options">
                     <template v-if="workspace.displayMode === 'structures'">
                         <Button
                             v-for="feature in dimensionFeatures"
@@ -2938,7 +2976,10 @@ function clampWorldCoordinate(value: number) {
                         >
                     </Button>
                 </div>
-                <div v-if="layersExpanded" class="layer-expanded-panel">
+                <div
+                    v-if="layersExpanded && workspace.displayMode !== 'underground'"
+                    class="layer-expanded-panel"
+                >
                     <div class="layer-bulk-actions">
                         <Button
                             type="outlined"
@@ -3467,25 +3508,6 @@ function clampWorldCoordinate(value: number) {
                     <div
                         class="map-bottom-actions max-sm:w-full max-sm:flex-wrap max-sm:justify-start max-sm:ml-0"
                     >
-                        <Button
-                            :type="
-                                workspace.displayMode === 'underground' ? 'chip-text' : 'outlined'
-                            "
-                            :disabled="!undergroundMask"
-                            class="map-action"
-                            data-onboarding-id="seed-map-underground-mode"
-                            @click="setDisplayMode('underground')"
-                            ><LayersIcon />{{ formatMessage(messages.undergroundMode) }}</Button
-                        >
-                        <Button
-                            type="quiet"
-                            icon-only
-                            :aria-label="formatMessage(messages.advancedTour)"
-                            data-onboarding-id="seed-map-advanced-guide"
-                            @click="replayOnboarding?.('seed-map')"
-                            ><InfoIcon
-                        /></Button>
-
                         <Button
                             :type="terrainEnabled ? 'chip-text' : 'outlined'"
                             color="brand"

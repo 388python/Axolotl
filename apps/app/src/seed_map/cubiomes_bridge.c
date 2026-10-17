@@ -478,11 +478,6 @@ int axolotl_seed_map_render(
 
     unsigned char colors[256][3];
     initBiomeColors(colors);
-    /* cubiomes' palette predates sulfur caves; keep this id consistent with
-     * the client picker instead of rendering it as black. */
-    colors[187][0] = 0xc8;
-    colors[187][1] = 0xc8;
-    colors[187][2] = 0x28;
     biomesToImage(rgb, colors, biomes, width, height, 1, 2);
 
     if (highlight_mask) {
@@ -799,7 +794,7 @@ int32_t axolotl_seed_map_capability(int32_t mc, int32_t capability, int32_t valu
         }
         return (int32_t)mask;
     }
-    if (capability == 3) return mc >= MC_1_14 ? (value == DIM_END ? 1 : value == DIM_NETHER ? 3 : 7) : 0;
+    if (capability == 3) return (mc >= MC_1_14 ? 1 : 0) | (mc >= MC_1_13 && value != DIM_END ? (value == DIM_NETHER ? 2 : 6) : 0);
     if (capability == 2 && value >= 0 && value < 25) {
         if (value == 2 || value == 4) return mc >= MC_1_18;
         for (int i = 0; i < 7 && ore_groups[value][i] >= 0; i++) {

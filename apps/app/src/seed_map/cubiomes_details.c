@@ -190,14 +190,19 @@ int32_t axolotl_seed_map_underground(
     int32_t x, int32_t z, int32_t scale, int32_t width, int32_t height,
     int32_t y, uint32_t layers, uint8_t *rgba, uint64_t length
 ) {
-    if (mc < MC_1_14 || (scale != 1 && scale != 4) || width <= 0 || height <= 0 || width > 64 || height > 64 ||
+    if (mc < MC_1_13 || ((layers & 1) && mc < MC_1_14) || (scale != 1 && scale != 4) || width <= 0 || height <= 0 || width > 64 || height > 64 ||
         width % 16 || height % 16 ||
         width * scale > 256 || height * scale > 256 || length != (uint64_t)width * height * 4 ||
         x % 16 || z % 16) return -1;
     TerrainNoise *terrain = calloc(1, sizeof(TerrainNoise));
     if (!terrain) return -2;
-    setupTerrainNoise(terrain, mc, flags);
-    initTerrainNoise(terrain, seed, dimension);
+    if (layers & 1) {
+        setupTerrainNoise(terrain, mc, flags);
+        initTerrainNoise(terrain, seed, dimension);
+    } else {
+        setupGenerator(&terrain->g, mc, flags);
+        applySeed(&terrain->g, dimension, seed);
+    }
     const int min_y = dimension == DIM_OVERWORLD && mc >= MC_1_18 ? -64 : 0;
     const int max_y = dimension == DIM_OVERWORLD ? (mc >= MC_1_18 ? 319 : 255) : 127;
     if (y < min_y || y > max_y) { free(terrain); return -3; }

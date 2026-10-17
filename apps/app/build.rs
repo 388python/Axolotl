@@ -241,6 +241,11 @@ fn build_seed_map_engine() {
         std::fs::create_dir_all(resources).expect("Create seed map resources");
         std::fs::copy(&dll, resources.join("axolotl-cubiomes.dll"))
             .expect("Bundle seed map DLL");
+        std::fs::copy(
+            source.join("LICENSE"),
+            resources.join("LICENSE.cubiomes.txt"),
+        )
+        .expect("Bundle cubiomes license");
         println!(
             "cargo:rustc-env=AXOLOTL_CUBIOMES_BUILD_DLL={}",
             dll.display()

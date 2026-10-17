@@ -2330,6 +2330,63 @@ mod tests {
     }
 
     #[test]
+    fn current_and_snapshot_schematics_keep_their_original_data_version_on_export()
+     {
+        for data_version in [3700, 5005, 5023] {
+            let mut fixture = sponge_fixture(3);
+            let schematic =
+                fixture.get_mut::<_, &mut NbtCompound>("Schematic").unwrap();
+            schematic.insert("DataVersion", data_version);
+            let palette = schematic
+                .get_mut::<_, &mut NbtCompound>("Blocks")
+                .unwrap()
+                .get_mut::<_, &mut NbtCompound>("Palette")
+                .unwrap();
+            palette.inner_mut().remove("minecraft:stone");
+            palette.insert("minecraft:cinnabar", 1i32);
+            let mut session = parse_sponge(
+                fixture,
+                "test.schem".into(),
+                "test.schem".into(),
+                None,
+                None,
+            )
+            .unwrap();
+            session.regions[0].set_block([-3, 8, 2], 1);
+            session.refresh_manifest();
+            for (bytes, litematic) in [
+                (export_sponge_v3(&session).unwrap(), false),
+                (export_litematic(&session).unwrap(), true),
+            ] {
+                let root = read_root(&bytes).unwrap();
+                let exported = if litematic {
+                    parse_litematic(
+                        root,
+                        "test.litematic".into(),
+                        "test.litematic".into(),
+                        None,
+                        None,
+                    )
+                } else {
+                    parse_sponge(
+                        root,
+                        "test.schem".into(),
+                        "test.schem".into(),
+                        None,
+                        None,
+                    )
+                }
+                .unwrap();
+                assert_eq!(exported.manifest.data_version, Some(data_version));
+                assert_eq!(
+                    palette_at(&exported, 0, [-3, 8, 2]).name,
+                    "minecraft:cinnabar"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn rotations_are_reversible_and_update_dimensions() {
         let mut session = parse_sponge(
             sponge_fixture(3),

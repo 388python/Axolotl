@@ -47,6 +47,14 @@ pub fn structure_details(
     {
         return Err(io::Error::other("The structure query is invalid."));
     }
+    let supported = unsafe {
+        super::axolotl_seed_map_capability(mc, 1, query.dimension.as_cubiomes())
+    } as u32;
+    if supported & query.feature_mask == 0 {
+        return Err(io::Error::other(
+            "This structure is not supported in the selected version and dimension.",
+        ));
+    }
     let _guard = STRUCTURE_COMPUTATION.lock().map_err(|_| {
         io::Error::other(
             "Structure calculation was interrupted. Retry this query.",
@@ -89,7 +97,8 @@ pub fn underground_tile(request: UndergroundRequest) -> io::Result<Vec<u8>> {
         127
     };
     let y = tile.elevation.unwrap_or(16);
-    if code < 11400
+    if code < 11300
+        || (request.layers & 1 != 0 && code < 11400)
         || tile.width > 64
         || tile.height > 64
         || tile.width % 16 != 0
@@ -103,6 +112,14 @@ pub fn underground_tile(request: UndergroundRequest) -> io::Result<Vec<u8>> {
     {
         return Err(io::Error::other(
             "The underground tile bounds, height or layers are invalid.",
+        ));
+    }
+    let supported = unsafe {
+        super::axolotl_seed_map_capability(mc, 3, tile.dimension.as_cubiomes())
+    } as u32;
+    if request.layers & !supported != 0 {
+        return Err(io::Error::other(
+            "These underground layers are not supported in the selected version and dimension.",
         ));
     }
     let mut rgba = vec![0; tile.width as usize * tile.height as usize * 4];
@@ -226,6 +243,11 @@ mod tests {
         assert_eq!(image.len(), 16 * 16 * 4);
         assert!(image.chunks_exact(4).all(|pixel| pixel[3] == 255));
         assert_eq!(image, underground_tile(request.clone()).unwrap());
+        let mut legacy = request.clone();
+        legacy.tile.version = "1.13.2".into();
+        legacy.tile.elevation = Some(32);
+        legacy.layers = 6;
+        assert_eq!(underground_tile(legacy).unwrap().len(), 16 * 16 * 4);
         let mut invalid = request;
         invalid.tile.elevation = Some(320);
         assert!(underground_tile(invalid).is_err());

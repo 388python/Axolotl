@@ -14629,5 +14629,23 @@
   },
   "app.lab.recipe-generator.brewing.hint": {
     "message": "Drop any supported item into the input, reagent and output slots. Potion choices override only the potion ID in the corresponding JSON object. Other conditions and components are preserved."
+  },
+  "app.lab.seed-map.retry-map": {
+    "message": "Retry map calculation"
+  },
+  "app.lab.seed-map.details.no-loot": {
+    "message": "No predictable containers are available for this structure in this version."
+  },
+  "app.lab.seed-map.details.height": {
+    "message": "Some Y coordinates are placeholders. Use the horizontal layout to locate pieces."
+  },
+  "app.lab.seed-map.details.positions-unavailable": {
+    "message": "The engine provides container locations but no piece positions for this structure."
+  },
+  "app.lab.seed-map.underground-limit": {
+    "message": "Zoom in to view underground slices. Water, aquifers and block replacement are not simulated."
+  },
+  "app.lab.seed-map.copyright.view-license": {
+    "message": "View MIT License"
   }
 }

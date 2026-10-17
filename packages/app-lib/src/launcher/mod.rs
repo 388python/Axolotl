@@ -1913,19 +1913,6 @@ pub async fn launch_minecraft(
         )
         .await?
     };
-    let offline_skin_pack = if direct_launch.is_some() {
-        // Writing the offline skin pack would modify the linked folder.
-        crate::minecraft_skins::OfflineSkinPackOptions {
-            enabled_pack_id: None,
-        }
-    } else {
-        crate::minecraft_skins::prepare_offline_skin_resource_pack(
-            credentials,
-            &instance_path,
-            &content_set.game_version,
-        )
-        .await?
-    };
 
     let cache_behaviour = offline_mode.then_some(CacheBehaviour::CacheOnly);
     let mut linked_libraries = None;
@@ -2671,6 +2658,21 @@ pub async fn launch_minecraft(
     // Overwrites the minecraft options.txt file with the settings from the profile
     // Uses 'a:b' syntax which is not quite yaml
     // Directly associated instances never write into the linked folder.
+    let offline_skin_pack = if direct_launch.is_some() {
+        // Writing the offline skin pack would modify the linked folder.
+        crate::minecraft_skins::OfflineSkinPackOptions {
+            enabled_pack_id: None,
+        }
+    } else {
+        crate::minecraft_skins::prepare_offline_skin_resource_pack(
+            credentials,
+            &instance_path,
+            &content_set.game_version,
+            &client_path,
+        )
+        .await?
+    };
+
     let options_path = instance_path.join("options.txt");
     let options_existed = options_path.exists();
 

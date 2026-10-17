@@ -14650,5 +14650,23 @@
   },
   "app.lab.recipe-generator.brewing.hint": {
     "message": "将任意受支持物品拖入输入、试剂和输出槽。药水选项只覆盖对应 JSON 对象中的药水 ID，其他条件和组件会保留。"
+  },
+  "app.lab.seed-map.retry-map": {
+    "message": "重新计算地图"
+  },
+  "app.lab.seed-map.details.no-loot": {
+    "message": "当前版本的此结构没有可预测的容器。"
+  },
+  "app.lab.seed-map.details.height": {
+    "message": "部分 Y 坐标为占位值，请按水平布局定位结构块。"
+  },
+  "app.lab.seed-map.details.positions-unavailable": {
+    "message": "引擎提供了容器位置，但未提供此结构的结构块位置。"
+  },
+  "app.lab.seed-map.underground-limit": {
+    "message": "放大地图后查看地下切片。预测不模拟水、含水层和方块替换。"
+  },
+  "app.lab.seed-map.copyright.view-license": {
+    "message": "查看 MIT 许可证"
   }
 }

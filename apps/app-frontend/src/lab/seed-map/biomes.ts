@@ -49,7 +49,7 @@ export const SEED_MAP_BIOMES: readonly SeedMapBiome[] = [
     { id: 183, dimensions: OVERWORLD, category: 'cave', color: '#031F29' },
     { id: 174, dimensions: OVERWORLD, category: 'cave', color: '#4E3012' },
     { id: 175, dimensions: OVERWORLD, category: 'cave', color: '#283C00' },
-    { id: 187, dimensions: OVERWORLD, category: 'cave', color: '#C8C828' },
+    { id: 187, dimensions: OVERWORLD, category: 'cave', color: '#C8D232' },
     { id: 2, dimensions: OVERWORLD, category: 'desert', color: '#FA9418' },
     { id: 27, dimensions: OVERWORLD, category: 'forest', color: '#307444' },
     { id: 185, dimensions: OVERWORLD, category: 'forest', color: '#FF91C8' },
