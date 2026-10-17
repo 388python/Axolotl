@@ -128,6 +128,7 @@ import {
     SEED_MAP_LAYOUT_MAX_SCALE,
     seedMapLayoutPalette,
     seedMapLayoutPieces,
+    seedMapStructureBadgePositions,
 } from '@/lab/seed-map/structure-layout'
 import {
     createSeedMapTileLayer,
@@ -590,7 +591,11 @@ const undergroundYRange = computed(
     () => selectedProfile.value?.undergroundYRanges?.[dimensionsIndex.value] ?? [-64, 319],
 )
 const focusedPiece = ref<SeedMapStructurePiece | null>(null)
-const layoutLayer = createSeedMapLayoutLayer(getSeedMapStructureDetails, () => redraw())
+const layoutRevision = ref(0)
+const layoutLayer = createSeedMapLayoutLayer(getSeedMapStructureDetails, () => {
+    layoutRevision.value++
+    redraw()
+})
 let layoutRefreshTimer: ReturnType<typeof setTimeout> | undefined
 const replayOnboarding = inject<(mode: 'seed-map') => Promise<void>>('replayOnboarding')
 const structureQuery = computed<SeedMapStructureQuery | null>(() =>
@@ -681,6 +686,43 @@ const visibleLayoutQueries = computed(() => {
             },
         }))
 })
+const projectedStructures = computed(() => {
+    const currentRevision = layoutRevision.value
+    return visibleLayoutQueries.value.flatMap(({ feature, query }) => {
+        if (currentRevision < 0) return []
+        const pieces = seedMapLayoutPieces(layoutLayer.peek(query) ?? null)
+        return pieces.length ? [{ feature, pieces }] : []
+    })
+})
+const projectedFeatureKeys = computed(
+    () => new Set(projectedStructures.value.map(({ feature }) => featureKey(feature))),
+)
+function structureBadges(size: { width: number; height: number }) {
+    return seedMapStructureBadgePositions(
+        projectedStructures.value.map(({ feature, pieces }) => {
+            const min = worldToScreen(
+                Math.min(...pieces.map((piece) => piece.min!.x)),
+                Math.min(...pieces.map((piece) => piece.min!.z)),
+            )
+            const max = worldToScreen(
+                Math.max(...pieces.map((piece) => piece.max!.x + 1)),
+                Math.max(...pieces.map((piece) => piece.max!.z + 1)),
+            )
+            return { id: featureKey(feature), minX: min.x, minY: min.y, maxX: max.x, maxY: max.y }
+        }),
+        size,
+    ).map((badge) => ({
+        ...badge,
+        feature: projectedStructures.value.find(({ feature }) => featureKey(feature) === badge.id)!
+            .feature,
+    }))
+}
+function selectStructureBadge(feature: SeedMapFeature) {
+    selection.value = { x: feature.x, z: feature.z, feature }
+    focusedPiece.value = null
+    markerDraftOpen.value = false
+    redraw()
+}
 watch(visibleLayoutQueries, () => {
     clearTimeout(layoutRefreshTimer)
     layoutRefreshTimer = setTimeout(
@@ -1407,6 +1449,7 @@ function drawGrid(context: CanvasRenderingContext2D, bounds: MapBounds) {
 
 function drawFeatures(context: CanvasRenderingContext2D) {
     for (const feature of displayedFeatures.value) {
+        if (projectedFeatureKeys.value.has(featureKey(feature))) continue
         const point = worldToScreen(feature.x, feature.z)
         if (
             point.x < -18 ||
@@ -2653,7 +2696,10 @@ function clampWorldCoordinate(value: number) {
                     </div>
                 </div>
                 <div
-                    v-if="workspace.dimension === 'overworld'"
+                    v-if="
+                        workspace.dimension === 'overworld' &&
+                        workspace.displayMode !== 'underground'
+                    "
                     class="control-group elevation-group shrink-0"
                 >
                     <span class="control-label">{{ formatMessage(messages.depth) }}</span>
@@ -3013,6 +3059,40 @@ function clampWorldCoordinate(value: number) {
                             @dblclick="onDoubleClick"
                             @contextmenu="onContextMenu"
                         />
+
+                        <button
+                            v-for="badge in structureBadges(visibleSize)"
+                            :key="badge.id"
+                            type="button"
+                            class="absolute z-[6] flex h-8 items-center gap-2 rounded-lg border border-surface-4 bg-surface-3 px-2 text-xs font-semibold text-[var(--color-text-primary)] shadow-md hover:bg-surface-4"
+                            :class="{ 'ring-2 ring-brand': selectedFeatureKey === badge.id }"
+                            :style="{
+                                left: `${badge.x}px`,
+                                top: `${badge.y}px`,
+                                width: `${badge.width}px`,
+                            }"
+                            :title="`${featureResultLabel(badge.feature)} · ${badge.feature.x}, ${badge.feature.z}`"
+                            :aria-pressed="selectedFeatureKey === badge.id"
+                            data-testid="seed-map-structure-badge"
+                            @pointerdown.stop
+                            @dblclick.stop
+                            @keydown.stop
+                            @click="selectStructureBadge(badge.feature)"
+                        >
+                            <img
+                                :src="
+                                    badge.feature.kind === 'end-city' &&
+                                    badge.feature.endShip !== undefined
+                                        ? endCityImageSources[
+                                              badge.feature.endShip ? 'ship' : 'noShip'
+                                          ]
+                                        : featureImageSource(badge.feature.kind)
+                                "
+                                alt=""
+                                class="size-5 shrink-0 [image-rendering:pixelated]"
+                            />
+                            <span class="truncate">{{ featureResultLabel(badge.feature) }}</span>
+                        </button>
 
                         <div class="map-coordinate-ruler map-coordinate-ruler-x">
                             <span v-for="offset in [-2, -1, 0, 1, 2]" :key="offset">{{

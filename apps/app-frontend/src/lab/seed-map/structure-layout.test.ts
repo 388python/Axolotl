@@ -10,8 +10,25 @@ import { createSeedMapLayoutLayer } from './layout-layer.ts'
 import {
     hitSeedMapLayout,
     seedMapLayoutPieces,
+    seedMapStructureBadgePositions,
     seedMapStructureCapabilities,
 } from './structure-layout.ts'
+
+test('structure labels stay visible when an origin is offscreen and avoid each other', () => {
+    const badges = seedMapStructureBadgePositions(
+        [
+            { id: 'end-city', minX: -300, minY: -200, maxX: 250, maxY: 180 },
+            { id: 'fortress', minX: -120, minY: -100, maxX: 150, maxY: 200 },
+            { id: 'outside', minX: 900, minY: 10, maxX: 950, maxY: 50 },
+        ],
+        { width: 640, height: 480 },
+    )
+    assert.equal(badges.length, 2)
+    assert.equal(badges[0].x, 56)
+    assert.equal(badges[0].y, 32)
+    assert.ok(Math.abs(badges[0].y - badges[1].y) >= 36)
+    assert.ok(badges.every((badge) => badge.x + badge.width <= 640 && badge.y + 32 <= 480))
+})
 
 const piece: SeedMapStructurePiece = {
     id: 1,

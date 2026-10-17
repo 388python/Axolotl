@@ -250,6 +250,15 @@ it('automatically paints visible layouts without a selection, shares requests wi
     await flushPromises()
     await vi.waitFor(() => expect(backend.details).toHaveBeenCalledOnce())
     expect(vm.selection).toBeNull()
+    const badge = wrapper!.get('[data-testid="seed-map-structure-badge"]')
+    expect(badge.text()).toBe('Stronghold')
+    expect(badge.element.getBoundingClientRect().height).toBeGreaterThanOrEqual(32)
+    await badge.trigger('click')
+    await flushPromises()
+    expect(vm.selection?.feature?.kind).toBe('stronghold')
+    expect(vm.focusedPiece).toBeNull()
+    await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
+    await flushPromises()
     vm.drawMap()
     const sample = () => {
         const ratio = window.devicePixelRatio || 1
@@ -267,6 +276,7 @@ it('automatically paints visible layouts without a selection, shares requests wi
     const overlay = sample()
     vm.workspace.zoom = 1
     await flushPromises()
+    expect(wrapper!.find('[data-testid="seed-map-structure-badge"]').exists()).toBe(false)
     vm.drawMap()
     expect(sample()).not.toEqual(overlay)
     vm.workspace.zoom = 0
@@ -374,6 +384,46 @@ it('keeps screen coordinates and painted canvas intact when opening, dragging an
         recording = false
         observer.disconnect()
     }
+})
+
+it('keeps an End city label clickable when its origin is offscreen but its layout remains visible', async () => {
+    backend.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        containers: [],
+        limits: ['relative_height'],
+        pieces: [
+            {
+                id: 0,
+                name: 'base_floor',
+                rotation: 0,
+                positionKnown: true,
+                position: { x: -400, y: 0, z: 0 },
+                min: { x: -400, y: 0, z: 0 },
+                max: { x: 20, y: 20, z: 40 },
+            },
+        ],
+    })
+    const { vm, canvas } = await openMap()
+    vm.workspace.dimension = 'end'
+    vm.workspace.zoom = 0
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = ['end-city']
+    await flushPromises()
+    vm.features = [{ kind: 'end-city', x: -400, z: 0, approximate: false, endShip: true }]
+    await vi.waitFor(() =>
+        expect(wrapper!.find('[data-testid="seed-map-structure-badge"]').exists()).toBe(true),
+    )
+    const badge = wrapper!.get('[data-testid="seed-map-structure-badge"]')
+    expect(badge.get('img').attributes('src')).toContain('end_city_ship.webp')
+    const region = canvas.parentElement!.getBoundingClientRect()
+    const position = badge.element.getBoundingClientRect()
+    expect(position.left).toBeGreaterThanOrEqual(region.left)
+    expect(position.right).toBeLessThanOrEqual(region.right)
+    await badge.trigger('click')
+    await flushPromises()
+    expect(vm.selection?.feature).toMatchObject({ kind: 'end-city', x: -400, endShip: true })
+    expect(vm.focusedPiece).toBeNull()
 })
 
 afterEach(async () => {

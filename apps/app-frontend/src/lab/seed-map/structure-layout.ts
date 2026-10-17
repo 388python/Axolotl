@@ -1,6 +1,69 @@
 import type { SeedMapStructureDetails, SeedMapStructurePiece } from './advanced.ts'
+import type { StructureChest } from './structure-blocks.ts'
+import { seedMapTemplatePieces } from './structure-blocks.ts'
 
 export const SEED_MAP_LAYOUT_MAX_SCALE = 2
+
+/** Vanilla Nether fortress turn rooms place chests at local Y=2 above the piece minimum. */
+export function seedMapKnownLayoutChests(
+    details: SeedMapStructureDetails | null,
+    kind: string,
+): StructureChest[] {
+    if (kind !== 'fortress' || !details?.supported) return []
+    const pieces = new Map(details.pieces.map((piece) => [piece.id, piece]))
+    return details.containers.flatMap((container) => {
+        const piece = pieces.get(container.piece)
+        if (
+            !piece?.positionKnown ||
+            !piece.min ||
+            !['NeSCLT', 'NeSCRT'].includes(piece.name) ||
+            container.table.replace(/^minecraft:/, '') !== 'chests/nether_bridge'
+        )
+            return []
+        const position: [number, number, number] = [container.x, piece.min.y + 2, container.z]
+        return position.every(Number.isSafeInteger)
+            ? [{ pieceId: piece.id, position, name: 'minecraft:chest' }]
+            : []
+    })
+}
+
+export function seedMapStructureBadgePositions(
+    structures: { id: string; minX: number; minY: number; maxX: number; maxY: number }[],
+    viewport: { width: number; height: number },
+) {
+    const badges: { id: string; x: number; y: number; width: number }[] = []
+    const width = Math.min(176, Math.max(80, viewport.width - 112))
+    const minY = 32
+    const maxY = Math.max(minY, viewport.height - 76)
+    for (const structure of structures) {
+        if (
+            structure.maxX < 0 ||
+            structure.minX > viewport.width ||
+            structure.maxY < 0 ||
+            structure.minY > viewport.height
+        )
+            continue
+        const x = Math.max(56, Math.min(viewport.width - width - 56, structure.minX))
+        let y = Math.max(minY, Math.min(maxY, structure.minY - 40))
+        const overlaps = (top: number) =>
+            badges.some(
+                (badge) =>
+                    x < badge.x + badge.width + 4 &&
+                    x + width + 4 > badge.x &&
+                    top < badge.y + 36 &&
+                    top + 36 > badge.y,
+            )
+        if (overlaps(y)) {
+            const candidates = badges
+                .flatMap((badge) => [badge.y + 36, badge.y - 36])
+                .filter((top) => top >= minY && top <= maxY && !overlaps(top))
+                .sort((a, b) => Math.abs(a - y) - Math.abs(b - y))
+            y = candidates[0] ?? y
+        }
+        badges.push({ id: structure.id, x, y, width })
+    }
+    return badges
+}
 
 export function seedMapPieceBounds(piece: SeedMapStructurePiece) {
     return { min: piece.min ?? piece.position, max: piece.max ?? piece.position }
@@ -41,11 +104,17 @@ export function seedMapVolumePieces(details: SeedMapStructureDetails | null) {
     )
 }
 
-export function seedMapStructureCapabilities(details: SeedMapStructureDetails) {
+export function seedMapStructureCapabilities(
+    details: SeedMapStructureDetails,
+    version = '',
+    kind = '',
+    position = { x: 0, z: 0 },
+) {
+    const templates = seedMapTemplatePieces(details, { version, ...position }, kind)
     return {
         variant: details.capabilities?.variant ?? !!details.variant,
         projection: seedMapLayoutPieces(details).length > 0,
-        volume: seedMapVolumePieces(details).length > 0,
+        volume: seedMapVolumePieces(details).length > 0 || templates.length > 0,
         containers: details.capabilities?.containers ?? details.containers.length > 0,
         complete:
             seedMapLayoutPieces(details).length > 0 &&
@@ -57,7 +126,7 @@ export function seedMapStructureCapabilities(details: SeedMapStructureDetails) {
                 ),
             ),
         absoluteHeight: false,
-        blocks: false,
+        blocks: templates.length > 0,
     }
 }
 

@@ -180,6 +180,11 @@ export function createSeedMapLabels(format: Format, locale: string) {
         if (Object.hasOwn(pieceNames, id)) return text(pieceNames[id])
         const end = id.replace(/^end_city\//, '')
         if (kind === 'end-city' && Object.hasOwn(endPieces, end)) return text(endPieces[end])
+        const portal = /^ruined_portal\/(giant_)?portal_(\d+)$/.exec(id)
+        if (portal)
+            return text(portal[1] ? 'giant-portal' : 'portal', { number: Number(portal[2]) })
+        const fossil = /^nether_fossils\/fossil_(\d+)$/.exec(id)
+        if (fossil) return text('fossil', { number: Number(fossil[1]) })
         const ship = /^shipwreck\/(.+?)(_degraded)?$/.exec(id)
         if (ship && Object.hasOwn(shipNames, ship[1])) {
             const label = text(shipNames[ship[1]])
