@@ -241,7 +241,7 @@ async fn upload_prepared(
     prepared: &UploadBody,
 ) -> crate::Result<LogShareUploadResponse> {
     let client = request_client().await?;
-    let body_value = serde_json::to_value(&prepared)?;
+    let body_value = serde_json::to_value(prepared)?;
     let request = client
         .post(format!("{LOGSHARE_BASE_URL}/v1/log"))
         .header("Accept", "application/json")

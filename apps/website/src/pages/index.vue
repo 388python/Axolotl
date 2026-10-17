@@ -10,11 +10,11 @@ import GitGraphIcon from '@modrinth/assets/icons/git-graph.svg?component'
 import IssuesIcon from '@modrinth/assets/icons/issues.svg?component'
 import SearchIcon from '@modrinth/assets/icons/search.svg?component'
 import TrashIcon from '@modrinth/assets/icons/trash.svg?component'
-import Combobox, { type ComboboxOption } from '@modrinth/ui/src/components/base/Combobox.vue'
 import Accordion from '@modrinth/ui/src/components/base/Accordion.vue'
 import Avatar from '@modrinth/ui/src/components/base/Avatar.vue'
 import Button from '@modrinth/ui/src/components/base/buttons/Button.vue'
 import Checkbox from '@modrinth/ui/src/components/base/Checkbox.vue'
+import Combobox, { type ComboboxOption } from '@modrinth/ui/src/components/base/Combobox.vue'
 import IntlFormatted from '@modrinth/ui/src/components/base/IntlFormatted.vue'
 import { defineMessages, useVIntl } from '@modrinth/ui/src/composables/i18n.ts'
 
@@ -289,7 +289,8 @@ const messages = defineMessages({
     },
     recentDescription: {
         id: 'axolotl-marketing.recent.description',
-        defaultMessage: 'Find something new to play, spend less time downloading, and keep a backup to return to. Axolotl helps with the work around your Minecraft worlds.',
+        defaultMessage:
+            'Find something new to play, spend less time downloading, and keep a backup to return to. Axolotl helps with the work around your Minecraft worlds.',
     },
     recentResourcesTitle: {
         id: 'axolotl-marketing.recent.resources.title',
@@ -649,8 +650,7 @@ const messages = defineMessages({
     },
     seoTitle: {
         id: 'axolotl-site.seo.title',
-        defaultMessage:
-            'Axolotl Launcher - Free, Open-Source Minecraft Java Launcher',
+        defaultMessage: 'Axolotl Launcher - Free, Open-Source Minecraft Java Launcher',
     },
     seoDescription: {
         id: 'axolotl-site.seo.description',
@@ -671,7 +671,8 @@ const messages = defineMessages({
     },
     faqDescription: {
         id: 'axolotl-site.faq.description',
-        defaultMessage: 'Answers about installing, moving your games, downloading content, and keeping backups.',
+        defaultMessage:
+            'Answers about installing, moving your games, downloading content, and keeping backups.',
     },
     faqPlatformsQuestion: {
         id: 'axolotl-site.faq.platforms.question',
@@ -751,7 +752,8 @@ const messages = defineMessages({
     },
     structuredFeatureDownloads: {
         id: 'axolotl-site.structured-data.feature.downloads',
-        defaultMessage: 'Concurrent downloads, alternative download sources, and DNS over HTTPS (DoH)',
+        defaultMessage:
+            'Concurrent downloads, alternative download sources, and DNS over HTTPS (DoH)',
     },
     structuredFeatureMigration: {
         id: 'axolotl-site.structured-data.feature.migration',
@@ -764,7 +766,8 @@ const messages = defineMessages({
     },
     structuredFeatureStorage: {
         id: 'axolotl-site.structured-data.feature.storage',
-        defaultMessage: 'Disk usage analysis and cache cleanup that preserves installed games, saves, and backups',
+        defaultMessage:
+            'Disk usage analysis and cache cleanup that preserves installed games, saves, and backups',
     },
     structuredFeatureExport: {
         id: 'axolotl-site.structured-data.feature.export',
@@ -786,7 +789,8 @@ const messages = defineMessages({
     },
     structuredFeatureAccounts: {
         id: 'axolotl-site.structured-data.feature.accounts',
-        defaultMessage: 'Microsoft, eligible offline accounts, LittleSkin, and custom Yggdrasil account support',
+        defaultMessage:
+            'Microsoft, eligible offline accounts, LittleSkin, and custom Yggdrasil account support',
     },
     faqLabQuestion: {
         id: 'axolotl-site.faq.lab.question',
@@ -1107,7 +1111,9 @@ useHead(() => ({
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
                     data-number="05"
                 >
-                    <div class="promise-meta"><DownloadIcon aria-hidden="true" /><span>05</span></div>
+                    <div class="promise-meta">
+                        <DownloadIcon aria-hidden="true" /><span>05</span>
+                    </div>
                     <h3>{{ formatMessage(messages.mirrorSupport) }}</h3>
                     <p>{{ formatMessage(messages.mirrorSupportDescription) }}</p>
                 </article>

@@ -983,27 +983,6 @@
   "app.content.install-content": {
     "message": "安裝內容"
   },
-  "app.crash-analysis.ai.action": {
-    "message": "使用 AI 解釋"
-  },
-  "app.crash-analysis.ai.analyzing": {
-    "message": "正在解釋崩潰……"
-  },
-  "app.crash-analysis.ai.close": {
-    "message": "關閉"
-  },
-  "app.crash-analysis.ai.copied": {
-    "message": "AI 解釋已複製到剪貼簿"
-  },
-  "app.crash-analysis.ai.copy": {
-    "message": "複製解釋"
-  },
-  "app.crash-analysis.ai.disclaimer": {
-    "message": "經過脫敏和裁剪的崩潰內容會直接傳送給此啟動器中設定的 AI Provider。AI 輸出可能不準確。"
-  },
-  "app.crash-analysis.ai.error": {
-    "message": "AI 解釋失敗：{message}"
-  },
   "app.crash-analysis.ai.settings.enabled": {
     "message": "啟用 AI 解釋"
   },
@@ -1018,9 +997,6 @@
   },
   "app.crash-analysis.ai.settings.provider": {
     "message": "AI Provider"
-  },
-  "app.crash-analysis.ai.title": {
-    "message": "AI 崩潰解釋"
   },
   "app.curseforge.automatic-downloads-failed.notification-body": {
     "message": "重試後仍有 {failed, number} 個文件下載失敗（{list}）。可在“下載”中查看已記錄的錯誤。"

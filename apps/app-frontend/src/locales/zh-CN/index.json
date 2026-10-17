@@ -1226,27 +1226,6 @@
   "app.content.install-content": {
     "message": "安装内容"
   },
-  "app.crash-analysis.ai.action": {
-    "message": "使用 AI 解释"
-  },
-  "app.crash-analysis.ai.analyzing": {
-    "message": "正在解释崩溃……"
-  },
-  "app.crash-analysis.ai.close": {
-    "message": "关闭"
-  },
-  "app.crash-analysis.ai.copied": {
-    "message": "AI 解释已复制到剪贴板"
-  },
-  "app.crash-analysis.ai.copy": {
-    "message": "复制解释"
-  },
-  "app.crash-analysis.ai.disclaimer": {
-    "message": "经过脱敏和裁剪的崩溃上下文会直接发送给本启动器中配置的 AI Provider。AI 输出可能不准确。"
-  },
-  "app.crash-analysis.ai.error": {
-    "message": "AI 解释失败：{message}"
-  },
   "app.crash-analysis.ai.settings.enabled": {
     "message": "启用本地 LogAgent"
   },
@@ -1261,9 +1240,6 @@
   },
   "app.crash-analysis.ai.settings.provider": {
     "message": "AI Provider"
-  },
-  "app.crash-analysis.ai.title": {
-    "message": "AI 崩溃解释"
   },
   "app.curseforge.automatic-downloads-failed.notification-body": {
     "message": "重试后仍有 {failed, number} 个文件下载失败（{list}）。可在“下载”中查看已记录的错误。"
@@ -5648,9 +5624,6 @@
   "app.library.view.standard": {
     "message": "标准网格"
   },
-  "app.log-share.ai.action": {
-    "message": "AI 深度分析"
-  },
   "app.log-share.ai.confidence": {
     "message": "诊断置信度"
   },
@@ -5672,9 +5645,6 @@
   "app.log-share.ai.thinking": {
     "message": "思考中…"
   },
-  "app.log-share.ai.tool": {
-    "message": "正在使用工具：{name}"
-  },
   "app.log-share.ai.tool-result": {
     "message": "已收到工具结果"
   },
@@ -5690,29 +5660,14 @@
   "app.log-share.ai.tab": {
     "message": "LogAgent 深度分析"
   },
-  "app.log-share.ai.unknown-tool": {
-    "message": "工具"
-  },
   "app.log-share.settings.ai-source": {
     "message": "AI 分析来源"
-  },
-  "app.log-share.settings.ai-source-custom": {
-    "message": "本地 LogAgent"
-  },
-  "app.log-share.settings.ai-source-description": {
-    "message": "本地 LogAgent 在启动器内运行，并将相关日志片段发送给你配置的模型服务商；云端 LogShare 会将日志发送到 LogShare。这是默认来源，每次分析时仍可临时切换。"
-  },
-  "app.log-share.settings.ai-source-logshare": {
-    "message": "云端 LogShare"
   },
   "app.log-share.settings.auto-upload": {
     "message": "自动上传以获取结构化摘要"
   },
   "app.log-share.settings.auto-upload-description": {
     "message": "崩溃后自动将日志上传到 LogShare，无需先启动 AI 分析。"
-  },
-  "app.log-share.settings.description": {
-    "message": "选择本地 LogAgent 或云端 LogShare 分析崩溃；日志分享服务单独配置。"
   },
   "app.log-share.settings.multi-file": {
     "message": "多文件上传"
@@ -5728,9 +5683,6 @@
   },
   "app.log-share.settings.share-provider": {
     "message": "日志分享服务"
-  },
-  "app.log-share.settings.share-provider-description": {
-    "message": "分享诊断链接时上传到的目标服务。"
   },
   "app.log-share.settings.show-progress": {
     "message": "显示 AI 分析进度"
@@ -14297,14 +14249,8 @@
   "app.logagent.cancelled": {
     "message": "启动器已取消本次分析。云端任务可能仍在服务器上运行。"
   },
-  "app.logagent.local-unavailable": {
-    "message": "请在「设置 > 启动默认值」中启用本地 LogAgent 并选择支持工具调用的模型。"
-  },
   "app.logagent.preparing": {
     "message": "正在准备诊断快照…"
-  },
-  "app.logagent.run": {
-    "message": "使用 LogAgent 分析"
   },
   "app.logagent.settings.supported-models": {
     "message": "请选择支持工具调用的模型。协议已适配不代表每个模型都接受工具调用；使用 Copilot 时需选择具体模型，不能使用 Auto。"
@@ -14318,14 +14264,8 @@
   "app.logagent.source-cloud-hint": {
     "message": "崩溃日志会发送到 LogShare 进行云端分析。"
   },
-  "app.logagent.source-label": {
-    "message": "本次分析来源"
-  },
   "app.logagent.source-local": {
     "message": "本地 LogAgent"
-  },
-  "app.logagent.source-local-hint": {
-    "message": "LogAgent 在启动器内运行，相关日志片段会发送给你配置的模型服务商。"
   },
   "app.onboarding.logagent-cloud.description": {
     "message": "选择「云端 LogShare」后显示云端选项。不存储日志的分析仍会将内容发送到 LogShare，并停用自动摘要。取消分析会断开启动器连接，服务器上的任务可能继续运行。"
