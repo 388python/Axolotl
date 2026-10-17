@@ -14,6 +14,7 @@ import { loadMinecraftItemImage } from '@/lab/recipe-generator/item-images'
 import {
     getSeedMapContainerLoot,
     getSeedMapStructureDetails,
+    type SeedMapContainer,
     type SeedMapLoot,
     type SeedMapStructureDetails,
     type SeedMapStructurePiece,
@@ -132,6 +133,14 @@ const messages = defineMessages({
         id: 'app.lab.seed-map.details.named-container',
         defaultMessage: '{name} {number} · {x}, {z}',
     },
+    allContainers: {
+        id: 'app.lab.seed-map.details.all-containers',
+        defaultMessage: 'All loot',
+    },
+    lootSource: {
+        id: 'app.lab.seed-map.details.loot-source',
+        defaultMessage: 'From {container}',
+    },
     technical: {
         id: 'app.lab.seed-map.details.technical-identifiers',
         defaultMessage: 'Technical identifiers',
@@ -200,12 +209,16 @@ const tab = ref<'overview' | 'layout' | 'loot'>('overview')
 const details = ref<SeedMapStructureDetails | null>(null)
 const sparseBlocks = ref<SeedMapStructureDetails['blocks']>()
 const loot = ref<SeedMapLoot | null>(null)
+type LootItem = NonNullable<SeedMapLoot['items']>[number]
+type DisplayLootItem = LootItem & { containerId?: number }
+const allContainersValue = 'all'
+const displayedLootItems = ref<DisplayLootItem[]>([])
 const hoverLoot = ref<{ containerId: number; result: SeedMapLoot }>()
 const busy = ref(false)
 const lootBusy = ref(false)
 const failed = ref(false)
 const lootFailed = ref(false)
-const containerId = ref<number>()
+const containerId = ref<number | typeof allContainersValue>()
 const selectedPiece = ref<number>()
 const copied = ref(false)
 const technicalOpen = ref(false)
@@ -252,7 +265,7 @@ async function loadDetails() {
         details.value = result
         sparseBlocks.value = result.blocks
         selectedPiece.value = props.selected
-        containerId.value = result.containers[0]?.id
+        containerId.value = result.containers.length ? allContainersValue : undefined
         if (!result.supported) tab.value = 'overview'
         if (tab.value === 'loot') void loadLoot()
     } catch {
@@ -278,15 +291,19 @@ async function loadSparseBlocks() {
 async function loadLoot() {
     if (!details.value?.supported || containerId.value === undefined || tab.value !== 'loot') return
     const token = ++lootGeneration
-    const container = containerId.value
+    const selection = containerId.value
     const query = { ...props.query }
     lootBusy.value = true
     lootFailed.value = false
     copied.value = false
     try {
-        const result = await fetchContainerLoot(container, query)
+        const result =
+            selection === allContainersValue
+                ? await fetchAllContainerLoot(query)
+                : { loot: await fetchContainerLoot(selection, query), items: undefined }
         if (token !== lootGeneration) return
-        loot.value = result
+        loot.value = result.loot
+        displayedLootItems.value = result.items ?? result.loot.items ?? []
     } catch {
         if (token === lootGeneration) lootFailed.value = true
     } finally {
@@ -298,9 +315,10 @@ async function fetchContainerLoot(container: number, query = props.query) {
     const cached = lootCache.get(container)
     if (cached) return cached
     const result = await getSeedMapContainerLoot({ ...query }, container)
+    const mergedResult = result.items ? { ...result, items: mergeLootItems(result.items) } : result
     if (lootCache.size >= 32) lootCache.delete(lootCache.keys().next().value!)
-    lootCache.set(container, result)
-    for (const item of result.items ?? []) {
+    lootCache.set(container, mergedResult)
+    for (const item of mergedResult.items ?? []) {
         if (itemImages.value[item.id]) continue
         void Promise.resolve()
             .then(() => loadMinecraftItemImage(item.id))
@@ -309,7 +327,58 @@ async function fetchContainerLoot(container: number, query = props.query) {
             })
             .catch(() => {})
     }
-    return result
+    return mergedResult
+}
+
+function mergeLootItems(items: LootItem[]) {
+    const merged = new Map<string, LootItem>()
+    for (const item of items) {
+        const key = JSON.stringify([
+            item.id,
+            [...item.enchantments]
+                .map((enchantment) => [enchantment.id, enchantment.level])
+                .sort(([leftId, leftLevel], [rightId, rightLevel]) =>
+                    `${leftId}:${leftLevel}`.localeCompare(`${rightId}:${rightLevel}`),
+                ),
+            item.effect ?? null,
+            item.duration ?? null,
+        ])
+        const existing = merged.get(key)
+        if (existing) existing.count += item.count
+        else
+            merged.set(key, {
+                ...item,
+                enchantments: item.enchantments.map((value) => ({ ...value })),
+            })
+    }
+    return [...merged.values()]
+}
+
+async function fetchAllContainerLoot(query = props.query) {
+    const containers = details.value?.containers ?? []
+    const entries = await Promise.all(
+        containers.map(async (container) => ({
+            container,
+            loot: await fetchContainerLoot(container.id, query),
+        })),
+    )
+    const lootResults = entries.map(({ loot }) => loot)
+    const items = entries.flatMap(({ container, loot }) =>
+        (loot.items ?? []).map((item) => ({ ...item, containerId: container.id })),
+    )
+    return {
+        loot: {
+            supported: lootResults.some((result) => result.supported),
+            truncated: lootResults.some((result) => result.truncated),
+            estimated: lootResults.some((result) => result.estimated),
+            items: lootResults.flatMap((result) => result.items ?? []),
+            unresolvedTables: [
+                ...new Set(lootResults.flatMap((result) => result.unresolvedTables ?? [])),
+            ],
+            limits: [...new Set(lootResults.flatMap((result) => result.limits))],
+        },
+        items,
+    } satisfies { loot: SeedMapLoot; items: DisplayLootItem[] }
 }
 
 async function previewContainerLoot(containerId: number | undefined) {
@@ -333,6 +402,7 @@ async function openContainerLoot(container: number) {
         containerId.value = container
         tab.value = 'loot'
         loot.value = result
+        displayedLootItems.value = result.items ?? []
     } catch {
         containerId.value = container
         tab.value = 'loot'
@@ -348,6 +418,7 @@ watch(
         details.value = null
         sparseBlocks.value = undefined
         loot.value = null
+        displayedLootItems.value = []
         hoverLoot.value = undefined
         lootBusy.value = false
         lootFailed.value = false
@@ -362,6 +433,7 @@ watch(
 )
 watch([tab, containerId], () => {
     loot.value = null
+    displayedLootItems.value = []
     void loadLoot()
 })
 
@@ -420,6 +492,20 @@ function effectLabel(effect: string, duration?: number) {
     )
     const time = duration === undefined || instant ? undefined : seedMapEffectDuration(duration)
     return time ? formatMessage(messages.effectDuration, { name, duration: time }) : name
+}
+function containerLabel(container: SeedMapContainer) {
+    const containers = details.value?.containers ?? []
+    const index = containers.findIndex((value) => value.id === container.id)
+    return formatMessage(messages.container, {
+        number: index + 1,
+        name: labels.value.table(container.table ?? 'chests/ancient_city'),
+        x: container.x,
+        z: container.z,
+    })
+}
+function lootSourceLabel(id: number) {
+    const container = details.value?.containers.find((value) => value.id === id)
+    return container ? containerLabel(container) : String(id)
 }
 function focus(piece: SeedMapStructurePiece) {
     if (!piece.positionKnown) return
@@ -680,19 +766,25 @@ async function copyLoot() {
                     </p>
                     <Combobox
                         v-else
-                        :model-value="String(containerId)"
-                        :options="
-                            details.containers.map((container, index) => ({
-                                value: String(container.id),
-                                label: formatMessage(messages.container, {
-                                    number: index + 1,
-                                    name: labels.table(container.table ?? 'chests/ancient_city'),
-                                    x: container.x,
-                                    z: container.z,
-                                }),
-                            }))
+                        :model-value="
+                            containerId === allContainersValue
+                                ? allContainersValue
+                                : String(containerId)
                         "
-                        @update:model-value="containerId = Number($event)"
+                        :options="[
+                            {
+                                value: allContainersValue,
+                                label: formatMessage(messages.allContainers),
+                            },
+                            ...details.containers.map((container) => ({
+                                value: String(container.id),
+                                label: containerLabel(container),
+                            })),
+                        ]"
+                        @update:model-value="
+                            containerId =
+                                $event === allContainersValue ? allContainersValue : Number($event)
+                        "
                     />
                     <p v-if="lootBusy" class="m-0">{{ formatMessage(messages.loading) }}</p>
                     <div v-if="lootFailed" class="flex flex-col gap-2">
@@ -721,8 +813,8 @@ async function copyLoot() {
                             >
                         </p>
                         <div
-                            v-for="(item, index) in loot.items"
-                            :key="index"
+                            v-for="(item, index) in displayedLootItems"
+                            :key="`${item.id}-${index}`"
                             class="flex gap-2 border-b border-surface-4 py-2"
                         >
                             <img
@@ -746,7 +838,16 @@ async function copyLoot() {
                                     }}</span
                                 ><span v-if="item.effect" class="block text-xs">{{
                                     effectLabel(item.effect, item.duration)
-                                }}</span>
+                                }}</span
+                                ><span
+                                    v-if="item.containerId !== undefined"
+                                    class="block text-xs text-[var(--color-text-tertiary)]"
+                                    >{{
+                                        formatMessage(messages.lootSource, {
+                                            container: lootSourceLabel(item.containerId),
+                                        })
+                                    }}</span
+                                >
                             </div>
                         </div>
                         <Button v-if="loot.supported" type="outlined" size="2xs" @click="copyLoot"

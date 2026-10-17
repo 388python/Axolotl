@@ -948,10 +948,53 @@ it('loads loot only after opening its tab and reports unavailable piece position
         .find((tab) => tab.text() === 'Loot')!
         .trigger('click')
     await vi.waitFor(() => expect(calls.loot).toHaveBeenCalledOnce())
-    expect(wrapper.text()).toContain('Unrecognized loot table')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Unrecognized loot table'))
     expect(wrapper.text()).not.toContain('missing/table')
     await wrapper.get('details summary').trigger('click')
     await vi.waitFor(() => expect(wrapper.text()).toContain('missing/table'))
+})
+
+it('shows all containers by default and merges identical items within each container', async () => {
+    calls.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        limits: [],
+        pieces: [],
+        containers: [
+            { id: 2, piece: 0, x: 10, z: 20, table: 'chests/end_city_treasure' },
+            { id: 5, piece: 1, x: 30, z: 40, table: 'chests/end_city_treasure' },
+        ],
+    })
+    calls.loot.mockImplementation((_query, container: number) =>
+        Promise.resolve({
+            supported: true,
+            truncated: false,
+            limits: [],
+            items:
+                container === 2
+                    ? [
+                          { id: 'minecraft:diamond', count: 2, enchantments: [] },
+                          { id: 'minecraft:diamond', count: 3, enchantments: [] },
+                          {
+                              id: 'minecraft:diamond',
+                              count: 1,
+                              enchantments: [{ id: 'minecraft:fortune', level: 1 }],
+                          },
+                      ]
+                    : [{ id: 'minecraft:emerald', count: 4, enchantments: [] }],
+        }),
+    )
+    const wrapper = render()
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]')[2].trigger('click')
+    await vi.waitFor(() => expect(calls.loot).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(wrapper.text()).toContain('Emerald ×4'))
+    expect(wrapper.get('[data-combobox]').text()).toContain('All loot')
+    expect(wrapper.text()).toContain('Diamond ×5')
+    expect(wrapper.text()).toContain('Diamond ×1')
+    expect(wrapper.text()).toContain('From End city chest 1 · 10, 20')
+    expect(wrapper.text()).toContain('From End city chest 2 · 30, 40')
+    expect(wrapper.text()).not.toContain('>')
 })
 
 it.each(['en-US', 'zh-CN'])(

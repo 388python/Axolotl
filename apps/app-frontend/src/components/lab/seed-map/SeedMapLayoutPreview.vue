@@ -546,9 +546,6 @@ onBeforeUnmount(() => {
                         })
                     }}
                 </span>
-                <span class="mt-1 block text-[10px] text-[var(--color-text-tertiary)]">{{
-                    formatMessage(messages.chestLootLimit)
-                }}</span>
                 <span
                     v-if="props.hoverLoot?.result.estimated"
                     class="mt-1 block text-[10px] text-[var(--color-text-tertiary)]"
@@ -598,24 +595,6 @@ onBeforeUnmount(() => {
         </div>
         <p v-if="unknownChestHeights" class="m-0 text-xs text-[var(--color-text-tertiary)]">
             {{ formatMessage(messages.unknownChestHeights, { count: unknownChestHeights }) }}
-        </p>
-        <p
-            v-if="blocksEnabled && !blocksBusy"
-            class="m-0 text-xs text-[var(--color-text-tertiary)]"
-        >
-            {{ formatMessage(messages.templateNote, { version: props.version ?? '' }) }}
-        </p>
-        <p
-            v-if="blocksEnabled && missingModels"
-            class="m-0 text-xs text-[var(--color-text-tertiary)]"
-        >
-            {{ formatMessage(messages.missingModels, { count: missingModels }) }}
-        </p>
-        <p
-            v-if="blocksEnabled && templateLimit"
-            class="m-0 text-xs text-[var(--color-text-tertiary)]"
-        >
-            {{ formatMessage(templateLimit) }}
         </p>
         <div v-if="blocksFailed" role="alert" class="flex flex-col items-start gap-2 text-xs">
             <span>{{ formatMessage(messages.blocksFailed) }}</span>

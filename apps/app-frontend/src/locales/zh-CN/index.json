@@ -14393,57 +14393,57 @@
   "app.logagent.controls.return-to-analysis": {
     "message": "返回分析"
   },
-    "app.lab.seed-map.ore.emerald": {
-        "message": "绿宝石矿石"
-    },
-    "app.lab.seed-map.ore.quartz": {
-        "message": "下界石英矿石"
-    },
-    "app.lab.seed-map.ore.nether_gold": {
-        "message": "下界金矿石"
-    },
-    "app.lab.seed-map.ore.andesite": {
-        "message": "安山岩"
-    },
-    "app.lab.seed-map.ore.diorite": {
-        "message": "闪长岩"
-    },
-    "app.lab.seed-map.ore.granite": {
-        "message": "花岗岩"
-    },
-    "app.lab.seed-map.ore.dirt": {
-        "message": "泥土"
-    },
-    "app.lab.seed-map.ore.gravel": {
-        "message": "沙砾"
-    },
-    "app.lab.seed-map.ore.infested": {
-        "message": "虫蚀石头"
-    },
-    "app.lab.seed-map.ore.deepslate": {
-        "message": "深板岩"
-    },
-    "app.lab.seed-map.ore.tuff": {
-        "message": "凝灰岩"
-    },
-    "app.lab.seed-map.ore.clay": {
-        "message": "黏土块"
-    },
-    "app.lab.seed-map.ore.blackstone": {
-        "message": "黑石"
-    },
-    "app.lab.seed-map.ore.magma": {
-        "message": "岩浆块"
-    },
-    "app.lab.seed-map.ore.soul_sand": {
-        "message": "灵魂沙"
-    },
-    "app.lab.seed-map.ore-candidate": {
-        "message": "预测位置；尚未核验地形和方块替换条件"
-    },
-    "app.lab.seed-map.version-unavailable": {
-        "message": "当前引擎无法计算此版本，请选择受支持的版本后继续。"
-    },
+  "app.lab.seed-map.ore.emerald": {
+    "message": "绿宝石矿石"
+  },
+  "app.lab.seed-map.ore.quartz": {
+    "message": "下界石英矿石"
+  },
+  "app.lab.seed-map.ore.nether_gold": {
+    "message": "下界金矿石"
+  },
+  "app.lab.seed-map.ore.andesite": {
+    "message": "安山岩"
+  },
+  "app.lab.seed-map.ore.diorite": {
+    "message": "闪长岩"
+  },
+  "app.lab.seed-map.ore.granite": {
+    "message": "花岗岩"
+  },
+  "app.lab.seed-map.ore.dirt": {
+    "message": "泥土"
+  },
+  "app.lab.seed-map.ore.gravel": {
+    "message": "沙砾"
+  },
+  "app.lab.seed-map.ore.infested": {
+    "message": "虫蚀石头"
+  },
+  "app.lab.seed-map.ore.deepslate": {
+    "message": "深板岩"
+  },
+  "app.lab.seed-map.ore.tuff": {
+    "message": "凝灰岩"
+  },
+  "app.lab.seed-map.ore.clay": {
+    "message": "黏土块"
+  },
+  "app.lab.seed-map.ore.blackstone": {
+    "message": "黑石"
+  },
+  "app.lab.seed-map.ore.magma": {
+    "message": "岩浆块"
+  },
+  "app.lab.seed-map.ore.soul_sand": {
+    "message": "灵魂沙"
+  },
+  "app.lab.seed-map.ore-candidate": {
+    "message": "预测位置；尚未核验地形和方块替换条件"
+  },
+  "app.lab.seed-map.version-unavailable": {
+    "message": "当前引擎无法计算此版本，请选择受支持的版本后继续。"
+  },
   "app.lab.seed-map.ore-truncated": {
     "message": "已达到结果数量上限，请减少选中的矿物种类以查看更完整的位置。"
   },
@@ -15017,6 +15017,12 @@
   "app.lab.seed-map.details.named-container": {
     "message": "{name} {number} · {x}, {z}"
   },
+  "app.lab.seed-map.details.all-containers": {
+    "message": "全部战利品"
+  },
+  "app.lab.seed-map.details.loot-source": {
+    "message": "来源：{container}"
+  },
   "app.lab.seed-map.details.technical-identifiers": {
     "message": "技术标识"
   },
@@ -15129,7 +15135,7 @@
     "message": "世界坐标轴：+X 向东，+Y 向上，+Z 向南"
   },
   "app.lab.seed-map.preview.chest-xray": {
-    "message": "箱子透视高亮（{count}）"
+    "message": "箱子（{count}）"
   },
   "app.lab.seed-map.preview.chest-loading": {
     "message": "正在定位箱子…"
