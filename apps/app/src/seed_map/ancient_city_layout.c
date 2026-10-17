@@ -47,6 +47,9 @@ static const char *string(cJSON *parent, const char *name) {
     return cJSON_IsString(value) ? value->valuestring : NULL;
 }
 
+static cJSON *template_by_id(AncientContext *ctx, const char *id);
+static cJSON *matching_jigsaw(cJSON *template, const char *name, int *index);
+
 static void add_number(cJSON *array, int value) {
     cJSON_AddItemToArray(array, cJSON_CreateNumber(value));
 }
@@ -100,12 +103,36 @@ static void bounds(AncientPiece *piece) {
 }
 
 static int intersects(const AncientPiece *a, const AncientPiece *b) {
-    return a->minx <= b->maxx && a->maxx >= b->minx &&
-        a->miny <= b->maxy && a->maxy >= b->miny &&
-        a->minz <= b->maxz && a->maxz >= b->minz;
+    return a->minx < b->maxx && a->maxx > b->minx &&
+        a->miny < b->maxy && a->maxy > b->miny &&
+        a->minz < b->maxz && a->maxz > b->minz;
 }
 
-static cJSON *pool_element(AncientContext *ctx, cJSON *pool) {
+static int element_matches_target(AncientContext *ctx, cJSON *element, const char *target) {
+    if (!element || !target) return 0;
+    const char *type = string(element, "element_type");
+    if (strcmp(type ? type : "", "minecraft:single_pool_element")) return 0;
+    cJSON *template = template_by_id(ctx, string(element, "location"));
+    return matching_jigsaw(template, target, NULL) != NULL;
+}
+
+static void add_pool_candidate(
+    cJSON **candidates,
+    int *weights,
+    int *count,
+    int *total,
+    cJSON *element,
+    int weight
+) {
+    if (*count >= 128) return;
+    const int normalized_weight = weight > 0 ? weight : 1;
+    candidates[*count] = element;
+    weights[*count] = normalized_weight;
+    (*count)++;
+    *total += normalized_weight;
+}
+
+static cJSON *pool_element(AncientContext *ctx, cJSON *pool, const char *target) {
     cJSON *elements = object(pool, "elements");
     if (!cJSON_IsArray(elements)) return NULL;
     cJSON *candidates[128];
@@ -118,25 +145,23 @@ static cJSON *pool_element(AncientContext *ctx, cJSON *pool) {
         if (!element) continue;
         const char *type = string(element, "element_type");
         int weight = number(entry, "weight", 1);
-        if (!strcmp(type ? type : "", "minecraft:empty_pool_element")) continue;
-        if (!strcmp(type ? type : "", "minecraft:list_pool_element")) {
+        if (!strcmp(type ? type : "", "minecraft:empty_pool_element")) {
+            add_pool_candidate(candidates, weights, &count, &total, element, weight);
+        } else if (!strcmp(type ? type : "", "minecraft:list_pool_element")) {
             cJSON *nested = object(element, "elements");
             if (!cJSON_IsArray(nested)) { ctx->unsupported = 1; continue; }
             cJSON *nested_element;
             cJSON_ArrayForEach(nested_element, nested) {
-                if (count < 128) {
-                    candidates[count] = nested_element;
-                    weights[count++] = weight > 0 ? weight : 1;
-                    total += weight > 0 ? weight : 1;
+                if (element_matches_target(ctx, nested_element, target) && count < 128) {
+                    add_pool_candidate(
+                        candidates, weights, &count, &total, nested_element, weight);
                 }
             }
         } else if (!strcmp(type ? type : "", "minecraft:single_pool_element")) {
-            if (count < 128) {
-                candidates[count] = element;
-                weights[count++] = weight > 0 ? weight : 1;
-                total += weight > 0 ? weight : 1;
+            if (element_matches_target(ctx, element, target) && count < 128) {
+                add_pool_candidate(candidates, weights, &count, &total, element, weight);
             }
-        } else {
+        } else if (!strcmp(type ? type : "", "minecraft:feature_pool_element")) {
             ctx->unsupported = 1;
         }
     }
@@ -173,7 +198,8 @@ static void expand_from(AncientContext *ctx, int parent_index) {
         const char *target = string(jigsaw, "target");
         if (!pool_id || !strcmp(pool_id, "minecraft:empty") || !target) continue;
         cJSON *pool = object(ctx->pools, pool_id);
-        cJSON *element = pool_element(ctx, pool);
+        cJSON *element = pool_element(ctx, pool, target);
+        if (element && !strcmp(string(element, "element_type") ? string(element, "element_type") : "", "minecraft:empty_pool_element")) continue;
         const char *location = element ? string(element, "location") : NULL;
         cJSON *child_template = template_by_id(ctx, location);
         if (!child_template) { ctx->unsupported = 1; continue; }

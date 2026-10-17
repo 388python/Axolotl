@@ -579,8 +579,8 @@ mod tests {
                 structure_details(structure_query.clone(), None).unwrap();
             assert_eq!(result["supported"], true, "{version}");
             assert!(
-                !result["pieces"].as_array().unwrap().is_empty(),
-                "{version}"
+                result["pieces"].as_array().unwrap().len() > 1,
+                "{version} should include adjoining city pieces: {result}"
             );
             assert!(
                 result["pieces"][0]["templateId"]
