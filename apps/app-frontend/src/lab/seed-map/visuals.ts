@@ -46,6 +46,9 @@ export const SEED_MAP_FEATURE_ICONS: Record<SeedMapFeatureKind, Component> = {
     bastion: HomeIcon,
     'end-city': HomeIcon,
     'end-gateway': WorldIcon,
+    'abandoned-camp': HomeIcon,
+    'nether-fossil': LayersIcon,
+    'end-island': WorldIcon,
 }
 
 export const SEED_MAP_FEATURE_IMAGE_SOURCES: Partial<Record<SeedMapFeatureKind, string>> = {
@@ -99,5 +102,8 @@ export const SEED_MAP_FEATURE_COLORS: Record<SeedMapFeatureKind, string> = {
     fortress: '#A94A51',
     bastion: '#7E6658',
     'end-city': '#A57BC5',
+    'abandoned-camp': '#D58B35',
+    'nether-fossil': '#D0A23E',
+    'end-island': '#8793A4',
     'end-gateway': '#70559F',
 }

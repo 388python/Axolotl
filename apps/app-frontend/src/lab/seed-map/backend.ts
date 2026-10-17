@@ -16,6 +16,8 @@ export type SeedMapVersionProfile = {
     ores: boolean
     oreKinds?: SeedMapOreKind[]
     featureMasks?: [number, number, number]
+    undergroundMasks?: [number, number, number]
+    undergroundYRanges?: [[number, number], [number, number], [number, number]]
     biomes?: number[]
     engineRevision?: string
     note?: string
@@ -35,6 +37,7 @@ export type SeedMapTileRequest = {
     elevation?: number
     terrain: boolean
     contours: boolean
+    underground?: number
     highlightBiomes?: number[]
 }
 
@@ -184,23 +187,27 @@ export function seedMapTileConcurrency(
 }
 
 export async function renderSeedMapTile(request: SeedMapTileRequest): Promise<SeedMapTile> {
-    const pixels = await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', {
-        request: {
-            seed: request.seed,
-            edition: request.edition,
-            version: request.version,
-            dimension: request.dimension,
-            x: request.x,
-            z: request.z,
-            scale: request.scale,
-            width: request.width,
-            height: request.height,
-            elevation: request.elevation ?? 128,
-            terrain: request.terrain,
-            contours: request.contours,
-            highlightBiomes: request.highlightBiomes ?? null,
-        },
-    })
+    const tile = {
+        seed: request.seed,
+        edition: request.edition,
+        version: request.version,
+        dimension: request.dimension,
+        x: request.x,
+        z: request.z,
+        scale: request.scale,
+        width: request.width,
+        height: request.height,
+        elevation: request.elevation ?? 128,
+        terrain: request.terrain,
+        contours: request.contours,
+        highlightBiomes: request.highlightBiomes ?? null,
+    }
+    const pixels =
+        request.underground === undefined
+            ? await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', { request: tile })
+            : await invoke<ArrayBuffer>('plugin:seed-map|seed_map_underground_tile', {
+                  request: { tile, layers: request.underground },
+              })
     const expectedLength = request.width * request.height * 4
     if (pixels.byteLength !== expectedLength) {
         throw new Error('The seed map backend returned an unexpected tile size.')

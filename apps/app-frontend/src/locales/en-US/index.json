@@ -14425,5 +14425,158 @@
     },
   "app.lab.seed-map.ore-truncated": {
     "message": "Result limit reached. Select fewer ore types to see more positions."
+  },
+  "app.lab.seed-map.details.overview": {
+    "message": "Overview"
+  },
+  "app.lab.seed-map.details.layout": {
+    "message": "Layout"
+  },
+  "app.lab.seed-map.details.loot": {
+    "message": "Loot"
+  },
+  "app.lab.seed-map.details.close": {
+    "message": "Close structure details"
+  },
+  "app.lab.seed-map.details.retry": {
+    "message": "Retry"
+  },
+  "app.lab.seed-map.details.loading": {
+    "message": "Calculating structure…"
+  },
+  "app.lab.seed-map.details.failed": {
+    "message": "The calculation failed. Your selection is preserved."
+  },
+  "app.lab.seed-map.details.unsupported": {
+    "message": "The engine has no additional details for this structure in this version."
+  },
+  "app.lab.seed-map.details.rotation": {
+    "message": "Rotation"
+  },
+  "app.lab.seed-map.details.mirror": {
+    "message": "Mirror"
+  },
+  "app.lab.seed-map.details.variant": {
+    "message": "Variant"
+  },
+  "app.lab.seed-map.details.abandoned": {
+    "message": "Abandoned village"
+  },
+  "app.lab.seed-map.details.giant": {
+    "message": "Giant portal"
+  },
+  "app.lab.seed-map.details.underground": {
+    "message": "Underground"
+  },
+  "app.lab.seed-map.details.air-pocket": {
+    "message": "Air pocket"
+  },
+  "app.lab.seed-map.details.basement": {
+    "message": "Basement"
+  },
+  "app.lab.seed-map.details.cracked": {
+    "message": "Cracked geode"
+  },
+  "app.lab.seed-map.details.ship": {
+    "message": "End ship"
+  },
+  "app.lab.seed-map.details.eyes": {
+    "message": "{count} portal eyes"
+  },
+  "app.lab.seed-map.details.pieces": {
+    "message": "{count} structure pieces"
+  },
+  "app.lab.seed-map.details.containers": {
+    "message": "{count} containers"
+  },
+  "app.lab.seed-map.details.container": {
+    "message": "Container {number} · {x}, {z}"
+  },
+  "app.lab.seed-map.details.no-layout": {
+    "message": "Internal layout is not simulated by this engine."
+  },
+  "app.lab.seed-map.details.predicted-loot": {
+    "message": "Predicted item list; chest slot positions are not reconstructed."
+  },
+  "app.lab.seed-map.details.unresolved": {
+    "message": "Some loot subtables are missing; this list is incomplete."
+  },
+  "app.lab.seed-map.details.copy": {
+    "message": "Copy predicted loot"
+  },
+  "app.lab.seed-map.details.copied": {
+    "message": "Copied"
+  },
+  "app.lab.seed-map.details.partial": {
+    "message": "The engine simulates only part of this structure."
+  },
+  "app.lab.seed-map.details.terrain": {
+    "message": "Terrain and later world changes can affect this prediction."
+  },
+  "app.lab.seed-map.details.truncated": {
+    "message": "The structure reached the piece limit; additional pieces may be missing."
+  },
+  "app.lab.seed-map.details.bastion-units": {
+    "message": "Housing units"
+  },
+  "app.lab.seed-map.details.bastion-stable": {
+    "message": "Hoglin stable"
+  },
+  "app.lab.seed-map.details.bastion-treasure": {
+    "message": "Treasure room"
+  },
+  "app.lab.seed-map.details.bastion-bridge": {
+    "message": "Bridge"
+  },
+  "app.lab.seed-map.details.layout-map": {
+    "message": "Structure layout. Select a piece to highlight it on the map."
+  },
+  "app.lab.seed-map.underground-mode": {
+    "message": "Underground"
+  },
+  "app.lab.seed-map.underground-density": {
+    "message": "Terrain density"
+  },
+  "app.lab.seed-map.underground-caves": {
+    "message": "Cave carvers"
+  },
+  "app.lab.seed-map.underground-canyons": {
+    "message": "Canyon carvers"
+  },
+  "app.lab.seed-map.advanced-tour": {
+    "message": "Map exploration guide"
+  },
+  "app.lab.seed-map.feature.abandoned-camp": {
+    "message": "Abandoned camp"
+  },
+  "app.lab.seed-map.feature.nether-fossil": {
+    "message": "Nether fossil"
+  },
+  "app.lab.seed-map.feature.end-island": {
+    "message": "End island"
+  },
+  "app.onboarding.seed-map.title": {
+    "message": "Explore structure details"
+  },
+  "app.onboarding.seed-map.description": {
+    "message": "Select a structure on the map to inspect its variant, layout and predictable containers. Some layouts are partial or use placeholder heights; each result lists its limits."
+  },
+  "app.onboarding.seed-map-underground.title": {
+    "message": "Look below the surface"
+  },
+  "app.onboarding.seed-map-underground.description": {
+    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. These predictions do not simulate water, aquifers or later world changes."
+  },
+  "app.onboarding.brewing.title": {
+    "message": "Create a brewing recipe"
+  },
+  "app.onboarding.brewing.description": {
+    "message": "Choose an input, reagent and output. Potion conditions are optional, and output components can be edited as validated JSON. Brewing recipes require Minecraft 26.3."
+  },
+  "app.lab.seed-map.biome.dappled-forest": {
+    "message": "Dappled Forest"
+  },
+  "app.lab.seed-map.details.estimated-containers": {
+    "message": "Container coordinates are rough chunk estimates; exact chest positions are unavailable."
   }
 }

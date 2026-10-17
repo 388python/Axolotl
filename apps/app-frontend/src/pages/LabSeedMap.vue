@@ -12,6 +12,7 @@ import {
     HashIcon,
     HistoryIcon,
     ImportIcon,
+    InfoIcon,
     LandmarkIcon,
     LayersIcon,
     MinusIcon,
@@ -43,6 +44,7 @@ import {
 } from '@modrinth/ui'
 import {
     computed,
+    inject,
     nextTick,
     onMounted,
     onUnmounted,
@@ -55,6 +57,7 @@ import { useRoute } from 'vue-router'
 
 import SeedMapBiomePicker from '@/components/lab/seed-map/SeedMapBiomePicker.vue'
 import SeedMapCopyrightModal from '@/components/lab/seed-map/SeedMapCopyrightModal.vue'
+import SeedMapStructureDetails from '@/components/lab/seed-map/SeedMapStructureDetails.vue'
 import SeedMapWorldImportModal, {
     type SeedMapWorldImport,
 } from '@/components/lab/seed-map/SeedMapWorldImportModal.vue'
@@ -114,6 +117,8 @@ import {
     useSeedMapOreLayer,
     visibleFeatureDefinitions,
 } from '@/lab/seed-map'
+import type { SeedMapStructurePiece, SeedMapStructureQuery } from '@/lab/seed-map/advanced'
+import { SEED_MAP_ENGINE_REVISION } from '@/lab/seed-map/backend'
 
 type MapBounds = {
     minX: number
@@ -332,6 +337,28 @@ const messages = defineMessages({
         id: 'app.lab.seed-map.ore-truncated',
         defaultMessage: 'Result limit reached. Select fewer ore types to see more positions.',
     },
+    undergroundMode: { id: 'app.lab.seed-map.underground-mode', defaultMessage: 'Underground' },
+    undergroundDensity: {
+        id: 'app.lab.seed-map.underground-density',
+        defaultMessage: 'Terrain density',
+    },
+    undergroundCaves: { id: 'app.lab.seed-map.underground-caves', defaultMessage: 'Cave carvers' },
+    undergroundCanyons: {
+        id: 'app.lab.seed-map.underground-canyons',
+        defaultMessage: 'Canyon carvers',
+    },
+    undergroundLimit: {
+        id: 'app.lab.seed-map.underground-limit',
+        defaultMessage:
+            'Zoom in to view underground slices. Water, aquifers and block replacement are not simulated.',
+    },
+    advancedTour: { id: 'app.lab.seed-map.advanced-tour', defaultMessage: 'Map exploration guide' },
+    abandonedCamp: {
+        id: 'app.lab.seed-map.feature.abandoned-camp',
+        defaultMessage: 'Abandoned camp',
+    },
+    netherFossil: { id: 'app.lab.seed-map.feature.nether-fossil', defaultMessage: 'Nether fossil' },
+    endIsland: { id: 'app.lab.seed-map.feature.end-island', defaultMessage: 'End island' },
     oreCandidate: {
         id: 'app.lab.seed-map.ore-candidate',
         defaultMessage: 'Predicted position; terrain and block replacement are unverified',
@@ -487,6 +514,9 @@ const featureMessages: Record<SeedMapFeatureKind, (typeof messages)[keyof typeof
     bastion: messages.bastion,
     'end-city': messages.endCity,
     'end-gateway': messages.endGateway,
+    'abandoned-camp': messages.abandonedCamp,
+    'nether-fossil': messages.netherFossil,
+    'end-island': messages.endIsland,
 }
 
 const oreMessages: Record<SeedMapOreKind, (typeof messages)[keyof typeof messages]> = {
@@ -553,12 +583,51 @@ const scale = computed(() => 4 ** workspace.zoom)
 // tile source for the whole zoom interval and switch only at its boundary;
 // rounding here used to replace the biome sampler halfway through an
 // animated zoom (for example at zoom 0.5), causing abrupt color changes.
-const tileScale = computed(
-    () =>
-        SEED_MAP_SCALES[
-            Math.min(Math.max(Math.floor(workspace.zoom), 0), SEED_MAP_SCALES.length - 1)
-        ],
+const tileScale = computed(() =>
+    workspace.displayMode === 'underground'
+        ? scale.value <= 1
+            ? 1
+            : 4
+        : SEED_MAP_SCALES[
+              Math.min(Math.max(Math.floor(workspace.zoom), 0), SEED_MAP_SCALES.length - 1)
+          ],
 )
+const tilePixels = computed(() => (workspace.displayMode === 'underground' ? 16 : 256))
+const undergroundMask = computed(
+    () => selectedProfile.value?.undergroundMasks?.[dimensionsIndex.value] ?? 0,
+)
+const undergroundYRange = computed(
+    () => selectedProfile.value?.undergroundYRanges?.[dimensionsIndex.value] ?? [0, 127],
+)
+const focusedPiece = ref<SeedMapStructurePiece | null>(null)
+const replayOnboarding = inject<(mode: 'seed-map') => Promise<void>>('replayOnboarding')
+const structureQuery = computed<SeedMapStructureQuery | null>(() =>
+    selection.value?.feature
+        ? {
+              seed: workspace.seed,
+              edition: workspace.edition,
+              version: workspace.gameVersion,
+              dimension: workspace.dimension,
+              x: selection.value.feature.x,
+              z: selection.value.feature.z,
+              featureMask: featureMask([selection.value.feature.kind]),
+          }
+        : null,
+)
+function closeStructureDetails() {
+    selection.value = null
+    focusedPiece.value = null
+}
+function focusStructurePiece(piece: SeedMapStructurePiece) {
+    focusedPiece.value = piece
+    workspace.center = { x: piece.position.x, z: piece.position.z }
+    redraw()
+}
+function toggleUndergroundLayer(layer: number, enabled: boolean) {
+    workspace.undergroundLayers = enabled
+        ? workspace.undergroundLayers | layer
+        : workspace.undergroundLayers & ~layer
+}
 const mapScaleLabel = computed(() =>
     scale.value >= 10
         ? String(Math.round(scale.value))
@@ -638,7 +707,9 @@ const availableBiomes = computed(() =>
 const activeHighlightedBiomes = computed(() =>
     workspace.highlightedBiomes.filter((biome) => availableBiomes.value.includes(biome)),
 )
-const terrainSupported = computed(() => workspace.dimension !== 'nether')
+const terrainSupported = computed(
+    () => workspace.dimension !== 'nether' && workspace.displayMode !== 'underground',
+)
 const terrainEnabled = computed({
     get: () => terrainSupported.value && workspace.terrainEstimation,
     set: (enabled: boolean) => {
@@ -719,6 +790,27 @@ const selectionVisible = computed(() => {
 })
 
 watch(
+    () => JSON.stringify(structureQuery.value),
+    () => {
+        focusedPiece.value = null
+        redraw()
+    },
+)
+watch(
+    () => workspace.displayMode,
+    () => {
+        fallbackTileScale = undefined
+    },
+)
+watch(
+    undergroundYRange,
+    ([min, max]) => {
+        workspace.undergroundY = Math.max(min, Math.min(max, workspace.undergroundY))
+    },
+    { immediate: true },
+)
+
+watch(
     workspace,
     () => {
         if (saveTimer) window.clearTimeout(saveTimer)
@@ -785,6 +877,8 @@ watch(
         workspace.gameVersion = shared.gameVersion
         workspace.dimension = shared.dimension
         workspace.displayMode = shared.displayMode
+        workspace.undergroundY = shared.undergroundY
+        workspace.undergroundLayers = shared.undergroundLayers
         workspace.selectedOres = [...shared.selectedOres]
         workspace.oreYMin = shared.oreYMin
         workspace.oreYMax = shared.oreYMax
@@ -823,6 +917,8 @@ watch(
         workspace.gameVersion,
         workspace.dimension,
         workspace.displayMode,
+        workspace.undergroundY,
+        workspace.undergroundLayers,
         tileScale.value,
         workspace.elevation,
         workspace.terrainEstimation,
@@ -1003,6 +1099,7 @@ function oreLabel(kind: SeedMapOreKind) {
 
 function setDisplayMode(mode: SeedMapDisplayMode) {
     if (mode === 'ores' && !oreModeSupported.value) return
+    if (mode === 'underground' && !undergroundMask.value) return
     if (mode === 'ores' && workspace.dimension === 'end') workspace.dimension = 'overworld'
     workspace.displayMode = mode
     ensureDimensionOreSelection()
@@ -1131,6 +1228,10 @@ function screenToWorld(x: number, y: number) {
 
 function tileKey(x: number, z: number, sourceScale = tileScale.value) {
     return [
+        SEED_MAP_ENGINE_REVISION,
+        workspace.displayMode,
+        workspace.undergroundLayers,
+        workspace.undergroundY,
         workspace.seed,
         workspace.edition,
         workspace.gameVersion,
@@ -1178,14 +1279,30 @@ function drawMap() {
 
     if (workspace.showGrid || workspace.showChunkCoordinates) drawGrid(context, bounds)
     if (workspace.displayMode === 'structures') drawFeatures(context)
-    else drawOres(context)
+    else if (workspace.displayMode === 'ores') drawOres(context)
+    if (focusedPiece.value && structureQuery.value) {
+        const piece = focusedPiece.value
+        const min = piece.min ?? piece.position
+        const max = piece.max ?? piece.position
+        const position = worldToScreen(min.x, min.z)
+        context.save()
+        context.strokeStyle = '#FFCF50'
+        context.lineWidth = 3
+        context.strokeRect(
+            position.x,
+            position.y,
+            Math.max(8, (max.x - min.x + 1) / scale.value),
+            Math.max(8, (max.z - min.z + 1) / scale.value),
+        )
+        context.restore()
+    }
     drawSpawn(context)
     drawMarkers(context)
     drawRuler(context)
 }
 
 function drawTileLayer(context: CanvasRenderingContext2D, bounds: MapBounds, sourceScale: number) {
-    const tileSpan = 256 * sourceScale
+    const tileSpan = tilePixels.value * sourceScale
     const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
     const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
     const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
@@ -1213,7 +1330,7 @@ function visibleTileKeys(bounds: MapBounds): Set<string> {
     const sourceScales = new Set<number>([tileScale.value])
     if (fallbackTileScale !== undefined) sourceScales.add(fallbackTileScale)
     for (const sourceScale of sourceScales) {
-        const tileSpan = 256 * sourceScale
+        const tileSpan = tilePixels.value * sourceScale
         const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
         const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
         const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
@@ -1232,7 +1349,7 @@ function hasMissingCurrentTiles(bounds: MapBounds): boolean {
 
 function countMissingCurrentTiles(bounds: MapBounds) {
     const sourceScale = tileScale.value
-    const tileSpan = 256 * sourceScale
+    const tileSpan = tilePixels.value * sourceScale
     const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
     const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
     const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
@@ -1525,7 +1642,7 @@ function refreshMap() {
         void requestSpawn(epoch)
         return
     }
-    requestVisibleTiles(epoch)
+    if (workspace.displayMode !== 'underground' || scale.value <= 4) requestVisibleTiles(epoch)
     if (workspace.displayMode === 'structures') void requestFeatures(epoch)
     else features.value = []
     void requestSpawn(epoch)
@@ -1554,7 +1671,7 @@ function refreshCurrentOreLayer(delay = 180) {
 function requestVisibleTiles(epoch: number) {
     const bounds = mapBounds()
     const requestScale = tileScale.value
-    const tileSpan = 256 * requestScale
+    const tileSpan = tilePixels.value * requestScale
     const minTileX = Math.floor(bounds.minX / tileSpan) - TILE_CULL_PADDING
     const minTileZ = Math.floor(bounds.minZ / tileSpan) - TILE_CULL_PADDING
     const maxTileX = Math.floor(bounds.maxX / tileSpan) + TILE_CULL_PADDING
@@ -1588,9 +1705,16 @@ function requestVisibleTiles(epoch: number) {
             x: tileX * tileSpan,
             z: tileZ * tileSpan,
             scale: requestScale,
-            width: 256,
-            height: 256,
-            elevation: workspace.elevation,
+            width: tilePixels.value,
+            height: tilePixels.value,
+            elevation:
+                workspace.displayMode === 'underground'
+                    ? workspace.undergroundY
+                    : workspace.elevation,
+            underground:
+                workspace.displayMode === 'underground'
+                    ? workspace.undergroundLayers & undergroundMask.value
+                    : undefined,
             terrain: terrainEnabled.value,
             contours: contoursEnabled.value,
             highlightBiomes:
@@ -1645,7 +1769,8 @@ function enqueueTile(job: TileJob) {
 }
 
 function pumpTileQueue() {
-    const concurrency = seedMapTileConcurrency(tileScale.value)
+    const concurrency =
+        workspace.displayMode === 'underground' ? 2 : seedMapTileConcurrency(tileScale.value)
     const totalConcurrency = concurrency * 2
     while (
         (activeTileRequestsByEpoch.get(requestEpoch) ?? 0) < concurrency &&
@@ -3067,7 +3192,11 @@ function clampWorldCoordinate(value: number) {
                     /></Button>
                 </div>
 
-                <div v-if="selection && selectionVisible" class="map-popup" :style="selectionStyle">
+                <div
+                    v-if="selection && selectionVisible && !structureQuery"
+                    class="map-popup"
+                    :style="selectionStyle"
+                >
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <strong class="block truncate text-sm text-[var(--color-text-primary)]">
@@ -3235,6 +3364,93 @@ function clampWorldCoordinate(value: number) {
                     </div>
                 </div>
 
+                <SeedMapStructureDetails
+                    v-if="structureQuery && selection?.feature"
+                    :query="structureQuery"
+                    :kind="selection.feature.kind"
+                    :title="featureResultLabel(selection.feature)"
+                    @close="closeStructureDetails"
+                    @focus="focusStructurePiece"
+                >
+                    <template #actions>
+                        <div
+                            v-if="markerDraftOpen"
+                            class="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2"
+                        >
+                            <StyledInput
+                                v-model="markerName"
+                                :placeholder="formatMessage(messages.markerName)"
+                            />
+                            <input
+                                v-model="markerColor"
+                                type="color"
+                                class="size-9 rounded border border-surface-4 bg-surface-3"
+                                :aria-label="formatMessage(messages.markerColor)"
+                            />
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button type="outlined" size="2xs" @click="copyTeleport"
+                                ><ClipboardCopyIcon />{{
+                                    formatMessage(messages.copyTeleport)
+                                }}</Button
+                            >
+                            <Button
+                                :type="markerDraftOpen ? 'colored' : 'outlined'"
+                                size="2xs"
+                                @click="markerDraftOpen ? addMarker() : (markerDraftOpen = true)"
+                                ><PinIcon />{{ formatMessage(messages.addMarker) }}</Button
+                            >
+                            <Checkbox
+                                v-model="selectedFeatureCompleted"
+                                :label="formatMessage(messages.completed)"
+                            />
+                        </div>
+                    </template>
+                </SeedMapStructureDetails>
+                <div
+                    v-if="workspace.displayMode === 'underground'"
+                    class="absolute left-3 top-3 z-10 flex w-[min(22rem,calc(100%_-_1.5rem))] flex-col gap-2 rounded-lg border border-surface-4 bg-surface-2 p-3 text-sm"
+                    data-onboarding-id="seed-map-underground-layers"
+                    @pointerdown.stop
+                    @wheel.stop
+                >
+                    <label class="flex items-center gap-2"
+                        >Y
+                        <StyledInput
+                            :model-value="String(workspace.undergroundY)"
+                            type="number"
+                            :min="undergroundYRange[0]"
+                            :max="undergroundYRange[1]"
+                            @update:model-value="
+                                workspace.undergroundY = Math.max(
+                                    undergroundYRange[0],
+                                    Math.min(undergroundYRange[1], Number($event) || 0),
+                                )
+                            "
+                    /></label>
+                    <label
+                        v-for="layer in [1, 2, 4] as const"
+                        v-show="undergroundMask & layer"
+                        :key="layer"
+                        class="flex items-center justify-between gap-2"
+                        ><span>{{
+                            formatMessage(
+                                layer === 1
+                                    ? messages.undergroundDensity
+                                    : layer === 2
+                                      ? messages.undergroundCaves
+                                      : messages.undergroundCanyons,
+                            )
+                        }}</span
+                        ><Toggle
+                            :model-value="Boolean(workspace.undergroundLayers & layer)"
+                            small
+                            @update:model-value="toggleUndergroundLayer(layer, $event)"
+                    /></label>
+                    <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
+                        {{ formatMessage(messages.undergroundLimit) }}
+                    </p>
+                </div>
                 <div class="map-bottom-toolbar">
                     <SeedMapBiomePicker
                         class="map-bottom-biomes"
@@ -3251,6 +3467,25 @@ function clampWorldCoordinate(value: number) {
                     <div
                         class="map-bottom-actions max-sm:w-full max-sm:flex-wrap max-sm:justify-start max-sm:ml-0"
                     >
+                        <Button
+                            :type="
+                                workspace.displayMode === 'underground' ? 'chip-text' : 'outlined'
+                            "
+                            :disabled="!undergroundMask"
+                            class="map-action"
+                            data-onboarding-id="seed-map-underground-mode"
+                            @click="setDisplayMode('underground')"
+                            ><LayersIcon />{{ formatMessage(messages.undergroundMode) }}</Button
+                        >
+                        <Button
+                            type="quiet"
+                            icon-only
+                            :aria-label="formatMessage(messages.advancedTour)"
+                            data-onboarding-id="seed-map-advanced-guide"
+                            @click="replayOnboarding?.('seed-map')"
+                            ><InfoIcon
+                        /></Button>
+
                         <Button
                             :type="terrainEnabled ? 'chip-text' : 'outlined'"
                             color="brand"

@@ -12,6 +12,9 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             seed_map_biome_at,
             seed_map_scan_ores,
             seed_map_read_level_dat,
+            seed_map_structure_details,
+            seed_map_container_loot,
+            seed_map_underground_tile,
         ])
         .build()
 }
@@ -94,4 +97,39 @@ pub async fn seed_map_read_level_dat(
     })
     .await
     .map_err(std::io::Error::other)??)
+}
+
+#[tauri::command]
+pub async fn seed_map_structure_details(
+    query: seed_map::details::StructureQuery,
+) -> Result<serde_json::Value> {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        seed_map::details::structure_details(query, None)
+    })
+    .await
+    .map_err(std::io::Error::other)??)
+}
+
+#[tauri::command]
+pub async fn seed_map_container_loot(
+    query: seed_map::details::StructureQuery,
+    container: u32,
+) -> Result<serde_json::Value> {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        seed_map::details::structure_details(query, Some(container))
+    })
+    .await
+    .map_err(std::io::Error::other)??)
+}
+
+#[tauri::command]
+pub async fn seed_map_underground_tile(
+    request: seed_map::details::UndergroundRequest,
+) -> Result<tauri::ipc::Response> {
+    let pixels = tauri::async_runtime::spawn_blocking(move || {
+        seed_map::details::underground_tile(request)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    Ok(tauri::ipc::Response::new(pixels))
 }

@@ -96,6 +96,9 @@ enum {
     AXOLOTL_FEATURE_BASTION = 1 << 21,
     AXOLOTL_FEATURE_END_CITY = 1 << 22,
     AXOLOTL_FEATURE_END_GATEWAY = 1 << 23,
+    AXOLOTL_FEATURE_ABANDONED_CAMP = 1 << 24,
+    AXOLOTL_FEATURE_NETHER_FOSSIL = 1 << 25,
+    AXOLOTL_FEATURE_END_ISLAND = 1 << 26,
 };
 
 typedef struct AxolotlStructureDefinition {
@@ -127,6 +130,9 @@ static const AxolotlStructureDefinition AXOLOTL_STRUCTURES[] = {
     {Bastion, AXOLOTL_FEATURE_BASTION},
     {End_City, AXOLOTL_FEATURE_END_CITY},
     {End_Gateway, AXOLOTL_FEATURE_END_GATEWAY},
+    {Abandoned_Camp, AXOLOTL_FEATURE_ABANDONED_CAMP},
+    {Nether_Fossil, AXOLOTL_FEATURE_NETHER_FOSSIL},
+    {End_Island, AXOLOTL_FEATURE_END_ISLAND},
 };
 
 uint32_t axolotl_seed_map_abi_version(void) { return 1; }
@@ -793,6 +799,7 @@ int32_t axolotl_seed_map_capability(int32_t mc, int32_t capability, int32_t valu
         }
         return (int32_t)mask;
     }
+    if (capability == 3) return mc >= MC_1_14 ? (value == DIM_END ? 1 : value == DIM_NETHER ? 3 : 7) : 0;
     if (capability == 2 && value >= 0 && value < 25) {
         if (value == 2 || value == 4) return mc >= MC_1_18;
         for (int i = 0; i < 7 && ore_groups[value][i] >= 0; i++) {

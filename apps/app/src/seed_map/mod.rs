@@ -6,6 +6,7 @@ use std::{
 use quartz_nbt::{NbtCompound, NbtTag};
 use serde::{Deserialize, Serialize};
 
+pub mod details;
 pub mod ores;
 
 #[repr(C)]
@@ -45,6 +46,9 @@ pub const FEATURE_FORTRESS: u32 = 1 << 20;
 pub const FEATURE_BASTION: u32 = 1 << 21;
 pub const FEATURE_END_CITY: u32 = 1 << 22;
 pub const FEATURE_END_GATEWAY: u32 = 1 << 23;
+pub const FEATURE_ABANDONED_CAMP: u32 = 1 << 24;
+pub const FEATURE_NETHER_FOSSIL: u32 = 1 << 25;
+pub const FEATURE_END_ISLAND: u32 = 1 << 26;
 pub const ALL_FEATURES: u32 = FEATURE_VILLAGE
     | FEATURE_OUTPOST
     | FEATURE_SHIPWRECK
@@ -68,7 +72,10 @@ pub const ALL_FEATURES: u32 = FEATURE_VILLAGE
     | FEATURE_FORTRESS
     | FEATURE_BASTION
     | FEATURE_END_CITY
-    | FEATURE_END_GATEWAY;
+    | FEATURE_END_GATEWAY
+    | FEATURE_ABANDONED_CAMP
+    | FEATURE_NETHER_FOSSIL
+    | FEATURE_END_ISLAND;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -234,6 +241,8 @@ pub struct VersionProfile {
     pub ores: bool,
     pub ore_kinds: Vec<ores::OreKind>,
     pub feature_masks: [u32; 3],
+    pub underground_masks: [u8; 3],
+    pub underground_y_ranges: [[i32; 2]; 3],
     pub biomes: Vec<i32>,
     pub engine_revision: &'static str,
     pub note: Option<String>,
@@ -294,6 +303,16 @@ pub fn version_profiles() -> Vec<VersionProfile> {
                     capability(1, 0) as u32,
                     capability(1, -1) as u32,
                     capability(1, 1) as u32,
+                ],
+                underground_y_ranges: [
+                    if code >= 11800 { [-64, 319] } else { [0, 255] },
+                    [0, 127],
+                    [0, 127],
+                ],
+                underground_masks: [
+                    capability(3, 0) as u8,
+                    capability(3, -1) as u8,
+                    capability(3, 1) as u8,
                 ],
                 biomes: (0..256).filter(|id| capability(0, *id) != 0).collect(),
                 engine_revision: "a49d5bc5b709e6e28b5a74daddb3efb382fba7bb",
@@ -676,6 +695,9 @@ fn feature_name(feature: u32) -> Option<&'static str> {
         FEATURE_BASTION => Some("bastion"),
         FEATURE_END_CITY => Some("end-city"),
         FEATURE_END_GATEWAY => Some("end-gateway"),
+        FEATURE_ABANDONED_CAMP => Some("abandoned-camp"),
+        FEATURE_NETHER_FOSSIL => Some("nether-fossil"),
+        FEATURE_END_ISLAND => Some("end-island"),
         _ => None,
     }
 }

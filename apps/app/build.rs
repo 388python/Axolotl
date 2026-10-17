@@ -185,11 +185,14 @@ fn build_seed_map_engine() {
         );
     std::fs::write(&compatibility_header, header)
         .expect("Write pre-C23 compatibility header");
-    let mut sources =
-        vec![std::path::PathBuf::from("src/seed_map/cubiomes_bridge.c")];
+    let mut sources = vec![
+        std::path::PathBuf::from("src/seed_map/cubiomes_bridge.c"),
+        std::path::PathBuf::from("src/seed_map/cubiomes_details.c"),
+    ];
     collect_engine_sources(source, &mut sources);
     sources.sort();
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.c");
+    println!("cargo:rerun-if-changed=src/seed_map/cubiomes_details.c");
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
     println!("cargo:rerun-if-changed=vendor/cubiomes");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
@@ -841,6 +844,9 @@ fn main() {
                         "seed_map_biome_at",
                         "seed_map_scan_ores",
                         "seed_map_read_level_dat",
+                        "seed_map_structure_details",
+                        "seed_map_container_loot",
+                        "seed_map_underground_tile",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

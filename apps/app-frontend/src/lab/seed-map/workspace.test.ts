@@ -11,6 +11,7 @@ import { featureMask, SEED_MAP_FEATURES, visibleFeatureDefinitions } from './fea
 import {
     applyShareQuery,
     createDefaultSeedMapWorkspace,
+    createShareQuery,
     isCurrentSeedMapEpoch,
     sanitizeSeedMapWorkspace,
     SEED_MAP_MIN_ZOOM,
@@ -74,10 +75,10 @@ test('seed map supports a closer maximum zoom', () => {
 
 test('seed map exposes every categorized cubiomes biome exactly once', () => {
     const groups = seedMapBiomeGroups()
-    assert.equal(SEED_MAP_BIOMES.length, 65)
+    assert.equal(SEED_MAP_BIOMES.length, Object.keys(SEED_MAP_BIOME_NAMES).length)
     assert.equal(groups.length, 17)
-    assert.equal(groups.flatMap((group) => group.biomes).length, 65)
-    assert.equal(new Set(SEED_MAP_BIOMES.map((biome) => biome.id)).size, 65)
+    assert.equal(groups.flatMap((group) => group.biomes).length, SEED_MAP_BIOMES.length)
+    assert.equal(new Set(SEED_MAP_BIOMES.map((biome) => biome.id)).size, SEED_MAP_BIOMES.length)
     assert.deepEqual(
         groups.filter((group) => group.dimension === 'nether').map((group) => group.category),
         ['nether'],
@@ -232,4 +233,17 @@ test('v3 migration retains version, markers and completion records', () => {
     assert.deepEqual(migrated.markers, previous.markers)
     assert.deepEqual(migrated.completedFeatures, previous.completedFeatures)
     assert.deepEqual(migrated.completedOres, previous.completedOres)
+})
+
+test('sharing underground view preserves height and individual layers', () => {
+    const workspace = {
+        ...createDefaultSeedMapWorkspace(),
+        displayMode: 'underground' as const,
+        undergroundY: -32,
+        undergroundLayers: 5,
+    }
+    const restored = applyShareQuery(createShareQuery(workspace))
+    assert.equal(restored.displayMode, 'underground')
+    assert.equal(restored.undergroundY, -32)
+    assert.equal(restored.undergroundLayers, 5)
 })

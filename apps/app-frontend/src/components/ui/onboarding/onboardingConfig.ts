@@ -1,7 +1,7 @@
 import { defineMessages, type MessageDescriptor } from '@modrinth/ui'
 
 export type OnboardingInteraction = 'manual' | 'navigate' | 'activate' | 'inspect'
-export type OnboardingMode = 'main' | 'instance' | 'logagent'
+export type OnboardingMode = 'main' | 'instance' | 'logagent' | 'seed-map' | 'brewing'
 export type CreationPath = 'custom'
 export type StepDestination = string | 'complete'
 
@@ -27,6 +27,30 @@ export type OnboardingStep = {
 }
 
 export const onboardingMessages = defineMessages({
+    mapAdvancedTitle: {
+        id: 'app.onboarding.seed-map.title',
+        defaultMessage: 'Explore structure details',
+    },
+    mapAdvancedDescription: {
+        id: 'app.onboarding.seed-map.description',
+        defaultMessage:
+            'Select a structure on the map to inspect its variant, layout and predictable containers. Some layouts are partial or use placeholder heights; each result lists its limits.',
+    },
+    mapUndergroundTitle: {
+        id: 'app.onboarding.seed-map-underground.title',
+        defaultMessage: 'Look below the surface',
+    },
+    mapUndergroundDescription: {
+        id: 'app.onboarding.seed-map-underground.description',
+        defaultMessage:
+            'Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. These predictions do not simulate water, aquifers or later world changes.',
+    },
+    brewingTitle: { id: 'app.onboarding.brewing.title', defaultMessage: 'Create a brewing recipe' },
+    brewingDescription: {
+        id: 'app.onboarding.brewing.description',
+        defaultMessage:
+            'Choose an input, reagent and output. Potion conditions are optional, and output components can be edited as validated JSON. Brewing recipes require Minecraft 26.3.',
+    },
     logagentSourceTitle: {
         id: 'app.onboarding.logagent-source.title',
         defaultMessage: 'Choose where analysis runs',
@@ -505,6 +529,28 @@ const settingsTourSteps: Array<{
 ]
 
 export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
+    'seed-map': [
+        inspect(
+            'seed-map-advanced',
+            'seed-map-advanced-guide',
+            onboardingMessages.mapAdvancedTitle,
+            onboardingMessages.mapAdvancedDescription,
+        ),
+        inspect(
+            'seed-map-underground',
+            'seed-map-underground-mode',
+            onboardingMessages.mapUndergroundTitle,
+            onboardingMessages.mapUndergroundDescription,
+        ),
+    ],
+    brewing: [
+        inspect(
+            'recipe-brewing',
+            'recipe-brewing-editor',
+            onboardingMessages.brewingTitle,
+            onboardingMessages.brewingDescription,
+        ),
+    ],
     logagent: [
         inspect(
             'logagent-source',

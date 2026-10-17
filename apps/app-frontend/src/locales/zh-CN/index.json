@@ -14446,5 +14446,158 @@
     },
   "app.lab.seed-map.ore-truncated": {
     "message": "已达到结果数量上限，请减少选中的矿物种类以查看更完整的位置。"
+  },
+  "app.lab.seed-map.details.overview": {
+    "message": "概览"
+  },
+  "app.lab.seed-map.details.layout": {
+    "message": "布局"
+  },
+  "app.lab.seed-map.details.loot": {
+    "message": "战利品"
+  },
+  "app.lab.seed-map.details.close": {
+    "message": "关闭结构详情"
+  },
+  "app.lab.seed-map.details.retry": {
+    "message": "重试"
+  },
+  "app.lab.seed-map.details.loading": {
+    "message": "正在计算结构…"
+  },
+  "app.lab.seed-map.details.failed": {
+    "message": "计算失败，已保留当前选择。"
+  },
+  "app.lab.seed-map.details.unsupported": {
+    "message": "引擎尚未实现此版本中该结构的更多详情。"
+  },
+  "app.lab.seed-map.details.rotation": {
+    "message": "旋转"
+  },
+  "app.lab.seed-map.details.mirror": {
+    "message": "镜像"
+  },
+  "app.lab.seed-map.details.variant": {
+    "message": "变体"
+  },
+  "app.lab.seed-map.details.abandoned": {
+    "message": "废弃村庄"
+  },
+  "app.lab.seed-map.details.giant": {
+    "message": "巨型传送门"
+  },
+  "app.lab.seed-map.details.underground": {
+    "message": "地下"
+  },
+  "app.lab.seed-map.details.air-pocket": {
+    "message": "气穴"
+  },
+  "app.lab.seed-map.details.basement": {
+    "message": "地下室"
+  },
+  "app.lab.seed-map.details.cracked": {
+    "message": "开裂的晶洞"
+  },
+  "app.lab.seed-map.details.ship": {
+    "message": "末地船"
+  },
+  "app.lab.seed-map.details.eyes": {
+    "message": "{count} 只末地传送门框架已填充"
+  },
+  "app.lab.seed-map.details.pieces": {
+    "message": "{count} 个结构块"
+  },
+  "app.lab.seed-map.details.containers": {
+    "message": "{count} 个容器"
+  },
+  "app.lab.seed-map.details.container": {
+    "message": "容器 {number} · {x}, {z}"
+  },
+  "app.lab.seed-map.details.no-layout": {
+    "message": "引擎尚未模拟此结构的内部布局。"
+  },
+  "app.lab.seed-map.details.predicted-loot": {
+    "message": "预测物品清单；未还原箱子的槽位排列。"
+  },
+  "app.lab.seed-map.details.unresolved": {
+    "message": "部分战利品子表缺失，清单不完整。"
+  },
+  "app.lab.seed-map.details.copy": {
+    "message": "复制预测战利品"
+  },
+  "app.lab.seed-map.details.copied": {
+    "message": "已复制"
+  },
+  "app.lab.seed-map.details.partial": {
+    "message": "引擎仅模拟此结构的一部分。"
+  },
+  "app.lab.seed-map.details.terrain": {
+    "message": "地形和后续世界变化可能影响预测结果。"
+  },
+  "app.lab.seed-map.details.truncated": {
+    "message": "已达到结构块数量上限，可能遗漏更多结构块。"
+  },
+  "app.lab.seed-map.details.bastion-units": {
+    "message": "居住区"
+  },
+  "app.lab.seed-map.details.bastion-stable": {
+    "message": "疣猪兽棚"
+  },
+  "app.lab.seed-map.details.bastion-treasure": {
+    "message": "藏宝室"
+  },
+  "app.lab.seed-map.details.bastion-bridge": {
+    "message": "桥梁"
+  },
+  "app.lab.seed-map.details.layout-map": {
+    "message": "结构平面布局。选择结构块可在地图上高亮。"
+  },
+  "app.lab.seed-map.underground-mode": {
+    "message": "地下"
+  },
+  "app.lab.seed-map.underground-density": {
+    "message": "地形密度"
+  },
+  "app.lab.seed-map.underground-caves": {
+    "message": "洞穴雕刻层"
+  },
+  "app.lab.seed-map.underground-canyons": {
+    "message": "峡谷雕刻层"
+  },
+  "app.lab.seed-map.advanced-tour": {
+    "message": "地图探索指南"
+  },
+  "app.lab.seed-map.feature.abandoned-camp": {
+    "message": "废弃营地"
+  },
+  "app.lab.seed-map.feature.nether-fossil": {
+    "message": "下界化石"
+  },
+  "app.lab.seed-map.feature.end-island": {
+    "message": "末地岛屿"
+  },
+  "app.onboarding.seed-map.title": {
+    "message": "探索结构详情"
+  },
+  "app.onboarding.seed-map.description": {
+    "message": "点击地图中的结构，查看变体、布局和可预测的容器。部分布局不完整或使用占位高度，结果会注明限制。"
+  },
+  "app.onboarding.seed-map-underground.title": {
+    "message": "查看地表之下"
+  },
+  "app.onboarding.seed-map-underground.description": {
+    "message": "地下模式显示指定高度的切片。放大地图、选择 Y 高度，并独立开关地形密度、洞穴和峡谷雕刻层。预测不模拟水、含水层和后续世界变化。"
+  },
+  "app.onboarding.brewing.title": {
+    "message": "创建酿造配方"
+  },
+  "app.onboarding.brewing.description": {
+    "message": "选择输入物品、试剂和输出物品。药水条件为可选项，输出组件可通过带校验的 JSON 编辑。酿造配方需要 Minecraft 26.3。"
+  },
+  "app.lab.seed-map.biome.dappled-forest": {
+    "message": "斑驳森林"
+  },
+  "app.lab.seed-map.details.estimated-containers": {
+    "message": "容器坐标仅为区块位置的粗略估计，无法确定箱子的精确位置。"
   }
 }

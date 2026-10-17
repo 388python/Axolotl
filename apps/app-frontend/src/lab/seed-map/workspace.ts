@@ -18,6 +18,8 @@ export type SeedMapWorkspace = {
     gameVersion: string
     dimension: SeedMapDimension
     displayMode: SeedMapDisplayMode
+    undergroundLayers: number
+    undergroundY: number
     center: { x: number; z: number }
     zoom: number
     elevation: number
@@ -54,6 +56,8 @@ export function createDefaultSeedMapWorkspace(): SeedMapWorkspace {
         gameVersion: SEED_MAP_DEFAULT_VERSION,
         dimension: 'overworld',
         displayMode: 'structures',
+        undergroundLayers: 7,
+        undergroundY: 16,
         center: { x: 0, z: 0 },
         zoom: 1,
         elevation: SEED_MAP_ELEVATIONS[0],
@@ -146,7 +150,15 @@ export function sanitizeSeedMapWorkspace(
             source.dimension === 'nether' || source.dimension === 'end'
                 ? source.dimension
                 : 'overworld',
-        displayMode: source.displayMode === 'ores' ? 'ores' : 'structures',
+        displayMode:
+            source.displayMode === 'ores' || source.displayMode === 'underground'
+                ? source.displayMode
+                : 'structures',
+        undergroundLayers: Math.trunc(finiteNumber(source.undergroundLayers, 7)) & 7,
+        undergroundY: Math.max(
+            -64,
+            Math.min(319, Math.trunc(finiteNumber(source.undergroundY, 16))),
+        ),
         center: {
             x: finiteNumber(center.x, fallback.center.x),
             z: finiteNumber(center.z, fallback.center.z),
@@ -189,6 +201,8 @@ export function createShareQuery(workspace: SeedMapWorkspace): Record<string, st
         version: workspace.gameVersion,
         dimension: workspace.dimension,
         mode: workspace.displayMode,
+        undergroundY: String(workspace.undergroundY),
+        undergroundLayers: String(workspace.undergroundLayers),
         ores: workspace.selectedOres.join(','),
         yMin: workspace.oreYMin === null ? '' : String(workspace.oreYMin),
         yMax: workspace.oreYMax === null ? '' : String(workspace.oreYMax),
@@ -213,6 +227,8 @@ export function applyShareQuery(
         gameVersion: typeof query.version === 'string' ? query.version : workspace.gameVersion,
         dimension: query.dimension,
         displayMode: query.mode,
+        undergroundY: parseQueryNumber(query.undergroundY, workspace.undergroundY),
+        undergroundLayers: parseQueryNumber(query.undergroundLayers, workspace.undergroundLayers),
         selectedOres:
             typeof query.ores === 'string' && query.ores.length > 0
                 ? query.ores.split(',')

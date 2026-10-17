@@ -1,6 +1,6 @@
 import type { SeedMapDimension } from './biomes.ts'
 
-export type SeedMapDisplayMode = 'structures' | 'ores'
+export type SeedMapDisplayMode = 'structures' | 'ores' | 'underground'
 
 export type SeedMapOreKind =
     | 'diamond'
