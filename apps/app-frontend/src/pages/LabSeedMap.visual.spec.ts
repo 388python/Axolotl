@@ -1,5 +1,8 @@
+import '@/test/visual-styles.scss'
+
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 
 import type { SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
 import type { SeedMapWorkspace } from '@/lab/seed-map/workspace'
@@ -65,12 +68,8 @@ vi.mock('@modrinth/ui', async () => {
         PopoutMenu: control,
         Slider: control,
         Toggle: control,
-        Button: defineComponent({
-            setup:
-                (_, { slots }) =>
-                () =>
-                    h('button', slots.default?.()),
-        }),
+        Button: (await import('../../../../packages/ui/src/components/base/buttons/Button.vue'))
+            .default,
         StyledInput: defineComponent({
             props: ['modelValue'],
             emits: ['update:modelValue'],
@@ -248,3 +247,36 @@ it('defers ore scanning until base coverage and invalidates pending work on a se
     await new Promise((resolve) => setTimeout(resolve, 220))
     expect(backend.ores).not.toHaveBeenCalled()
 })
+
+it.each([
+    { mode: 'structures', dimension: 'overworld' },
+    { mode: 'structures', dimension: 'nether' },
+    { mode: 'structures', dimension: 'end' },
+    { mode: 'ores', dimension: 'overworld' },
+    { mode: 'ores', dimension: 'nether' },
+] as const)(
+    'toggles every $mode layer button in the $dimension, including its visible selected state',
+    async ({ mode, dimension }) => {
+        const { vm } = await openMap()
+        vm.workspace.dimension = dimension
+        vm.workspace.displayMode = mode
+        await flushPromises()
+        const buttons = wrapper!.findAll('.layer-options > button')
+        expect(buttons.length).toBeGreaterThan(0)
+        for (const button of buttons) {
+            const wasSelected = button.attributes('aria-pressed') === 'true'
+            await userEvent.click(button.element)
+            await flushPromises()
+            expect(button.attributes('aria-pressed')).toBe(String(!wasSelected))
+            expect(button.classes()).toContain(
+                wasSelected ? 'button-frame--base' : 'button-frame--colored',
+            )
+            await userEvent.click(button.element)
+            await flushPromises()
+            expect(button.attributes('aria-pressed')).toBe(String(wasSelected))
+            expect(button.classes()).toContain(
+                wasSelected ? 'button-frame--colored' : 'button-frame--base',
+            )
+        }
+    },
+)

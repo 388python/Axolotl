@@ -2707,7 +2707,11 @@ function clampWorldCoordinate(value: number) {
                             v-for="feature in dimensionFeatures"
                             :key="feature.kind"
                             v-tooltip="featureTooltip(feature.kind, feature.maxScale)"
-                            type="colored"
+                            :type="
+                                workspace.visibleFeatures.includes(feature.kind)
+                                    ? 'colored'
+                                    : 'base'
+                            "
                             :color="
                                 workspace.visibleFeatures.includes(feature.kind)
                                     ? 'brand'
@@ -2736,7 +2740,7 @@ function clampWorldCoordinate(value: number) {
                             v-for="ore in dimensionOres"
                             :key="ore.kind"
                             v-tooltip="oreLabel(ore.kind)"
-                            type="colored"
+                            :type="workspace.selectedOres.includes(ore.kind) ? 'colored' : 'base'"
                             :color="workspace.selectedOres.includes(ore.kind) ? 'brand' : undefined"
                             class="layer-option w-10 p-1"
                             :class="{ named: showLayerNames }"
@@ -2758,7 +2762,7 @@ function clampWorldCoordinate(value: number) {
                     <Button
                         v-if="workspace.dimension === 'overworld'"
                         v-tooltip="formatMessage(messages.spawnPoint)"
-                        type="colored"
+                        :type="workspace.showSpawn ? 'colored' : 'base'"
                         :color="workspace.showSpawn ? 'brand' : undefined"
                         class="layer-option w-10 p-1"
                         :class="{ named: showLayerNames }"
