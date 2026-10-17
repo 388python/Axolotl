@@ -334,9 +334,9 @@ it('paints unselected Ancient city piece projections on the map canvas', async (
                 templateId: 'minecraft:ancient_city/city_center/city_center_1',
                 rotation: 0,
                 positionKnown: true,
-                position: { x: -13, y: -27, z: -20 },
-                min: { x: -13, y: -27, z: -20 },
-                max: { x: 4, y: 3, z: 20 },
+                position: { x: 79_987, y: -27, z: -120_020 },
+                min: { x: 79_987, y: -27, z: -120_020 },
+                max: { x: 80_004, y: 3, z: -119_980 },
             },
             {
                 id: 1,
@@ -344,21 +344,21 @@ it('paints unselected Ancient city piece projections on the map canvas', async (
                 templateId: 'minecraft:ancient_city/city_center/walls/bottom_1',
                 rotation: 0,
                 positionKnown: true,
-                position: { x: -27, y: -26, z: -20 },
-                min: { x: -27, y: -26, z: -20 },
-                max: { x: -14, y: -3, z: 20 },
+                position: { x: 79_973, y: -26, z: -120_020 },
+                min: { x: 79_973, y: -26, z: -120_020 },
+                max: { x: 79_986, y: -3, z: -119_980 },
             },
         ],
     }
     backend.details.mockResolvedValue(details)
     const { vm, canvas } = await openMap()
     vm.workspace.showSpawn = false
-    vm.workspace.center = { x: 0, z: 0 }
+    vm.workspace.center = { x: 80_000, z: -120_000 }
     vm.workspace.zoom = 0
     vm.workspace.displayMode = 'structures'
     vm.workspace.dimension = 'overworld'
     vm.workspace.visibleFeatures = ['ancient-city']
-    vm.features = [{ kind: 'ancient-city', x: 0, z: 0, approximate: false }]
+    vm.features = [{ kind: 'ancient-city', x: 80_000, z: -120_000, approximate: false }]
     await flushPromises()
     await vi.waitFor(() => expect(backend.details).toHaveBeenCalledOnce())
     for (const job of backend.tiles.splice(0)) await complete(job, '#00ff00')
@@ -371,7 +371,11 @@ it('paints unselected Ancient city piece projections on the map canvas', async (
             0, 255, 0, 255,
         ])
     })
-    expect(backend.details.mock.calls[0][0]).toMatchObject({ featureMask: 1 << 5, x: 0, z: 0 })
+    expect(backend.details.mock.calls[0][0]).toMatchObject({
+        featureMask: 1 << 5,
+        x: 80_000,
+        z: -120_000,
+    })
 })
 
 it('keeps screen coordinates and painted canvas intact when opening, dragging and closing details', async () => {

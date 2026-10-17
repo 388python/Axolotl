@@ -270,7 +270,14 @@ char *axolotl_seed_map_ancient_city_layout(
     snprintf(start_id, sizeof(start_id), "minecraft:ancient_city/city_center/city_center_%d", variant.start);
     cJSON *start = template_by_id(&ctx, start_id);
     if (!start) { cJSON_Delete(layout); return NULL; }
-    AncientPiece root = {.template = start, .x = variant.x, .y = variant.y, .z = variant.z, .rotation = variant.rotation * 90, .depth = 0};
+    AncientPiece root = {
+        .template = start,
+        .x = (x & ~15) + variant.x,
+        .y = variant.y,
+        .z = (z & ~15) + variant.z,
+        .rotation = variant.rotation * 90,
+        .depth = 0,
+    };
     bounds(&root);
     ctx.pieces[ctx.count++] = root;
     expand_from(&ctx, 0);
@@ -280,9 +287,9 @@ char *axolotl_seed_map_ancient_city_layout(
     cJSON_AddNumberToObject(result, "rotation", variant.rotation * 90);
     cJSON_AddNumberToObject(result, "start", variant.start);
     cJSON_AddItemToObject(result, "origin", cJSON_CreateArray());
-    add_number(object(result, "origin"), variant.x);
+    add_number(object(result, "origin"), root.x);
     add_number(object(result, "origin"), variant.y);
-    add_number(object(result, "origin"), variant.z);
+    add_number(object(result, "origin"), root.z);
     cJSON *pieces = cJSON_AddArrayToObject(result, "pieces");
     for (int i = 0; i < ctx.count; i++) {
         AncientPiece *piece = &ctx.pieces[i];

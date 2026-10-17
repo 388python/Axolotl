@@ -590,6 +590,20 @@ mod tests {
                 "{version}"
             );
             assert!(result["pieces"][0]["min"]["x"].is_number(), "{version}");
+            assert!(
+                (i64::from(feature.x)
+                    - result["pieces"][0]["position"]["x"].as_i64().unwrap())
+                .abs()
+                    <= 64,
+                "{version} returned a city outside its world X coordinate"
+            );
+            assert!(
+                (i64::from(feature.z)
+                    - result["pieces"][0]["position"]["z"].as_i64().unwrap())
+                .abs()
+                    <= 64,
+                "{version} returned a city outside its world Z coordinate"
+            );
             structure_query.include_blocks = true;
             let detailed = structure_details(structure_query, None).unwrap();
             assert!(
