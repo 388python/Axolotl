@@ -321,6 +321,59 @@ it('automatically paints visible layouts without a selection, shares requests wi
     expect(wrapper!.find('aside').exists()).toBe(false)
 })
 
+it('paints unselected Ancient city piece projections on the map canvas', async () => {
+    const details: SeedMapStructureDetails = {
+        supported: true,
+        truncated: false,
+        containers: [],
+        limits: ['terrain_unverified', 'relative_height'],
+        pieces: [
+            {
+                id: 0,
+                name: 'minecraft:ancient_city/city_center/city_center_1',
+                templateId: 'minecraft:ancient_city/city_center/city_center_1',
+                rotation: 0,
+                positionKnown: true,
+                position: { x: -13, y: -27, z: -20 },
+                min: { x: -13, y: -27, z: -20 },
+                max: { x: 4, y: 3, z: 20 },
+            },
+            {
+                id: 1,
+                name: 'minecraft:ancient_city/city_center/walls/bottom_1',
+                templateId: 'minecraft:ancient_city/city_center/walls/bottom_1',
+                rotation: 0,
+                positionKnown: true,
+                position: { x: -27, y: -26, z: -20 },
+                min: { x: -27, y: -26, z: -20 },
+                max: { x: -14, y: -3, z: 20 },
+            },
+        ],
+    }
+    backend.details.mockResolvedValue(details)
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.center = { x: 0, z: 0 }
+    vm.workspace.zoom = 0
+    vm.workspace.displayMode = 'structures'
+    vm.workspace.dimension = 'overworld'
+    vm.workspace.visibleFeatures = ['ancient-city']
+    vm.features = [{ kind: 'ancient-city', x: 0, z: 0, approximate: false }]
+    await flushPromises()
+    await vi.waitFor(() => expect(backend.details).toHaveBeenCalledOnce())
+    for (const job of backend.tiles.splice(0)) await complete(job, '#00ff00')
+    await vi.waitFor(() => {
+        vm.drawMap()
+        const ratio = window.devicePixelRatio || 1
+        const x = Math.floor((canvas.clientWidth / 2 - 20) * ratio)
+        const y = Math.floor((canvas.clientHeight / 2) * ratio)
+        expect([...canvas.getContext('2d')!.getImageData(x, y, 1, 1).data]).not.toEqual([
+            0, 255, 0, 255,
+        ])
+    })
+    expect(backend.details.mock.calls[0][0]).toMatchObject({ featureMask: 1 << 5, x: 0, z: 0 })
+})
+
 it('keeps screen coordinates and painted canvas intact when opening, dragging and closing details', async () => {
     await page.viewport(1280, 1100)
     const { vm, canvas } = await openMap()
