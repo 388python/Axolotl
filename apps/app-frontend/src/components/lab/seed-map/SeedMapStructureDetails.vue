@@ -14,15 +14,75 @@ import {
 } from '@/lab/seed-map/advanced'
 import type { SeedMapFeatureKind } from '@/lab/seed-map/features'
 import { createSeedMapLabels, seedMapEffectDuration } from '@/lab/seed-map/structure-labels'
+import {
+    seedMapLayoutPieces,
+    seedMapStructureCapabilities,
+    seedMapVolumePieces,
+} from '@/lab/seed-map/structure-layout'
+
+import SeedMapLayoutPreview from './SeedMapLayoutPreview.vue'
 
 const props = defineProps<{
     query: SeedMapStructureQuery
     kind: SeedMapFeatureKind
     title: string
+    selected?: number
+    load?: (query: SeedMapStructureQuery) => Promise<SeedMapStructureDetails>
 }>()
 const emit = defineEmits<{ close: []; focus: [piece: SeedMapStructurePiece] }>()
 const { formatMessage, locale } = useVIntl()
 const messages = defineMessages({
+    supportedFeatures: {
+        id: 'app.lab.seed-map.details.supported-features',
+        defaultMessage: 'Supported',
+    },
+    unsupportedFeatures: {
+        id: 'app.lab.seed-map.details.unsupported-features',
+        defaultMessage: 'Not supported',
+    },
+    capabilityVariant: {
+        id: 'app.lab.seed-map.details.capability.variant',
+        defaultMessage: 'Structure variants',
+    },
+    capabilityProjection: {
+        id: 'app.lab.seed-map.details.capability.projection',
+        defaultMessage: '2D map projection',
+    },
+    capabilityVolume: {
+        id: 'app.lab.seed-map.details.capability.volume',
+        defaultMessage: '3D piece bounds',
+    },
+    capabilityContainers: {
+        id: 'app.lab.seed-map.details.capability.containers',
+        defaultMessage: 'Container list',
+    },
+    capabilityComplete: {
+        id: 'app.lab.seed-map.details.capability.complete',
+        defaultMessage: 'Complete piece layout',
+    },
+    capabilityAbsoluteHeight: {
+        id: 'app.lab.seed-map.details.capability.absolute-height',
+        defaultMessage: 'Verified world heights',
+    },
+    capabilityBlocks: {
+        id: 'app.lab.seed-map.details.capability.blocks',
+        defaultMessage: 'Individual block models',
+    },
+    none: {
+        id: 'app.lab.seed-map.details.capability.none',
+        defaultMessage: 'No additional predictions',
+    },
+    projectionHint: {
+        id: 'app.lab.seed-map.details.projection-hint',
+        defaultMessage:
+            'Zoom to 2 blocks per pixel or closer to see 2D layouts on the map. Select overlapping pieces again to inspect the next piece.',
+    },
+    relativeHeight: {
+        id: 'app.lab.seed-map.details.relative-height',
+        defaultMessage:
+            'Vertical relationships are relative; the final world height is not predicted.',
+    },
+
     overview: { id: 'app.lab.seed-map.details.overview', defaultMessage: 'Overview' },
     layout: { id: 'app.lab.seed-map.details.layout', defaultMessage: 'Layout' },
     loot: { id: 'app.lab.seed-map.details.loot', defaultMessage: 'Loot' },
@@ -68,7 +128,7 @@ const messages = defineMessages({
     },
     noLayout: {
         id: 'app.lab.seed-map.details.no-layout',
-        defaultMessage: 'Internal layout is not simulated by this engine.',
+        defaultMessage: 'The engine does not provide spatial layout bounds for this structure.',
     },
     noLoot: {
         id: 'app.lab.seed-map.details.no-loot',
@@ -111,10 +171,6 @@ const messages = defineMessages({
         id: 'app.lab.seed-map.details.positions-unavailable',
         defaultMessage:
             'The engine provides container locations but no piece positions for this structure.',
-    },
-    layoutMap: {
-        id: 'app.lab.seed-map.details.layout-map',
-        defaultMessage: 'Structure layout. Select a piece to highlight it on the map.',
     },
 })
 
@@ -165,9 +221,10 @@ async function loadDetails() {
     busy.value = true
     failed.value = false
     try {
-        const result = await getSeedMapStructureDetails(query)
+        const result = await (props.load ?? getSeedMapStructureDetails)(query)
         if (token !== generation) return
         details.value = result
+        selectedPiece.value = props.selected
         containerId.value = result.containers[0]?.id
         if (tab.value === 'loot') void loadLoot()
     } catch {
@@ -225,22 +282,23 @@ watch([tab, containerId], () => {
     void loadLoot()
 })
 
-const positionedPieces = computed(
-    () => details.value?.pieces.filter((piece) => piece.positionKnown) ?? [],
+watch(
+    () => props.selected,
+    (id) => {
+        selectedPiece.value = id
+    },
+    { immediate: true },
 )
-const bounds = computed(() => {
-    const pieces = positionedPieces.value
-    const minX = Math.min(...pieces.map((piece) => piece.min?.x ?? piece.position.x), props.query.x)
-    const minZ = Math.min(...pieces.map((piece) => piece.min?.z ?? piece.position.z), props.query.z)
-    const maxX = Math.max(
-        ...pieces.map((piece) => piece.max?.x ?? piece.position.x),
-        props.query.x + 1,
-    )
-    const maxZ = Math.max(
-        ...pieces.map((piece) => piece.max?.z ?? piece.position.z),
-        props.query.z + 1,
-    )
-    return `${minX - 4} ${minZ - 4} ${maxX - minX + 8} ${maxZ - minZ + 8}`
+const positionedPieces = computed(() => seedMapLayoutPieces(details.value))
+const volumePieces = computed(() => seedMapVolumePieces(details.value))
+const capabilities = computed(() => {
+    if (!details.value) return []
+    return Object.entries(seedMapStructureCapabilities(details.value)).map(([key, supported]) => ({
+        key,
+        supported,
+        message:
+            messages[`capability${key[0].toUpperCase()}${key.slice(1)}` as keyof typeof messages],
+    }))
 })
 const flags = computed(() => {
     const variant = details.value?.variant
@@ -291,7 +349,7 @@ async function copyLoot() {
 
 <template>
     <aside
-        class="absolute inset-y-3 right-3 z-20 flex w-[min(26rem,calc(100%_-_1.5rem))] min-h-0 flex-col overflow-hidden rounded-xl border border-surface-4 bg-surface-2 shadow-lg"
+        class="flex size-full min-h-0 min-w-0 flex-col overflow-hidden bg-surface-2"
         :aria-label="title"
         @pointerdown.stop
         @wheel.stop
@@ -342,6 +400,34 @@ async function copyLoot() {
             </div>
             <div class="mb-3 flex flex-col gap-2"><slot name="actions" /></div>
             <template v-if="details">
+                <div
+                    class="mb-4 grid grid-cols-2 gap-3 rounded-lg border border-surface-4 bg-surface-3 p-3 text-xs"
+                    data-testid="seed-map-structure-capabilities"
+                >
+                    <div
+                        v-for="supported in [true, false]"
+                        :key="String(supported)"
+                        class="flex flex-col gap-1"
+                    >
+                        <strong>{{
+                            formatMessage(
+                                supported
+                                    ? messages.supportedFeatures
+                                    : messages.unsupportedFeatures,
+                            )
+                        }}</strong>
+                        <span
+                            v-for="capability in capabilities.filter(
+                                (entry) => entry.supported === supported,
+                            )"
+                            :key="capability.key"
+                            >{{ formatMessage(capability.message) }}</span
+                        >
+                        <span v-if="supported && !capabilities.some((entry) => entry.supported)">{{
+                            formatMessage(messages.none)
+                        }}</span>
+                    </div>
+                </div>
                 <p v-if="!details.supported" class="m-0 text-sm">
                     {{ formatMessage(messages.unsupported) }}
                 </p>
@@ -384,57 +470,48 @@ async function copyLoot() {
                     }}</span>
                 </div>
                 <div v-else-if="tab === 'layout'" class="flex flex-col gap-2">
-                    <p v-if="!details.pieces.length" class="m-0 text-sm">
+                    <p v-if="!positionedPieces.length" class="m-0 text-sm">
                         {{ formatMessage(messages.noLayout) }}
                     </p>
-                    <svg
-                        v-if="positionedPieces.length"
-                        :viewBox="bounds"
-                        class="h-52 w-full rounded-lg border border-surface-4 bg-surface-1 text-[var(--color-brand)]"
-                        :aria-label="formatMessage(messages.layoutMap)"
+                    <p
+                        v-if="details.limits.includes('relative_height')"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
                     >
-                        <rect
-                            v-for="piece in positionedPieces"
-                            :key="piece.id"
-                            :x="piece.min?.x ?? piece.position.x"
-                            :y="piece.min?.z ?? piece.position.z"
-                            :width="
-                                Math.max(
-                                    1,
-                                    (piece.max?.x ?? piece.position.x) -
-                                        (piece.min?.x ?? piece.position.x) +
-                                        1,
-                                )
-                            "
-                            :height="
-                                Math.max(
-                                    1,
-                                    (piece.max?.z ?? piece.position.z) -
-                                        (piece.min?.z ?? piece.position.z) +
-                                        1,
-                                )
-                            "
-                            fill="currentColor"
-                            :fill-opacity="selectedPiece === piece.id ? 0.8 : 0.25"
-                            stroke="currentColor"
-                            stroke-width="0.5"
-                            role="button"
-                            tabindex="0"
-                            :aria-label="pieceLabel(piece)"
-                            @click="focus(piece)"
-                            @keydown.enter="focus(piece)"
-                        />
-                    </svg>
+                        {{ formatMessage(messages.relativeHeight) }}
+                    </p>
+                    <p
+                        v-else-if="details.limits.includes('height_placeholder')"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                    >
+                        {{ formatMessage(messages.height) }}
+                    </p>
+                    <SeedMapLayoutPreview
+                        v-if="volumePieces.length"
+                        :pieces="volumePieces"
+                        :selected="selectedPiece"
+                        :label="pieceLabel"
+                        @select="focus"
+                    />
+                    <p
+                        v-if="positionedPieces.length"
+                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                    >
+                        {{ formatMessage(messages.projectionHint) }}
+                    </p>
                     <button
                         v-for="piece in details.pieces"
                         :key="piece.id"
+                        :data-piece-id="piece.id"
+                        :aria-pressed="selectedPiece === piece.id"
+                        :class="selectedPiece === piece.id ? 'ring-2 ring-brand' : ''"
                         class="flex flex-col gap-1 rounded-lg border border-surface-4 bg-surface-3 p-2 text-left text-xs hover:bg-surface-4"
+                        :disabled="!piece.positionKnown"
                         @click="focus(piece)"
                     >
                         <strong class="break-words">{{ pieceLabel(piece) }}</strong
                         ><span v-if="piece.positionKnown"
-                            >{{ piece.position.x }}, {{ piece.position.z }} ·
-                            {{ labels.rotation(piece.rotation) }}</span
+                            >{{ piece.position.x }}, {{ piece.position.y }},
+                            {{ piece.position.z }} · {{ labels.rotation(piece.rotation) }}</span
                         ><span v-if="piece.portalEyes !== undefined">{{
                             formatMessage(messages.eyes, { count: piece.portalEyes })
                         }}</span>
@@ -526,9 +603,6 @@ async function copyLoot() {
                 <div
                     class="mt-4 flex flex-col gap-2 border-t border-surface-4 pt-3 text-xs text-[var(--color-text-tertiary)]"
                 >
-                    <p v-if="details.limits.includes('height_placeholder')" class="m-0">
-                        {{ formatMessage(messages.height) }}
-                    </p>
                     <p v-if="details.limits.includes('partial_layout')" class="m-0">
                         {{ formatMessage(messages.partial) }}
                     </p>

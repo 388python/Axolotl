@@ -2,6 +2,7 @@ import '@/test/visual-styles.scss'
 
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
 
 import SeedMapStructureDetails from './SeedMapStructureDetails.vue'
 
@@ -74,6 +75,8 @@ function render() {
         attachTo: document.body,
     })
     wrappers.push(wrapper)
+    ;(wrapper.element as HTMLElement).style.cssText =
+        'width: 430px; height: 720px; background: var(--surface-2); color: var(--color-text-primary)'
     return wrapper
 }
 
@@ -108,6 +111,108 @@ it('keeps a newer structure selection when an older calculation finishes later',
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(wrapper.text()).toContain('90°')
     expect(wrapper.text()).not.toContain('180°')
+})
+
+it('renders interactive 3D bounds and keeps map selection synchronized without inventing heights', async () => {
+    calls.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        limits: ['relative_height'],
+        containers: [],
+        pieces: [
+            {
+                id: 0,
+                name: 'SHPR',
+                positionKnown: true,
+                rotation: 0,
+                position: { x: -20, y: 64, z: 0 },
+                min: { x: -20, y: 64, z: 0 },
+                max: { x: -10, y: 72, z: 15 },
+            },
+            {
+                id: 1,
+                name: 'SHLi',
+                positionKnown: true,
+                rotation: 90,
+                position: { x: -10, y: 70, z: 0 },
+                min: { x: -10, y: 70, z: 0 },
+                max: { x: 5, y: 82, z: 10 },
+            },
+        ],
+    })
+    const wrapper = render()
+    await wrapper.setProps({ kind: 'stronghold', title: 'Stronghold', selected: 1 })
+    await flushPromises()
+    const card = wrapper.get('[data-testid="seed-map-structure-capabilities"]')
+    expect(card.text()).toContain('Supported')
+    expect(card.text()).toContain('Not supported')
+    expect(card.findAll('div')[1].text()).toContain('Verified world heights')
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
+    const canvas = wrapper.get('canvas').element as HTMLCanvasElement
+    await vi.waitFor(() => expect(wrapper.get('canvas').attributes('data-ready')).toBe('true'))
+    const gl = canvas.getContext('webgl2')!
+    const pixels = () => {
+        const data = new Uint8Array(canvas.width * canvas.height * 4)
+        gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data)
+        return data
+    }
+    await vi.waitFor(() => expect(pixels().some((value) => value > 0)).toBe(true))
+    expect(wrapper.get('[data-piece-id="1"]').attributes('aria-pressed')).toBe('true')
+    const before = pixels()
+    canvas.dispatchEvent(
+        new WheelEvent('wheel', {
+            deltaY: -200,
+            clientX: 200,
+            clientY: 400,
+            bubbles: true,
+            cancelable: true,
+        }),
+    )
+    await vi.waitFor(() => expect(pixels()).not.toEqual(before))
+    const zoomed = pixels()
+    await userEvent.dragAndDrop(
+        canvas,
+        wrapper.get('[data-testid="seed-map-layout-preview"] strong').element,
+    )
+    await vi.waitFor(() => expect(pixels()).not.toEqual(zoomed))
+    await wrapper.get('[data-piece-id="0"]').trigger('click')
+    expect(wrapper.emitted('focus')?.at(-1)?.[0]).toMatchObject({ id: 0 })
+    expect(wrapper.text()).toContain('Vertical relationships are relative')
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            element: wrapper.element,
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-layout-3d.png`,
+        })
+})
+
+it('retains a selectable horizontal fallback after a WebGL context loss', async () => {
+    calls.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        limits: ['height_placeholder'],
+        containers: [],
+        pieces: [
+            {
+                id: 0,
+                name: 'SHPR',
+                positionKnown: true,
+                rotation: 0,
+                position: { x: 0, y: 64, z: 0 },
+                min: { x: 0, y: 64, z: 0 },
+                max: { x: 10, y: 72, z: 15 },
+            },
+        ],
+    })
+    const wrapper = render()
+    await wrapper.setProps({ kind: 'stronghold' })
+    await flushPromises()
+    await wrapper.findAll('[role="tab"]')[1].trigger('click')
+    await vi.waitFor(() => expect(wrapper.get('canvas').attributes('data-ready')).toBe('true'))
+    await wrapper.get('canvas').trigger('webglcontextlost')
+    expect(wrapper.text()).toContain('3D rendering is unavailable')
+    await wrapper.get('svg[aria-label] rect').trigger('click')
+    expect(wrapper.emitted('focus')?.at(-1)?.[0]).toMatchObject({ id: 0 })
+    expect(wrapper.text()).toContain('Retry 3D preview')
 })
 
 it('loads loot only after opening its tab and reports unavailable piece positions', async () => {
@@ -193,10 +298,10 @@ it.each(['en-US', 'zh-CN'])(
         await wrapper.findAll('[role="tab"]')[1].trigger('click')
         expect(wrapper.text()).toContain(locale === 'zh-CN' ? '末地传送门房间' : 'End portal room')
         expect(wrapper.text()).not.toContain('SHPR')
-        expect(wrapper.get('svg[aria-label] rect').attributes('aria-label')).toBe(
+        expect(wrapper.get('[data-piece-id="0"]').text()).toContain(
             locale === 'zh-CN' ? '末地传送门房间' : 'End portal room',
         )
-        await wrapper.get('svg[aria-label] rect').trigger('click')
+        await wrapper.get('[data-piece-id="0"]').trigger('click')
         expect(wrapper.emitted('focus')?.[0]?.[0]).toMatchObject({
             name: 'SHPR',
             position: { x: 12, y: 64, z: 34 },

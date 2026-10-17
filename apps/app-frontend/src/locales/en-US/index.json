@@ -14490,7 +14490,7 @@
     "message": "{count} containers"
   },
   "app.lab.seed-map.details.no-layout": {
-    "message": "Internal layout is not simulated by this engine."
+    "message": "The engine does not provide spatial layout bounds for this structure."
   },
   "app.lab.seed-map.details.predicted-loot": {
     "message": "Predicted item list; chest slot positions are not reconstructed."
@@ -14512,9 +14512,6 @@
   },
   "app.lab.seed-map.details.truncated": {
     "message": "The structure reached the piece limit; additional pieces may be missing."
-  },
-  "app.lab.seed-map.details.layout-map": {
-    "message": "Structure layout. Select a piece to highlight it on the map."
   },
   "app.lab.seed-map.underground-mode": {
     "message": "Underground"
@@ -14541,7 +14538,7 @@
     "message": "Explore structure details"
   },
   "app.onboarding.seed-map.description": {
-    "message": "Select a structure on the map to inspect its variant, layout and predictable containers. Some layouts are partial or use placeholder heights; each result lists its limits."
+    "message": "Zoom in to see supported 2D structure layouts directly on the map. Select a structure to open its capabilities and details beside the map; drag the divider to resize. The Layout tab provides an interactive 3D bounds preview where available. Heights may be relative or placeholders."
   },
   "app.onboarding.seed-map-underground.title": {
     "message": "Look below the surface"
@@ -15007,5 +15004,62 @@
   },
   "app.lab.seed-map.names.loot-camp-secret": {
     "message": "Abandoned camp hidden chest"
+  },
+  "app.lab.seed-map.split.resize": {
+    "message": "Resize map and structure details"
+  },
+  "app.lab.seed-map.preview.title": {
+    "message": "3D layout preview"
+  },
+  "app.lab.seed-map.preview.controls": {
+    "message": "Drag to rotate · Scroll to zoom · Right-drag to pan"
+  },
+  "app.lab.seed-map.preview.fit": {
+    "message": "Fit structure"
+  },
+  "app.lab.seed-map.preview.failed": {
+    "message": "3D rendering is unavailable. The horizontal layout is shown below."
+  },
+  "app.lab.seed-map.preview.retry": {
+    "message": "Retry 3D preview"
+  },
+  "app.lab.seed-map.preview.bounds": {
+    "message": "Structure piece bounds; individual blocks are not simulated."
+  },
+  "app.lab.seed-map.details.supported-features": {
+    "message": "Supported"
+  },
+  "app.lab.seed-map.details.unsupported-features": {
+    "message": "Not supported"
+  },
+  "app.lab.seed-map.details.capability.variant": {
+    "message": "Structure variants"
+  },
+  "app.lab.seed-map.details.capability.projection": {
+    "message": "2D map projection"
+  },
+  "app.lab.seed-map.details.capability.volume": {
+    "message": "3D piece bounds"
+  },
+  "app.lab.seed-map.details.capability.containers": {
+    "message": "Container list"
+  },
+  "app.lab.seed-map.details.capability.complete": {
+    "message": "Complete piece layout"
+  },
+  "app.lab.seed-map.details.capability.absolute-height": {
+    "message": "Verified world heights"
+  },
+  "app.lab.seed-map.details.capability.blocks": {
+    "message": "Individual block models"
+  },
+  "app.lab.seed-map.details.capability.none": {
+    "message": "No additional predictions"
+  },
+  "app.lab.seed-map.details.projection-hint": {
+    "message": "Zoom to 2 blocks per pixel or closer to see 2D layouts on the map. Select overlapping pieces again to inspect the next piece."
+  },
+  "app.lab.seed-map.details.relative-height": {
+    "message": "Vertical relationships are relative; the final world height is not predicted."
   }
 }

@@ -28,6 +28,7 @@ export type SeedMapStructurePiece = {
 export type SeedMapContainer = { id: number; piece: number; x: number; z: number; table: string }
 export type SeedMapStructureDetails = {
     supported: boolean
+    capabilities?: { variant: boolean; containers: boolean }
     truncated: boolean
     variant?: {
         rotation: number

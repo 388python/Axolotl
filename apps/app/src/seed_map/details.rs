@@ -179,6 +179,7 @@ mod tests {
         );
         let result = structure_details(query.clone(), None).unwrap();
         assert_eq!(result["supported"], true);
+        assert_eq!(result["capabilities"]["containers"], true);
         assert_eq!(result["pieces"].as_array().unwrap().len(), 2);
         assert!(
             result["pieces"][0]["name"]
@@ -218,6 +219,43 @@ mod tests {
                     }
                 )
         ));
+    }
+    #[test]
+    fn shipwreck_bounds_use_world_coordinates_and_placeholder_heights() {
+        for x in [1024, 2048, -4096, 8192] {
+            let result = structure_details(
+                query(
+                    "10292992",
+                    "26.3",
+                    x,
+                    -1024,
+                    super::super::FEATURE_SHIPWRECK,
+                ),
+                None,
+            )
+            .unwrap();
+            let piece = &result["pieces"][0];
+            assert!(
+                result["limits"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|limit| limit == "height_placeholder")
+            );
+            for axis in ["x", "z"] {
+                let origin = piece["position"][axis].as_i64().unwrap();
+                let min = piece["min"][axis].as_i64().unwrap();
+                let max = piece["max"][axis].as_i64().unwrap();
+                assert!(min <= origin && origin <= max);
+                assert!(max - min < 32);
+                for container in result["containers"].as_array().unwrap() {
+                    let position = container[axis].as_i64().unwrap();
+                    assert!(min <= position && position <= max);
+                }
+            }
+            assert!(piece["min"]["y"].as_i64().unwrap() >= 64);
+            assert_eq!(piece["rotation"], result["variant"]["rotation"]);
+        }
     }
     #[test]
     fn underground_slices_are_bounded_and_deterministic() {

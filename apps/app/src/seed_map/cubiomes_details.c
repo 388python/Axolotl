@@ -91,6 +91,9 @@ char *axolotl_seed_map_structure_details(
     cJSON *pieces = cJSON_AddArrayToObject(result, "pieces");
     cJSON *containers = cJSON_AddArrayToObject(result, "containers");
     cJSON *limits = cJSON_AddArrayToObject(result, "limits");
+    cJSON *capabilities = cJSON_AddObjectToObject(result, "capabilities");
+    cJSON_AddBoolToObject(capabilities, "variant", 0);
+    cJSON_AddBoolToObject(capabilities, "containers", 0);
     int type = structure_type(feature, dimension);
     if (type < 0) goto finish;
     Generator g;
@@ -105,6 +108,7 @@ char *axolotl_seed_map_structure_details(
         has_variant = isViableNetherFossilTerrain(x >> 4, z >> 4, &variant, &terrain, mc);
     }
     if (has_variant) {
+        cJSON_ReplaceItemInObject(capabilities, "variant", cJSON_CreateBool(1));
         cJSON *value = cJSON_AddObjectToObject(result, "variant");
         cJSON_AddNumberToObject(value, "rotation", variant.rotation * 90);
         cJSON_AddNumberToObject(value, "mirror", variant.mirror);
@@ -127,6 +131,7 @@ char *axolotl_seed_map_structure_details(
     }
     StructureSaltConfig salt = {0};
     int has_salt = mc >= MC_1_13 && getStructureSaltConfig(type, mc, has_variant && mc >= MC_1_18 ? variant.biome : biome, &salt);
+    cJSON_ReplaceItemInObject(capabilities, "containers", cJSON_CreateBool(has_salt));
     Piece *list = calloc(2048, sizeof(Piece));
     if (!list) goto finish;
     int count;
@@ -137,7 +142,10 @@ char *axolotl_seed_map_structure_details(
     if (count > 2048) count = 2048;
     cJSON_ReplaceItemInObject(result, "supported", cJSON_CreateBool(has_variant || count > 0));
     cJSON_AddItemToArray(limits, cJSON_CreateString("terrain_unverified"));
-    if (type == Stronghold || type == Outpost || type == Desert_Pyramid || type == Jungle_Temple || type == Swamp_Hut || type == Treasure || type == Ruined_Portal || type == Ruined_Portal_N) {
+    if (type == Stronghold || type == Fortress || type == End_City) {
+        cJSON_AddItemToArray(limits, cJSON_CreateString("relative_height"));
+    }
+    if (type == Stronghold || type == Outpost || type == Desert_Pyramid || type == Jungle_Temple || type == Swamp_Hut || type == Treasure || type == Ruined_Portal || type == Ruined_Portal_N || type == Igloo || type == Shipwreck) {
         cJSON_AddItemToArray(limits, cJSON_CreateString("height_placeholder"));
     }
     if (type == Ruined_Portal || type == Ruined_Portal_N) cJSON_AddItemToArray(limits, cJSON_CreateString("container_positions_approximate"));
@@ -147,6 +155,14 @@ char *axolotl_seed_map_structure_details(
     }
     for (int i = 0; i < count; i++) {
         Piece *piece = &list[i];
+        if (type == Shipwreck) {
+            piece->bb0.x += piece->pos.x + (piece->bb0.x < 0);
+            piece->bb0.y += piece->pos.y;
+            piece->bb0.z += piece->pos.z + (piece->bb0.z < 0);
+            piece->bb1.x += piece->pos.x - (piece->bb1.x > 0);
+            piece->bb1.y += piece->pos.y - 1;
+            piece->bb1.z += piece->pos.z - (piece->bb1.z > 0);
+        }
         if (container >= 0 && container / 4 == i && container % 4 < piece->chestCount && has_salt) {
             add_loot(result, piece, container % 4, mc);
         }
@@ -154,7 +170,7 @@ char *axolotl_seed_map_structure_details(
         cJSON *value = cJSON_CreateObject();
         cJSON_AddNumberToObject(value, "id", i);
         cJSON_AddStringToObject(value, "name", piece->name ? piece->name : "unknown");
-        cJSON_AddNumberToObject(value, "rotation", (type == Abandoned_Camp || type == Bastion) ? variant.rotation * 90 : piece->rot * 90);
+        cJSON_AddNumberToObject(value, "rotation", (type == Abandoned_Camp || type == Bastion || type == Shipwreck || type == Igloo) ? variant.rotation * 90 : piece->rot * 90);
         cJSON_AddBoolToObject(value, "positionKnown", type != Abandoned_Camp && type != Bastion);
         cJSON_AddItemToObject(value, "position", position(piece->pos.x, piece->pos.y, piece->pos.z));
         if (piece->bb1.x > piece->bb0.x || piece->bb1.z > piece->bb0.z) {

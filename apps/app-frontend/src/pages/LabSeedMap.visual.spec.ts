@@ -2,10 +2,14 @@ import '@/test/visual-styles.scss'
 
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { userEvent } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
+import { defineComponent, h, Suspense, Transition, type VNode } from 'vue'
+import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 
+import type { SeedMapStructureDetails, SeedMapStructurePiece } from '@/lab/seed-map/advanced'
 import type { SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
-import type { SeedMapWorkspace } from '@/lab/seed-map/workspace'
+import type { SeedMapFeature } from '@/lab/seed-map/features'
+import { createDefaultSeedMapWorkspace, type SeedMapWorkspace } from '@/lab/seed-map/workspace'
 
 import LabSeedMap from './LabSeedMap.vue'
 
@@ -17,9 +21,18 @@ const backend = vi.hoisted(() => ({
     }[],
     features: vi.fn(async () => []),
     ores: vi.fn(async () => []),
+    details: vi.fn(),
 }))
 
-vi.mock('vue-router', () => ({ useRoute: () => ({ query: {} }) }))
+vi.mock('@/lab/seed-map/advanced', () => ({
+    getSeedMapStructureDetails: backend.details,
+    getSeedMapContainerLoot: vi.fn(),
+}))
+
+vi.mock('vue-router', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('vue-router')>()),
+    useRoute: () => ({ query: {} }),
+}))
 vi.mock('@/lab/recipe-generator/item-images', () => ({
     loadMinecraftItemImage: () => Promise.resolve({ src: '' }),
 }))
@@ -27,9 +40,6 @@ vi.mock('@/components/lab/seed-map/SeedMapBiomePicker.vue', () => ({
     default: { render: () => null },
 }))
 vi.mock('@/components/lab/seed-map/SeedMapCopyrightModal.vue', () => ({
-    default: { render: () => null },
-}))
-vi.mock('@/components/lab/seed-map/SeedMapStructureDetails.vue', () => ({
     default: { render: () => null },
 }))
 vi.mock('@/components/lab/seed-map/SeedMapWorldImportModal.vue', () => ({
@@ -97,6 +107,10 @@ type MapVm = {
     resizeCanvas: () => void
     scheduleRefresh: (delay?: number) => void
     drawMap: () => void
+    features: SeedMapFeature[]
+    selection: { x: number; z: number; feature?: SeedMapFeature } | null
+    focusedPiece: SeedMapStructurePiece | null
+    selectAt: (x: number, y: number) => void
 }
 let wrapper: VueWrapper | undefined
 let closed: ReturnType<typeof vi.spyOn>[] = []
@@ -108,6 +122,191 @@ beforeEach(() => {
     backend.spawns = []
     backend.features.mockClear()
     backend.ores.mockClear()
+    backend.details.mockReset().mockResolvedValue({
+        supported: false,
+        truncated: false,
+        pieces: [],
+        containers: [],
+        limits: ['layout_unavailable'],
+    })
+})
+
+it.each([-2, 0, 0.5])(
+    'opens a saved workspace at zoom %s without reading uninitialized layout dependencies',
+    async (zoom) => {
+        localStorage.setItem(
+            'axolotl.lab.seed-map.v1',
+            JSON.stringify({ ...createDefaultSeedMapWorkspace(), zoom }),
+        )
+        const { vm } = await openMap()
+        expect(vm.workspace.zoom).toBe(zoom)
+        expect(wrapper!.get('canvas').exists()).toBe(true)
+    },
+)
+
+it('can leave a close-zoom map with pending work and navigate back through the app transition shell', async () => {
+    localStorage.setItem(
+        'axolotl.lab.seed-map.v1',
+        JSON.stringify({ ...createDefaultSeedMapWorkspace(), zoom: 0 }),
+    )
+    const errors: unknown[] = []
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: '/lab/seed-map', component: LabSeedMap },
+            {
+                path: '/other',
+                component: defineComponent({
+                    render: () => h('div', { 'data-testid': 'other-page' }, 'Other page'),
+                }),
+            },
+        ],
+    })
+    router.onError((error) => errors.push(error))
+    await router.push('/lab/seed-map')
+    await router.isReady()
+    const shell = defineComponent({
+        render: () =>
+            h(
+                RouterView,
+                {},
+                {
+                    default: ({
+                        Component,
+                        route,
+                    }: {
+                        Component: VNode
+                        route: { path: string }
+                    }) =>
+                        h(
+                            Transition,
+                            { css: false, appear: true },
+                            {
+                                default: () =>
+                                    h('div', { key: route.path }, [
+                                        h(Suspense, {}, { default: () => Component }),
+                                    ]),
+                            },
+                        ),
+                },
+            ),
+    })
+    wrapper = mount(shell, {
+        attachTo: document.body,
+        global: {
+            plugins: [router],
+            directives: { tooltip: () => {} },
+            provide: { replayOnboarding: async () => {} },
+        },
+    })
+    await vi.waitFor(() => expect(wrapper!.find('canvas').exists()).toBe(true))
+    await vi.waitFor(() => expect(backend.tiles.length).toBeGreaterThan(0))
+    await router.push('/other')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="other-page"]').text()).toBe('Other page')
+    for (const job of backend.tiles.splice(0)) await complete(job, '#00ff00')
+    await router.push('/lab/seed-map')
+    await flushPromises()
+    expect(wrapper.find('canvas').exists()).toBe(true)
+    await router.push('/other')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="other-page"]').exists()).toBe(true)
+    expect(errors).toEqual([])
+})
+
+it('automatically paints visible layouts without a selection, shares requests with details and resizes the split', async () => {
+    await page.viewport(1280, 1100)
+    document.documentElement.classList.add('dark-mode')
+    const result: SeedMapStructureDetails = {
+        supported: true,
+        truncated: false,
+        containers: [],
+        limits: ['relative_height'],
+        pieces: [
+            {
+                id: 0,
+                name: 'SHPR',
+                rotation: 0,
+                positionKnown: true,
+                position: { x: -40, y: 64, z: -20 },
+                min: { x: -40, y: 64, z: -20 },
+                max: { x: 40, y: 75, z: 20 },
+            },
+        ],
+    }
+    backend.details.mockResolvedValue(result)
+    const { vm, canvas } = await openMap()
+    ;(wrapper!.element as HTMLElement).style.cssText =
+        'width: 1200px; height: 1000px; background: var(--surface-1); color: var(--color-text-primary)'
+    canvas.style.width = ''
+    canvas.style.height = ''
+    vm.resizeCanvas()
+    vm.workspace.zoom = 0
+    vm.workspace.showGrid = false
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = ['stronghold']
+    vm.features = [{ kind: 'stronghold', x: 0, z: 0, approximate: true }]
+    await flushPromises()
+    await vi.waitFor(() => expect(backend.details).toHaveBeenCalledOnce())
+    expect(vm.selection).toBeNull()
+    vm.drawMap()
+    const sample = () => {
+        const ratio = window.devicePixelRatio || 1
+        return [
+            ...canvas
+                .getContext('2d')!
+                .getImageData(
+                    Math.floor((canvas.clientWidth / 2 + 25) * ratio),
+                    Math.floor((canvas.clientHeight / 2) * ratio),
+                    1,
+                    1,
+                ).data,
+        ]
+    }
+    const overlay = sample()
+    vm.workspace.zoom = 1
+    await flushPromises()
+    vm.drawMap()
+    expect(sample()).not.toEqual(overlay)
+    vm.workspace.zoom = 0
+    await flushPromises()
+    vm.selectAt(canvas.clientWidth / 2 + 25, canvas.clientHeight / 2)
+    await flushPromises()
+    await vi.waitFor(() => expect(wrapper!.find('aside').exists()).toBe(true))
+    expect(backend.details).toHaveBeenCalledOnce()
+    expect(vm.focusedPiece?.id).toBe(0)
+    const divider = wrapper!.get('[role="separator"]')
+    const initialWidth = canvas.clientWidth
+    await divider.trigger('keydown', { key: 'ArrowLeft' })
+    await vi.waitFor(() => expect(canvas.clientWidth).toBeLessThan(initialWidth))
+    const keyboardWidth = canvas.clientWidth
+    await userEvent.dragAndDrop(divider.element, canvas)
+    await vi.waitFor(() => expect(canvas.clientWidth).toBeLessThan(keyboardWidth))
+    await divider.trigger('dblclick')
+    await vi.waitFor(() => expect(Number(divider.attributes('aria-valuenow'))).toBe(62))
+    await wrapper!.findAll('[role="tab"]')[1].trigger('click')
+    await vi.waitFor(() =>
+        expect(wrapper!.get('aside canvas').attributes('data-ready')).toBe('true'),
+    )
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            element: wrapper!.element,
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-split-desktop.png`,
+        })
+    ;(wrapper!.element as HTMLElement).style.width = '650px'
+    await vi.waitFor(() => expect(wrapper!.find('[role="separator"]').exists()).toBe(false))
+    expect(wrapper!.element.scrollWidth).toBeLessThanOrEqual(wrapper!.element.clientWidth + 1)
+    expect(canvas.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        wrapper!.get('aside').element.getBoundingClientRect().top + 1,
+    )
+    if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
+        await page.screenshot({
+            element: wrapper!.element,
+            path: `${import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE}/seed-map-split-narrow.png`,
+        })
+    await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
+    expect(vm.selection).toBeNull()
+    expect(wrapper!.find('aside').exists()).toBe(false)
 })
 
 afterEach(async () => {

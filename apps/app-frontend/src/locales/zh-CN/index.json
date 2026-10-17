@@ -14511,7 +14511,7 @@
     "message": "{count} 个容器"
   },
   "app.lab.seed-map.details.no-layout": {
-    "message": "引擎尚未模拟此结构的内部布局。"
+    "message": "引擎未提供此结构的空间布局包围盒。"
   },
   "app.lab.seed-map.details.predicted-loot": {
     "message": "预测物品清单；未还原箱子的槽位排列。"
@@ -14533,9 +14533,6 @@
   },
   "app.lab.seed-map.details.truncated": {
     "message": "已达到结构块数量上限，可能遗漏更多结构块。"
-  },
-  "app.lab.seed-map.details.layout-map": {
-    "message": "结构平面布局。选择结构块可在地图上高亮。"
   },
   "app.lab.seed-map.underground-mode": {
     "message": "地下"
@@ -14562,7 +14559,7 @@
     "message": "探索结构详情"
   },
   "app.onboarding.seed-map.description": {
-    "message": "点击地图中的结构，查看变体、布局和可预测的容器。部分布局不完整或使用占位高度，结果会注明限制。"
+    "message": "放大地图即可直接查看受支持结构的 2D 布局。选中结构后，地图旁会显示能力说明和详情，可拖动分隔条调整宽度。在支持的情况下，“布局”页签提供可交互的 3D 包围盒预览。高度可能为相对值或占位值。"
   },
   "app.onboarding.seed-map-underground.title": {
     "message": "查看地表之下"
@@ -15028,5 +15025,62 @@
   },
   "app.lab.seed-map.names.loot-camp-secret": {
     "message": "废弃营地隐藏宝箱"
+  },
+  "app.lab.seed-map.split.resize": {
+    "message": "调整地图与结构详情的宽度"
+  },
+  "app.lab.seed-map.preview.title": {
+    "message": "3D 布局预览"
+  },
+  "app.lab.seed-map.preview.controls": {
+    "message": "拖动旋转 · 滚轮缩放 · 右键拖动平移"
+  },
+  "app.lab.seed-map.preview.fit": {
+    "message": "适应结构大小"
+  },
+  "app.lab.seed-map.preview.failed": {
+    "message": "暂时无法进行 3D 渲染，下方显示水平布局。"
+  },
+  "app.lab.seed-map.preview.retry": {
+    "message": "重试 3D 预览"
+  },
+  "app.lab.seed-map.preview.bounds": {
+    "message": "显示结构块包围盒；不模拟其中的单个方块。"
+  },
+  "app.lab.seed-map.details.supported-features": {
+    "message": "支持"
+  },
+  "app.lab.seed-map.details.unsupported-features": {
+    "message": "不支持"
+  },
+  "app.lab.seed-map.details.capability.variant": {
+    "message": "结构变体"
+  },
+  "app.lab.seed-map.details.capability.projection": {
+    "message": "地图 2D 投影"
+  },
+  "app.lab.seed-map.details.capability.volume": {
+    "message": "3D 结构块包围盒"
+  },
+  "app.lab.seed-map.details.capability.containers": {
+    "message": "容器列表"
+  },
+  "app.lab.seed-map.details.capability.complete": {
+    "message": "完整结构块布局"
+  },
+  "app.lab.seed-map.details.capability.absolute-height": {
+    "message": "经过验证的世界高度"
+  },
+  "app.lab.seed-map.details.capability.blocks": {
+    "message": "单个方块模型"
+  },
+  "app.lab.seed-map.details.capability.none": {
+    "message": "暂无额外预测能力"
+  },
+  "app.lab.seed-map.details.projection-hint": {
+    "message": "放大至每像素 2 个方块或更近时，地图将显示 2D 布局。再次点击重叠处可选择下一个结构块。"
+  },
+  "app.lab.seed-map.details.relative-height": {
+    "message": "垂直关系为相对关系，未预测结构在世界中的最终高度。"
   }
 }

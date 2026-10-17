@@ -34,7 +34,7 @@ export const onboardingMessages = defineMessages({
     mapAdvancedDescription: {
         id: 'app.onboarding.seed-map.description',
         defaultMessage:
-            'Select a structure on the map to inspect its variant, layout and predictable containers. Some layouts are partial or use placeholder heights; each result lists its limits.',
+            'Zoom in to see supported 2D structure layouts directly on the map. Select a structure to open its capabilities and details beside the map; drag the divider to resize. The Layout tab provides an interactive 3D bounds preview where available. Heights may be relative or placeholders.',
     },
     mapUndergroundTitle: {
         id: 'app.onboarding.seed-map-underground.title',
