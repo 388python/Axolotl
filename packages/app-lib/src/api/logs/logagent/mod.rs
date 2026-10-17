@@ -159,7 +159,7 @@ pub async fn prepare(
     if result.is_err() {
         cancel(&run_id)?;
     }
-    Ok(result?)
+    result
 }
 
 async fn prepare_snapshot(

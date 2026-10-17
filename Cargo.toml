@@ -233,6 +233,6 @@ lto = false
 [profile.ci]
 inherits = "release"
 opt-level = 0
-lto = "off"
 debug = false
+lto = "off"
 incremental = false
