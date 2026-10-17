@@ -146,8 +146,8 @@
         "shipwreck/with_mast_degraded": "38ef29bf631bb613a3f438126d7276f9d18c11b1b15aef5dacb86c9f3e46755c",
         "shipwreck/with_mast": "3bf05be24f1b85d68ad259305cd54bb7cc6fac69ab655b468e5bcf5c33f5073d"
     },
-    "ancientCityLayoutSha256": "fdd79a4e5f5ecbb8677d47090493a99f5763d010d306521fe6ef7c17a700fff4",
-    "ancientCityBlocksSha256": "93b16cceeaa8751f0001397fb8de6133f08eb6d9b37290cc8ac3f662b8d97043",
+    "ancientCityLayoutSha256": "8c75e79e497b380e41a2a788dc811824ffe718b2d3ee14a1fa645d4bb0f9e05d",
+    "ancientCityBlocksSha256": "aba306f67f7ad6c6e9bd29de7fe28965d643eea1aeb5c3bcf9f6a26503eacdac",
     "colorAlgorithm": "alpha-weighted linear-sRGB mean of nontransparent pixels, weighted by animation frame duration; per model face texture",
     "textureCount": 2042,
     "placementRules": "template-v1: EndCityPiece air processors; Shipwreck pivot (4,0,15) encoded by engine origin; Igloo pivots and offsets from IglooPieces; Outpost main tower only; RuinedPortal center pivot and FRONT_BACK mirror, excluding terrain processors; NetherFossil variant; Ancient City pools and jigsaw connectors are bundled separately for native layout expansion. Verify rules against each new game version.",

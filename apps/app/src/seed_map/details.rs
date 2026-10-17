@@ -1,4 +1,8 @@
-use std::{ffi::CStr, io, sync::Mutex};
+use std::{
+    ffi::{CStr, CString},
+    io::{self, Read},
+    sync::Mutex,
+};
 
 use serde::Deserialize;
 
@@ -18,6 +22,8 @@ pub struct StructureQuery {
     pub x: i32,
     pub z: i32,
     pub feature_mask: u32,
+    #[serde(default)]
+    pub include_blocks: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -32,6 +38,165 @@ impl Drop for NativeResult {
     fn drop(&mut self) {
         unsafe { super::axolotl_seed_map_free_result(self.0) };
     }
+}
+
+fn ancient_city_layout(
+    query: &StructureQuery,
+    mc: i32,
+) -> io::Result<serde_json::Value> {
+    let compressed = match query.version.as_str() {
+        "26.3" => {
+            include_bytes!("assets/versions/26.3/ancient-city-layout.json.gz")
+        }
+        _ => {
+            return Err(io::Error::other(
+                "Ancient city detailed layouts are not bundled for this version.",
+            ));
+        }
+    };
+    let mut decoded = Vec::new();
+    flate2::read::GzDecoder::new(&compressed[..])
+        .read_to_end(&mut decoded)
+        .map_err(io::Error::other)?;
+    let layout = CString::new(decoded).map_err(|_| {
+        io::Error::other("Ancient city layout contains an invalid byte.")
+    })?;
+    let result = NativeResult(unsafe {
+        super::axolotl_seed_map_ancient_city_layout(
+            parse_seed(&query.seed),
+            mc,
+            query.x,
+            query.z,
+            layout.as_ptr(),
+            layout.as_bytes().len(),
+        )
+    });
+    if result.0.is_null() {
+        return Err(io::Error::other(
+            "The ancient city layout engine could not allocate a result.",
+        ));
+    }
+    serde_json::from_slice(unsafe { CStr::from_ptr(result.0) }.to_bytes())
+        .map_err(io::Error::other)
+}
+
+fn ancient_city_blocks(
+    query: &StructureQuery,
+    pieces: &serde_json::Value,
+) -> io::Result<serde_json::Value> {
+    let compressed = match query.version.as_str() {
+        "26.3" => {
+            include_bytes!("assets/versions/26.3/ancient-city-blocks.json.gz")
+        }
+        _ => {
+            return Err(io::Error::other(
+                "Ancient city block templates are not bundled for this version.",
+            ));
+        }
+    };
+    let mut decoded = Vec::new();
+    flate2::read::GzDecoder::new(&compressed[..])
+        .read_to_end(&mut decoded)
+        .map_err(io::Error::other)?;
+    let pack: serde_json::Value =
+        serde_json::from_slice(&decoded).map_err(io::Error::other)?;
+    if pack["version"] != query.version || !pack["templates"].is_object() {
+        return Err(io::Error::other(
+            "Ancient city block template version mismatch.",
+        ));
+    }
+    let mut blocks =
+        std::collections::HashMap::<[i64; 3], serde_json::Value>::new();
+    for piece in pieces.as_array().into_iter().flatten() {
+        let template_id = piece["templateId"].as_str().ok_or_else(|| {
+            io::Error::other("Ancient city template ID is missing.")
+        })?;
+        let template = pack["templates"].get(template_id).ok_or_else(|| {
+            io::Error::other(format!(
+                "Ancient city template {template_id} is missing."
+            ))
+        })?;
+        let origin = piece["position"].as_array().ok_or_else(|| {
+            io::Error::other("Ancient city template position is invalid.")
+        })?;
+        let origin = [
+            origin[0].as_i64().unwrap_or_default(),
+            origin[1].as_i64().unwrap_or_default(),
+            origin[2].as_i64().unwrap_or_default(),
+        ];
+        let rotation = piece["rotation"]
+            .as_i64()
+            .unwrap_or_default()
+            .rem_euclid(360);
+        for block in template["blocks"].as_array().into_iter().flatten() {
+            if blocks.len() >= 2_000_000 {
+                return Err(io::Error::other(
+                    "Ancient city block limit exceeded.",
+                ));
+            }
+            let values = block.as_array().ok_or_else(|| {
+                io::Error::other("Ancient city block entry is invalid.")
+            })?;
+            let local = [
+                values[0].as_i64().unwrap_or_default(),
+                values[1].as_i64().unwrap_or_default(),
+                values[2].as_i64().unwrap_or_default(),
+            ];
+            let index = values[3].as_u64().unwrap_or_default() as usize;
+            let state = template["palette"]
+                .as_array()
+                .and_then(|palette| palette.get(index))
+                .ok_or_else(|| {
+                    io::Error::other("Ancient city palette index is invalid.")
+                })?;
+            let name = state["name"].as_str().unwrap_or_default();
+            if name.ends_with(":jigsaw")
+                || name.ends_with(":structure_void")
+                || name.ends_with(":structure_block")
+            {
+                continue;
+            }
+            let (x, z) = match rotation {
+                0 => (local[0], local[2]),
+                90 => (-local[2], local[0]),
+                180 => (-local[0], -local[2]),
+                270 => (local[2], -local[0]),
+                _ => {
+                    return Err(io::Error::other(
+                        "Ancient city rotation is invalid.",
+                    ));
+                }
+            };
+            let position = [origin[0] + x, origin[1] + local[1], origin[2] + z];
+            if name == "minecraft:air"
+                || name == "minecraft:cave_air"
+                || name == "minecraft:void_air"
+            {
+                if template["overwriteAir"].as_bool().unwrap_or(true) {
+                    blocks.remove(&position);
+                }
+                continue;
+            }
+            blocks.insert(position, serde_json::json!({
+                "position": [origin[0] + x, origin[1] + local[1], origin[2] + z],
+                "state": state,
+                "rotation": rotation,
+                "mirror": false,
+                "pieceId": piece["id"],
+                "overwriteAir": template["overwriteAir"].as_bool().unwrap_or(true),
+            }));
+        }
+    }
+    let mut blocks = blocks.into_values().collect::<Vec<_>>();
+    blocks.sort_by_key(|block| {
+        let position = block["position"].as_array().unwrap();
+        (
+            position[0].as_i64().unwrap_or_default(),
+            position[1].as_i64().unwrap_or_default(),
+            position[2].as_i64().unwrap_or_default(),
+        )
+    });
+    Ok(serde_json::Value::Array(blocks))
 }
 
 pub fn structure_details(
@@ -60,6 +225,77 @@ pub fn structure_details(
             "Structure calculation was interrupted. Retry this query.",
         )
     })?;
+    if query.feature_mask == super::FEATURE_ANCIENT_CITY && container.is_none()
+    {
+        let mut result = ancient_city_layout(&query, mc)?;
+        if query.include_blocks {
+            result["blocks"] = ancient_city_blocks(&query, &result["pieces"])?;
+            if let Some(limits) = result["limits"].as_array_mut() {
+                limits.push(serde_json::json!(
+                    "terrain_dependent_processors_not_applied"
+                ));
+            }
+        }
+        if let Some(object) = result.as_object_mut() {
+            if let Some(pieces) = object
+                .get_mut("pieces")
+                .and_then(serde_json::Value::as_array_mut)
+            {
+                for piece in pieces {
+                    let position = piece
+                        .get("position")
+                        .and_then(serde_json::Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let min_values = piece
+                        .get("min")
+                        .and_then(serde_json::Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let max_values = piece
+                        .get("max")
+                        .and_then(serde_json::Value::as_array)
+                        .cloned()
+                        .unwrap_or_default();
+                    let to_position = |values: Vec<serde_json::Value>| {
+                        serde_json::json!({
+                            "x": values.first().and_then(serde_json::Value::as_i64).unwrap_or_default(),
+                            "y": values.get(1).and_then(serde_json::Value::as_i64).unwrap_or_default(),
+                            "z": values.get(2).and_then(serde_json::Value::as_i64).unwrap_or_default(),
+                        })
+                    };
+                    let template_id = piece
+                        .get("templateId")
+                        .cloned()
+                        .unwrap_or(serde_json::Value::String("unknown".into()));
+                    piece["name"] = template_id.clone();
+                    piece["positionKnown"] = serde_json::Value::Bool(true);
+                    piece["position"] = to_position(position);
+                    piece["min"] = to_position(min_values);
+                    piece["max"] = to_position(max_values);
+                }
+            }
+            object.insert("containers".into(), serde_json::json!([]));
+            object.insert("truncated".into(), serde_json::json!(false));
+            object.insert(
+                "capabilities".into(),
+                serde_json::json!({
+                    "variant": true,
+                    "containers": false,
+                    "projection": true,
+                    "blocks": true
+                }),
+            );
+            object.insert(
+                "limits".into(),
+                object
+                    .get("limits")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!([])),
+            );
+        }
+        return Ok(result);
+    }
     let result = NativeResult(unsafe {
         super::axolotl_seed_map_structure_details(
             parse_seed(&query.seed),
@@ -166,6 +402,7 @@ mod tests {
             x,
             z,
             feature_mask,
+            include_blocks: false,
         }
     }
     #[test]
@@ -231,6 +468,49 @@ mod tests {
             .collect();
         assert_eq!(portal_rooms.len(), 1);
         assert_eq!(portal_rooms[0]["name"], "SHPR");
+    }
+
+    #[test]
+    fn ancient_city_details_expand_versioned_jigsaw_templates() {
+        let feature = super::super::find_features(super::super::FeatureQuery {
+            seed: "10292992".into(),
+            edition: Edition::Java,
+            version: "26.3".into(),
+            dimension: Dimension::Overworld,
+            min_x: -8192,
+            min_z: -8192,
+            max_x: 8192,
+            max_z: 8192,
+            feature_mask: Some(super::super::FEATURE_ANCIENT_CITY),
+        })
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+        let mut structure_query = query(
+            "10292992",
+            "26.3",
+            feature.x,
+            feature.z,
+            super::super::FEATURE_ANCIENT_CITY,
+        );
+        let result = structure_details(structure_query.clone(), None).unwrap();
+        assert_eq!(result["supported"], true);
+        assert!(result["pieces"].as_array().unwrap().len() >= 1);
+        assert!(
+            result["pieces"][0]["templateId"]
+                .as_str()
+                .unwrap()
+                .contains("ancient_city")
+        );
+        assert!(result["pieces"][0]["min"]["x"].is_number());
+        structure_query.include_blocks = true;
+        let detailed = structure_details(structure_query, None).unwrap();
+        assert!(
+            detailed["blocks"]
+                .as_array()
+                .is_some_and(|blocks| !blocks.is_empty())
+        );
     }
     #[test]
     fn outpost_loot_matches_upstream_enchantment_fixture() {

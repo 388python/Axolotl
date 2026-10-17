@@ -85,6 +85,7 @@ for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeC
     hashes[id] = createHash('sha256').update(bytes).digest('hex')
     if (id.startsWith('ancient_city/')) {
         ancientCityTemplates[`minecraft:${id}`] = {
+            id: `minecraft:${id}`,
             size: source.size,
             jigsaws: source.blocks.flatMap((block) => {
                 const state = sourcePalettes[0][block.state]
@@ -250,7 +251,9 @@ const ancientCityBlocks = gzipSync(
         version: version.id,
         dataVersion: version.world_version,
         templates: Object.fromEntries(
-            Object.entries(templates).filter(([id]) => id.startsWith('ancient_city/')),
+            Object.entries(templates)
+                .filter(([id]) => id.startsWith('ancient_city/'))
+                .map(([id, template]) => [`minecraft:${id}`, template]),
         ),
     }),
     { level: 9 },

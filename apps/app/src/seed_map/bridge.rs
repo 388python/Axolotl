@@ -51,6 +51,8 @@ pub(super) fn ensure_available() -> std::io::Result<()> {
                             library.get(b"axolotl_seed_map_capability\0")?;
                         let _: libloading::Symbol<*const ()> = library
                             .get(b"axolotl_seed_map_structure_details\0")?;
+                        let _: libloading::Symbol<*const ()> = library
+                            .get(b"axolotl_seed_map_ancient_city_layout\0")?;
                         let _: libloading::Symbol<*const ()> =
                             library.get(b"axolotl_seed_map_free_result\0")?;
                         let _: libloading::Symbol<*const ()> =
@@ -143,5 +145,6 @@ engine_function!(axolotl_seed_map_scan_ores(seed: u64, mc: i32, flags: i32, dime
 engine_function!(axolotl_seed_map_capability(mc: i32, capability: i32, value: i32) -> i32, 0);
 
 engine_function!(axolotl_seed_map_structure_details(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, feature: u32, container: i32) -> *mut c_char, std::ptr::null_mut());
+engine_function!(axolotl_seed_map_ancient_city_layout(seed: u64, mc: i32, x: i32, z: i32, layout_json: *const c_char, layout_len: usize) -> *mut c_char, std::ptr::null_mut());
 engine_function!(axolotl_seed_map_free_result(result: *mut c_char) -> (), ());
 engine_function!(axolotl_seed_map_underground(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, scale: i32, width: i32, height: i32, y: i32, layers: u32, rgba: *mut u8, length: u64) -> i32, -1);

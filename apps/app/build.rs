@@ -188,11 +188,14 @@ fn build_seed_map_engine() {
     let mut sources = vec![
         std::path::PathBuf::from("src/seed_map/cubiomes_bridge.c"),
         std::path::PathBuf::from("src/seed_map/cubiomes_details.c"),
+        std::path::PathBuf::from("src/seed_map/ancient_city_layout.c"),
     ];
     collect_engine_sources(source, &mut sources);
     sources.sort();
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.c");
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_details.c");
+    println!("cargo:rerun-if-changed=src/seed_map/ancient_city_layout.c");
+    println!("cargo:rerun-if-changed=src/seed_map/ancient_city_layout.h");
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
     println!("cargo:rerun-if-changed=vendor/cubiomes");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
