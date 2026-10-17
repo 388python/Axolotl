@@ -29,7 +29,7 @@ scope.onmessage = async (event: MessageEvent<StructureBlocksRequest>) => {
             return
         }
         const { buildStructureBlockMeshes } = await import('./structure-block-mesh')
-        const result = buildStructureBlockMeshes(event.data.pieces, pack)
+        const result = buildStructureBlockMeshes(event.data.pieces, pack, event.data.sparseBlocks)
         scope.postMessage(
             { type: 'ready', result } satisfies StructureBlocksResponse,
             result.meshes.flatMap((mesh) => [mesh.positions.buffer, mesh.colors.buffer]),

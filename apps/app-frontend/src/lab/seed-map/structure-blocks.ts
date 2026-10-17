@@ -43,6 +43,7 @@ export type StructureBlocksRequest = {
     version: string
     pieces: SeedMapStructurePiece[]
     mode?: 'chests' | 'blocks'
+    sparseBlocks?: StructureBlock[]
 }
 export type StructureBlocksResponse =
     | { type: 'ready'; result: StructureBlocksResult }
@@ -131,7 +132,12 @@ export function seedMapTemplatePieces(
             },
         })
     }
-    if (kind === 'end-city' || kind === 'shipwreck' || kind === 'outpost') {
+    if (
+        kind === 'end-city' ||
+        kind === 'shipwreck' ||
+        kind === 'outpost' ||
+        kind === 'ancient-city'
+    ) {
         for (const piece of details.pieces) {
             if (!piece.positionKnown) continue
             const name = piece.name.replace(/^minecraft:/, '')
@@ -139,6 +145,7 @@ export function seedMapTemplatePieces(
                 kind === 'end-city' ? `end_city/${name.replace(/^end_city\//, '')}` : name
             if (kind === 'shipwreck' && !templateId.startsWith('shipwreck/')) continue
             if (kind === 'outpost' && templateId !== 'pillager_outpost/watchtower') continue
+            if (kind === 'ancient-city' && !templateId.startsWith('ancient_city/')) continue
             append(
                 piece.id,
                 templateId,

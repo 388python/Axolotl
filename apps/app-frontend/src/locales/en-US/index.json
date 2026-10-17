@@ -15098,6 +15098,9 @@
   "app.lab.seed-map.preview.portal-limit": {
     "message": "Portal template only. Weathering, random block replacements and surrounding terrain are not reconstructed; Y is a placeholder."
   },
+  "app.lab.seed-map.preview.ancient-city-limit": {
+    "message": "Original template blocks are shown. Terrain-dependent city degradation and terrain adaptation are not applied."
+  },
   "app.lab.seed-map.preview.axes": {
     "message": "World axes: +X east, +Y up, +Z south"
   },

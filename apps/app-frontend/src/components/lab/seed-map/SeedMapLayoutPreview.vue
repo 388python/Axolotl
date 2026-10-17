@@ -6,6 +6,7 @@ import type { SeedMapStructurePiece } from '@/lab/seed-map/advanced'
 import type { SeedMapLayoutScene } from '@/lab/seed-map/layout-scene'
 import type { PreviewAxis } from '@/lab/seed-map/preview-overlays'
 import {
+    type StructureBlock,
     type StructureBlocksResponse,
     type StructureBlocksResult,
     type StructureChest,
@@ -22,8 +23,9 @@ const props = defineProps<{
     kind?: string
     chests?: StructureChest[]
     unknownChestHeights?: number
+    sparseBlocks?: StructureBlock[]
 }>()
-const emit = defineEmits<{ select: [piece: SeedMapStructurePiece] }>()
+const emit = defineEmits<{ select: [piece: SeedMapStructurePiece]; requestBlocks: [] }>()
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
     title: { id: 'app.lab.seed-map.preview.title', defaultMessage: '3D layout preview' },
@@ -77,6 +79,11 @@ const messages = defineMessages({
         defaultMessage:
             'Portal template only. Weathering, random block replacements and surrounding terrain are not reconstructed; Y is a placeholder.',
     },
+    ancientCityLimit: {
+        id: 'app.lab.seed-map.preview.ancient-city-limit',
+        defaultMessage:
+            'Original template blocks are shown. Terrain-dependent city degradation and terrain adaptation are not applied.',
+    },
     chestXray: {
         id: 'app.lab.seed-map.preview.chest-xray',
         defaultMessage: 'Chest X-ray ({count})',
@@ -125,7 +132,9 @@ const templateLimit = computed(() =>
           ? messages.outpostLimit
           : props.kind === 'ruined-portal'
             ? messages.portalLimit
-            : undefined,
+            : props.kind === 'ancient-city'
+              ? messages.ancientCityLimit
+              : undefined,
 )
 let blockResult: StructureBlocksResult | undefined
 let worker: Worker | undefined
@@ -203,6 +212,15 @@ function loadBlocks() {
     const token = blockGeneration
     blocksBusy.value = true
     blocksFailed.value = false
+    if (props.kind === 'ancient-city' && !props.sparseBlocks) {
+        emit('requestBlocks')
+        timeout = setTimeout(() => {
+            if (token !== blockGeneration) return
+            stopBlockWork()
+            blocksFailed.value = true
+        }, 30_000)
+        return
+    }
     const fail = () => {
         if (token !== blockGeneration) return
         stopBlockWork()
@@ -238,6 +256,9 @@ function loadBlocks() {
         worker.postMessage({
             version: props.version,
             pieces: JSON.parse(JSON.stringify(props.pieces)),
+            sparseBlocks: props.sparseBlocks
+                ? JSON.parse(JSON.stringify(props.sparseBlocks))
+                : undefined,
         })
     } catch {
         fail()
@@ -311,6 +332,15 @@ watch([() => props.pieces, () => props.version, () => props.kind, () => props.ch
     chestFailed.value = false
     initialize()
 })
+watch(
+    () => props.sparseBlocks,
+    (blocks) => {
+        if (blocksEnabled.value && blocks) {
+            stopBlockWork()
+            loadBlocks()
+        }
+    },
+)
 watch(chestXray, (value) => scene?.showChests(value))
 watch(
     () => props.selected,

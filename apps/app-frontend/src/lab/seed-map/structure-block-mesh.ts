@@ -24,8 +24,11 @@ import {
 export function buildStructureBlockMeshes(
     pieces: SeedMapStructurePiece[],
     pack: StructureTemplatePack,
+    sparseBlocks?: StructureBlock[],
 ): StructureBlocksResult {
-    const blocks = assembleStructureBlocks(pieces, pack)
+    const blocks = sparseBlocks
+        ? new Map(sparseBlocks.map((block) => [structureBlockKey(block.position), block]))
+        : assembleStructureBlocks(pieces, pack)
     const textureIds = Object.keys(pack.textureColors)
     const textureIndices = new Map(textureIds.map((id, index) => [id, index]))
     const textureSlotWidth = 2

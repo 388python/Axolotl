@@ -194,6 +194,7 @@ const messages = defineMessages({
 
 const tab = ref<'overview' | 'layout' | 'loot'>('overview')
 const details = ref<SeedMapStructureDetails | null>(null)
+const sparseBlocks = ref<SeedMapStructureDetails['blocks']>()
 const loot = ref<SeedMapLoot | null>(null)
 const busy = ref(false)
 const lootBusy = ref(false)
@@ -243,6 +244,7 @@ async function loadDetails() {
         const result = await (props.load ?? getSeedMapStructureDetails)(query)
         if (token !== generation) return
         details.value = result
+        sparseBlocks.value = result.blocks
         selectedPiece.value = props.selected
         containerId.value = result.containers[0]?.id
         if (!result.supported) tab.value = 'overview'
@@ -251,6 +253,19 @@ async function loadDetails() {
         if (token === generation) failed.value = true
     } finally {
         if (token === generation) busy.value = false
+    }
+}
+async function loadSparseBlocks() {
+    if (sparseBlocks.value || generation === 0) return
+    const token = generation
+    try {
+        const result = await (props.load ?? getSeedMapStructureDetails)({
+            ...props.query,
+            includeBlocks: true,
+        })
+        if (token === generation && result.supported) sparseBlocks.value = result.blocks ?? []
+    } catch {
+        if (token === generation) sparseBlocks.value = undefined
     }
 }
 
@@ -289,6 +304,7 @@ watch(
         generation++
         lootGeneration++
         details.value = null
+        sparseBlocks.value = undefined
         loot.value = null
         lootBusy.value = false
         lootFailed.value = false
@@ -576,6 +592,7 @@ async function copyLoot() {
                         :label="pieceLabel"
                         :version="query.version"
                         :kind="kind"
+                        :sparse-blocks="sparseBlocks"
                         :chests="knownChests"
                         :unknown-chest-heights="
                             templatePieces.length
@@ -583,6 +600,7 @@ async function copyLoot() {
                                 : Math.max(details.containers.length - knownChests.length, 0)
                         "
                         @select="focus"
+                        @request-blocks="loadSparseBlocks"
                     />
                     <button
                         v-for="piece in layoutList"

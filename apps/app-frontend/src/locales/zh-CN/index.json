@@ -15119,6 +15119,9 @@
   "app.lab.seed-map.preview.portal-limit": {
     "message": "仅显示传送门模板，未还原风化、随机方块替换及周围地形；Y 为占位高度。"
   },
+  "app.lab.seed-map.preview.ancient-city-limit": {
+    "message": "显示原版模板方块；未应用依赖地形的城市风化和地形适应。"
+  },
   "app.lab.seed-map.preview.axes": {
     "message": "世界坐标轴：+X 向东，+Y 向上，+Z 向南"
   },

@@ -12,6 +12,7 @@ export type SeedMapStructureQuery = {
     x: number
     z: number
     featureMask: number
+    includeBlocks?: boolean
 }
 
 export type SeedMapStructurePiece = {
@@ -49,6 +50,14 @@ export type SeedMapStructureDetails = {
         size3d: SeedMapPosition
     }
     pieces: SeedMapStructurePiece[]
+    blocks?: {
+        position: [number, number, number]
+        state: { name: string; properties: Record<string, string> }
+        rotation: number
+        mirror: boolean
+        pieceId: number
+        overwriteAir: boolean
+    }[]
     containers: SeedMapContainer[]
     limits: string[]
 }

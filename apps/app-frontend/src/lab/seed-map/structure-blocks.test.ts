@@ -30,7 +30,7 @@ test('bundled original 26.3 templates include every engine End city piece and sh
     assert.equal(pack.schemaVersion, 2)
     assert.equal(pack.version, '26.3')
     assert.equal(pack.dataVersion, 5023)
-    assert.equal(Object.keys(pack.templates).length, 81)
+    assert.equal(Object.keys(pack.templates).length, 139)
     for (const name of END_CITY_TEMPLATE_NAMES) {
         const template = pack.templates[`end_city/${name}`]
         assert.ok(template)
@@ -42,6 +42,7 @@ test('bundled original 26.3 templates include every engine End city piece and sh
     }
     assert.deepEqual(pack.templates['end_city/ship'].size, [13, 24, 29])
     assert.equal(supportsStructureBlocks('26.3', 'end-city'), true)
+    assert.equal(supportsStructureBlocks('26.3', 'ancient-city'), true)
     assert.equal(supportsStructureBlocks('26.2', 'end-city'), false)
     assert.equal(supportsStructureBlocks('26.3', 'fortress'), false)
     assert.notDeepEqual(

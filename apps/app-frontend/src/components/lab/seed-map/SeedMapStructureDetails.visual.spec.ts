@@ -443,7 +443,11 @@ it('meshes every enabled template variant with original resources and bounded wo
         expect(response.type, response.type === 'error' ? response.message : 'ready').toBe('ready')
         if (response.type === 'ready') {
             expect(response.result.meshes.length).toBe(names.length)
-            expect(response.result.missingModels).toEqual(['minecraft:dragon_wall_head'])
+            expect(response.result.missingModels).toEqual([
+                'minecraft:deepslate',
+                'minecraft:deepslate_tile_slab',
+                'minecraft:dragon_wall_head',
+            ])
             expect(
                 response.result.meshes.every(
                     (mesh) =>

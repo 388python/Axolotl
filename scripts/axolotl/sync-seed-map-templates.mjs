@@ -178,8 +178,9 @@ for (const [name, bytes] of Object.entries(entries).sort(([a], [b]) => a.localeC
     const image = PNG.sync.read(Buffer.from(bytes))
     const metadata = entries[`${name}.mcmeta`] ? readJson(`${name}.mcmeta`) : undefined
     const color = averageTextureColor(image, metadata?.animation)
-    if (color)
-        textureColors[`minecraft:${name.slice('assets/minecraft/textures/'.length, -4)}`] = color
+    const id = `minecraft:${name.slice('assets/minecraft/textures/'.length, -4)}`
+    if (color) textureColors[id] = color
+    else if (id === 'minecraft:block/redstone_dust_overlay') textureColors[id] = [255, 0, 0]
 }
 const root = new URL('../../apps/app-frontend/src/lab/seed-map/assets/', import.meta.url)
 const output = new URL(`versions/${version.id}/`, root)
