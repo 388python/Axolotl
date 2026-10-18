@@ -8,6 +8,45 @@ use std::sync::{
 use tokio::sync::{Notify, Semaphore};
 use tokio_util::sync::CancellationToken;
 
+#[test]
+fn modrinth_orphaned_embedded_dependency_does_not_hide_release() {
+    let mut release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+    release["dependencies"] = json!([
+        {"project_id": null, "version_id": null, "file_name": null,
+         "dependency_type": "embedded"},
+        {"project_id": "P7dR8mSH", "version_id": null, "file_name": null,
+         "dependency_type": "required"}
+    ]);
+    let document = legacy::release(release).unwrap();
+    for artifact in document.release.artifacts {
+        assert_eq!(artifact.dependencies.len(), 1);
+        assert_eq!(
+            artifact.dependencies[0].kind,
+            ResourceDependencyKind::Required
+        );
+    }
+    assert_eq!(
+        document.protocol.unwrap()["dependencies"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn modrinth_missing_required_dependency_target_is_still_rejected() {
+    let mut release: Value = serde_json::from_str(fixtures::MR_IRIS).unwrap();
+    release["dependencies"] = json!([
+        {"project_id": null, "version_id": null, "file_name": null,
+         "dependency_type": "required"}
+    ]);
+    assert!(matches!(
+        legacy::release(release),
+        Err(ResourceError::InvalidResponse(message)) if message == "dependency has no target"
+    ));
+}
+
 #[tokio::test]
 async fn modrinth_catalog_pages_share_one_complete_response() {
     let transport = FixtureTransport::new(|_, request| {

@@ -125,6 +125,7 @@ import {
     java_download_confirmation_listener,
     warning_listener,
 } from '@/helpers/events.js'
+import { fileOperationError } from '@/helpers/file-operation-errors'
 import { install_create_modpack_instance, install_get_modpack_preview } from '@/helpers/install'
 import { type DirectLinkSyncReport, get as getInstance, run } from '@/helpers/instance'
 import { type BackupOperation, cancelBackup, listBackupOperations } from '@/helpers/instance-backup'
@@ -1379,7 +1380,8 @@ const messages = defineMessages({
 
 notificationManager.errorTitleProvider = () => formatMessage(messages.errorOccurred)
 notificationManager.errorTextFormatter = (error) =>
-    isResourceOperationError(error) ? resourceOperationError(error, formatMessage) : null
+    fileOperationError(error, getOsType(), formatMessage) ??
+    (isResourceOperationError(error) ? resourceOperationError(error, formatMessage) : null)
 
 function getErrorNotificationDetails(notification) {
     const details = [notification.title, notification.text, notification.errorCode].filter(Boolean)
