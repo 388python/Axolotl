@@ -44,55 +44,15 @@ fn ancient_city_layout(
     query: &StructureQuery,
     mc: i32,
 ) -> io::Result<serde_json::Value> {
-    let compressed: &[u8] = match query.version.as_str() {
-        "26.3" => {
-            include_bytes!("assets/versions/26.3/ancient-city-layout.json.gz")
-        }
-        "26.2" => {
-            include_bytes!("assets/versions/26.2/ancient-city-layout.json.gz")
-        }
-        "26.1" => {
-            include_bytes!("assets/versions/26.1/ancient-city-layout.json.gz")
-        }
-        "26.1.2" => {
-            include_bytes!("assets/versions/26.1.2/ancient-city-layout.json.gz")
-        }
-        "1.21.9" => {
-            include_bytes!("assets/versions/1.21.9/ancient-city-layout.json.gz")
-        }
-        "1.21.7" => {
-            include_bytes!("assets/versions/1.21.7/ancient-city-layout.json.gz")
-        }
-        "1.21.6" => {
-            include_bytes!("assets/versions/1.21.6/ancient-city-layout.json.gz")
-        }
-        "1.21.5" => {
-            include_bytes!("assets/versions/1.21.5/ancient-city-layout.json.gz")
-        }
-        "1.21.4" => {
-            include_bytes!("assets/versions/1.21.4/ancient-city-layout.json.gz")
-        }
-        "1.21.3" => {
-            include_bytes!("assets/versions/1.21.3/ancient-city-layout.json.gz")
-        }
-        "1.21.1" => {
-            include_bytes!("assets/versions/1.21.1/ancient-city-layout.json.gz")
-        }
-        "1.20.6" => {
-            include_bytes!("assets/versions/1.20.6/ancient-city-layout.json.gz")
-        }
-        "1.19.4" => {
-            include_bytes!("assets/versions/1.19.4/ancient-city-layout.json.gz")
-        }
-        "1.21.11" => include_bytes!(
-            "assets/versions/1.21.11/ancient-city-layout.json.gz"
-        ),
-        _ => {
-            return Err(io::Error::other(
-                "Ancient city detailed layouts are not bundled for this version.",
-            ));
-        }
-    };
+    let compressed = super::template_resources::ancient_city_resources(
+        &query.version,
+    )
+    .ok_or_else(|| {
+        io::Error::other(
+            "Ancient city detailed layouts are not bundled for this version.",
+        )
+    })?
+    .0;
     let mut decoded = Vec::new();
     flate2::read::GzDecoder::new(&compressed[..])
         .read_to_end(&mut decoded)
@@ -122,62 +82,27 @@ fn ancient_city_layout(
 fn ancient_city_block_pack(
     query: &StructureQuery,
 ) -> io::Result<serde_json::Value> {
-    let compressed: &[u8] = match query.version.as_str() {
-        "26.3" => {
-            include_bytes!("assets/versions/26.3/ancient-city-blocks.json.gz")
-        }
-        "26.2" => {
-            include_bytes!("assets/versions/26.2/ancient-city-blocks.json.gz")
-        }
-        "26.1" => {
-            include_bytes!("assets/versions/26.1/ancient-city-blocks.json.gz")
-        }
-        "26.1.2" => {
-            include_bytes!("assets/versions/26.1.2/ancient-city-blocks.json.gz")
-        }
-        "1.21.9" => {
-            include_bytes!("assets/versions/1.21.9/ancient-city-blocks.json.gz")
-        }
-        "1.21.7" => {
-            include_bytes!("assets/versions/1.21.7/ancient-city-blocks.json.gz")
-        }
-        "1.21.6" => {
-            include_bytes!("assets/versions/1.21.6/ancient-city-blocks.json.gz")
-        }
-        "1.21.5" => {
-            include_bytes!("assets/versions/1.21.5/ancient-city-blocks.json.gz")
-        }
-        "1.21.4" => {
-            include_bytes!("assets/versions/1.21.4/ancient-city-blocks.json.gz")
-        }
-        "1.21.3" => {
-            include_bytes!("assets/versions/1.21.3/ancient-city-blocks.json.gz")
-        }
-        "1.21.1" => {
-            include_bytes!("assets/versions/1.21.1/ancient-city-blocks.json.gz")
-        }
-        "1.20.6" => {
-            include_bytes!("assets/versions/1.20.6/ancient-city-blocks.json.gz")
-        }
-        "1.19.4" => {
-            include_bytes!("assets/versions/1.19.4/ancient-city-blocks.json.gz")
-        }
-        "1.21.11" => include_bytes!(
-            "assets/versions/1.21.11/ancient-city-blocks.json.gz"
-        ),
-        _ => {
-            return Err(io::Error::other(
-                "Ancient city block templates are not bundled for this version.",
-            ));
-        }
-    };
+    let compressed = super::template_resources::ancient_city_resources(
+        &query.version,
+    )
+    .ok_or_else(|| {
+        io::Error::other(
+            "Ancient city block templates are not bundled for this version.",
+        )
+    })?
+    .1;
     let mut decoded = Vec::new();
     flate2::read::GzDecoder::new(&compressed[..])
         .read_to_end(&mut decoded)
         .map_err(io::Error::other)?;
     let pack: serde_json::Value =
         serde_json::from_slice(&decoded).map_err(io::Error::other)?;
-    if pack["version"] != query.version || !pack["templates"].is_object() {
+    if !pack["templates"].is_object()
+        || pack["version"]
+            .as_str()
+            .and_then(super::template_resources::ancient_city_resources)
+            .is_none_or(|resource| resource.1 != compressed)
+    {
         return Err(io::Error::other(
             "Ancient city block template version mismatch.",
         ));
@@ -728,7 +653,11 @@ mod tests {
 
     #[test]
     fn ancient_city_details_expand_versioned_jigsaw_templates() {
-        for version in ["1.19.4", "1.21.11", "26.2", "26.3"] {
+        for version in [
+            "1.19.2", "1.19.4", "1.20.6", "1.20", "1.21.1", "1.21.3", "1.21.4",
+            "1.21.5", "1.21.6", "1.21.9", "1.21.11", "26.1", "26.1.2", "26.2",
+            "26.3",
+        ] {
             let feature =
                 super::super::find_features(super::super::FeatureQuery {
                     seed: "10292992".into(),
@@ -793,58 +722,64 @@ mod tests {
     }
     #[test]
     fn ancient_city_nbt_chests_expose_estimated_loot_and_fixed_items() {
-        let query = query(
-            "10292992",
+        for version in [
+            "1.19.2", "1.19.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4",
+            "1.21.5", "1.21.6", "1.21.9", "1.21.11", "26.1", "26.1.2", "26.2",
             "26.3",
-            0,
-            0,
-            super::super::FEATURE_ANCIENT_CITY,
-        );
-        let pack = ancient_city_block_pack(&query).unwrap();
-        let barracks = serde_json::json!([{
-            "id": 0,
-            "templateId": "minecraft:ancient_city/structures/barracks",
-            "position": [120, -40, -88],
-            "rotation": 90,
-        }]);
-        let containers = ancient_city_containers(&barracks, &pack).unwrap();
-        assert_eq!(containers.as_array().unwrap().len(), 2);
-        assert_eq!(containers[0]["x"], 105);
-        assert_eq!(containers[0]["y"], -36);
-        assert_eq!(containers[0]["z"], -84);
-        assert_eq!(containers[0]["table"], "chests/ancient_city");
-        assert_eq!(containers[0]["estimated"], true);
-        let layout = serde_json::json!({ "pieces": barracks });
-        let loot = ancient_city_container_loot(
-            &query,
-            resolve_java_version("26.3").unwrap().0,
-            0,
-            &layout,
-            &pack,
-        )
-        .unwrap();
-        assert_eq!(loot["supported"], true);
-        assert_eq!(loot["estimated"], true);
-        assert!(!loot["items"].as_array().unwrap().is_empty());
+        ] {
+            let query = query(
+                "10292992",
+                version,
+                0,
+                0,
+                super::super::FEATURE_ANCIENT_CITY,
+            );
+            let pack = ancient_city_block_pack(&query).unwrap();
+            let barracks = serde_json::json!([{
+                "id": 0,
+                "templateId": "minecraft:ancient_city/structures/barracks",
+                "position": [120, -40, -88],
+                "rotation": 90,
+            }]);
+            let containers = ancient_city_containers(&barracks, &pack).unwrap();
+            assert_eq!(containers.as_array().unwrap().len(), 2);
+            assert_eq!(containers[0]["x"], 105);
+            assert_eq!(containers[0]["y"], -36);
+            assert_eq!(containers[0]["z"], -84);
+            assert_eq!(containers[0]["table"], "chests/ancient_city");
+            assert_eq!(containers[0]["estimated"], true);
+            let layout = serde_json::json!({ "pieces": barracks });
+            let loot = ancient_city_container_loot(
+                &query,
+                resolve_java_version(version).unwrap().0,
+                0,
+                &layout,
+                &pack,
+            )
+            .unwrap();
+            assert_eq!(loot["supported"], true);
+            assert_eq!(loot["estimated"], true);
+            assert!(!loot["items"].as_array().unwrap().is_empty());
 
-        let city_center = serde_json::json!([{
-            "id": 0,
-            "templateId": "minecraft:ancient_city/city_center/city_center_2",
-            "position": [0, 0, 0],
-            "rotation": 0,
-        }]);
-        let layout = serde_json::json!({ "pieces": city_center });
-        let fixed = ancient_city_container_loot(
-            &query,
-            resolve_java_version("26.3").unwrap().0,
-            0,
-            &layout,
-            &pack,
-        )
-        .unwrap();
-        assert_eq!(fixed["estimated"], false);
-        assert_eq!(fixed["items"][0]["id"], "minecraft:golden_apple");
-        assert_eq!(fixed["items"][0]["count"], 1);
+            let city_center = serde_json::json!([{
+                "id": 0,
+                "templateId": "minecraft:ancient_city/city_center/city_center_2",
+                "position": [0, 0, 0],
+                "rotation": 0,
+            }]);
+            let layout = serde_json::json!({ "pieces": city_center });
+            let fixed = ancient_city_container_loot(
+                &query,
+                resolve_java_version(version).unwrap().0,
+                0,
+                &layout,
+                &pack,
+            )
+            .unwrap();
+            assert_eq!(fixed["estimated"], false);
+            assert_eq!(fixed["items"][0]["id"], "minecraft:golden_apple");
+            assert_eq!(fixed["items"][0]["count"], 1);
+        }
     }
     #[test]
     fn outpost_loot_matches_upstream_enchantment_fixture() {

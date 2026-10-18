@@ -91,6 +91,50 @@ function render(actions?: string) {
     return wrapper
 }
 
+it.each([
+    ['1.13.2', 'end_city/tower_top'],
+    ['1.14.4', 'pillager_outpost/watchtower'],
+    ['1.19.2', 'end_city/tower_top'],
+    ['1.20', 'pillager_outpost/watchtower'],
+    ['1.13.2', 'igloo/bottom'],
+    ['1.14.4', 'igloo/bottom'],
+    ['1.13.2', 'shipwreck/with_mast'],
+    ['26.2', 'end_city/tower_top'],
+])('meshes historical %s %s assets through the structure worker', async (version, templateId) => {
+    const worker = new Worker(
+        new URL('../../../lab/seed-map/structure-block-worker.ts', import.meta.url),
+        { type: 'module' },
+    )
+    try {
+        const response = await new Promise<StructureBlocksResponse>((resolve, reject) => {
+            worker.onmessage = (event) => resolve(event.data)
+            worker.onerror = (event) => reject(new Error(event.message))
+            worker.postMessage({
+                version,
+                pieces: [
+                    {
+                        id: 0,
+                        name: templateId,
+                        templateId,
+                        positionKnown: true,
+                        position: { x: 0, y: 0, z: 0 },
+                        rotation: 0,
+                    },
+                ],
+            })
+        })
+        expect(response.type, response.type === 'error' ? response.message : 'ready').toBe('ready')
+        if (response.type === 'ready') {
+            expect(response.result.blockCount).toBeGreaterThan(100)
+            expect(response.result.meshes.some((mesh) => mesh.positions.length > 0)).toBe(true)
+            expect(response.result.missingModels).not.toContain('minecraft:oak_slab')
+            expect(response.result.missingModels).not.toContain('minecraft:spruce_slab')
+        }
+    } finally {
+        worker.terminate()
+    }
+})
+
 it('loads original End city and ship geometry on demand and switches modes without rebuilding the canvas', async () => {
     const pieces = [
         {
@@ -235,7 +279,7 @@ it('loads original End city and ship geometry on demand and switches modes witho
     await wrapper.get('[data-testid="seed-map-frames-mode"]').trigger('click')
     await vi.waitFor(() => expect(pixels()).toEqual(frames))
     await wrapper.setProps({ version: '26.2' })
-    expect(wrapper.find('[data-testid="seed-map-blocks-mode"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="seed-map-blocks-mode"]').exists()).toBe(true)
     expect(canvas.dataset.renderMode).toBe('frames')
 }, 30000)
 
@@ -342,10 +386,10 @@ it.each([
             gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
             expect(pixels.some((value, index) => index % 4 === 3 && value > 0)).toBe(true)
         })
-        if (kind === 'shipwreck')
-            expect(wrapper.text()).toContain('representative original palette')
-        if (kind === 'outpost') expect(wrapper.text()).toContain('Only the main watchtower')
-        if (kind === 'ruined-portal') expect(wrapper.text()).toContain('Weathering')
+        if (source.limits.includes('height_placeholder'))
+            expect(wrapper.text()).toContain('Some Y coordinates are placeholders')
+        if (source.limits.includes('partial_layout'))
+            expect(wrapper.text()).toContain('The engine simulates only part of this structure')
         if (kind === 'nether-fossil') expect(wrapper.text()).toContain('Nether fossil 14')
         if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
             await page.screenshot({
@@ -569,7 +613,7 @@ it('shows camera-relative positive axes and toggles depth-independent chest high
     expect(axis.attributes('aria-label')).toContain('+X east')
     for (const name of ['X', 'Y', 'Z'])
         expect(axis.find(`[data-testid="seed-map-axis-${name}"]`).exists()).toBe(true)
-    expect(wrapper.get('[data-testid="seed-map-chest-xray"]').text()).toContain('Chest X-ray (1)')
+    expect(wrapper.get('[data-testid="seed-map-chest-xray"]').text()).toContain('Chest (1)')
     expect(wrapper.text()).toContain('2 containers have no known Y coordinates')
     const gl = canvas.getContext('webgl2')!
     const pixels = () => {
