@@ -141,6 +141,19 @@ export const SEED_MAP_FALLBACK_VERSIONS: readonly string[] = [
 
 export const SEED_MAP_DEFAULT_VERSION = SEED_MAP_FALLBACK_VERSIONS[0]
 
+/** Numeric game versions descend ahead of beta releases; aliases remain selectable. */
+export function compareSeedMapVersions(left: string, right: string): number {
+    const beta = (version: string) => version.startsWith('b')
+    if (beta(left) !== beta(right)) return beta(left) ? 1 : -1
+    const a = left.replace(/^b/, '').split('.').map(Number)
+    const b = right.replace(/^b/, '').split('.').map(Number)
+    for (let index = 0; index < Math.max(a.length, b.length); index++) {
+        const difference = (b[index] ?? 0) - (a[index] ?? 0)
+        if (difference) return difference
+    }
+    return left.localeCompare(right, 'en', { numeric: true })
+}
+
 export function fallbackSeedMapProfiles(): SeedMapVersionProfile[] {
     const profiles: SeedMapVersionProfile[] = []
     for (const edition of ['java', 'java-large-biomes'] as const) {

@@ -123,6 +123,7 @@ import {
     type SeedMapStructurePiece,
     type SeedMapStructureQuery,
 } from '@/lab/seed-map/advanced'
+import { compareSeedMapVersions } from '@/lab/seed-map/backend'
 import { createSeedMapLayoutLayer } from '@/lab/seed-map/layout-layer'
 import {
     drawSeedMapLayout,
@@ -567,7 +568,8 @@ const selectedProfile = computed(() =>
 const availableVersions = computed(() =>
     profiles.value
         .filter((profile) => profile.edition === workspace.edition)
-        .map((profile) => profile.version),
+        .map((profile) => profile.version)
+        .sort(compareSeedMapVersions),
 )
 const dimensions = computed(
     () => selectedProfile.value?.dimensions ?? ['overworld', 'nether', 'end'],

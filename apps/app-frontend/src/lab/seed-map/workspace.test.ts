@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+    compareSeedMapVersions,
     fallbackSeedMapProfiles,
     SEED_MAP_DEFAULT_VERSION,
     seedMapTileConcurrency,
@@ -33,6 +34,33 @@ test('seed map starts near spawn with a lightweight layer set', () => {
     ])
     assert.equal(workspace.displayMode, 'structures')
     assert.deepEqual(workspace.selectedOres, ['diamond'])
+})
+
+test('game version choices sort newest releases first and beta releases last', () => {
+    const versions = [
+        'b1.7',
+        '1.9.4',
+        '1.21.9',
+        '26.1',
+        '1.20',
+        '1.21.11',
+        '26.1.2',
+        'b1.8',
+        '26.3',
+        '26.2',
+    ]
+    assert.deepEqual(versions.sort(compareSeedMapVersions), [
+        '26.3',
+        '26.2',
+        '26.1.2',
+        '26.1',
+        '1.21.11',
+        '1.21.9',
+        '1.20',
+        '1.9.4',
+        'b1.8',
+        'b1.7',
+    ])
 })
 
 test('removed end-island layer is discarded from saved selections while other data survives', () => {
