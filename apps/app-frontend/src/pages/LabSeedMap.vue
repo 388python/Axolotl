@@ -2697,6 +2697,7 @@ function clampWorldCoordinate(value: number) {
                             :placeholder="formatMessage(messages.seedPlaceholder)"
                             wrapper-class="seed-map-seed w-full"
                         />
+
                         <Button
                             v-tooltip="formatMessage(messages.randomSeed)"
                             type="outlined"
@@ -2706,12 +2707,17 @@ function clampWorldCoordinate(value: number) {
                             @click="randomizeSeed"
                             ><RefreshCwIcon />
                         </Button>
-                        <PopoutMenu
-                            :aria-label="formatMessage(messages.history)"
-                            dropdown-class="seed-map-history-popout"
-                            placement="bottom-end"
-                        >
-                            <HistoryIcon />
+                        <PopoutMenu dropdown-class="seed-map-history-popout" placement="bottom-end">
+                            <template #trigger>
+                                <Button
+                                    v-tooltip="formatMessage(messages.history)"
+                                    type="outlined"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.history)"
+                                    ><HistoryIcon />
+                                </Button>
+                            </template>
                             <template #menu>
                                 <div class="seed-history-menu">
                                     <div class="seed-history-heading">

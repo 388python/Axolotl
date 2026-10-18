@@ -5420,23 +5420,14 @@
   "app.lab.seed-map.ore-layers": {
     "message": "矿物图层"
   },
-  "app.lab.seed-map.ore-likely": {
-    "message": "可能存在"
-  },
   "app.lab.seed-map.ore-max-y": {
     "message": "最高 Y"
   },
   "app.lab.seed-map.ore-min-y": {
     "message": "最低 Y"
   },
-  "app.lab.seed-map.ore-precision": {
-    "message": "精度 {precision}%"
-  },
   "app.lab.seed-map.ore-scan-failed": {
     "message": "矿物扫描失败，请刷新地图后重试。"
-  },
-  "app.lab.seed-map.ore-verified": {
-    "message": "已验证"
   },
   "app.lab.seed-map.ore-y-range": {
     "message": "Y 范围"
