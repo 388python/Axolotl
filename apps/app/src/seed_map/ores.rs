@@ -107,6 +107,15 @@ pub(super) fn scan_ores_with_budget(
     request: OreScanRequest,
     total_capacity: usize,
 ) -> io::Result<Vec<OreChunkResult>> {
+    scan_ores_with_budget_cancellable(request, total_capacity, None)
+}
+
+pub(super) fn scan_ores_with_budget_cancellable(
+    request: OreScanRequest,
+    total_capacity: usize,
+    cancellation: Option<(u64, extern "C" fn(u64) -> i32)>,
+) -> io::Result<Vec<OreChunkResult>> {
+    let canceled = || cancellation.is_some_and(|(id, check)| check(id) != 0);
     let (mc, code) = resolve_java_version(&request.version)?;
     if !supports_ores(code, request.dimension) {
         return Err(io::Error::other(
@@ -139,19 +148,47 @@ pub(super) fn scan_ores_with_budget(
         let capacity = (total_capacity / kinds.len().max(1)).clamp(1, 16_384);
         let mut xyz = vec![0_i32; capacity * 3];
         for &kind in &kinds {
+            if canceled() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Ore generation canceled.",
+                ));
+            }
             let count = unsafe {
-                super::axolotl_seed_map_scan_ores(
-                    seed,
-                    mc,
-                    request.edition.generator_flags(),
-                    request.dimension.as_cubiomes(),
-                    chunk[0],
-                    chunk[1],
-                    kind as i32,
-                    xyz.as_mut_ptr(),
-                    xyz.len() / 3,
-                )
+                if let Some((id, check)) = cancellation {
+                    super::axolotl_seed_map_scan_ores_cancellable(
+                        seed,
+                        mc,
+                        request.edition.generator_flags(),
+                        request.dimension.as_cubiomes(),
+                        chunk[0],
+                        chunk[1],
+                        kind as i32,
+                        xyz.as_mut_ptr(),
+                        xyz.len() / 3,
+                        id,
+                        check,
+                    )
+                } else {
+                    super::axolotl_seed_map_scan_ores(
+                        seed,
+                        mc,
+                        request.edition.generator_flags(),
+                        request.dimension.as_cubiomes(),
+                        chunk[0],
+                        chunk[1],
+                        kind as i32,
+                        xyz.as_mut_ptr(),
+                        xyz.len() / 3,
+                    )
+                }
             };
+            if canceled() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "Ore generation canceled.",
+                ));
+            }
             truncated |= count == xyz.len() / 3;
             for pos in xyz[..count.min(xyz.len() / 3) * 3].chunks_exact(3) {
                 if !seen.insert((kind, pos[0], pos[1], pos[2])) {

@@ -89,6 +89,7 @@ size_t axolotl_seed_map_scan_ores(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity
 );
+size_t axolotl_seed_map_scan_ores_cancellable(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity, uint64_t request_id, int32_t (*canceled)(uint64_t));
 
 /*
  * Fills `out` (length `width * height`) with approximate Overworld surface
@@ -114,6 +115,7 @@ char *axolotl_seed_map_generate_loot(const char *table_json, size_t table_len, u
 void axolotl_seed_map_free_result(char *result);
 int32_t axolotl_seed_map_underground_volume(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, int32_t y, int32_t width, int32_t height, uint8_t *blocks, uint64_t length);
 int32_t axolotl_seed_map_underground_volume_surface(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, int32_t y, int32_t width, int32_t height, uint8_t *blocks, uint64_t length, int32_t *surface_heights);
+int32_t axolotl_seed_map_underground_chunk(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, uint8_t *blocks, uint64_t length, int32_t *surface_heights, uint64_t request_id, int32_t (*canceled)(uint64_t));
 int32_t axolotl_seed_map_underground(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension, int32_t x, int32_t z, int32_t scale, int32_t width, int32_t height, int32_t y, uint32_t layers, uint8_t *rgba, uint64_t length);
 
 #endif

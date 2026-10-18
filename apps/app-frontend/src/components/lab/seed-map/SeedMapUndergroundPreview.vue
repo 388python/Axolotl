@@ -12,6 +12,7 @@ import type { SchematicPreviewScene } from '@/lab/schematic-preview/scene'
 import {
     cancelUndergroundVolume,
     loadUndergroundVolume,
+    UNDERGROUND_MEMORY_BUDGET,
     undergroundChunkKey,
     undergroundChunkQueue,
     undergroundEviction,
@@ -137,7 +138,7 @@ const loaded = new Map<
     string,
     { position: [number, number, number]; bytes: number; truncated: boolean }
 >()
-const memoryBudget = 192 * 1024 * 1024
+const memoryBudget = UNDERGROUND_MEMORY_BUDGET
 let loadedBytes = 0
 let failedChunk: [number, number, number] | undefined
 const position = ref<[number, number, number]>([props.query.x, props.query.y, props.query.z])
@@ -148,6 +149,7 @@ let worker: Worker | undefined
 let rejectWorker: ((error: Error) => void) | undefined
 let task = 0
 let timer: ReturnType<typeof setInterval> | undefined
+let queueWake: ReturnType<typeof setTimeout> | undefined
 let disposed = false
 let initialCanceled = false
 let initialization: Promise<void> | undefined
@@ -188,6 +190,8 @@ function cancel() {
     if (!scene) initialCanceled = true
     const previous = task
     task = 0
+    if (queueWake) clearTimeout(queueWake)
+    queueWake = undefined
     if (previous) void cancelUndergroundVolume(previous).catch(() => undefined)
     worker?.terminate()
     worker = undefined
@@ -198,14 +202,19 @@ function cancel() {
 
 function meshVolume(volume: Awaited<ReturnType<typeof loadUndergroundVolume>>, y: number) {
     return new Promise<UndergroundMesh>((resolve, reject) => {
-        worker = new Worker(
-            new URL('../../../lab/seed-map/underground-worker.ts', import.meta.url),
-            { type: 'module' },
-        )
+        if (!worker) {
+            worker = new Worker(
+                new URL('../../../lab/seed-map/underground-worker.ts', import.meta.url),
+                { type: 'module' },
+            )
+            worker.postMessage({ type: 'init', textureUvs })
+        }
         rejectWorker = reject
         worker.onmessage = (event: MessageEvent<{ mesh?: UndergroundMesh; error?: string }>) => {
-            worker?.terminate()
-            worker = undefined
+            if (worker) {
+                worker.onmessage = null
+                worker.onerror = null
+            }
             rejectWorker = undefined
             if (event.data.mesh) resolve(event.data.mesh)
             else reject(new Error(event.data.error ?? 'Underground mesh failed'))
@@ -218,8 +227,8 @@ function meshVolume(volume: Awaited<ReturnType<typeof loadUndergroundVolume>>, y
         }
         worker.postMessage(
             {
+                type: 'mesh',
                 ...volume,
-                textureUvs,
                 surfaceOffset: y,
                 focusY: props.query.y - y,
                 nether: props.query.dimension === 'nether',
@@ -306,6 +315,11 @@ async function generateChunk(chunk: [number, number, number]) {
         if (task === id) {
             busy.value = false
             task = 0
+            if (!disposed && !autoPaused.value && !failed.value)
+                queueWake = setTimeout(() => {
+                    queueWake = undefined
+                    pumpQueue()
+                }, 0)
         }
     }
 }
@@ -415,6 +429,7 @@ async function initializeScene() {
             },
             requireWalkLock: true,
             doubleSided: true,
+            releaseContextOnDispose: true,
             ...(isTauri() && platform() === 'macos'
                 ? {
                       onNativeWalkLock: async () => {
@@ -479,8 +494,15 @@ onBeforeUnmount(() => {
     cancel()
     resourceAbort.abort()
     if (timer) clearInterval(timer)
-    scene?.dispose()
     texture?.dispose()
+    if (texture) texture.image = undefined
+    texture = undefined
+    scene?.dispose()
+    scene = undefined
+    textureUvs = {}
+    loaded.clear()
+    loadedBytes = 0
+    loadedCount.value = 0
 })
 </script>
 

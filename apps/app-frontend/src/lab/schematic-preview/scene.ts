@@ -28,6 +28,7 @@ type SceneOptions = {
     onNativeWalkUnlock?: () => Promise<void>
     requireWalkLock?: boolean
     doubleSided?: boolean
+    releaseContextOnDispose?: boolean
 }
 
 type Projection = 'perspective' | 'orthographic'
@@ -83,6 +84,7 @@ export class SchematicPreviewScene {
     private measurementStart?: SchematicSceneSelection
     private measurementEnd?: SchematicSceneSelection
     private renderFrame?: number
+    private controlFrame?: number
     private walkFrame?: number
     private bounds?: THREE.Box3
     private layerRange?: [number, number]
@@ -109,6 +111,9 @@ export class SchematicPreviewScene {
     private nativeWalkLockPending = false
     private nativeWalkLocked = false
     private readonly requireWalkLock: boolean
+    private readonly releaseContextOnDispose: boolean
+    private readonly onContextLost: SceneOptions['onContextLost']
+    private readonly onContextRestored: SceneOptions['onContextRestored']
 
     constructor(options: SceneOptions) {
         this.canvas = options.canvas
@@ -120,6 +125,9 @@ export class SchematicPreviewScene {
         this.onNativeWalkLock = options.onNativeWalkLock
         this.onNativeWalkUnlock = options.onNativeWalkUnlock
         this.requireWalkLock = options.requireWalkLock ?? false
+        this.releaseContextOnDispose = options.releaseContextOnDispose ?? false
+        this.onContextLost = options.onContextLost
+        this.onContextRestored = options.onContextRestored
         if (options.doubleSided) {
             this.opaqueMaterial.side = THREE.DoubleSide
             this.translucentMaterial.side = THREE.DoubleSide
@@ -177,14 +185,8 @@ export class SchematicPreviewScene {
         window.addEventListener('keydown', this.handleWalkKeyDown)
         window.addEventListener('keyup', this.handleWalkKeyUp)
         window.addEventListener('blur', this.handleWalkBlur)
-        this.canvas.addEventListener('webglcontextlost', (event) => {
-            event.preventDefault()
-            options.onContextLost()
-        })
-        this.canvas.addEventListener('webglcontextrestored', () => {
-            options.onContextRestored()
-            this.requestRender()
-        })
+        this.canvas.addEventListener('webglcontextlost', this.handleContextLost)
+        this.canvas.addEventListener('webglcontextrestored', this.handleContextRestored)
         this.resize()
         this.onWalkSpeedChange(this.walkSpeed)
     }
@@ -676,11 +678,15 @@ export class SchematicPreviewScene {
     }
 
     dispose() {
+        if (this.disposed) return
         this.disposed = true
         if (this.renderFrame !== undefined) cancelAnimationFrame(this.renderFrame)
+        if (this.controlFrame !== undefined) cancelAnimationFrame(this.controlFrame)
         this.resizeObserver.disconnect()
         this.canvas.removeEventListener('pointerdown', this.handlePointerDown)
         this.canvas.removeEventListener('pointerup', this.handlePointerUp)
+        this.canvas.removeEventListener('webglcontextlost', this.handleContextLost)
+        this.canvas.removeEventListener('webglcontextrestored', this.handleContextRestored)
         this.canvas.ownerDocument.removeEventListener('click', this.handleWalkClick)
         this.canvas.ownerDocument.removeEventListener('mousemove', this.handleWalkMouseMove)
         this.canvas.ownerDocument.removeEventListener(
@@ -699,6 +705,9 @@ export class SchematicPreviewScene {
         this.walkControls.dispose()
         if (this.walkFrame !== undefined) cancelAnimationFrame(this.walkFrame)
         for (const chunk of this.chunks.values()) this.disposeObject(chunk)
+        this.chunks.clear()
+        this.regions.clear()
+        this.pressedKeys.clear()
         if (this.grid) {
             this.scene.remove(this.grid)
             for (const helper of this.grid.children) this.disposeHelper(helper)
@@ -713,7 +722,9 @@ export class SchematicPreviewScene {
         this.measurement.clear()
         this.opaqueMaterial.dispose()
         this.translucentMaterial.dispose()
+        this.scene.clear()
         this.renderer.dispose()
+        if (this.releaseContextOnDispose) this.renderer.forceContextLoss()
     }
 
     private createMaterial(translucent: boolean, texture?: THREE.CanvasTexture) {
@@ -1116,13 +1127,26 @@ export class SchematicPreviewScene {
         this.walkFrame = requestAnimationFrame(update)
     }
 
+    private readonly handleContextLost = (event: Event) => {
+        event.preventDefault()
+        if (!this.disposed) this.onContextLost()
+    }
+
+    private readonly handleContextRestored = () => {
+        if (this.disposed) return
+        this.onContextRestored()
+        this.requestRender()
+    }
+
     private startControlLoop() {
+        if (this.controlFrame !== undefined) return
         const update = () => {
+            this.controlFrame = undefined
             if (this.disposed || !this.controls.update()) return
             this.render()
-            requestAnimationFrame(update)
+            this.controlFrame = requestAnimationFrame(update)
         }
-        requestAnimationFrame(update)
+        this.controlFrame = requestAnimationFrame(update)
     }
 
     private requestRender() {
@@ -1140,7 +1164,13 @@ export class SchematicPreviewScene {
 
     private disposeObject(object: THREE.Object3D) {
         object.traverse((child) => {
-            if (child instanceof THREE.Mesh) child.geometry.dispose()
+            if (child instanceof THREE.Mesh) {
+                child.geometry.dispose()
+                for (const name of Object.keys(child.geometry.attributes))
+                    child.geometry.deleteAttribute(name)
+                child.geometry.setIndex(null)
+                delete child.userData.basePositions
+            }
         })
     }
 

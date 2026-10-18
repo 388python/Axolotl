@@ -1,6 +1,8 @@
 use super::{
     Dimension, Edition,
-    ores::{OreKind, OreScanRequest, scan_ores, scan_ores_with_budget},
+    ores::{
+        OreKind, OreScanRequest, scan_ores, scan_ores_with_budget_cancellable,
+    },
     parse_seed, resolve_java_version,
 };
 use serde::Deserialize;
@@ -13,7 +15,10 @@ use std::{
 };
 
 static ACTIVE_REQUEST: AtomicU64 = AtomicU64::new(0);
+static CANCELED_REQUEST: AtomicU64 = AtomicU64::new(0);
 static GENERATOR: Mutex<()> = Mutex::new(());
+#[cfg(test)]
+static CANCEL_CHECKS: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +40,7 @@ pub fn begin(id: u64) {
 }
 
 pub fn cancel(id: u64) {
+    CANCELED_REQUEST.store(id, Ordering::Relaxed);
     let _ = ACTIVE_REQUEST.compare_exchange(
         id,
         0,
@@ -44,14 +50,29 @@ pub fn cancel(id: u64) {
 }
 
 fn check_active(id: u64) -> io::Result<()> {
-    if id == 0 || ACTIVE_REQUEST.load(Ordering::Relaxed) != id {
+    if is_canceled(id) != 0 {
         return Err(io::Error::other("Underground generation canceled."));
     }
     Ok(())
 }
 
-/// Schema 1: four little-endian u32 fields (schema, flags, width, height),
-/// followed by u8 material IDs in X/Z/Y order. Flags: bit 0 = truncated ores.
+extern "C" fn is_canceled(id: u64) -> i32 {
+    #[cfg(test)]
+    CANCEL_CHECKS.fetch_add(1, Ordering::Relaxed);
+    i32::from(
+        id == 0
+            || ACTIVE_REQUEST.load(Ordering::Relaxed) != id
+            || CANCELED_REQUEST.load(Ordering::Relaxed) == id,
+    )
+}
+
+#[cfg(test)]
+extern "C" fn never_canceled(_: u64) -> i32 {
+    0
+}
+
+/// Legacy schema 1 returns a 64-cube volume. Chunk schema 3 returns full-height
+/// padded columns and surface heights. Flags bit 0 means mineral results truncated.
 pub fn generate_volume(request: VolumeRequest) -> io::Result<Vec<u8>> {
     check_active(request.id)?;
     let _guard = GENERATOR
@@ -249,8 +270,6 @@ fn generate_chunk(
     mc: i32,
     code: i32,
 ) -> io::Result<Vec<u8>> {
-    let source_x = (request.x - 16).clamp(-30_000_000, 29_999_952);
-    let source_z = (request.z - 16).clamp(-30_000_000, 29_999_952);
     let min_y =
         if matches!(request.dimension, Dimension::Overworld) && code >= 11800 {
             -64
@@ -263,49 +282,49 @@ fn generate_chunk(
         _ => 256,
     };
     let height = max_y - min_y;
-    let mut source = vec![0_u8; 48 * 48 * height as usize];
-    let mut heights = vec![0_i32; 48 * 48];
+    let mut data = vec![0_u8; 18 * 18 * height as usize];
+    let mut heights = vec![0_i32; 18 * 18];
     let status = unsafe {
-        super::axolotl_seed_map_underground_volume_surface(
+        super::axolotl_seed_map_underground_chunk(
             parse_seed(&request.seed),
             mc,
             request.edition.generator_flags(),
             request.dimension.as_cubiomes(),
-            source_x,
-            source_z,
-            request.y,
-            48,
-            height,
-            source.as_mut_ptr(),
-            source.len() as u64,
+            request.x,
+            request.z,
+            data.as_mut_ptr(),
+            data.len() as u64,
             heights.as_mut_ptr(),
+            request.id,
+            is_canceled,
         )
     };
+    check_active(request.id)?;
     if status != 0 {
         return Err(io::Error::other(format!(
             "Underground chunk generation failed ({status})."
         )));
     }
-    check_active(request.id)?;
-    let mut data = vec![1_u8; 18 * 18 * height as usize];
-    let mut surface = vec![i16::MIN; 18 * 18];
-    for x in 0..18_i32 {
-        for z in 0..18_i32 {
-            let sx = request.x - 1 + x - source_x;
-            let sz = request.z - 1 + z - source_z;
-            if !(0..48).contains(&sx) || !(0..48).contains(&sz) {
-                continue;
-            }
-            let surface_y = heights[(sx * 48 + sz) as usize] - 1;
-            if surface_y >= min_y {
-                surface[(x * 18 + z) as usize] = surface_y as i16;
-            }
-            for y in 0..height {
-                let block = source[((sx * 48 + sz) * height + y) as usize];
-                data[((x * 18 + z) * height + y) as usize] = match block {
-                    1 if matches!(request.dimension, Dimension::Nether) => 3,
-                    1 if code >= 11800 && request.y + y < 0 => 2,
-                    value => value,
+    let surface: Vec<i16> = heights
+        .into_iter()
+        .map(|y| if y <= min_y { i16::MIN } else { (y - 1) as i16 })
+        .collect();
+    for (index, column) in data.chunks_exact_mut(height as usize).enumerate() {
+        let x = request.x + (index / 18) as i32 - 1;
+        let z = request.z + (index % 18) as i32 - 1;
+        if !(-30_000_000..30_000_000).contains(&x)
+            || !(-30_000_000..30_000_000).contains(&z)
+        {
+            continue;
+        }
+        for (by, value) in column.iter_mut().enumerate() {
+            if *value == 1 {
+                *value = if matches!(request.dimension, Dimension::Nether) {
+                    3
+                } else if code >= 11800 && min_y + (by as i32) < 0 {
+                    2
+                } else {
+                    1
                 };
             }
         }
@@ -349,7 +368,7 @@ fn generate_chunk(
                 })
                 .collect();
             let capacity = 16_384 * ores.len();
-            for result in scan_ores_with_budget(
+            for result in scan_ores_with_budget_cancellable(
                 OreScanRequest {
                     seed: request.seed.clone(),
                     edition: request.edition,
@@ -359,6 +378,7 @@ fn generate_chunk(
                     chunks: vec![cx_world, cz_world],
                 },
                 capacity,
+                Some((request.id, is_canceled)),
             )? {
                 truncated |= result.truncated;
                 for hit in result.hits {
@@ -441,11 +461,28 @@ mod tests {
             ores: vec![OreKind::Diamond, OreKind::Iron],
             chunks: vec![0, 0],
         };
-        let small = scan_ores_with_budget(ore_request(), 2).unwrap();
-        let expanded = scan_ores_with_budget(ore_request(), 32_768).unwrap();
+        let small = super::super::ores::scan_ores_with_budget(ore_request(), 2)
+            .unwrap();
+        let expanded =
+            super::super::ores::scan_ores_with_budget(ore_request(), 32_768)
+                .unwrap();
         assert!(small[0].truncated);
         assert!(expanded[0].hits.len() > small[0].hits.len());
         assert!(!expanded[0].truncated);
+        let cancellable = scan_ores_with_budget_cancellable(
+            ore_request(),
+            32_768,
+            Some((99, never_canceled)),
+        )
+        .unwrap();
+        assert_eq!(expanded[0].hits.len(), cancellable[0].hits.len());
+        assert!(
+            expanded[0]
+                .hits
+                .iter()
+                .zip(&cancellable[0].hits)
+                .all(|(a, b)| (a.ore, a.x, a.y, a.z) == (b.ore, b.x, b.y, b.z))
+        );
         let bytes = generate_volume(chunk.clone()).unwrap();
         assert_eq!(bytes.len(), 16 + 18 * 18 * 384 + 18 * 18 * 2);
         assert_eq!(&bytes[..4], &3_u32.to_le_bytes());
@@ -460,5 +497,56 @@ mod tests {
         assert!(generate_volume(chunk).is_ok());
         cancel(request.id);
         assert!(generate_volume(request).is_err());
+        let interrupted = VolumeRequest {
+            id: 100,
+            seed: "12345".into(),
+            edition: Edition::Java,
+            version: "26.3".into(),
+            dimension: Dimension::Overworld,
+            x: -32,
+            y: -64,
+            z: -32,
+            chunk: true,
+        };
+        CANCEL_CHECKS.store(0, Ordering::Relaxed);
+        begin(interrupted.id);
+        let task = std::thread::spawn(move || generate_volume(interrupted));
+        let started = std::time::Instant::now();
+        while CANCEL_CHECKS.load(Ordering::Relaxed) < 10 && !task.is_finished()
+        {
+            assert!(started.elapsed() < std::time::Duration::from_secs(2));
+            std::thread::yield_now();
+        }
+        assert!(
+            !task.is_finished(),
+            "Generation must still be active when canceled"
+        );
+        let canceled_at = std::time::Instant::now();
+        cancel(100);
+        assert!(task.join().unwrap().is_err());
+        eprintln!(
+            "Active native generation canceled in {:?}",
+            canceled_at.elapsed()
+        );
+        assert!(canceled_at.elapsed() < std::time::Duration::from_millis(250));
+        let checks_after = CANCEL_CHECKS.load(Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert_eq!(CANCEL_CHECKS.load(Ordering::Relaxed), checks_after);
+        cancel(101);
+        begin(101);
+        assert!(
+            generate_volume(VolumeRequest {
+                id: 101,
+                seed: "1".into(),
+                edition: Edition::Java,
+                version: "26.3".into(),
+                dimension: Dimension::Overworld,
+                x: 0,
+                y: -64,
+                z: 0,
+                chunk: true
+            })
+            .is_err()
+        );
     }
 }

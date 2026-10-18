@@ -35,6 +35,7 @@ export type UndergroundMeshRequest = UndergroundVolume & {
 }
 
 export const UNDERGROUND_RADIUS = 12
+export const UNDERGROUND_MEMORY_BUDGET = 512 * 1024 * 1024
 export function undergroundChunkKey(position: [number, number, number]) {
     return position.join(':')
 }

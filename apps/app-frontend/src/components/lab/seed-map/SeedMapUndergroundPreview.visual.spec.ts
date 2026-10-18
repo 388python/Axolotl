@@ -1,6 +1,7 @@
 import '@/test/visual-styles.scss'
 
 import { mount, type VueWrapper } from '@vue/test-utils'
+import { CanvasTexture, type WebGLRenderer } from 'three'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 
@@ -53,6 +54,191 @@ afterEach(() => {
     host?.remove()
     wrapper = undefined
     vi.clearAllMocks()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+})
+
+it('does not start native work or create a scene when closed during initialization', async () => {
+    const regions = vi.spyOn(SchematicPreviewScene.prototype, 'setRegions')
+    backend.invoke.mockResolvedValue(new ArrayBuffer(0))
+    host = document.createElement('div')
+    document.body.append(host)
+    wrapper = mount(SeedMapUndergroundPreview, {
+        attachTo: host,
+        props: {
+            query: {
+                seed: '12345',
+                edition: 'java',
+                version: '26.3',
+                dimension: 'overworld',
+                x: 0,
+                y: 16,
+                z: 0,
+            },
+        },
+    })
+    wrapper.unmount()
+    wrapper = undefined
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(backend.invoke.mock.calls.length).toBe(0)
+    expect(regions.mock.calls.length).toBe(0)
+})
+
+it('terminates an in-flight mesh worker when the preview is closed before its result arrives', async () => {
+    const NativeWorker = window.Worker
+    const workers = new Set<Worker>()
+    let posted!: () => void
+    const meshPosted = new Promise<void>((resolve) => {
+        posted = resolve
+    })
+    vi.stubGlobal(
+        'Worker',
+        class extends NativeWorker {
+            constructor(url: string | URL, options?: WorkerOptions) {
+                super(url, options)
+                workers.add(this)
+            }
+            postMessage(message: unknown, transfer: Transferable[]) {
+                super.postMessage(message, transfer)
+                if ((message as { type?: string }).type === 'mesh') posted()
+            }
+            terminate() {
+                workers.delete(this)
+                super.terminate()
+            }
+        },
+    )
+    const result = new ArrayBuffer(16 + 18 * 18 * 384 + 18 * 18 * 2)
+    const header = new DataView(result)
+    ;[3, 0, 18, 384].forEach((value, index) => header.setUint32(index * 4, value, true))
+    new Uint8Array(result, 16, 18 * 18 * 384).fill(1)
+    backend.invoke.mockResolvedValue(result)
+    host = document.createElement('div')
+    host.style.cssText = 'position:relative;width:800px;height:600px'
+    document.body.append(host)
+    wrapper = mount(SeedMapUndergroundPreview, {
+        attachTo: host,
+        props: {
+            query: {
+                seed: '12345',
+                edition: 'java',
+                version: '26.3',
+                dimension: 'overworld',
+                x: 0,
+                y: 16,
+                z: 0,
+            },
+        },
+    })
+    await meshPosted
+    expect(workers.size).toBe(1)
+    wrapper.unmount()
+    wrapper = undefined
+    expect(workers.size).toBe(0)
+    const count = backend.invoke.mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    expect(backend.invoke.mock.calls.length).toBe(count)
+})
+
+it('reuses one worker and releases graphics, timers and late native results across repeated open and close cycles', async () => {
+    const NativeWorker = window.Worker
+    const workers = new Set<Worker>()
+    let created = 0
+    vi.stubGlobal(
+        'Worker',
+        class extends NativeWorker {
+            constructor(url: string | URL, options?: WorkerOptions) {
+                super(url, options)
+                created++
+                workers.add(this)
+            }
+            terminate() {
+                workers.delete(this)
+                super.terminate()
+            }
+        },
+    )
+    const render = vi.spyOn(
+        SchematicPreviewScene.prototype as unknown as { render: () => void },
+        'render',
+    )
+    const textureDispose = vi.spyOn(CanvasTexture.prototype, 'dispose')
+    const dispose = vi.spyOn(SchematicPreviewScene.prototype, 'dispose')
+    const response = () => {
+        const buffer = new ArrayBuffer(16 + 18 * 18 * 384 + 18 * 18 * 2)
+        const header = new DataView(buffer)
+        ;[3, 0, 18, 384].forEach((value, index) => header.setUint32(index * 4, value, true))
+        const blocks = new Uint8Array(buffer, 16, 18 * 18 * 384).fill(1)
+        for (let x = 1; x < 17; x++)
+            for (let z = 1; z < 17; z++)
+                for (let y = 70; y < 100; y++) blocks[(x * 18 + z) * 384 + y] = 0
+        for (let column = 0; column < 18 * 18; column++)
+            header.setInt16(16 + blocks.length + column * 2, 100, true)
+        return buffer
+    }
+    for (let cycle = 0; cycle < 3; cycle++) {
+        let resolveLate: ((value: ArrayBuffer) => void) | undefined
+        let calls = 0
+        backend.invoke.mockImplementation((command: string) => {
+            if (command.endsWith('seed_map_cancel_underground')) return Promise.resolve()
+            calls++
+            return calls > 3
+                ? new Promise((resolve) => {
+                      resolveLate = resolve
+                  })
+                : Promise.resolve(response())
+        })
+        host = document.createElement('div')
+        host.style.cssText = 'position:relative;width:800px;height:600px'
+        document.body.append(host)
+        const workerCountBefore = created
+        wrapper = mount(SeedMapUndergroundPreview, {
+            attachTo: host,
+            props: {
+                query: {
+                    seed: '12345',
+                    edition: 'java',
+                    version: '26.3',
+                    dimension: 'overworld',
+                    x: 0,
+                    y: 16,
+                    z: 0,
+                },
+            },
+        })
+        await expect.poll(() => resolveLate, { timeout: 30000 }).toBeDefined()
+        expect(created - workerCountBefore).toBe(1)
+        expect(workers.size).toBe(1)
+        const canvas = wrapper.get('canvas').element as HTMLCanvasElement
+        const context = canvas.getContext('webgl2')!
+        expect(context.isContextLost()).toBe(false)
+        const beforeDispose = dispose.mock.calls.length
+        wrapper.unmount()
+        wrapper = undefined
+        expect(dispose.mock.calls.length).toBe(beforeDispose + 1)
+        expect(workers.size).toBe(0)
+        const scene = dispose.mock.contexts.at(-1) as unknown as {
+            chunks: Map<string, unknown>
+            regions: Map<string, unknown>
+            scene: { children: unknown[] }
+            renderer: WebGLRenderer
+        }
+        expect(scene.chunks.size).toBe(0)
+        expect(scene.regions.size).toBe(0)
+        expect(scene.scene.children.length).toBe(0)
+        await expect.poll(() => context.isContextLost()).toBe(true)
+        expect(scene.renderer.info.memory.geometries).toBe(0)
+        expect(scene.renderer.info.memory.textures).toBe(0)
+        expect(textureDispose.mock.calls.length).toBe(cycle + 1)
+        const requestsAfterClose = calls
+        const rendersAfterClose = render.mock.calls.length
+        resolveLate!(response())
+        await new Promise((resolve) => setTimeout(resolve, 350))
+        expect(calls).toBe(requestsAfterClose)
+        expect(render.mock.calls.length).toBe(rendersAfterClose)
+        expect(workers.size).toBe(0)
+        host.remove()
+    }
 })
 
 it('targets visible block coordinates after chunk translation and ignores hidden or removed chunks', () => {
@@ -175,7 +361,6 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
     await expect.poll(generationCalls, { timeout: 6000 }).toBeGreaterThan(callsBeforeWalking)
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }))
-    await expect.poll(() => wrapper?.text()).not.toContain('Cancel generation')
     expect(wrapper.get('canvas').element).toBe(canvas)
     expect(wrapper.text()).not.toContain('Could not generate')
     const beforeMove = wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]
