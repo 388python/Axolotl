@@ -53,4 +53,22 @@ the failed job in GitHub Actions; rebuilding installers is unnecessary.
 
 With Netlify builds stopped, ordinary website commits no longer deploy through
 Netlify's Git integration. They go live with the next launcher release, or can be
-built and uploaded manually with the same CLI command used by the workflow.
+built and uploaded using the manual workflow below.
+
+## Manual website deployment
+
+Push `.github/workflows/deploy-website.yml` to `main` first. In the GitHub
+repository, open **Actions > Deploy website to Netlify > Run workflow**, select
+**main**, and click **Run workflow**. Alternatively, run:
+
+```sh
+gh workflow run deploy-website.yml --ref main
+```
+
+This workflow builds the latest `main` after obtaining the same production
+deployment concurrency lock used by the release workflow. Other branches are
+skipped. It uses the existing `apps/website/releases/catalog.json` synchronized
+by successful releases; it does not regenerate announcements from potentially
+unreleased `catalog.ts` entries or build launcher installers. It requires the
+same two Netlify secrets and deploys directly to production with `--no-build`.
+If installation, building, or static output verification fails, upload is skipped.
