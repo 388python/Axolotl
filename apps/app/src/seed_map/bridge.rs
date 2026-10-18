@@ -59,6 +59,9 @@ pub(super) fn ensure_available() -> std::io::Result<()> {
                             library.get(b"axolotl_seed_map_free_result\0")?;
                         let _: libloading::Symbol<*const ()> =
                             library.get(b"axolotl_seed_map_underground\0")?;
+                        let _: libloading::Symbol<*const ()> = library.get(
+                            b"axolotl_seed_map_underground_volume_surface\0",
+                        )?;
                     }
                     Ok(library)
                 },
@@ -152,3 +155,4 @@ engine_function!(axolotl_seed_map_generate_loot(table_json: *const c_char, table
 engine_function!(axolotl_seed_map_free_result(result: *mut c_char) -> (), ());
 engine_function!(axolotl_seed_map_underground(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, scale: i32, width: i32, height: i32, y: i32, layers: u32, rgba: *mut u8, length: u64) -> i32, -1);
 engine_function!(axolotl_seed_map_underground_volume(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, y: i32, width: i32, height: i32, blocks: *mut u8, length: u64) -> i32, -1);
+engine_function!(axolotl_seed_map_underground_volume_surface(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, y: i32, width: i32, height: i32, blocks: *mut u8, length: u64, surface_heights: *mut i32) -> i32, -1);

@@ -12,10 +12,11 @@ import type { SchematicPreviewScene } from '@/lab/schematic-preview/scene'
 import {
     cancelUndergroundVolume,
     loadUndergroundVolume,
-    nextUndergroundRegion,
+    undergroundChunkKey,
+    undergroundChunkQueue,
+    undergroundEviction,
     type UndergroundLayer,
     type UndergroundMesh,
-    undergroundOrigin,
     type UndergroundQuery,
 } from '@/lab/seed-map/underground'
 
@@ -51,18 +52,33 @@ const messages = defineMessages({
             'Mouse: look · WASD: move · Space / Shift: up / down · Wheel: speed · Esc: release mouse. Free flight, without collision.',
     },
     terrain: { id: 'app.lab.seed-map.underground-3d.terrain', defaultMessage: 'Cave boundaries' },
+    surface: { id: 'app.lab.seed-map.underground-3d.surface', defaultMessage: 'Surface layer' },
+    bedrock: { id: 'app.lab.seed-map.underground-3d.bedrock', defaultMessage: 'Bedrock' },
+    target: {
+        id: 'app.lab.seed-map.underground-3d.target',
+        defaultMessage: 'Target: X {x} · Y {y} · Z {z}',
+    },
+    noTarget: {
+        id: 'app.lab.seed-map.underground-3d.no-target',
+        defaultMessage: 'Target: no block within 256 blocks',
+    },
+    memory: {
+        id: 'app.lab.seed-map.underground-3d.memory',
+        defaultMessage:
+            'The preview memory budget is full. Distant chunks are released as you move.',
+    },
     water: { id: 'app.lab.seed-map.underground-3d.water', defaultMessage: 'Water (estimated)' },
     lava: { id: 'app.lab.seed-map.underground-3d.lava', defaultMessage: 'Lava (estimated)' },
     ores: { id: 'app.lab.seed-map.underground-3d.ores', defaultMessage: 'Mineral candidates' },
     limits: {
         id: 'app.lab.seed-map.underground-3d.limits',
         defaultMessage:
-            'Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated.',
+            'Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials; the surface uses representative stone or netherrack, without biome surface rules or decorations. Bedrock bands use estimated thickness, not the exact original random pattern. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated.',
     },
     range: {
         id: 'app.lab.seed-map.underground-3d.range',
         defaultMessage:
-            'Loaded 64 × 64 × 64 blocks: X {x}…{maxX}, Y {y}…{maxY}, Z {z}…{maxZ}. Nearby regions load automatically as you move.',
+            'Loaded {count} full-height chunks. Idle computation fills a horizontal radius of up to 12 chunks, with each 16 × 16 column covering the entire build height.',
     },
     autoPaused: {
         id: 'app.lab.seed-map.underground-3d.auto-paused',
@@ -105,11 +121,25 @@ const noAir = ref(false)
 const speed = ref(8)
 const layers = reactive<Record<UndergroundLayer, boolean>>({
     terrain: true,
+    surface: true,
+    bedrock: true,
     water: true,
     lava: true,
     ores: true,
 })
-const origin = ref<[number, number, number]>(undergroundOrigin(props.query))
+const origin = ref<[number, number, number]>(
+    undergroundChunkQueue(props.query, [props.query.x, props.query.y, props.query.z])[0],
+)
+const target = ref<[number, number, number]>()
+const loadedCount = ref(0)
+const memoryFull = ref(false)
+const loaded = new Map<
+    string,
+    { position: [number, number, number]; bytes: number; truncated: boolean }
+>()
+const memoryBudget = 192 * 1024 * 1024
+let loadedBytes = 0
+let failedChunk: [number, number, number] | undefined
 const position = ref<[number, number, number]>([props.query.x, props.query.y, props.query.z])
 let scene: SchematicPreviewScene | undefined
 let texture: CanvasTexture | undefined
@@ -118,7 +148,6 @@ let worker: Worker | undefined
 let rejectWorker: ((error: Error) => void) | undefined
 let task = 0
 let timer: ReturnType<typeof setInterval> | undefined
-let lastQuery = props.query
 let disposed = false
 let initialCanceled = false
 let initialization: Promise<void> | undefined
@@ -133,13 +162,17 @@ const lavaLevel = computed(() =>
 )
 const range = computed(() =>
     formatMessage(messages.range, {
-        x: origin.value[0],
-        y: origin.value[1],
-        z: origin.value[2],
-        maxX: origin.value[0] + 63,
-        maxY: origin.value[1] + 63,
-        maxZ: origin.value[2] + 63,
+        count: loadedCount.value,
     }),
+)
+const targetText = computed(() =>
+    target.value
+        ? formatMessage(messages.target, {
+              x: target.value[0],
+              y: target.value[1],
+              z: target.value[2],
+          })
+        : formatMessage(messages.noTarget),
 )
 const positionText = computed(() =>
     formatMessage(messages.position, {
@@ -163,7 +196,7 @@ function cancel() {
     busy.value = false
 }
 
-function meshVolume(volume: Awaited<ReturnType<typeof loadUndergroundVolume>>) {
+function meshVolume(volume: Awaited<ReturnType<typeof loadUndergroundVolume>>, y: number) {
     return new Promise<UndergroundMesh>((resolve, reject) => {
         worker = new Worker(
             new URL('../../../lab/seed-map/underground-worker.ts', import.meta.url),
@@ -183,47 +216,52 @@ function meshVolume(volume: Awaited<ReturnType<typeof loadUndergroundVolume>>) {
             rejectWorker = undefined
             reject(new Error('Underground mesh worker failed'))
         }
-        worker.postMessage({ ...volume, textureUvs }, [volume.blocks.buffer])
+        worker.postMessage(
+            {
+                ...volume,
+                textureUvs,
+                surfaceOffset: y,
+                focusY: props.query.y - y,
+                nether: props.query.dimension === 'nether',
+            },
+            [volume.blocks.buffer],
+        )
     })
 }
 
-async function generate(query: UndergroundQuery = lastQuery) {
-    cancel()
+async function generateChunk(chunk: [number, number, number]) {
+    if (busy.value || disposed || !scene) return
     autoPaused.value = false
-    lastQuery = { ...query }
+    failedChunk = chunk
+    const query = { ...props.query, x: chunk[0], y: chunk[1], z: chunk[2] }
     const id = Date.now() * 1000 + Math.floor(Math.random() * 1000)
     task = id
     busy.value = true
     failed.value = false
     stage.value = 'generating'
-    const nextOrigin = undergroundOrigin(query)
     try {
-        const volume = await loadUndergroundVolume(
-            { ...query, x: nextOrigin[0], y: nextOrigin[1], z: nextOrigin[2] },
-            id,
-        )
+        const volume = await loadUndergroundVolume(query, id)
         if (disposed || task !== id) return
         stage.value = 'meshing'
-        const mesh = await meshVolume(volume)
+        const mesh = await meshVolume(volume, chunk[1])
         if (disposed || task !== id || !scene) return
-        const camera = scene.getCameraPosition()
-        const nextPosition: [number, number, number] = ready.value
-            ? (camera.map((value, axis) => value + origin.value[axis] - nextOrigin[axis]) as [
-                  number,
-                  number,
-                  number,
-              ])
-            : mesh.spawn
-        origin.value = nextOrigin
-        truncated.value = volume.truncated
-        noAir.value = mesh.noAir
-        scene.setRegions(
-            (Object.keys(layers) as UndergroundLayer[]).map((id) => ({
-                id,
-                min: [0, 0, 0],
-                max: [63, 63, 63],
-            })),
+        const wanted = undergroundChunkQueue(props.query, position.value)
+        if (
+            ready.value &&
+            !wanted.some((item) => undergroundChunkKey(item) === undergroundChunkKey(chunk))
         )
+            return
+        const offset: [number, number, number] = [
+            chunk[0] - origin.value[0] - 1,
+            chunk[1] - origin.value[1],
+            chunk[2] - origin.value[2] - 1,
+        ]
+        const bytes =
+            Object.values(mesh.layers).reduce(
+                (sum, layer) =>
+                    sum + Object.values(layer).reduce((sum, array) => sum + array.byteLength, 0),
+                0,
+            ) * 3
         const empty: SchematicMeshData = {
             positions: new Float32Array(),
             normals: new Float32Array(),
@@ -235,16 +273,30 @@ async function generate(query: UndergroundQuery = lastQuery) {
             const fluid = layer === 'water'
             scene.setChunk(
                 layer,
-                [0, 0, 0],
+                chunk,
                 fluid ? empty : mesh.layers[layer],
                 fluid ? mesh.layers[layer] : empty,
             )
-            scene.setRegionVisible(layer, layers[layer])
+            scene.setChunkOffset(layer, chunk, offset)
         }
-        scene.setCameraPosition(nextPosition)
-        scene.setViewMode('walk')
-        ready.value = true
+        loaded.set(undergroundChunkKey(chunk), {
+            position: chunk,
+            bytes,
+            truncated: volume.truncated,
+        })
+        loadedBytes += bytes
+        loadedCount.value = loaded.size
+        truncated.value = [...loaded.values()].some((chunk) => chunk.truncated)
+        if (!ready.value) {
+            noAir.value = mesh.noAir
+            scene.setCameraPosition(
+                mesh.spawn.map((value, axis) => value + offset[axis]) as [number, number, number],
+            )
+            scene.setViewMode('walk')
+            ready.value = true
+        }
         updatePosition()
+        failedChunk = undefined
     } catch (error) {
         if (!disposed && task === id) {
             console.error('Underground preview failed', error)
@@ -259,31 +311,51 @@ async function generate(query: UndergroundQuery = lastQuery) {
 }
 
 function updatePosition() {
-    if (scene && ready.value)
+    if (scene && ready.value) {
         position.value = scene
             .getCameraPosition()
             .map((value, axis) => value + origin.value[axis]) as [number, number, number]
-    if (
-        !ready.value ||
-        !locked.value ||
-        busy.value ||
-        autoPaused.value ||
-        failed.value ||
-        contextLost.value ||
-        disposed
-    )
-        return
-    const next = nextUndergroundRegion(props.query, origin.value, position.value)
-    if (next) void generate(next)
+        target.value = scene.crosshairBlock()?.map((value, axis) => value + origin.value[axis]) as
+            [number, number, number] | undefined
+    }
+}
+function pumpQueue() {
+    updatePosition()
+    if (!scene || !ready.value || disposed || contextLost.value) return
+    const queue = undergroundChunkQueue(props.query, position.value)
+    const wanted = new Set(queue.map(undergroundChunkKey))
+    for (const [key, chunk] of loaded)
+        if (!wanted.has(key)) {
+            for (const layer of Object.keys(layers) as UndergroundLayer[])
+                scene.removeChunk(layer, chunk.position)
+            loadedBytes -= chunk.bytes
+            loaded.delete(key)
+        }
+    loadedCount.value = loaded.size
+    truncated.value = [...loaded.values()].some((chunk) => chunk.truncated)
+    memoryFull.value = loadedBytes >= memoryBudget
+    if (busy.value || autoPaused.value || failed.value) return
+    const next = queue.find((chunk) => !loaded.has(undergroundChunkKey(chunk)))
+    if (memoryFull.value && next) {
+        const eviction = undergroundEviction(queue, [...loaded.values()], next)
+        if (!eviction) return
+        const key = undergroundChunkKey(eviction)
+        const previous = loaded.get(key)!
+        for (const layer of Object.keys(layers) as UndergroundLayer[])
+            scene.removeChunk(layer, eviction)
+        loadedBytes -= previous.bytes
+        loaded.delete(key)
+        loadedCount.value = loaded.size
+    }
+    truncated.value = [...loaded.values()].some((chunk) => chunk.truncated)
+    if (next) void generateChunk(next)
 }
 function generateAtCamera() {
-    updatePosition()
-    void generate({
-        ...props.query,
-        x: position.value[0],
-        y: position.value[1],
-        z: position.value[2],
-    })
+    cancel()
+    autoPaused.value = false
+    failed.value = false
+    if (!ready.value) void generateChunk(origin.value)
+    else pumpQueue()
 }
 watch(layers, () => {
     for (const layer of Object.keys(layers) as UndergroundLayer[])
@@ -370,9 +442,18 @@ async function initializeScene() {
         scene.setTexture(texture)
         scene.setGridVisible(false)
         scene.setBoundsVisible(false)
-        timer = setInterval(updatePosition, 150)
-        if (!initialCanceled) await generate(props.query)
-        else busy.value = false
+        scene.setRegions(
+            (Object.keys(layers) as UndergroundLayer[]).map((id) => ({
+                id,
+                min: [0, 0, 0],
+                max: [16, 384, 16],
+            })),
+        )
+        for (const layer of Object.keys(layers) as UndergroundLayer[])
+            scene.setRegionVisible(layer, layers[layer])
+        timer = setInterval(pumpQueue, 200)
+        busy.value = false
+        if (!initialCanceled) await generateChunk(origin.value)
     } catch (error) {
         if (!disposed) {
             busy.value = false
@@ -383,8 +464,11 @@ async function initializeScene() {
 }
 function retry() {
     autoPaused.value = false
-    if (scene) void generate()
-    else {
+    if (scene) {
+        cancel()
+        autoPaused.value = false
+        void generateChunk(failedChunk ?? undergroundChunkQueue(props.query, position.value)[0])
+    } else {
         initialCanceled = false
         void initialize()
     }
@@ -437,7 +521,7 @@ onBeforeUnmount(() => {
             />
             <div
                 v-if="!locked"
-                class="pointer-events-none absolute inset-x-3 top-3 flex flex-col gap-2"
+                class="pointer-events-none absolute inset-x-3 top-20 bottom-12 flex flex-col gap-2"
             >
                 <p v-if="ready" class="m-0 self-center rounded-lg bg-surface-2 px-3 py-2 text-sm">
                     {{ formatMessage(messages.paused) }}
@@ -460,7 +544,14 @@ onBeforeUnmount(() => {
                     </p>
                     <div class="flex flex-wrap gap-x-4 gap-y-2">
                         <label
-                            v-for="layer in ['terrain', 'water', 'lava', 'ores'] as const"
+                            v-for="layer in [
+                                'terrain',
+                                'surface',
+                                'bedrock',
+                                'water',
+                                'lava',
+                                'ores',
+                            ] as const"
                             :key="layer"
                             class="flex items-center gap-2"
                             ><Toggle v-model="layers[layer]" small />{{
@@ -473,6 +564,7 @@ onBeforeUnmount(() => {
                         {{ formatMessage(messages.limits, { lava: lavaLevel }) }}
                     </p>
                     <p v-if="ready" class="m-0 text-[var(--color-text-tertiary)]">{{ range }}</p>
+                    <p v-if="memoryFull" class="m-0">{{ formatMessage(messages.memory) }}</p>
                     <p v-if="truncated" class="m-0">{{ formatMessage(messages.truncated) }}</p>
                     <p v-if="noAir" class="m-0">{{ formatMessage(messages.noAir) }}</p>
                 </div>
@@ -485,9 +577,9 @@ onBeforeUnmount(() => {
                 +
             </div>
             <p
-                class="pointer-events-none absolute bottom-2 left-2 m-0 rounded-lg bg-surface-2 px-2 py-1 text-xs tabular-nums"
+                class="pointer-events-none absolute top-2 left-2 m-0 rounded-lg bg-surface-2 px-2 py-1 text-xs tabular-nums"
             >
-                {{ positionText }}
+                {{ positionText }}<br />{{ targetText }}
             </p>
         </div>
     </div>

@@ -5,13 +5,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-int32_t axolotl_seed_map_underground_volume(
+static uint64_t mix64(uint64_t value) {
+    value ^= value >> 30;
+    value *= UINT64_C(0xbf58476d1ce4e5b9);
+    value ^= value >> 27;
+    value *= UINT64_C(0x94d049bb133111eb);
+    return value ^ (value >> 31);
+}
+
+int32_t axolotl_seed_map_underground_volume_surface(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
     int32_t x, int32_t z, int32_t y, int32_t width, int32_t height,
-    uint8_t *blocks, uint64_t length
+    uint8_t *blocks, uint64_t length, int32_t *surface_heights
 ) {
     if (mc < MC_1_14 || (dimension != DIM_OVERWORLD && dimension != DIM_NETHER) ||
-        width < 16 || width > 64 || width % 16 || height < 8 || height > 96 || height % 8 ||
+        width < 16 || width > 64 || width % 16 || height < 8 || height > 384 || height % 8 ||
         x < -30000000 || x > 30000000 - width || z < -30000000 || z > 30000000 - width ||
         x % 16 || z % 16 || !blocks || length != (uint64_t)width * width * height) return -1;
     const int min_y = dimension == DIM_OVERWORLD && mc >= MC_1_18 ? -64 : 0;
@@ -57,13 +65,28 @@ int32_t axolotl_seed_map_underground_volume(
             }
         }
     }
+    for (int bx = 0; bx < width; bx++) for (int bz = 0; bz < width; bz++) {
+        const int wx = x + bx;
+        const int wz = z + bz;
+        for (int by = 0; by < height; by++) {
+            const int world_y = y + by;
+            const int floor_depth = (int)(mix64(seed ^ ((uint64_t)(uint32_t)wx << 32) ^ (uint32_t)wz ^ (uint32_t)world_y) % 5);
+            const int ceiling_depth = (int)(mix64(seed ^ ((uint64_t)(uint32_t)wz << 32) ^ (uint32_t)wx ^ (uint32_t)world_y ^ UINT64_C(0x9e3779b97f4a7c15)) % 5);
+            const int floor_y = dimension == DIM_OVERWORLD && mc >= MC_1_18 ? -64 : 0;
+            if (world_y <= floor_y + floor_depth ||
+                (dimension == DIM_NETHER && world_y >= 127 - ceiling_depth)) {
+                blocks[((size_t)bx * width + bz) * height + by] = 6;
+            }
+        }
+    }
     int *surfaces = NULL;
-    if (dimension == DIM_OVERWORLD && y < 63) {
+    if (surface_heights || (dimension == DIM_OVERWORLD && y < 63)) {
         surfaces = calloc((size_t)width * width, sizeof(int));
         if (!surfaces) { free(terrain); return -2; }
         generateRegion(terrain, x / 16, z / 16, width / 16, width / 16,
             NULL, 0, (max_y - min_y) / 8, surfaces, 1);
     }
+    if (surface_heights) memcpy(surface_heights, surfaces, (size_t)width * width * sizeof(int32_t));
     const int lava_level = dimension == DIM_NETHER ? 31 : mc >= MC_1_18 ? -54 : 10;
     for (int bx = 0; bx < width; bx++) for (int bz = 0; bz < width; bz++) {
         size_t column = (size_t)bx * width + bz;
@@ -71,10 +94,19 @@ int32_t axolotl_seed_map_underground_volume(
             size_t index = column * height + by;
             if (blocks[index]) continue;
             if (y + by < lava_level) blocks[index] = 5;
-            else if (surfaces && y + by < 63 && y + by >= surfaces[column]) blocks[index] = 4;
+            else if (dimension == DIM_OVERWORLD && surfaces && y + by < 63 && y + by >= surfaces[column]) blocks[index] = 4;
         }
     }
     free(surfaces);
     free(terrain);
     return 0;
+}
+
+int32_t axolotl_seed_map_underground_volume(
+    uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
+    int32_t x, int32_t z, int32_t y, int32_t width, int32_t height,
+    uint8_t *blocks, uint64_t length
+) {
+    return axolotl_seed_map_underground_volume_surface(seed, mc, flags, dimension,
+        x, z, y, width, height, blocks, length, NULL);
 }

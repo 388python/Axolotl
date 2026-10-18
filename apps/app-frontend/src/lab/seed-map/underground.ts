@@ -13,12 +13,13 @@ export type UndergroundQuery = {
     y: number
     z: number
 }
-export type UndergroundLayer = 'terrain' | 'water' | 'lava' | 'ores'
+export type UndergroundLayer = 'terrain' | 'surface' | 'bedrock' | 'water' | 'lava' | 'ores'
 export type UndergroundVolume = {
     blocks: Uint8Array
     width: number
     height: number
     truncated: boolean
+    surface?: Int16Array
 }
 export type UndergroundMesh = {
     layers: Record<UndergroundLayer, SchematicMeshData>
@@ -28,6 +29,55 @@ export type UndergroundMesh = {
 }
 export type UndergroundMeshRequest = UndergroundVolume & {
     textureUvs: Record<string, [number, number, number, number]>
+    surfaceOffset?: number
+    nether?: boolean
+    focusY?: number
+}
+
+export const UNDERGROUND_RADIUS = 12
+export function undergroundChunkKey(position: [number, number, number]) {
+    return position.join(':')
+}
+export function undergroundChunkQueue(query: UndergroundQuery, position: [number, number, number]) {
+    const cx = Math.max(-1_875_000, Math.min(1_874_999, Math.floor(position[0] / 16))),
+        cz = Math.max(-1_875_000, Math.min(1_874_999, Math.floor(position[2] / 16)))
+    const chunks: [number, number, number][] = []
+    const modern =
+        Number(query.version.split('.')[0]) >= 26 || /^1\.(?:1[89]|2\d)(?:\.|$)/.test(query.version)
+    const chunkY = query.dimension === 'overworld' && modern ? -64 : 0
+    for (let dx = -UNDERGROUND_RADIUS; dx <= UNDERGROUND_RADIUS; dx++)
+        for (let dz = -UNDERGROUND_RADIUS; dz <= UNDERGROUND_RADIUS; dz++) {
+            if (dx * dx + dz * dz > UNDERGROUND_RADIUS ** 2) continue
+            const x = (cx + dx) * 16,
+                z = (cz + dz) * 16
+            if (x < -30_000_000 || x > 29_999_984 || z < -30_000_000 || z > 29_999_984) continue
+            chunks.push([x, chunkY, z])
+        }
+    return chunks.sort(
+        (a, b) =>
+            (a[0] + 8 - position[0]) ** 2 +
+                (a[2] + 8 - position[2]) ** 2 -
+                (b[0] + 8 - position[0]) ** 2 -
+                (b[2] + 8 - position[2]) ** 2 ||
+            a[0] - b[0] ||
+            a[2] - b[2],
+    )
+}
+
+export function undergroundEviction(
+    queue: [number, number, number][],
+    loaded: { position: [number, number, number] }[],
+    next: [number, number, number],
+): [number, number, number] | undefined {
+    const ranks = new Map(queue.map((position, index) => [undergroundChunkKey(position), index]))
+    const rank = (position: [number, number, number]) =>
+        ranks.get(undergroundChunkKey(position)) ?? Infinity
+    const farthest = loaded.reduce<{ position: [number, number, number] } | undefined>(
+        (result, value) =>
+            !result || rank(value.position) > rank(result.position) ? value : result,
+        undefined,
+    )
+    return farthest && rank(next) < rank(farthest.position) ? farthest.position : undefined
 }
 
 export function undergroundOrigin(query: UndergroundQuery): [number, number, number] {
@@ -44,44 +94,46 @@ export function undergroundOrigin(query: UndergroundQuery): [number, number, num
     ]
 }
 
-/** Recenter before reaching an unloaded edge, keeping an overlapping region visible. */
-export function nextUndergroundRegion(
-    query: UndergroundQuery,
-    origin: [number, number, number],
-    position: [number, number, number],
-): UndergroundQuery | undefined {
-    if (position.every((value, axis) => value - origin[axis] >= 16 && value - origin[axis] < 48))
-        return
-    const next = { ...query, x: position[0], y: position[1], z: position[2] }
-    if (undergroundOrigin(next).every((value, axis) => value === origin[axis])) return
-    return next
-}
-
 export function decodeUndergroundVolume(buffer: ArrayBuffer): UndergroundVolume {
     if (buffer.byteLength < 16) throw new Error('Invalid underground volume header')
     const header = new DataView(buffer)
     const width = header.getUint32(8, true)
     const height = header.getUint32(12, true)
+    const schema = header.getUint32(0, true)
+    const length = width * width * height
     if (
-        header.getUint32(0, true) !== 1 ||
-        width !== 64 ||
-        height !== 64 ||
-        buffer.byteLength !== 16 + width * width * height
+        height < 64 ||
+        height > 384 ||
+        height % 8 !== 0 ||
+        !(
+            (schema === 1 && width === 64 && buffer.byteLength === 16 + length) ||
+            (schema === 2 &&
+                width === 18 &&
+                height === 64 &&
+                buffer.byteLength === 16 + length + width * width * 2) ||
+            (schema === 3 && width === 18 && buffer.byteLength === 16 + length + width * width * 2)
+        )
     ) {
         throw new Error('Unsupported underground volume format')
     }
     return {
-        blocks: new Uint8Array(buffer, 16),
+        blocks: new Uint8Array(buffer, 16, length),
         width,
         height,
         truncated: Boolean(header.getUint32(4, true) & 1),
+        surface:
+            schema === 2 || schema === 3
+                ? Int16Array.from({ length: width * width }, (_, index) =>
+                      header.getInt16(16 + length + index * 2, true),
+                  )
+                : undefined,
     }
 }
 
 export async function loadUndergroundVolume(query: UndergroundQuery, id: number) {
     return decodeUndergroundVolume(
         await invoke<ArrayBuffer>('plugin:seed-map|seed_map_underground_volume', {
-            request: { ...query, id },
+            request: { ...query, id, chunk: true },
         }),
     )
 }

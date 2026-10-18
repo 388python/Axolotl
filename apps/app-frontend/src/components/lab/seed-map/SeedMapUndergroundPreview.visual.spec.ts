@@ -4,6 +4,9 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 
+import { SchematicPreviewScene } from '@/lab/schematic-preview/scene'
+import { buildUndergroundMesh } from '@/lab/seed-map/underground-mesh'
+
 import SeedMapUndergroundPreview from './SeedMapUndergroundPreview.vue'
 
 const backend = vi.hoisted(() => ({ invoke: vi.fn() }))
@@ -52,18 +55,62 @@ afterEach(() => {
     vi.clearAllMocks()
 })
 
+it('targets visible block coordinates after chunk translation and ignores hidden or removed chunks', () => {
+    host = document.createElement('div')
+    host.style.cssText = 'position:relative;width:600px;height:500px'
+    document.body.append(host)
+    const canvas = document.createElement('canvas')
+    host.append(canvas)
+    const scene = new SchematicPreviewScene({
+        canvas,
+        onSelect: () => undefined,
+        onFocus: () => undefined,
+        onContextLost: () => undefined,
+        onContextRestored: () => undefined,
+        onViewModeChange: () => undefined,
+        onWalkLockChange: () => undefined,
+        onWalkSpeedChange: () => undefined,
+        doubleSided: true,
+    })
+    try {
+        const blocks = new Uint8Array(125)
+        blocks[(2 * 5 + 2) * 5 + 2] = 1
+        const mesh = buildUndergroundMesh({
+            blocks,
+            width: 5,
+            height: 5,
+            truncated: false,
+            textureUvs: { 'minecraft:block/stone': [0, 0, 1, 1] },
+        })
+        scene.setRegions([{ id: 'terrain', min: [0, 0, 0], max: [5, 5, 5] }])
+        scene.setChunk('terrain', [0, 0, 0], mesh.layers.terrain, mesh.layers.water)
+        scene.setChunkOffset('terrain', [0, 0, 0], [10, 20, 30])
+        scene.setCameraPosition([15, 25, 35])
+        expect(scene.crosshairBlock()).toEqual([12, 22, 32])
+        scene.setRegionVisible('terrain', false)
+        expect(scene.crosshairBlock()).toBeUndefined()
+        scene.setRegionVisible('terrain', true)
+        scene.removeChunk('terrain', [0, 0, 0])
+        expect(scene.crosshairBlock()).toBeUndefined()
+    } finally {
+        scene.dispose()
+    }
+})
+
 it('loads textured cavity geometry, switches layers, keeps the view on failure and cancels pending generation on exit', async () => {
     const volume = () => {
-        const result = new ArrayBuffer(16 + 64 ** 3)
+        const result = new ArrayBuffer(16 + 18 * 18 * 384 + 18 * 18 * 2)
         const header = new DataView(result)
-        ;[1, 0, 64, 64].forEach((value, index) => header.setUint32(index * 4, value, true))
-        const blocks = new Uint8Array(result, 16).fill(1)
-        for (let x = 16; x < 48; x++)
-            for (let z = 16; z < 48; z++)
-                for (let y = 16; y < 48; y++) blocks[(x * 64 + z) * 64 + y] = 0
-        blocks[(32 * 64 + 32) * 64 + 16] = 5
-        blocks[(34 * 64 + 32) * 64 + 16] = 4
-        blocks[(30 * 64 + 32) * 64 + 15] = 16
+        ;[3, 0, 18, 384].forEach((value, index) => header.setUint32(index * 4, value, true))
+        const blocks = new Uint8Array(result, 16, 18 * 18 * 384).fill(1)
+        for (let x = 1; x < 17; x++)
+            for (let z = 1; z < 17; z++)
+                for (let y = 64; y < 112; y++) blocks[(x * 18 + z) * 384 + y] = 0
+        for (let column = 0; column < 18 * 18; column++)
+            header.setInt16(16 + blocks.length + column * 2, 100, true)
+        blocks[(8 * 18 + 8) * 384 + 64] = 5
+        blocks[(10 * 18 + 8) * 384 + 64] = 4
+        blocks[(6 * 18 + 8) * 384 + 63] = 16
         return result
     }
     let fail = false
@@ -93,9 +140,29 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     })
     await expect
         .poll(() => wrapper?.text(), { timeout: 30000 })
-        .toContain('Loaded 64 × 64 × 64 blocks')
+        .toMatch(/Loaded \d+ full-height chunks/)
     expect(wrapper.text()).toContain('other solid rock is hidden')
     expect(wrapper.text()).toContain('aquifers are omitted')
+    expect(wrapper.text()).toContain('Target:')
+    await userEvent.click(page.getByRole('checkbox', { name: 'Bedrock' }))
+    expect(wrapper.text()).toContain('each 16 × 16 column covering the entire build height')
+    await userEvent.click(page.getByRole('checkbox', { name: 'Surface layer' }))
+    expect((wrapper.findAll('input')[1].element as HTMLInputElement).checked).toBe(false)
+    await expect
+        .poll(
+            () =>
+                backend.invoke.mock.calls.filter(([command]) =>
+                    command.endsWith('seed_map_underground_volume'),
+                ).length,
+        )
+        .toBeGreaterThan(1)
+    const requests = backend.invoke.mock.calls
+        .filter(([command]) => command.endsWith('seed_map_underground_volume'))
+        .map(([, args]) => args.request)
+    expect(requests.every((request) => request.chunk)).toBe(true)
+    expect(new Set(requests.map((request) => `${request.x}:${request.y}:${request.z}`)).size).toBe(
+        requests.length,
+    )
     const canvas = wrapper.get('canvas').element as HTMLCanvasElement
     expect(canvas.width).toBeGreaterThan(1)
     await userEvent.click(page.elementLocator(canvas), { position: { x: 800, y: 500 } })
@@ -118,6 +185,7 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
         .not.toBe(beforeMove)
     document.exitPointerLock()
     await expect.poll(() => document.pointerLockElement).toBe(null)
+    await new Promise((resolve) => setTimeout(resolve, 180))
     const afterUnlock = wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]
     await new Promise((resolve) => setTimeout(resolve, 250))
     expect(wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]).toBe(
@@ -126,10 +194,9 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     await userEvent.click(page.getByRole('checkbox', { name: 'Cave boundaries' }))
     expect((wrapper.findAll('input')[0].element as HTMLInputElement).checked).toBe(false)
     fail = true
-    await userEvent.click(page.getByRole('button', { name: 'Generate around camera' }))
     await expect.poll(() => wrapper?.text()).toContain('Your previous view is kept')
     expect(wrapper.get('canvas').element).toBe(canvas)
-    expect(wrapper.text()).toContain('Loaded 64 × 64 × 64 blocks')
+    expect(wrapper.text()).toMatch(/Loaded \d+ full-height chunks/)
     pending = true
     await userEvent.click(page.getByRole('button', { name: 'Retry region' }))
     await expect.poll(() => wrapper?.text()).toContain('Cancel generation')

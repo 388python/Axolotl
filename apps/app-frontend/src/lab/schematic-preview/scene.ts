@@ -298,6 +298,49 @@ export class SchematicPreviewScene {
         this.requestRender()
     }
 
+    removeChunk(regionId: string, position: [number, number, number]) {
+        const key = `${regionId}:${position.join(':')}`
+        const chunk = this.chunks.get(key)
+        if (!chunk) return
+        chunk.parent?.remove(chunk)
+        this.disposeObject(chunk)
+        this.chunks.delete(key)
+        this.requestRender()
+    }
+
+    setChunkOffset(
+        regionId: string,
+        position: [number, number, number],
+        offset: [number, number, number],
+    ) {
+        this.chunks.get(`${regionId}:${position.join(':')}`)?.position.set(...offset)
+        this.requestRender()
+    }
+
+    crosshairBlock(): [number, number, number] | undefined {
+        this.scene.updateMatrixWorld(true)
+        this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.activeCamera)
+        const candidates: THREE.Object3D[] = []
+        for (const group of this.regions.values())
+            if (group.visible) candidates.push(...group.children)
+        const hit = this.raycaster
+            .intersectObjects(candidates, true)
+            .find(
+                (hit) =>
+                    hit.object instanceof THREE.Mesh &&
+                    hit.object.visible &&
+                    hit.faceIndex !== undefined &&
+                    hit.distance <= 256,
+            )
+        if (!hit || !(hit.object instanceof THREE.Mesh)) return
+        const attribute = hit.object.geometry.getAttribute('blockPosition')
+        if (!attribute) return
+        const point = new THREE.Vector3()
+            .fromBufferAttribute(attribute, (hit.faceIndex ?? 0) * 3)
+            .applyMatrix4(hit.object.matrixWorld)
+        return [Math.round(point.x), Math.round(point.y), Math.round(point.z)]
+    }
+
     setLayerRange(range?: [number, number]) {
         this.layerRange = range
         this.applyClippingPlanes()

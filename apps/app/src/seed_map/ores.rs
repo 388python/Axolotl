@@ -100,13 +100,21 @@ pub fn supports_ores(version_code: i32, dimension: Dimension) -> bool {
 }
 
 pub fn scan_ores(request: OreScanRequest) -> io::Result<Vec<OreChunkResult>> {
+    scan_ores_with_budget(request, 4096)
+}
+
+pub(super) fn scan_ores_with_budget(
+    request: OreScanRequest,
+    total_capacity: usize,
+) -> io::Result<Vec<OreChunkResult>> {
     let (mc, code) = resolve_java_version(&request.version)?;
     if !supports_ores(code, request.dimension) {
         return Err(io::Error::other(
             "Ore prediction supports Java 1.13+ Overworld and Nether maps.",
         ));
     }
-    if !request.chunks.len().is_multiple_of(2)
+    if !(1..=409_600).contains(&total_capacity)
+        || !request.chunks.len().is_multiple_of(2)
         || request.chunks.len() > 192
         || request.ores.len() > 25
         || request
@@ -128,7 +136,7 @@ pub fn scan_ores(request: OreScanRequest) -> io::Result<Vec<OreChunkResult>> {
         let mut hits = Vec::new();
         let mut truncated = false;
         let mut seen = HashSet::new();
-        let capacity = (4096 / kinds.len().max(1)).max(1);
+        let capacity = (total_capacity / kinds.len().max(1)).clamp(1, 16_384);
         let mut xyz = vec![0_i32; capacity * 3];
         for &kind in &kinds {
             let count = unsafe {

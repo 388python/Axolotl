@@ -14571,7 +14571,7 @@
     "message": "岩浆（估算）"
   },
   "app.lab.seed-map.underground-3d.limits": {
-    "message": "仅绘制紧贴空腔的岩层，其余实心岩层隐藏。石头、深板岩和下界岩为代表性洞壁材质。水仅估算地形表面以上、Y=63 以下的部分，不模拟地下含水层。岩浆填充 Y={lava} 以下的空腔。流体使用静态原版贴图。矿物替换、空气暴露规则、装饰和玩家改动尚未完整模拟。"
+    "message": "仅绘制紧贴空腔的岩层，其余实心岩层隐藏。石头、深板岩和下界岩为代表性洞壁材质；地表使用石头或下界岩表示，不模拟群系地表规则和装饰。基岩层厚度为估算值，与原版随机分布不完全一致。水仅估算地形表面以上、Y=63 以下的部分，不模拟地下含水层。岩浆填充 Y={lava} 以下的空腔。流体使用静态原版贴图。矿物替换、空气暴露规则、装饰和玩家改动尚未完整模拟。"
   },
   "app.lab.seed-map.underground-3d.meshing": {
     "message": "正在构建带贴图的洞壁…"
@@ -14592,7 +14592,7 @@
     "message": "X {x} · Y {y} · Z {z} · {speed} 方块/秒"
   },
   "app.lab.seed-map.underground-3d.range": {
-    "message": "已加载 64 × 64 × 64 方块：X {x}…{maxX}，Y {y}…{maxY}，Z {z}…{maxZ}。行走时会自动加载周边区域。"
+    "message": "已加载 {count} 个完整高度区块。计算空闲时预生成水平半径最多 12 区块，每个区块的 16 × 16 列覆盖全部建造高度。"
   },
   "app.lab.seed-map.underground-3d.retry": {
     "message": "重试此区域"
@@ -14631,7 +14631,7 @@
     "message": "查看地表之下"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "地下模式显示指定高度的切片。放大后选择 Y 高度，并独立开关地形密度、洞穴和峡谷。3D 地下探索会打开地图中心附近带真实贴图的 X-Ray 视图：点击画面转向，WASD 移动，空格 / Shift 上升或下降，Esc 释放鼠标。行走时会自动加载周边区域。流体为估算，不模拟含水层，矿物位置为候选结果。"
+    "message": "地下模式显示指定高度的切片。放大后选择 Y 高度，并独立开关地形密度、洞穴和峡谷。3D 地下探索会打开 X-Ray 视图：点击画面转向，WASD 移动，空格 / Shift 上升或下降，Esc 释放鼠标。计算空闲时由近到远预生成水平半径最多 12 区块，每个 16 × 16 区块包含完整建造高度。地表和基岩图层可独立开关，左上角显示当前位置和目标方块坐标。流体和基岩厚度为估算，矿物位置为候选结果。"
   },
   "app.onboarding.brewing.title": {
     "message": "创建酿造配方"
@@ -15226,5 +15226,20 @@
   },
   "app.lab.seed-map.underground-3d.auto-paused": {
     "message": "自动加载已暂停，点击“生成镜头周围区域”即可恢复。"
+  },
+  "app.lab.seed-map.underground-3d.surface": {
+    "message": "地表层"
+  },
+  "app.lab.seed-map.underground-3d.target": {
+    "message": "目标方块：X {x} · Y {y} · Z {z}"
+  },
+  "app.lab.seed-map.underground-3d.no-target": {
+    "message": "目标方块：256 格内未命中方块"
+  },
+  "app.lab.seed-map.underground-3d.memory": {
+    "message": "预览内存预算已满，移动时会释放远处区块。"
+  },
+  "app.lab.seed-map.underground-3d.bedrock": {
+    "message": "基岩"
   }
 }

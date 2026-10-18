@@ -14550,7 +14550,7 @@
     "message": "Lava (estimated)"
   },
   "app.lab.seed-map.underground-3d.limits": {
-    "message": "Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated."
+    "message": "Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials; the surface uses representative stone or netherrack, without biome surface rules or decorations. Bedrock bands use estimated thickness, not the exact original random pattern. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated."
   },
   "app.lab.seed-map.underground-3d.meshing": {
     "message": "Building textured cave boundaries…"
@@ -14571,7 +14571,7 @@
     "message": "X {x} · Y {y} · Z {z} · {speed} blocks/s"
   },
   "app.lab.seed-map.underground-3d.range": {
-    "message": "Loaded 64 × 64 × 64 blocks: X {x}…{maxX}, Y {y}…{maxY}, Z {z}…{maxZ}. Nearby regions load automatically as you move."
+    "message": "Loaded {count} full-height chunks. Idle computation fills a horizontal radius of up to 12 chunks, with each 16 × 16 column covering the entire build height."
   },
   "app.lab.seed-map.underground-3d.retry": {
     "message": "Retry region"
@@ -14610,7 +14610,7 @@
     "message": "Look below the surface"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view around the map center: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Nearby regions load automatically as you move. Fluids are estimates, aquifers are omitted, and mineral positions are candidates."
+    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks from near to far up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently, and the upper-left overlay shows your position and the targeted block. Fluids and bedrock thickness are estimates; mineral positions are candidates."
   },
   "app.onboarding.brewing.title": {
     "message": "Create a brewing recipe"
@@ -15205,5 +15205,20 @@
   },
   "app.lab.seed-map.underground-3d.auto-paused": {
     "message": "Automatic loading is paused. Generate around the camera to resume."
+  },
+  "app.lab.seed-map.underground-3d.surface": {
+    "message": "Surface layer"
+  },
+  "app.lab.seed-map.underground-3d.target": {
+    "message": "Target: X {x} · Y {y} · Z {z}"
+  },
+  "app.lab.seed-map.underground-3d.no-target": {
+    "message": "Target: no block within 256 blocks"
+  },
+  "app.lab.seed-map.underground-3d.memory": {
+    "message": "The preview memory budget is full. Distant chunks are released as you move."
+  },
+  "app.lab.seed-map.underground-3d.bedrock": {
+    "message": "Bedrock"
   }
 }
