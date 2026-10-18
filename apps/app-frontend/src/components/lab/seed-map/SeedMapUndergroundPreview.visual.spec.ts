@@ -10,7 +10,15 @@ import { buildUndergroundMesh } from '@/lab/seed-map/underground-mesh'
 
 import SeedMapUndergroundPreview from './SeedMapUndergroundPreview.vue'
 
-const backend = vi.hoisted(() => ({ invoke: vi.fn() }))
+const backend = vi.hoisted(() => ({ invoke: vi.fn(), maxChunks: 100 }))
+vi.mock('@/lab/seed-map/underground', async (original) => {
+    const module = await original<typeof import('@/lab/seed-map/underground')>()
+    return {
+        ...module,
+        undergroundChunkQueue: (...args: Parameters<typeof module.undergroundChunkQueue>) =>
+            module.undergroundChunkQueue(...args).slice(0, backend.maxChunks),
+    }
+})
 vi.mock('@tauri-apps/api/core', () => ({ invoke: backend.invoke, isTauri: () => false }))
 vi.mock('@modrinth/ui', async () => {
     const { defineComponent, h } = await import('vue')
@@ -56,6 +64,7 @@ afterEach(() => {
     vi.clearAllMocks()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    backend.maxChunks = 100
 })
 
 it('does not start native work or create a scene when closed during initialization', async () => {
@@ -82,6 +91,57 @@ it('does not start native work or create a scene when closed during initializati
     await new Promise((resolve) => setTimeout(resolve, 250))
     expect(backend.invoke.mock.calls.length).toBe(0)
     expect(regions.mock.calls.length).toBe(0)
+})
+
+it('shows the running and completed chunk count only in the upper-right status', async () => {
+    backend.maxChunks = 2
+    let resolveFirst!: (buffer: ArrayBuffer) => void
+    const response = () => {
+        const buffer = new ArrayBuffer(16 + 18 * 18 * 384 + 18 * 18 * 2)
+        const view = new DataView(buffer)
+        ;[3, 0, 18, 384].forEach((value, index) => view.setUint32(index * 4, value, true))
+        new Uint8Array(buffer, 16, 18 * 18 * 384).fill(1)
+        return buffer
+    }
+    let calls = 0
+    backend.invoke.mockImplementation((command: string) => {
+        if (command.endsWith('seed_map_cancel_underground')) return Promise.resolve()
+        return ++calls === 1
+            ? new Promise((resolve) => {
+                  resolveFirst = resolve
+              })
+            : Promise.resolve(response())
+    })
+    host = document.createElement('div')
+    host.style.cssText = 'position:relative;width:900px;height:650px'
+    document.body.append(host)
+    wrapper = mount(SeedMapUndergroundPreview, {
+        attachTo: host,
+        props: {
+            query: {
+                seed: '1',
+                edition: 'java',
+                version: '26.3',
+                dimension: 'overworld',
+                x: 0,
+                y: 16,
+                z: 0,
+            },
+        },
+    })
+    await expect.poll(() => resolveFirst).toBeDefined()
+    const status = wrapper.get('[data-testid=underground-generation-status]')
+    expect(status.text()).toBe('0 chunks')
+    expect(status.attributes('data-generating')).toBe('true')
+    expect(status.find('svg.animate-spin').exists()).toBe(true)
+    const settings = wrapper.get('[data-testid=underground-settings]')
+    expect(settings.text()).not.toMatch(/chunks|Computing|Building/)
+    resolveFirst(response())
+    await expect.poll(() => status.attributes('data-generating')).toBe('false')
+    expect(status.text()).toBe('2 chunks')
+    expect(status.find('svg.animate-spin').exists()).toBe(false)
+    expect(status.find('svg').exists()).toBe(true)
+    expect(wrapper.findAll('button').map((button) => button.text())).toEqual(['Back to map'])
 })
 
 it('terminates an in-flight mesh worker when the preview is closed before its result arrives', async () => {
@@ -227,6 +287,8 @@ it('reuses one worker and releases graphics, timers and late native results acro
         expect(scene.regions.size).toBe(0)
         expect(scene.scene.children.length).toBe(0)
         await expect.poll(() => context.isContextLost()).toBe(true)
+        expect(canvas.width).toBe(1)
+        expect(canvas.height).toBe(1)
         expect(scene.renderer.info.memory.geometries).toBe(0)
         expect(scene.renderer.info.memory.textures).toBe(0)
         expect(textureDispose.mock.calls.length).toBe(cycle + 1)
@@ -324,14 +386,17 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
             },
         },
     })
-    await expect
-        .poll(() => wrapper?.text(), { timeout: 30000 })
-        .toMatch(/Loaded \d+ full-height chunks/)
+    await expect.poll(() => wrapper?.text(), { timeout: 30000 }).toMatch(/\d+ chunks/)
     expect(wrapper.text()).toContain('other solid rock is hidden')
     expect(wrapper.text()).toContain('aquifers are omitted')
     expect(wrapper.text()).toContain('Target:')
     await userEvent.click(page.getByRole('checkbox', { name: 'Bedrock' }))
-    expect(wrapper.text()).toContain('each 16 × 16 column covering the entire build height')
+    expect(wrapper.get('[data-testid=underground-settings]').text()).not.toContain('chunks')
+    expect(
+        wrapper
+            .findAll('button')
+            .some((button) => /Generate around camera|Cancel generation/.test(button.text())),
+    ).toBe(false)
     await userEvent.click(page.getByRole('checkbox', { name: 'Surface layer' }))
     expect((wrapper.findAll('input')[1].element as HTMLInputElement).checked).toBe(false)
     await expect
@@ -379,12 +444,19 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     await userEvent.click(page.getByRole('checkbox', { name: 'Cave boundaries' }))
     expect((wrapper.findAll('input')[0].element as HTMLInputElement).checked).toBe(false)
     fail = true
+    backend.maxChunks += 2
     await expect.poll(() => wrapper?.text()).toContain('Your previous view is kept')
     expect(wrapper.get('canvas').element).toBe(canvas)
-    expect(wrapper.text()).toMatch(/Loaded \d+ full-height chunks/)
+    expect(wrapper.text()).toMatch(/\d+ chunks/)
     pending = true
     await userEvent.click(page.getByRole('button', { name: 'Retry region' }))
-    await expect.poll(() => wrapper?.text()).toContain('Cancel generation')
+    await expect
+        .poll(() =>
+            wrapper
+                ?.get('[data-testid=underground-generation-status]')
+                .attributes('data-generating'),
+        )
+        .toBe('true')
     wrapper.unmount()
     wrapper = undefined
     expect(

@@ -14519,17 +14519,8 @@
   "app.lab.seed-map.underground-mode": {
     "message": "Underground"
   },
-  "app.lab.seed-map.underground-density": {
-    "message": "Terrain density"
-  },
-  "app.lab.seed-map.underground-caves": {
-    "message": "Cave carvers"
-  },
   "app.lab.seed-map.underground-3d.back": {
     "message": "Back to map"
-  },
-  "app.lab.seed-map.underground-3d.cancel": {
-    "message": "Cancel generation"
   },
   "app.lab.seed-map.underground-3d.context-lost": {
     "message": "The 3D graphics context was lost. Return to the map and reopen this view."
@@ -14540,26 +14531,14 @@
   "app.lab.seed-map.underground-3d.failed": {
     "message": "Could not generate this region. Your previous view is kept. Retry or return to the map."
   },
-  "app.lab.seed-map.underground-3d.generate": {
-    "message": "Generate around camera"
-  },
-  "app.lab.seed-map.underground-3d.generating": {
-    "message": "Computing terrain, caves and minerals…"
-  },
   "app.lab.seed-map.underground-3d.lava": {
     "message": "Lava (estimated)"
   },
   "app.lab.seed-map.underground-3d.limits": {
     "message": "Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials; the surface uses representative stone or netherrack, without biome surface rules or decorations. Bedrock bands use estimated thickness, not the exact original random pattern. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated."
   },
-  "app.lab.seed-map.underground-3d.meshing": {
-    "message": "Building textured cave boundaries…"
-  },
   "app.lab.seed-map.underground-3d.no-air": {
     "message": "No open cave was found near this position. You can fly through rock or generate another region."
-  },
-  "app.lab.seed-map.underground-3d.open": {
-    "message": "Explore in 3D"
   },
   "app.lab.seed-map.underground-3d.ores": {
     "message": "Mineral candidates"
@@ -14569,9 +14548,6 @@
   },
   "app.lab.seed-map.underground-3d.position": {
     "message": "X {x} · Y {y} · Z {z} · {speed} blocks/s"
-  },
-  "app.lab.seed-map.underground-3d.range": {
-    "message": "Loaded {count} full-height chunks. Idle computation fills a horizontal radius of up to 12 chunks, with each 16 × 16 column covering the entire build height."
   },
   "app.lab.seed-map.underground-3d.retry": {
     "message": "Retry region"
@@ -14587,9 +14563,6 @@
   },
   "app.lab.seed-map.underground-3d.water": {
     "message": "Water (estimated)"
-  },
-  "app.lab.seed-map.underground-canyons": {
-    "message": "Canyon carvers"
   },
   "app.lab.seed-map.advanced-tour": {
     "message": "Map exploration guide"
@@ -14610,7 +14583,7 @@
     "message": "Look below the surface"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks from near to far up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently, and the upper-left overlay shows your position and the targeted block. Fluids and bedrock thickness are estimates; mineral positions are candidates."
+    "message": "Underground opens the 3D X-Ray view directly. Click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently. The upper-left overlay shows your position and the targeted block; the upper-right status shows the loaded chunk count and whether generation is running. Fluids and bedrock thickness are estimates; mineral positions are candidates."
   },
   "app.onboarding.brewing.title": {
     "message": "Create a brewing recipe"
@@ -14686,9 +14659,6 @@
   },
   "app.lab.seed-map.details.positions-unavailable": {
     "message": "The engine provides container locations but no piece positions for this structure."
-  },
-  "app.lab.seed-map.underground-limit": {
-    "message": "Zoom in to view underground slices. Water, aquifers and block replacement are not simulated."
   },
   "app.lab.seed-map.copyright.view-license": {
     "message": "View MIT License"
@@ -15203,9 +15173,6 @@
   "app.lab.seed-map.preview.estimated-loot": {
     "message": "Loot seed is estimated; items may differ from the game."
   },
-  "app.lab.seed-map.underground-3d.auto-paused": {
-    "message": "Automatic loading is paused. Generate around the camera to resume."
-  },
   "app.lab.seed-map.underground-3d.surface": {
     "message": "Surface layer"
   },
@@ -15220,5 +15187,14 @@
   },
   "app.lab.seed-map.underground-3d.bedrock": {
     "message": "Bedrock"
+  },
+  "app.lab.seed-map.underground-3d.chunks": {
+    "message": "{count} chunks"
+  },
+  "app.lab.seed-map.underground-3d.generating-status": {
+    "message": "Generating · {count} chunks loaded"
+  },
+  "app.lab.seed-map.underground-3d.complete-status": {
+    "message": "Ready · {count} chunks loaded"
   }
 }

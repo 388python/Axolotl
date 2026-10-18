@@ -20,10 +20,11 @@ const TILE_SCALES = [1, 4, 16, 64, 256] as const
 const CACHE_BYTES = 32 * 1024 * 1024
 
 /** Choose the closest native sampling interval; at most two samples per CSS pixel. */
-export function seedMapTileLevel(blocksPerPixel: number, underground = false): SeedMapTileLevel {
-    const scales = underground ? TILE_SCALES.slice(0, 2) : TILE_SCALES
-    const scale = scales.find((scale) => scale >= blocksPerPixel / 2) ?? scales[scales.length - 1]
-    return { scale, pixels: underground ? 16 : 256 }
+export function seedMapTileLevel(blocksPerPixel: number): SeedMapTileLevel {
+    const scale =
+        TILE_SCALES.find((scale) => scale >= blocksPerPixel / 2) ??
+        TILE_SCALES[TILE_SCALES.length - 1]
+    return { scale, pixels: 256 }
 }
 
 export function seedMapPreviewLevel(level: SeedMapTileLevel): SeedMapTileLevel | undefined {
@@ -41,7 +42,6 @@ export function seedMapTileContextKey(context: SeedMapTileView['context']): stri
         context.elevation ?? 128,
         context.terrain,
         context.contours,
-        context.underground,
         [...(context.highlightBiomes ?? [])].sort((a, b) => a - b),
     ])
 }
@@ -268,5 +268,12 @@ export function createSeedMapTileLayer(options: {
         bytes = 0
     }
 
-    return { invalidate, refresh, drawable, dispose }
+    function clear() {
+        invalidate()
+        for (const tile of cache.values()) tile.bitmap.close()
+        cache.clear()
+        bytes = 0
+    }
+
+    return { invalidate, refresh, drawable, dispose, clear }
 }

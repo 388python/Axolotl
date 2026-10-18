@@ -45,6 +45,18 @@ vi.mock('@/components/lab/seed-map/SeedMapCopyrightModal.vue', () => ({
 vi.mock('@/components/lab/seed-map/SeedMapWorldImportModal.vue', () => ({
     default: { render: () => null },
 }))
+vi.mock('@/components/lab/seed-map/SeedMapUndergroundPreview.vue', () => ({
+    default: {
+        props: ['query'],
+        emits: ['close'],
+        setup:
+            (_, { emit }) =>
+            () =>
+                h('div', { 'data-testid': 'direct-underground' }, [
+                    h('button', { onClick: () => emit('close') }, 'Back to map'),
+                ]),
+    },
+}))
 vi.mock('@/lab/seed-map/backend.ts', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/lab/seed-map/backend')>()),
     getSeedMapProfiles: async () => [
@@ -54,6 +66,7 @@ vi.mock('@/lab/seed-map/backend.ts', async (importOriginal) => ({
             available: true,
             dimensions: ['overworld', 'nether', 'end'],
             ores: true,
+            undergroundMasks: [7, 3, 1],
         },
     ],
     renderSeedMapTile: (request: SeedMapTileRequest) =>
@@ -509,6 +522,56 @@ async function openMap() {
     await expect.poll(() => backend.tiles.length).toBeGreaterThan(0)
     return { vm, canvas }
 }
+
+it('opens 3D directly from Underground and suspends 2D tile generation until returning to the map', async () => {
+    const { canvas } = await openMap()
+    await userEvent.click(page.getByRole('button', { name: 'Underground', exact: true }))
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    expect(wrapper!.find('[data-onboarding-id=seed-map-underground-layers]').exists()).toBe(false)
+    expect(wrapper!.text()).not.toContain('Explore in 3D')
+    const count = backend.tiles.length
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(backend.tiles.length).toBe(count)
+    expect(canvas.width).toBe(1)
+    await userEvent.click(page.getByRole('button', { name: 'Back to map', exact: true }))
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(false)
+    expect(canvas.width).toBeGreaterThan(1)
+    wrapper!.unmount()
+    wrapper = undefined
+    expect(canvas.width).toBe(1)
+    expect(canvas.height).toBe(1)
+})
+
+it('leaves underground mode when the selected dimension no longer supports 3D generation', async () => {
+    const { vm } = await openMap()
+    vm.workspace.displayMode = 'underground'
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    vm.workspace.dimension = 'end'
+    await flushPromises()
+    expect(vm.workspace.displayMode).toBe('structures')
+    expect(wrapper!.find('[data-testid=direct-underground]').exists()).toBe(false)
+    vm.workspace.displayMode = 'underground'
+    await flushPromises()
+    expect(vm.workspace.displayMode).toBe('structures')
+})
+
+it('restores a saved underground workspace directly into 3D after profiles load without generating 2D tiles', async () => {
+    localStorage.setItem(
+        'axolotl.lab.seed-map.v1',
+        JSON.stringify({ ...createDefaultSeedMapWorkspace(), displayMode: 'underground' }),
+    )
+    wrapper = mount(LabSeedMap, {
+        attachTo: document.body,
+        global: {
+            directives: { tooltip: () => {} },
+            provide: { replayOnboarding: async () => {} },
+        },
+    })
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    expect((wrapper.vm as unknown as MapVm).workspace.displayMode).toBe('underground')
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(backend.tiles.length).toBe(0)
+})
 
 async function complete(job: (typeof backend.tiles)[number], color: string) {
     const source = new OffscreenCanvas(job.request.width, job.request.height)

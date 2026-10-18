@@ -37,7 +37,6 @@ export type SeedMapTileRequest = {
     elevation?: number
     terrain: boolean
     contours: boolean
-    underground?: number
     highlightBiomes?: number[]
 }
 
@@ -202,12 +201,9 @@ export async function renderSeedMapTile(request: SeedMapTileRequest): Promise<Se
         contours: request.contours,
         highlightBiomes: request.highlightBiomes ?? null,
     }
-    const pixels =
-        request.underground === undefined
-            ? await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', { request: tile })
-            : await invoke<ArrayBuffer>('plugin:seed-map|seed_map_underground_tile', {
-                  request: { tile, layers: request.underground },
-              })
+    const pixels = await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', {
+        request: tile,
+    })
     const expectedLength = request.width * request.height * 4
     if (pixels.byteLength !== expectedLength) {
         throw new Error('The seed map backend returned an unexpected tile size.')

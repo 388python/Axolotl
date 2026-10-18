@@ -43,7 +43,7 @@ export const onboardingMessages = defineMessages({
     mapUndergroundDescription: {
         id: 'app.onboarding.seed-map-underground.description',
         defaultMessage:
-            'Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks from near to far up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently, and the upper-left overlay shows your position and the targeted block. Fluids and bedrock thickness are estimates; mineral positions are candidates.',
+            'Underground opens the 3D X-Ray view directly. Click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently. The upper-left overlay shows your position and the targeted block; the upper-right status shows the loaded chunk count and whether generation is running. Fluids and bedrock thickness are estimates; mineral positions are candidates.',
     },
     brewingTitle: { id: 'app.onboarding.brewing.title', defaultMessage: 'Create a brewing recipe' },
     brewingDescription: {

@@ -47,6 +47,7 @@ import {
     defineAsyncComponent,
     inject,
     nextTick,
+    onBeforeUnmount,
     onMounted,
     onUnmounted,
     reactive,
@@ -174,6 +175,7 @@ const workspace = reactive(applyShareQuery(route.query, loadSeedMapWorkspace()))
 if (!SEED_MAP_ELEVATIONS.includes(workspace.elevation as SeedMapElevation))
     workspace.elevation = SEED_MAP_ELEVATIONS[0]
 const profiles = ref<SeedMapVersionProfile[]>(fallbackSeedMapProfiles())
+const profilesResolved = ref(false)
 const features = ref<SeedMapFeature[]>([])
 const spawn = ref<SeedMapSpawnPoint | null>(null)
 const selection = ref<Selection | null>(null)
@@ -181,7 +183,6 @@ const markerName = ref('')
 const markerColor = ref('#22C55E')
 const markerDraftOpen = ref(false)
 const advancedOpen = ref(false)
-const underground3dOpen = ref(false)
 const layersExpanded = ref(false)
 const showLayerNames = ref(false)
 const rulerPoints = ref<{ x: number; z: number }[]>([])
@@ -347,21 +348,6 @@ const messages = defineMessages({
         defaultMessage: 'Result limit reached. Select fewer ore types to see more positions.',
     },
     undergroundMode: { id: 'app.lab.seed-map.underground-mode', defaultMessage: 'Underground' },
-    underground3d: { id: 'app.lab.seed-map.underground-3d.open', defaultMessage: 'Explore in 3D' },
-    undergroundDensity: {
-        id: 'app.lab.seed-map.underground-density',
-        defaultMessage: 'Terrain density',
-    },
-    undergroundCaves: { id: 'app.lab.seed-map.underground-caves', defaultMessage: 'Cave carvers' },
-    undergroundCanyons: {
-        id: 'app.lab.seed-map.underground-canyons',
-        defaultMessage: 'Canyon carvers',
-    },
-    undergroundLimit: {
-        id: 'app.lab.seed-map.underground-limit',
-        defaultMessage:
-            'Zoom in to view underground slices. Water, aquifers and block replacement are not simulated.',
-    },
     advancedTour: { id: 'app.lab.seed-map.advanced-tour', defaultMessage: 'Map exploration guide' },
     abandonedCamp: {
         id: 'app.lab.seed-map.feature.abandoned-camp',
@@ -587,15 +573,16 @@ const dimensions = computed(
     () => selectedProfile.value?.dimensions ?? ['overworld', 'nether', 'end'],
 )
 const scale = computed(() => 4 ** workspace.zoom)
-const tileLevel = computed(() =>
-    seedMapTileLevel(scale.value, workspace.displayMode === 'underground'),
-)
+const tileLevel = computed(() => seedMapTileLevel(scale.value))
 const tileScale = computed(() => tileLevel.value.scale)
 const undergroundMask = computed(
     () => selectedProfile.value?.undergroundMasks?.[dimensionsIndex.value] ?? 0,
 )
-const undergroundYRange = computed(
-    () => selectedProfile.value?.undergroundYRanges?.[dimensionsIndex.value] ?? [-64, 319],
+const undergroundSupported = computed(
+    () =>
+        !!selectedProfile.value?.available &&
+        !!(undergroundMask.value & 1) &&
+        workspace.dimension !== 'end',
 )
 const focusedPiece = ref<SeedMapStructurePiece | null>(null)
 const layoutRevision = ref(0)
@@ -628,11 +615,6 @@ function focusStructurePiece(piece: SeedMapStructurePiece) {
     const max = piece.max ?? piece.position
     workspace.center = { x: (min.x + max.x) / 2, z: (min.z + max.z) / 2 }
     redraw()
-}
-function toggleUndergroundLayer(layer: number, enabled: boolean) {
-    workspace.undergroundLayers = enabled
-        ? workspace.undergroundLayers | layer
-        : workspace.undergroundLayers & ~layer
 }
 const mapScaleLabel = computed(() =>
     scale.value >= 10
@@ -737,6 +719,13 @@ watch(visibleLayoutQueries, () => {
         120,
     )
 })
+onBeforeUnmount(() => {
+    if (canvas.value) {
+        canvas.value.width = 1
+        canvas.value.height = 1
+    }
+})
+
 onUnmounted(() => {
     clearTimeout(layoutRefreshTimer)
     layoutLayer.dispose()
@@ -882,13 +871,17 @@ watch(
     },
 )
 watch(
-    undergroundYRange,
-    ([min, max]) => {
-        workspace.undergroundY = Math.max(min, Math.min(max, workspace.undergroundY))
+    () => [profilesResolved.value, undergroundSupported.value, workspace.displayMode],
+    () => {
+        if (
+            profilesResolved.value &&
+            workspace.displayMode === 'underground' &&
+            !undergroundSupported.value
+        )
+            workspace.displayMode = 'structures'
     },
-    { immediate: true },
+    { immediate: true, flush: 'sync' },
 )
-
 watch(
     workspace,
     () => {
@@ -987,6 +980,13 @@ watch(
         }, 600)
     },
     { deep: true },
+)
+
+watch(
+    () => workspace.displayMode,
+    () => {
+        void nextTick(resizeCanvas)
+    },
 )
 
 watch(
@@ -1097,12 +1097,15 @@ watch(
 
 onMounted(async () => {
     await nextTick()
+    if (disposed) return
     preloadMapIcons()
     resizeCanvas()
     resizeObserver = new ResizeObserver(resizeCanvas)
     if (canvas.value) resizeObserver.observe(canvas.value)
     document.addEventListener('fullscreenchange', onFullscreenChange)
     profiles.value = await getSeedMapProfiles().catch(() => fallbackSeedMapProfiles())
+    if (disposed) return
+    profilesResolved.value = true
     ensureProfile()
     if (typeof route.query.seed === 'string' && route.query.seed.trim()) {
         recordHistory('share')
@@ -1134,6 +1137,9 @@ onUnmounted(() => {
     saveSeedMapWorkspace(workspace)
     disposeOreLayer()
     tileLayer.dispose()
+    featureImages.clear()
+    oreImages.clear()
+    spawnImage = undefined
     resizeObserver?.disconnect()
     document.removeEventListener('fullscreenchange', onFullscreenChange)
 })
@@ -1180,10 +1186,9 @@ function oreLabel(kind: SeedMapOreKind) {
 
 function setDisplayMode(mode: SeedMapDisplayMode) {
     if (mode === 'ores' && !oreModeSupported.value) return
-    if (mode === 'underground' && !undergroundMask.value) return
+    if (mode === 'underground' && !undergroundSupported.value) return
     if (mode === 'ores' && workspace.dimension === 'end') workspace.dimension = 'overworld'
     workspace.displayMode = mode
-    underground3dOpen.value = false
     ensureDimensionOreSelection()
     selection.value = null
 }
@@ -1212,6 +1217,7 @@ function preloadMapIcons() {
     const preloadFeatureImage = (key: string, source: string) => {
         const image = new Image()
         image.onload = () => {
+            if (disposed) return
             featureImages.set(key, image)
             redraw()
         }
@@ -1235,12 +1241,14 @@ function preloadMapIcons() {
             if (!source) continue
             const image = new Image()
             image.onload = () => {
+                if (disposed) return
                 oreImages.set(`${ore.kind}:${variant}`, image)
                 redraw()
             }
             if (source.startsWith('minecraft:')) {
                 void loadMinecraftItemImage(source)
                     .then((loaded) => {
+                        if (disposed) return
                         itemImageSources.value[source] = loaded.src
                         image.src = loaded.src
                     })
@@ -1250,6 +1258,7 @@ function preloadMapIcons() {
     }
     const image = new Image()
     image.onload = () => {
+        if (disposed) return
         spawnImage = image
         redraw()
     }
@@ -1259,6 +1268,11 @@ function preloadMapIcons() {
 function resizeCanvas() {
     const element = canvas.value
     if (!element) return
+    if (workspace.displayMode === 'underground') {
+        element.width = 1
+        element.height = 1
+        return
+    }
     const bounds = element.getBoundingClientRect()
     viewport.width = Math.max(1, Math.round(bounds.width))
     viewport.height = Math.max(1, Math.round(bounds.height))
@@ -1312,7 +1326,6 @@ function screenToWorld(x: number, y: number) {
 }
 
 function tileView(): SeedMapTileView {
-    const underground = workspace.displayMode === 'underground'
     return {
         epoch: requestEpoch,
         context: {
@@ -1320,10 +1333,7 @@ function tileView(): SeedMapTileView {
             edition: workspace.edition,
             version: workspace.gameVersion,
             dimension: workspace.dimension,
-            elevation: underground ? workspace.undergroundY : workspace.elevation,
-            underground: underground
-                ? workspace.undergroundLayers & undergroundMask.value
-                : undefined,
+            elevation: workspace.elevation,
             terrain: terrainEnabled.value,
             contours: contoursEnabled.value,
             highlightBiomes: workspace.highlightBiomeEnabled
@@ -1333,7 +1343,7 @@ function tileView(): SeedMapTileView {
         bounds: mapBounds(),
         center: { ...workspace.center },
         level: { ...tileLevel.value },
-        concurrency: underground ? 2 : seedMapTileConcurrency(tileScale.value),
+        concurrency: seedMapTileConcurrency(tileScale.value),
     }
 }
 
@@ -1356,7 +1366,7 @@ const tileLayer = createSeedMapTileLayer({
 })
 
 function redraw() {
-    if (disposed || redrawFrame !== undefined) return
+    if (disposed || workspace.displayMode === 'underground' || redrawFrame !== undefined) return
     redrawFrame = window.requestAnimationFrame(() => {
         redrawFrame = undefined
         drawMap()
@@ -1364,6 +1374,7 @@ function redraw() {
 }
 
 function drawMap() {
+    if (disposed || workspace.displayMode === 'underground') return
     const element = canvas.value
     const context = element?.getContext('2d')
     if (!element || !context || !viewport.width || !viewport.height) return
@@ -1687,7 +1698,8 @@ async function startMapGuide() {
 function scheduleRefresh(delay = 80) {
     if (disposed || !viewport.width || !viewport.height) return
     requestEpoch++
-    tileLayer.invalidate(tileView())
+    if (workspace.displayMode === 'underground') tileLayer.clear()
+    else tileLayer.invalidate(tileView())
     refreshCurrentOreLayer(null)
     redraw()
     if (refreshTimer) window.clearTimeout(refreshTimer)
@@ -1696,6 +1708,7 @@ function scheduleRefresh(delay = 80) {
 
 function refreshMap() {
     refreshTimer = undefined
+    if (workspace.displayMode === 'underground') return
     if (!workspace.seed.trim()) {
         features.value = []
         spawn.value = null
@@ -1713,7 +1726,7 @@ function refreshMap() {
         return
     }
     mapError.value = ''
-    if (workspace.displayMode !== 'underground' || scale.value <= 4) tileLayer.refresh(tileView())
+    tileLayer.refresh(tileView())
     if (workspace.displayMode !== 'structures') features.value = []
     void requestSpawn()
 }
@@ -1984,7 +1997,7 @@ function onContextMenu(event: MouseEvent) {
 }
 
 function onMapKeydown(event: KeyboardEvent) {
-    if (underground3dOpen.value) return
+    if (workspace.displayMode === 'underground') return
     const target = event.target
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
     let mapMoved = false
@@ -2795,7 +2808,7 @@ function clampWorldCoordinate(value: number) {
                         </Button>
                         <Button
                             :type="workspace.displayMode === 'underground' ? 'colored' : 'quiet'"
-                            :disabled="!undergroundMask"
+                            :disabled="!undergroundSupported"
                             size="2xs"
                             data-onboarding-id="seed-map-underground-mode"
                             @click="setDisplayMode('underground')"
@@ -3049,6 +3062,7 @@ function clampWorldCoordinate(value: number) {
                         data-onboarding-id="seed-map-canvas"
                     >
                         <canvas
+                            v-show="workspace.displayMode !== 'underground'"
                             ref="mapCanvas"
                             class="absolute left-0 top-0 block size-full touch-none"
                             :style="
@@ -3069,413 +3083,378 @@ function clampWorldCoordinate(value: number) {
                             @contextmenu="onContextMenu"
                         />
 
-                        <button
-                            v-for="badge in structureBadges(visibleSize)"
-                            :key="badge.id"
-                            type="button"
-                            class="absolute z-[6] flex h-8 items-center gap-2 rounded-lg border border-surface-4 bg-surface-3 px-2 text-xs font-semibold text-[var(--color-text-primary)] shadow-md hover:bg-surface-4"
-                            :class="{ 'ring-2 ring-brand': selectedFeatureKey === badge.id }"
-                            :style="{
-                                left: `${badge.x}px`,
-                                top: `${badge.y}px`,
-                                width: `${badge.width}px`,
-                            }"
-                            :title="`${featureResultLabel(badge.feature)} · ${badge.feature.x}, ${badge.feature.z}`"
-                            :aria-pressed="selectedFeatureKey === badge.id"
-                            data-testid="seed-map-structure-badge"
-                            @pointerdown.stop
-                            @dblclick.stop
-                            @keydown.stop
-                            @click="selectStructureBadge(badge.feature)"
-                        >
-                            <img
-                                :src="
-                                    badge.feature.kind === 'end-city' &&
-                                    badge.feature.endShip !== undefined
-                                        ? endCityImageSources[
-                                              badge.feature.endShip ? 'ship' : 'noShip'
-                                          ]
-                                        : featureImageSource(badge.feature.kind)
-                                "
-                                alt=""
-                                class="size-5 shrink-0 [image-rendering:pixelated]"
-                            />
-                            <span class="truncate">{{ featureResultLabel(badge.feature) }}</span>
-                        </button>
+                        <template v-if="workspace.displayMode !== 'underground'">
+                            <button
+                                v-for="badge in structureBadges(visibleSize)"
+                                :key="badge.id"
+                                type="button"
+                                class="absolute z-[6] flex h-8 items-center gap-2 rounded-lg border border-surface-4 bg-surface-3 px-2 text-xs font-semibold text-[var(--color-text-primary)] shadow-md hover:bg-surface-4"
+                                :class="{ 'ring-2 ring-brand': selectedFeatureKey === badge.id }"
+                                :style="{
+                                    left: `${badge.x}px`,
+                                    top: `${badge.y}px`,
+                                    width: `${badge.width}px`,
+                                }"
+                                :title="`${featureResultLabel(badge.feature)} · ${badge.feature.x}, ${badge.feature.z}`"
+                                :aria-pressed="selectedFeatureKey === badge.id"
+                                data-testid="seed-map-structure-badge"
+                                @pointerdown.stop
+                                @dblclick.stop
+                                @keydown.stop
+                                @click="selectStructureBadge(badge.feature)"
+                            >
+                                <img
+                                    :src="
+                                        badge.feature.kind === 'end-city' &&
+                                        badge.feature.endShip !== undefined
+                                            ? endCityImageSources[
+                                                  badge.feature.endShip ? 'ship' : 'noShip'
+                                              ]
+                                            : featureImageSource(badge.feature.kind)
+                                    "
+                                    alt=""
+                                    class="size-5 shrink-0 [image-rendering:pixelated]"
+                                />
+                                <span class="truncate">{{
+                                    featureResultLabel(badge.feature)
+                                }}</span>
+                            </button>
 
-                        <div class="map-coordinate-ruler map-coordinate-ruler-x">
-                            <span v-for="offset in [-2, -1, 0, 1, 2]" :key="offset">{{
-                                Math.round(
-                                    viewBounds().minX +
-                                        ((offset + 2) * visibleSize.width * scale) / 4,
-                                )
-                            }}</span>
-                        </div>
-                        <div class="map-coordinate-ruler map-coordinate-ruler-z">
-                            <span v-for="offset in [-1, 0, 1]" :key="offset">{{
-                                Math.round(
-                                    viewBounds().minZ +
-                                        ((offset + 1.5) * visibleSize.height * scale) / 3,
-                                )
-                            }}</span>
-                        </div>
-
-                        <div class="map-control-stack map-control-stack-left left-3">
-                            <Button
-                                v-tooltip="formatMessage(messages.zoomIn)"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.zoomIn)"
-                                :disabled="workspace.zoom <= SEED_MAP_MIN_ZOOM"
-                                @click="zoomBy(-0.5)"
-                                ><PlusIcon
-                            /></Button>
-                            <Button
-                                v-tooltip="formatMessage(messages.zoomOut)"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.zoomOut)"
-                                :disabled="workspace.zoom >= SEED_MAP_SCALES.length - 1"
-                                @click="zoomBy(0.5)"
-                                ><MinusIcon
-                            /></Button>
-                            <Button
-                                v-tooltip="formatMessage(messages.centerSpawn)"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.centerSpawn)"
-                                :disabled="!spawn"
-                                @click="centerSpawn"
-                                ><CompassIcon
-                            /></Button>
-                        </div>
-
-                        <div class="map-control-stack map-control-stack-right right-3">
-                            <Button
-                                v-tooltip="
-                                    formatMessage(
-                                        isFullscreen
-                                            ? messages.exitFullscreen
-                                            : messages.fullscreen,
+                            <div class="map-coordinate-ruler map-coordinate-ruler-x">
+                                <span v-for="offset in [-2, -1, 0, 1, 2]" :key="offset">{{
+                                    Math.round(
+                                        viewBounds().minX +
+                                            ((offset + 2) * visibleSize.width * scale) / 4,
                                     )
-                                "
-                                circular
-                                icon-only
-                                :aria-label="
-                                    formatMessage(
-                                        isFullscreen
-                                            ? messages.exitFullscreen
-                                            : messages.fullscreen,
-                                    )
-                                "
-                                @click="toggleFullscreen"
-                                ><ContractIcon v-if="isFullscreen" /><ExpandIcon v-else
-                            /></Button>
-                            <Button
-                                v-tooltip="formatMessage(messages.ruler)"
-                                :type="rulerEnabled ? 'base' : 'outlined'"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.ruler)"
-                                :aria-pressed="rulerEnabled"
-                                @click="rulerEnabled = !rulerEnabled"
-                                ><ScaleIcon
-                            /></Button>
-                            <Button
-                                v-tooltip="formatMessage(messages.mapSettings)"
-                                :type="advancedOpen ? 'base' : 'outlined'"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.mapSettings)"
-                                :aria-pressed="advancedOpen"
-                                @click="advancedOpen = !advancedOpen"
-                                ><SettingsIcon
-                            /></Button>
-                        </div>
-
-                        <div v-if="oreZoomLimited" class="map-status map-ore-status">
-                            <PickaxeIcon class="size-3" />{{
-                                formatMessage(messages.zoomToScanOres)
-                            }}
-                        </div>
-                        <div
-                            v-else-if="
-                                workspace.displayMode === 'ores' && workspace.dimension === 'end'
-                            "
-                            class="map-status map-ore-status"
-                        >
-                            <PickaxeIcon class="size-3" />{{ formatMessage(messages.noOresInEnd) }}
-                        </div>
-                        <div v-else-if="mapBusy" class="map-status map-ore-status">
-                            <RefreshCwIcon class="size-3 animate-spin" />{{
-                                oreScanning
-                                    ? formatMessage(messages.scanningOres, {
-                                          processed: oreScannedChunks,
-                                          total: oreTotalChunks,
-                                      })
-                                    : formatMessage(messages.loading)
-                            }}
-                        </div>
-                        <div
-                            v-if="workspace.displayMode === 'ores' && !mapBusy && !oreZoomLimited"
-                            class="map-status map-ore-status"
-                        >
-                            {{
-                                formatMessage(
-                                    oreScanTruncated
-                                        ? messages.oreTruncated
-                                        : messages.oreCandidate,
-                                )
-                            }}
-                        </div>
-                        <div v-if="rulerDistance !== null" class="map-status map-ruler-status">
-                            <ScaleIcon class="size-3" />{{
-                                formatMessage(messages.distance, { distance: rulerDistance })
-                            }}<Button
-                                v-tooltip="formatMessage(messages.clearRuler)"
-                                type="quiet"
-                                size="2xs"
-                                circular
-                                icon-only
-                                :aria-label="formatMessage(messages.clearRuler)"
-                                @click="rulerPoints = []"
-                                ><XIcon
-                            /></Button>
-                        </div>
-
-                        <div
-                            v-if="selection && selectionVisible && !structureQuery"
-                            class="map-popup"
-                            :style="selectionStyle"
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <strong
-                                        class="block truncate text-sm text-[var(--color-text-primary)]"
-                                    >
-                                        <i
-                                            v-if="selection.biome !== undefined && !selectedMarker"
-                                            class="popup-biome-dot"
-                                            :style="{
-                                                backgroundColor: biomeColorOf(selection.biome),
-                                            }"
-                                        ></i
-                                        >{{
-                                            selection.feature
-                                                ? featureResultLabel(selection.feature)
-                                                : selection.ore
-                                                  ? oreLabel(selection.ore.ore)
-                                                  : selection.spawn
-                                                    ? formatMessage(messages.spawnPoint)
-                                                    : selectedMarker?.name ||
-                                                      (selection.biome !== undefined
-                                                          ? biomeDisplayName(selection.biome)
-                                                          : formatMessage(messages.location))
-                                        }}
-                                    </strong>
-                                    <span class="text-xs text-[var(--color-text-tertiary)]"
-                                        >X {{ selection.x
-                                        }}<template v-if="selection.ore"
-                                            >, Y {{ selection.ore.y }}</template
-                                        >, Z {{ selection.z
-                                        }}<template
-                                            v-if="selection.biome !== undefined && !selectedMarker"
-                                        >
-                                            · {{ formatMessage(messages.biomeTag) }}</template
-                                        ></span
-                                    >
-                                </div>
-                                <Button
-                                    type="quiet"
-                                    size="2xs"
-                                    circular
-                                    icon-only
-                                    :aria-label="formatMessage(messages.closePanel)"
-                                    @click="selection = null"
-                                    ><XIcon
-                                /></Button>
-                            </div>
-                            <div v-if="selection.ore" class="ore-hit-details">
-                                <span>{{ formatMessage(messages.oreCandidate) }}</span>
-                                <span>{{
-                                    formatMessage(messages.oreCoverage, {
-                                        min: selection.ore.yMin,
-                                        max: selection.ore.yMax,
-                                    })
                                 }}</span>
                             </div>
-                            <div
-                                v-if="markerDraftOpen"
-                                class="mt-3 grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2"
-                            >
-                                <StyledInput
-                                    v-model="markerName"
-                                    :placeholder="formatMessage(messages.markerName)"
-                                />
-                                <input
-                                    v-model="markerColor"
-                                    type="color"
-                                    class="marker-color-input"
-                                    :aria-label="formatMessage(messages.markerColor)"
-                                />
+                            <div class="map-coordinate-ruler map-coordinate-ruler-z">
+                                <span v-for="offset in [-1, 0, 1]" :key="offset">{{
+                                    Math.round(
+                                        viewBounds().minZ +
+                                            ((offset + 1.5) * visibleSize.height * scale) / 3,
+                                    )
+                                }}</span>
                             </div>
-                            <div class="mt-3 flex flex-wrap gap-2">
-                                <Button
-                                    v-if="markerDraftOpen"
-                                    type="colored"
-                                    color="brand"
-                                    size="2xs"
-                                    @click="addMarker"
-                                    ><PinIcon />{{ formatMessage(messages.addMarker) }}
-                                </Button>
-                                <Button type="outlined" size="2xs" @click="copyTeleport"
-                                    ><ClipboardCopyIcon />{{ formatMessage(messages.copyTeleport) }}
-                                </Button>
-                                <Button
-                                    v-if="!markerDraftOpen && !selectedMarker"
-                                    type="outlined"
-                                    size="2xs"
-                                    @click="markerDraftOpen = true"
-                                    ><PlusIcon />{{ formatMessage(messages.addMarker) }}
-                                </Button>
-                                <Checkbox
-                                    v-if="selection.feature"
-                                    v-model="selectedFeatureCompleted"
-                                    class="feature-completed-checkbox"
-                                    :label="formatMessage(messages.completed)"
-                                />
-                                <Checkbox
-                                    v-if="selection.ore"
-                                    v-model="selectedOreCompleted"
-                                    class="feature-completed-checkbox"
-                                    :label="formatMessage(messages.mined)"
-                                />
-                                <Button
-                                    v-if="selectedMarker"
-                                    type="outlined"
-                                    size="2xs"
-                                    @click="removeMarker(selectedMarker.id)"
-                                    ><TrashIcon />{{ formatMessage(messages.removeMarker) }}
-                                </Button>
-                            </div>
-                        </div>
 
-                        <div v-if="advancedOpen" class="advanced-panel">
-                            <div class="flex items-center justify-between gap-3">
-                                <strong class="text-sm text-[var(--color-text-primary)]">{{
-                                    formatMessage(messages.mapSettings)
-                                }}</strong
-                                ><Button
+                            <div class="map-control-stack map-control-stack-left left-3">
+                                <Button
+                                    v-tooltip="formatMessage(messages.zoomIn)"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.zoomIn)"
+                                    :disabled="workspace.zoom <= SEED_MAP_MIN_ZOOM"
+                                    @click="zoomBy(-0.5)"
+                                    ><PlusIcon
+                                /></Button>
+                                <Button
+                                    v-tooltip="formatMessage(messages.zoomOut)"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.zoomOut)"
+                                    :disabled="workspace.zoom >= SEED_MAP_SCALES.length - 1"
+                                    @click="zoomBy(0.5)"
+                                    ><MinusIcon
+                                /></Button>
+                                <Button
+                                    v-tooltip="formatMessage(messages.centerSpawn)"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.centerSpawn)"
+                                    :disabled="!spawn"
+                                    @click="centerSpawn"
+                                    ><CompassIcon
+                                /></Button>
+                            </div>
+
+                            <div class="map-control-stack map-control-stack-right right-3">
+                                <Button
+                                    v-tooltip="
+                                        formatMessage(
+                                            isFullscreen
+                                                ? messages.exitFullscreen
+                                                : messages.fullscreen,
+                                        )
+                                    "
+                                    circular
+                                    icon-only
+                                    :aria-label="
+                                        formatMessage(
+                                            isFullscreen
+                                                ? messages.exitFullscreen
+                                                : messages.fullscreen,
+                                        )
+                                    "
+                                    @click="toggleFullscreen"
+                                    ><ContractIcon v-if="isFullscreen" /><ExpandIcon v-else
+                                /></Button>
+                                <Button
+                                    v-tooltip="formatMessage(messages.ruler)"
+                                    :type="rulerEnabled ? 'base' : 'outlined'"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.ruler)"
+                                    :aria-pressed="rulerEnabled"
+                                    @click="rulerEnabled = !rulerEnabled"
+                                    ><ScaleIcon
+                                /></Button>
+                                <Button
+                                    v-tooltip="formatMessage(messages.mapSettings)"
+                                    :type="advancedOpen ? 'base' : 'outlined'"
+                                    circular
+                                    icon-only
+                                    :aria-label="formatMessage(messages.mapSettings)"
+                                    :aria-pressed="advancedOpen"
+                                    @click="advancedOpen = !advancedOpen"
+                                    ><SettingsIcon
+                                /></Button>
+                            </div>
+
+                            <div v-if="oreZoomLimited" class="map-status map-ore-status">
+                                <PickaxeIcon class="size-3" />{{
+                                    formatMessage(messages.zoomToScanOres)
+                                }}
+                            </div>
+                            <div
+                                v-else-if="
+                                    workspace.displayMode === 'ores' &&
+                                    workspace.dimension === 'end'
+                                "
+                                class="map-status map-ore-status"
+                            >
+                                <PickaxeIcon class="size-3" />{{
+                                    formatMessage(messages.noOresInEnd)
+                                }}
+                            </div>
+                            <div v-else-if="mapBusy" class="map-status map-ore-status">
+                                <RefreshCwIcon class="size-3 animate-spin" />{{
+                                    oreScanning
+                                        ? formatMessage(messages.scanningOres, {
+                                              processed: oreScannedChunks,
+                                              total: oreTotalChunks,
+                                          })
+                                        : formatMessage(messages.loading)
+                                }}
+                            </div>
+                            <div
+                                v-if="
+                                    workspace.displayMode === 'ores' && !mapBusy && !oreZoomLimited
+                                "
+                                class="map-status map-ore-status"
+                            >
+                                {{
+                                    formatMessage(
+                                        oreScanTruncated
+                                            ? messages.oreTruncated
+                                            : messages.oreCandidate,
+                                    )
+                                }}
+                            </div>
+                            <div v-if="rulerDistance !== null" class="map-status map-ruler-status">
+                                <ScaleIcon class="size-3" />{{
+                                    formatMessage(messages.distance, { distance: rulerDistance })
+                                }}<Button
+                                    v-tooltip="formatMessage(messages.clearRuler)"
                                     type="quiet"
                                     size="2xs"
                                     circular
                                     icon-only
-                                    :aria-label="formatMessage(messages.closePanel)"
-                                    @click="advancedOpen = false"
+                                    :aria-label="formatMessage(messages.clearRuler)"
+                                    @click="rulerPoints = []"
                                     ><XIcon
                                 /></Button>
                             </div>
-                            <label
-                                ><span>{{ formatMessage(messages.chunkCoordinates) }}</span
-                                ><Toggle v-model="workspace.showChunkCoordinates" small
-                            /></label>
-                            <label
-                                ><span>{{ formatMessage(messages.contours) }}</span
-                                ><Toggle
-                                    v-model="contoursEnabled"
-                                    :disabled="workspace.dimension === 'nether'"
-                                    small
-                            /></label>
-                            <div class="mt-3 border-t border-surface-5 pt-3">
-                                <div class="mb-2 flex items-center justify-between">
-                                    <strong class="text-sm text-[var(--color-text-primary)]">{{
-                                        formatMessage(messages.markers)
-                                    }}</strong
-                                    ><span class="text-xs text-[var(--color-text-tertiary)]">{{
-                                        workspace.markers.length
+
+                            <div
+                                v-if="selection && selectionVisible && !structureQuery"
+                                class="map-popup"
+                                :style="selectionStyle"
+                            >
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <strong
+                                            class="block truncate text-sm text-[var(--color-text-primary)]"
+                                        >
+                                            <i
+                                                v-if="
+                                                    selection.biome !== undefined && !selectedMarker
+                                                "
+                                                class="popup-biome-dot"
+                                                :style="{
+                                                    backgroundColor: biomeColorOf(selection.biome),
+                                                }"
+                                            ></i
+                                            >{{
+                                                selection.feature
+                                                    ? featureResultLabel(selection.feature)
+                                                    : selection.ore
+                                                      ? oreLabel(selection.ore.ore)
+                                                      : selection.spawn
+                                                        ? formatMessage(messages.spawnPoint)
+                                                        : selectedMarker?.name ||
+                                                          (selection.biome !== undefined
+                                                              ? biomeDisplayName(selection.biome)
+                                                              : formatMessage(messages.location))
+                                            }}
+                                        </strong>
+                                        <span class="text-xs text-[var(--color-text-tertiary)]"
+                                            >X {{ selection.x
+                                            }}<template v-if="selection.ore"
+                                                >, Y {{ selection.ore.y }}</template
+                                            >, Z {{ selection.z
+                                            }}<template
+                                                v-if="
+                                                    selection.biome !== undefined && !selectedMarker
+                                                "
+                                            >
+                                                · {{ formatMessage(messages.biomeTag) }}</template
+                                            ></span
+                                        >
+                                    </div>
+                                    <Button
+                                        type="quiet"
+                                        size="2xs"
+                                        circular
+                                        icon-only
+                                        :aria-label="formatMessage(messages.closePanel)"
+                                        @click="selection = null"
+                                        ><XIcon
+                                    /></Button>
+                                </div>
+                                <div v-if="selection.ore" class="ore-hit-details">
+                                    <span>{{ formatMessage(messages.oreCandidate) }}</span>
+                                    <span>{{
+                                        formatMessage(messages.oreCoverage, {
+                                            min: selection.ore.yMin,
+                                            max: selection.ore.yMax,
+                                        })
                                     }}</span>
                                 </div>
-                                <p
-                                    v-if="!workspace.markers.length"
-                                    class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                                <div
+                                    v-if="markerDraftOpen"
+                                    class="mt-3 grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2"
                                 >
-                                    {{ formatMessage(messages.noMarkers) }}
-                                </p>
-                                <div v-else class="marker-list flex flex-col gap-1">
-                                    <div v-for="marker in workspace.markers" :key="marker.id">
-                                        <button class="marker-jump" @click="jumpToMarker(marker)">
-                                            <i :style="{ backgroundColor: marker.color }"></i
-                                            ><span>{{ marker.name }}</span
-                                            ><small>{{ marker.x }}, {{ marker.z }}</small>
-                                        </button>
-                                        <Button
-                                            type="quiet"
-                                            size="2xs"
-                                            circular
-                                            icon-only
-                                            :aria-label="formatMessage(messages.removeMarker)"
-                                            @click="removeMarker(marker.id)"
-                                            ><TrashIcon
-                                        /></Button>
+                                    <StyledInput
+                                        v-model="markerName"
+                                        :placeholder="formatMessage(messages.markerName)"
+                                    />
+                                    <input
+                                        v-model="markerColor"
+                                        type="color"
+                                        class="marker-color-input"
+                                        :aria-label="formatMessage(messages.markerColor)"
+                                    />
+                                </div>
+                                <div class="mt-3 flex flex-wrap gap-2">
+                                    <Button
+                                        v-if="markerDraftOpen"
+                                        type="colored"
+                                        color="brand"
+                                        size="2xs"
+                                        @click="addMarker"
+                                        ><PinIcon />{{ formatMessage(messages.addMarker) }}
+                                    </Button>
+                                    <Button type="outlined" size="2xs" @click="copyTeleport"
+                                        ><ClipboardCopyIcon />{{
+                                            formatMessage(messages.copyTeleport)
+                                        }}
+                                    </Button>
+                                    <Button
+                                        v-if="!markerDraftOpen && !selectedMarker"
+                                        type="outlined"
+                                        size="2xs"
+                                        @click="markerDraftOpen = true"
+                                        ><PlusIcon />{{ formatMessage(messages.addMarker) }}
+                                    </Button>
+                                    <Checkbox
+                                        v-if="selection.feature"
+                                        v-model="selectedFeatureCompleted"
+                                        class="feature-completed-checkbox"
+                                        :label="formatMessage(messages.completed)"
+                                    />
+                                    <Checkbox
+                                        v-if="selection.ore"
+                                        v-model="selectedOreCompleted"
+                                        class="feature-completed-checkbox"
+                                        :label="formatMessage(messages.mined)"
+                                    />
+                                    <Button
+                                        v-if="selectedMarker"
+                                        type="outlined"
+                                        size="2xs"
+                                        @click="removeMarker(selectedMarker.id)"
+                                        ><TrashIcon />{{ formatMessage(messages.removeMarker) }}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div v-if="advancedOpen" class="advanced-panel">
+                                <div class="flex items-center justify-between gap-3">
+                                    <strong class="text-sm text-[var(--color-text-primary)]">{{
+                                        formatMessage(messages.mapSettings)
+                                    }}</strong
+                                    ><Button
+                                        type="quiet"
+                                        size="2xs"
+                                        circular
+                                        icon-only
+                                        :aria-label="formatMessage(messages.closePanel)"
+                                        @click="advancedOpen = false"
+                                        ><XIcon
+                                    /></Button>
+                                </div>
+                                <label
+                                    ><span>{{ formatMessage(messages.chunkCoordinates) }}</span
+                                    ><Toggle v-model="workspace.showChunkCoordinates" small
+                                /></label>
+                                <label
+                                    ><span>{{ formatMessage(messages.contours) }}</span
+                                    ><Toggle
+                                        v-model="contoursEnabled"
+                                        :disabled="workspace.dimension === 'nether'"
+                                        small
+                                /></label>
+                                <div class="mt-3 border-t border-surface-5 pt-3">
+                                    <div class="mb-2 flex items-center justify-between">
+                                        <strong class="text-sm text-[var(--color-text-primary)]">{{
+                                            formatMessage(messages.markers)
+                                        }}</strong
+                                        ><span class="text-xs text-[var(--color-text-tertiary)]">{{
+                                            workspace.markers.length
+                                        }}</span>
+                                    </div>
+                                    <p
+                                        v-if="!workspace.markers.length"
+                                        class="m-0 text-xs text-[var(--color-text-tertiary)]"
+                                    >
+                                        {{ formatMessage(messages.noMarkers) }}
+                                    </p>
+                                    <div v-else class="marker-list flex flex-col gap-1">
+                                        <div v-for="marker in workspace.markers" :key="marker.id">
+                                            <button
+                                                class="marker-jump"
+                                                @click="jumpToMarker(marker)"
+                                            >
+                                                <i :style="{ backgroundColor: marker.color }"></i
+                                                ><span>{{ marker.name }}</span
+                                                ><small>{{ marker.x }}, {{ marker.z }}</small>
+                                            </button>
+                                            <Button
+                                                type="quiet"
+                                                size="2xs"
+                                                circular
+                                                icon-only
+                                                :aria-label="formatMessage(messages.removeMarker)"
+                                                @click="removeMarker(marker.id)"
+                                                ><TrashIcon
+                                            /></Button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        <div
-                            v-if="workspace.displayMode === 'underground'"
-                            class="absolute left-3 top-3 z-10 flex w-[min(22rem,calc(100%_-_1.5rem))] flex-col gap-2 rounded-lg border border-surface-4 bg-surface-2 p-3 text-sm"
-                            data-onboarding-id="seed-map-underground-layers"
-                            @pointerdown.stop
-                            @wheel.stop
-                        >
-                            <Button
-                                size="2xs"
-                                type="outlined"
-                                :disabled="!(undergroundMask & 1) || workspace.dimension === 'end'"
-                                data-onboarding-id="seed-map-underground-3d-open"
-                                @click="underground3dOpen = true"
-                                ><LayersIcon />{{ formatMessage(messages.underground3d) }}</Button
-                            >
-                            <label class="flex items-center gap-2"
-                                >Y
-                                <StyledInput
-                                    :model-value="String(workspace.undergroundY)"
-                                    type="number"
-                                    :min="undergroundYRange[0]"
-                                    :max="undergroundYRange[1]"
-                                    @update:model-value="
-                                        workspace.undergroundY = Math.max(
-                                            undergroundYRange[0],
-                                            Math.min(undergroundYRange[1], Number($event) || 0),
-                                        )
-                                    "
-                            /></label>
-                            <label
-                                v-for="layer in [1, 2, 4] as const"
-                                v-show="undergroundMask & layer"
-                                :key="layer"
-                                class="flex items-center justify-between gap-2"
-                                ><span>{{
-                                    formatMessage(
-                                        layer === 1
-                                            ? messages.undergroundDensity
-                                            : layer === 2
-                                              ? messages.undergroundCaves
-                                              : messages.undergroundCanyons,
-                                    )
-                                }}</span
-                                ><Toggle
-                                    :model-value="Boolean(workspace.undergroundLayers & layer)"
-                                    small
-                                    @update:model-value="toggleUndergroundLayer(layer, $event)"
-                            /></label>
-                            <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                                {{ formatMessage(messages.undergroundLimit) }}
-                            </p>
-                        </div>
+                        </template>
                         <SeedMapUndergroundPreview
-                            v-if="underground3dOpen && workspace.displayMode === 'underground'"
+                            v-if="workspace.displayMode === 'underground' && undergroundSupported"
                             :key="`${workspace.seed}:${workspace.edition}:${workspace.gameVersion}:${workspace.dimension}`"
                             :query="{
                                 seed: workspace.seed,
@@ -3486,9 +3465,12 @@ function clampWorldCoordinate(value: number) {
                                 y: workspace.undergroundY,
                                 z: workspace.center.z,
                             }"
-                            @close="underground3dOpen = false"
+                            @close="setDisplayMode('structures')"
                         />
-                        <div class="map-bottom-toolbar">
+                        <div
+                            v-if="workspace.displayMode !== 'underground'"
+                            class="map-bottom-toolbar"
+                        >
                             <SeedMapBiomePicker
                                 class="map-bottom-biomes"
                                 :dimension="workspace.dimension"

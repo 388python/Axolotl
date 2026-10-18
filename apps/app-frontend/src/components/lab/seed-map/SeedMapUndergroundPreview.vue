@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeftIcon, RefreshCwIcon } from '@modrinth/assets'
+import { ArrowLeftIcon, CheckIcon, CircleAlertIcon, RefreshCwIcon } from '@modrinth/assets'
 import { Button, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
 import { isTauri } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -30,18 +30,14 @@ const messages = defineMessages({
         defaultMessage: '3D underground · X-Ray',
     },
     back: { id: 'app.lab.seed-map.underground-3d.back', defaultMessage: 'Back to map' },
-    generate: {
-        id: 'app.lab.seed-map.underground-3d.generate',
-        defaultMessage: 'Generate around camera',
+    chunks: { id: 'app.lab.seed-map.underground-3d.chunks', defaultMessage: '{count} chunks' },
+    generatingStatus: {
+        id: 'app.lab.seed-map.underground-3d.generating-status',
+        defaultMessage: 'Generating · {count} chunks loaded',
     },
-    cancel: { id: 'app.lab.seed-map.underground-3d.cancel', defaultMessage: 'Cancel generation' },
-    generating: {
-        id: 'app.lab.seed-map.underground-3d.generating',
-        defaultMessage: 'Computing terrain, caves and minerals…',
-    },
-    meshing: {
-        id: 'app.lab.seed-map.underground-3d.meshing',
-        defaultMessage: 'Building textured cave boundaries…',
+    completeStatus: {
+        id: 'app.lab.seed-map.underground-3d.complete-status',
+        defaultMessage: 'Ready · {count} chunks loaded',
     },
     paused: {
         id: 'app.lab.seed-map.underground-3d.paused',
@@ -76,15 +72,6 @@ const messages = defineMessages({
         defaultMessage:
             'Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials; the surface uses representative stone or netherrack, without biome surface rules or decorations. Bedrock bands use estimated thickness, not the exact original random pattern. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated.',
     },
-    range: {
-        id: 'app.lab.seed-map.underground-3d.range',
-        defaultMessage:
-            'Loaded {count} full-height chunks. Idle computation fills a horizontal radius of up to 12 chunks, with each 16 × 16 column covering the entire build height.',
-    },
-    autoPaused: {
-        id: 'app.lab.seed-map.underground-3d.auto-paused',
-        defaultMessage: 'Automatic loading is paused. Generate around the camera to resume.',
-    },
     position: {
         id: 'app.lab.seed-map.underground-3d.position',
         defaultMessage: 'X {x} · Y {y} · Z {z} · {speed} blocks/s',
@@ -112,7 +99,7 @@ const messages = defineMessages({
 const canvas = useTemplateRef<HTMLCanvasElement>('canvas')
 const busy = ref(true)
 const autoPaused = ref(false)
-const stage = ref<'generating' | 'meshing'>('generating')
+const pendingChunks = ref(true)
 const failed = ref(false)
 const locked = ref(false)
 const contextLost = ref(false)
@@ -162,10 +149,20 @@ const lavaLevel = computed(() =>
           ? -54
           : 10,
 )
-const range = computed(() =>
-    formatMessage(messages.range, {
-        count: loadedCount.value,
-    }),
+const generating = computed(
+    () => (busy.value || pendingChunks.value) && !failed.value && !contextLost.value,
+)
+const generationLabel = computed(() =>
+    formatMessage(
+        failed.value
+            ? messages.failed
+            : contextLost.value
+              ? messages.contextLost
+              : generating.value
+                ? messages.generatingStatus
+                : messages.completeStatus,
+        { count: loadedCount.value },
+    ),
 )
 const targetText = computed(() =>
     target.value
@@ -247,11 +244,10 @@ async function generateChunk(chunk: [number, number, number]) {
     task = id
     busy.value = true
     failed.value = false
-    stage.value = 'generating'
+    pendingChunks.value = true
     try {
         const volume = await loadUndergroundVolume(query, id)
         if (disposed || task !== id) return
-        stage.value = 'meshing'
         const mesh = await meshVolume(volume, chunk[1])
         if (disposed || task !== id || !scene) return
         const wanted = undergroundChunkQueue(props.query, position.value)
@@ -352,7 +348,10 @@ function pumpQueue() {
     const next = queue.find((chunk) => !loaded.has(undergroundChunkKey(chunk)))
     if (memoryFull.value && next) {
         const eviction = undergroundEviction(queue, [...loaded.values()], next)
-        if (!eviction) return
+        if (!eviction) {
+            pendingChunks.value = false
+            return
+        }
         const key = undergroundChunkKey(eviction)
         const previous = loaded.get(key)!
         for (const layer of Object.keys(layers) as UndergroundLayer[])
@@ -362,14 +361,8 @@ function pumpQueue() {
         loadedCount.value = loaded.size
     }
     truncated.value = [...loaded.values()].some((chunk) => chunk.truncated)
+    pendingChunks.value = Boolean(next)
     if (next) void generateChunk(next)
-}
-function generateAtCamera() {
-    cancel()
-    autoPaused.value = false
-    failed.value = false
-    if (!ready.value) void generateChunk(origin.value)
-    else pumpQueue()
 }
 watch(layers, () => {
     for (const layer of Object.keys(layers) as UndergroundLayer[])
@@ -390,7 +383,7 @@ async function initializeScene() {
         const [{ SchematicPreviewScene }, builtin, three, { configureSchematicTexture }] =
             await Promise.all([
                 import('@/lab/schematic-preview/scene'),
-                import('@/lab/schematic-preview/builtin-resources'),
+                import('@/lab/schematic-preview/builtin-textures'),
                 import('three'),
                 import('@/lab/schematic-preview/resources'),
             ])
@@ -495,10 +488,21 @@ onBeforeUnmount(() => {
     resourceAbort.abort()
     if (timer) clearInterval(timer)
     texture?.dispose()
-    if (texture) texture.image = undefined
+    if (texture) {
+        const atlas = texture.image as HTMLCanvasElement | undefined
+        if (atlas) {
+            atlas.width = 1
+            atlas.height = 1
+        }
+        texture.image = undefined
+    }
     texture = undefined
     scene?.dispose()
     scene = undefined
+    if (canvas.value) {
+        canvas.value.width = 1
+        canvas.value.height = 1
+    }
     textureUvs = {}
     loaded.clear()
     loadedBytes = 0
@@ -521,19 +525,22 @@ onBeforeUnmount(() => {
                 ><ArrowLeftIcon />{{ formatMessage(messages.back) }}</Button
             >
             <strong class="mr-auto text-sm">{{ formatMessage(messages.title) }}</strong>
-            <Button v-if="busy" size="2xs" type="outlined" @click="cancel">{{
-                formatMessage(messages.cancel)
-            }}</Button>
-            <Button
-                v-else
-                size="2xs"
-                type="outlined"
-                :disabled="contextLost"
-                @click="failed || !scene ? retry() : generateAtCamera()"
-                ><RefreshCwIcon />{{
-                    formatMessage(failed ? messages.retry : messages.generate)
-                }}</Button
+            <span
+                class="inline-flex items-center gap-2 text-xs tabular-nums text-[var(--color-text-tertiary)]"
+                role="status"
+                :aria-label="generationLabel"
+                data-testid="underground-generation-status"
+                :data-generating="generating"
             >
+                <CircleAlertIcon v-if="failed || contextLost" class="size-4" aria-hidden="true" />
+                <RefreshCwIcon
+                    v-else-if="generating"
+                    class="size-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden="true"
+                />
+                <CheckIcon v-else class="size-4" aria-hidden="true" />
+                {{ formatMessage(messages.chunks, { count: loadedCount }) }}
+            </span>
         </div>
         <div class="relative min-h-0 flex-1 overflow-hidden">
             <canvas
@@ -550,17 +557,19 @@ onBeforeUnmount(() => {
                 </p>
                 <div
                     class="pointer-events-auto flex max-h-[min(26rem,60%)] w-[min(26rem,100%)] flex-col gap-2 overflow-y-auto rounded-lg border border-surface-4 bg-surface-2 p-3 text-xs"
+                    data-testid="underground-settings"
                     @keydown.stop
                 >
-                    <p v-if="busy" role="status" class="m-0">
-                        {{ formatMessage(messages[stage]) }}
-                    </p>
-                    <p v-if="autoPaused" role="status" class="m-0">
-                        {{ formatMessage(messages.autoPaused) }}
-                    </p>
                     <p v-if="failed" role="alert" class="m-0">
                         {{ formatMessage(messages.failed) }}
                     </p>
+                    <Button
+                        v-if="failed && !contextLost"
+                        type="outlined"
+                        size="2xs"
+                        @click="retry"
+                        >{{ formatMessage(messages.retry) }}</Button
+                    >
                     <p v-if="contextLost" role="alert" class="m-0">
                         {{ formatMessage(messages.contextLost) }}
                     </p>
@@ -585,7 +594,6 @@ onBeforeUnmount(() => {
                     <p class="m-0 text-[var(--color-text-tertiary)]">
                         {{ formatMessage(messages.limits, { lava: lavaLevel }) }}
                     </p>
-                    <p v-if="ready" class="m-0 text-[var(--color-text-tertiary)]">{{ range }}</p>
                     <p v-if="memoryFull" class="m-0">{{ formatMessage(messages.memory) }}</p>
                     <p v-if="truncated" class="m-0">{{ formatMessage(messages.truncated) }}</p>
                     <p v-if="noAir" class="m-0">{{ formatMessage(messages.noAir) }}</p>

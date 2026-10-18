@@ -223,10 +223,10 @@ export function applyShareQuery(
     return sanitizeSeedMapWorkspace({
         ...workspace,
         seed: typeof query.seed === 'string' ? query.seed : workspace.seed,
-        edition: query.edition,
+        edition: query.edition ?? workspace.edition,
         gameVersion: typeof query.version === 'string' ? query.version : workspace.gameVersion,
-        dimension: query.dimension,
-        displayMode: query.mode,
+        dimension: query.dimension ?? workspace.dimension,
+        displayMode: query.mode ?? workspace.displayMode,
         undergroundY: parseQueryNumber(query.undergroundY, workspace.undergroundY),
         undergroundLayers: parseQueryNumber(query.undergroundLayers, workspace.undergroundLayers),
         selectedOres:
