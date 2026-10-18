@@ -171,7 +171,8 @@ const targetText = computed(() =>
               y: target.value[1],
               z: target.value[2],
           })
-        : formatMessage(messages.noTarget),
+        : // : formatMessage(messages.noTarget),
+          '',
 )
 const positionText = computed(() =>
     formatMessage(messages.position, {
@@ -552,9 +553,6 @@ onBeforeUnmount(() => {
                 v-if="!locked"
                 class="pointer-events-none absolute inset-x-3 top-20 bottom-12 flex flex-col gap-2"
             >
-                <p v-if="ready" class="m-0 self-center rounded-lg bg-surface-2 px-3 py-2 text-sm">
-                    {{ formatMessage(messages.paused) }}
-                </p>
                 <div
                     class="pointer-events-auto flex max-h-[min(26rem,60%)] w-[min(26rem,100%)] flex-col gap-2 overflow-y-auto rounded-lg border border-surface-4 bg-surface-2 p-3 text-xs"
                     data-testid="underground-settings"
@@ -590,14 +588,17 @@ onBeforeUnmount(() => {
                             }}</label
                         >
                     </div>
-                    <p class="m-0">{{ formatMessage(messages.controls) }}</p>
+                    <!-- <p class="m-0">{{ formatMessage(messages.controls) }}</p>
                     <p class="m-0 text-[var(--color-text-tertiary)]">
                         {{ formatMessage(messages.limits, { lava: lavaLevel }) }}
-                    </p>
+                    </p> -->
                     <p v-if="memoryFull" class="m-0">{{ formatMessage(messages.memory) }}</p>
                     <p v-if="truncated" class="m-0">{{ formatMessage(messages.truncated) }}</p>
                     <p v-if="noAir" class="m-0">{{ formatMessage(messages.noAir) }}</p>
                 </div>
+                <p v-if="ready" class="m-0 self-center rounded-lg bg-surface-2 px-3 py-2 text-sm">
+                    {{ formatMessage(messages.paused) }}
+                </p>
             </div>
             <div
                 v-if="locked"
