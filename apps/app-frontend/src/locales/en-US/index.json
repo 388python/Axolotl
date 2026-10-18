@@ -1,4 +1,7 @@
 {
+  "app.files.error.in-use": {
+    "message": "This file is in use. Close the game or any other program using it, then try again."
+  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },

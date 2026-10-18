@@ -1,4 +1,7 @@
 {
+  "app.files.error.in-use": {
+    "message": "文件正被占用，请关闭游戏或其他占用该文件的程序后重试。"
+  },
   "app.content-install.retained-instance.title": {
     "message": "已保留创建的实例"
   },

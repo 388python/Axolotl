@@ -55,6 +55,11 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                         'deepened the top-bar background blur to improve readability.',
                     'zh-CN':
                         '在浏览页恢复了顶部栏的磨砂背景效果，增强可读性。',
+                },
+                {
+                    'en-US':
+                        'Added a localized error message when file is locked by another program.',
+                    'zh-CN': '新增文件被其他程序锁定时的本地化错误提示。',
                 }
             ],
             fixed: [
