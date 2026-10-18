@@ -58,6 +58,7 @@ jobs:
           node scripts/axolotl/check-migrations.mjs --base "${MIGRATION_BASE_REF:-HEAD^}"
           node scripts/axolotl/check-migrations.mjs --release
       - run: node scripts/axolotl/brand-guard.mjs
+      - run: node scripts/axolotl/check-agents.mjs
       - run: node scripts/axolotl/i18n-check.mjs
       - run: node scripts/axolotl/check-css-vars.mjs
       - run: node scripts/axolotl/check-orphan-components.mjs
