@@ -104,10 +104,9 @@ const AUTO_DOWNLOAD_PROBE_COOLDOWN: Duration = Duration::from_secs(30);
 
 /// The CurseForge API key set in the launcher, if any. Returns `None` while the
 /// launcher state is still initializing, which lets synchronous callers fall
-/// back to the build-time key without waiting.
+/// back to the key from the environment or the build without waiting.
 pub(crate) fn curseforge_api_key_override_if_ready() -> Option<String> {
-    LAUNCHER_STATE
-        .get()
+    State::get_if_initialized()
         .and_then(|state| state.curseforge_api_key_override())
 }
 
@@ -175,8 +174,10 @@ pub struct State {
     resource_service: OnceCell<Arc<crate::resources::ResourceService>>,
 
     /// CurseForge API key set in the launcher. Takes precedence over the key
-    /// the build injected, which stays the fallback until the user sets one.
+    /// from the environment or the build, which stays the fallback until the
+    /// user sets one here.
     curseforge_api_key: RwLock<Option<String>>,
+    curseforge_api_key_update: AsyncMutex<()>,
 
     // Cloning reqwest::Client retains its underlying connection pool.
     configured_http_client: RwLock<crate::util::fetch::DownloadClients>,
@@ -731,6 +732,7 @@ impl State {
         &self,
         api_key: Option<String>,
     ) -> crate::Result<()> {
+        let _update = self.curseforge_api_key_update.lock().await;
         let api_key = curseforge_settings::normalize(api_key);
         curseforge_settings::set(&self.pool, api_key.as_deref()).await?;
         *self.curseforge_api_key.write() = api_key;
@@ -1091,6 +1093,7 @@ impl State {
             pool,
             resource_service: OnceCell::new(),
             curseforge_api_key: RwLock::new(curseforge_api_key),
+            curseforge_api_key_update: AsyncMutex::new(()),
             configured_http_client: RwLock::new(configured_http_client),
             configured_http_client_update: AsyncMutex::new(()),
             file_watcher,
@@ -1209,6 +1212,7 @@ pub(crate) async fn test_state(
         pool,
         resource_service: OnceCell::new(),
         curseforge_api_key: RwLock::new(curseforge_api_key),
+        curseforge_api_key_update: AsyncMutex::new(()),
         configured_http_client: RwLock::new(configured_http_client),
         configured_http_client_update: AsyncMutex::new(()),
         file_watcher,

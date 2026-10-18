@@ -68,4 +68,37 @@ mod tests {
         set(&pool, Some("   ")).await.unwrap();
         assert_eq!(get(&pool).await.unwrap(), None);
     }
+
+    #[tokio::test]
+    async fn upgrade_keeps_settings_without_override() {
+        let pool = test_pool().await;
+        sqlx::query(
+            "UPDATE settings SET locale = 'zh-CN', developer_mode = 1 WHERE id = 0",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Rebuild the pre-migration shape: the column did not exist yet.
+        sqlx::query("ALTER TABLE settings DROP COLUMN curseforge_api_key")
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query(include_str!(
+            "../../migrations/20261018100000_curseforge-api-key.sql"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert_eq!(get(&pool).await.unwrap(), None);
+        let (locale, developer_mode): (String, bool) = sqlx::query_as(
+            "SELECT locale, developer_mode FROM settings WHERE id = 0",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(locale, "zh-CN");
+        assert!(developer_mode);
+    }
 }

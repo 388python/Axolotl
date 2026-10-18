@@ -134,18 +134,19 @@ async function testProxy() {
             proxyTestResult.value = result.message || formatMessage(messages.proxyTestFailed)
         }
     } catch (error) {
-        const message =
-            error instanceof Error
-                ? error.message
-                : typeof error === 'object' && error !== null && 'message' in error
-                  ? String(error.message)
-                  : typeof error === 'string'
-                    ? error
-                    : JSON.stringify(error)
-        proxyTestResult.value = message
+        proxyTestResult.value = errorMessage(error, formatMessage(messages.proxyTestFailed))
     } finally {
         proxyTesting.value = false
     }
+}
+
+function errorMessage(error, fallback) {
+    if (error instanceof Error) return error.message
+    if (typeof error === 'string') return error
+    if (typeof error === 'object' && error !== null && 'message' in error) {
+        return String(error.message)
+    }
+    return fallback
 }
 
 // CurseForge API key
@@ -158,16 +159,18 @@ const curseforgeApiKeyVerifying = ref(false)
 /** @type {import('vue').Ref<string>} */
 const curseforgeApiKeyResult = ref('')
 
-try {
-    const [capability, override] = await Promise.all([
-        getCurseForgeCapability(),
-        getCurseForgeApiKeyOverride(),
-    ])
-    curseforgeCapability.value = capability
-    curseforgeApiKeyInput.value = override ?? ''
-    curseforgeApiKeySaved.value = override ?? ''
-} catch (error) {
-    console.error('Failed to load the CurseForge API key', error)
+if (props.scope === 'content-downloads') {
+    try {
+        const [capability, override] = await Promise.all([
+            getCurseForgeCapability(),
+            getCurseForgeApiKeyOverride(),
+        ])
+        curseforgeCapability.value = capability
+        curseforgeApiKeyInput.value = override ?? ''
+        curseforgeApiKeySaved.value = override ?? ''
+    } catch (error) {
+        console.error('Failed to load the CurseForge API key', error)
+    }
 }
 
 const curseforgeApiKeyDirty = computed(
@@ -175,6 +178,9 @@ const curseforgeApiKeyDirty = computed(
 )
 
 const curseforgeApiKeyStatus = computed(() => {
+    if (curseforgeCapability.value?.status === 'unauthorized') {
+        return formatMessage(messages.curseforgeApiKeyStatusUnauthorized)
+    }
     switch (curseforgeCapability.value?.key_source) {
         case 'override':
             return formatMessage(messages.curseforgeApiKeyStatusOverride)
@@ -210,7 +216,8 @@ async function verifyCurseForgeApiKey() {
         curseforgeCapability.value = await validateCurseForgeCredentials()
         curseforgeApiKeyResult.value = formatMessage(messages.curseforgeApiKeyVerified)
     } catch (error) {
-        curseforgeApiKeyResult.value = getCurseForgeApiKeyErrorMessage(error)
+        console.error('CurseForge rejected the key check', error)
+        curseforgeApiKeyResult.value = formatMessage(messages.curseforgeApiKeyVerifyFailed)
         curseforgeCapability.value = await getCurseForgeCapability().catch(
             () => curseforgeCapability.value,
         )
@@ -219,14 +226,9 @@ async function verifyCurseForgeApiKey() {
     }
 }
 
-function getCurseForgeApiKeyErrorMessage(error) {
-    if (error instanceof Error) return error.message
-    if (typeof error === 'string') return error
-    if (typeof error === 'object' && error !== null && 'message' in error) {
-        return String(error.message)
-    }
-    return formatMessage(messages.curseforgeApiKeyVerifyFailed)
-}
+watch(curseforgeApiKeyInput, () => {
+    curseforgeApiKeyResult.value = ''
+})
 
 const messages = defineMessages({
     chineseNames: {
@@ -400,7 +402,7 @@ const messages = defineMessages({
     curseforgeApiKeyDescription: {
         id: 'app.settings.resources.curseforge-api-key-description',
         defaultMessage:
-            'Used for CurseForge search, project pages, and installations. A key entered here replaces the one this launcher was built with.',
+            'Used for CurseForge search, project pages, and installations. A key entered here replaces the one the launcher provides.',
     },
     curseforgeApiKeyField: {
         id: 'app.settings.resources.curseforge-api-key-field',
@@ -408,7 +410,7 @@ const messages = defineMessages({
     },
     curseforgeApiKeyPlaceholder: {
         id: 'app.settings.resources.curseforge-api-key-placeholder',
-        defaultMessage: 'Save an empty key to use the launcher key',
+        defaultMessage: 'Leave empty to drop the key entered here',
     },
     curseforgeApiKeyStatusOverride: {
         id: 'app.settings.resources.curseforge-api-key-status-override',
@@ -423,6 +425,10 @@ const messages = defineMessages({
         defaultMessage:
             'No key is available. CurseForge content cannot be searched or installed until one is set here.',
     },
+    curseforgeApiKeyStatusUnauthorized: {
+        id: 'app.settings.resources.curseforge-api-key-status-unauthorized',
+        defaultMessage: 'CurseForge rejected this key. Check it or enter another one.',
+    },
     curseforgeApiKeySave: {
         id: 'app.settings.resources.curseforge-api-key-save',
         defaultMessage: 'Save key',
@@ -430,6 +436,10 @@ const messages = defineMessages({
     curseforgeApiKeySaving: {
         id: 'app.settings.resources.curseforge-api-key-saving',
         defaultMessage: 'Saving…',
+    },
+    curseforgeApiKeyUnsaved: {
+        id: 'app.settings.resources.curseforge-api-key-unsaved',
+        defaultMessage: 'Unsaved changes',
     },
     curseforgeApiKeyVerify: {
         id: 'app.settings.resources.curseforge-api-key-verify',
@@ -1148,7 +1158,11 @@ function validateMinecraftDirectory(_value) {
                             />
                             <button
                                 class="btn min-w-max"
-                                :disabled="curseforgeApiKeySaving || !curseforgeApiKeyDirty"
+                                :disabled="
+                                    curseforgeApiKeySaving ||
+                                    curseforgeApiKeyVerifying ||
+                                    !curseforgeApiKeyDirty
+                                "
                                 @click="saveCurseForgeApiKey"
                             >
                                 {{
@@ -1163,6 +1177,7 @@ function validateMinecraftDirectory(_value) {
                                 class="btn min-w-max"
                                 :disabled="
                                     curseforgeApiKeyVerifying ||
+                                    curseforgeApiKeySaving ||
                                     curseforgeApiKeyDirty ||
                                     !curseforgeCapability?.configured
                                 "
@@ -1178,7 +1193,12 @@ function validateMinecraftDirectory(_value) {
                             </button>
                         </div>
                         <span
-                            v-if="curseforgeApiKeyResult"
+                            v-if="curseforgeApiKeyDirty"
+                            class="text-sm text-[var(--color-text-tertiary)]"
+                            >{{ formatMessage(messages.curseforgeApiKeyUnsaved) }}</span
+                        >
+                        <span
+                            v-else-if="curseforgeApiKeyResult"
                             class="text-sm text-[var(--color-text-tertiary)]"
                             >{{ curseforgeApiKeyResult }}</span
                         >

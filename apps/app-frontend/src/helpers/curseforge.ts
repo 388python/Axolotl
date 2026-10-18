@@ -14,13 +14,13 @@ import {
 
 export type ContentProvider = 'modrinth' | 'curseforge'
 
+export type CurseForgeApiKeySource = 'override' | 'launcher' | 'missing'
+
 export interface CurseForgeCapability {
     status: 'missing_key' | 'ready' | 'unauthorized'
     configured: boolean
     key_source: CurseForgeApiKeySource
 }
-
-export type CurseForgeApiKeySource = 'override' | 'launcher' | 'missing'
 
 export interface CurseForgeSearchRequest {
     classId: number

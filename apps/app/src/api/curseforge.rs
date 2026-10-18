@@ -9,7 +9,7 @@ use theseus::curseforge::{
     CurseForgeProject, CurseForgeRecognitionResult, CurseForgeSearchRequest,
     UnifiedSearchResponse,
 };
-use theseus::prelude::CacheBehaviour;
+use theseus::prelude::{CacheBehaviour, State};
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("curseforge")
@@ -42,8 +42,11 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 #[tauri::command]
-pub fn curseforge_capability() -> CurseForgeCapability {
-    theseus::curseforge::capability()
+pub async fn curseforge_capability() -> Result<CurseForgeCapability> {
+    // Wait for the state so the answer includes a key saved in the launcher
+    // instead of reporting the launcher key while settings are still loading.
+    State::get().await?;
+    Ok(theseus::curseforge::capability())
 }
 
 #[tauri::command]

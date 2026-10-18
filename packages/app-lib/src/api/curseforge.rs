@@ -9896,18 +9896,25 @@ fn api_key() -> Option<String> {
     api_key_with_source().0
 }
 
-/// A key set in the launcher wins over the one this build was given, which in
-/// turn can be absent: builds without `CURSEFORGE_API_KEY` stay valid, they just
-/// cannot reach the official API without a key.
+/// A key set in the launcher wins over `AXOLOTL_CURSEFORGE_API_KEY`, which in
+/// turn wins over the one this build was given. Either of the launcher sources
+/// can be absent: builds without `CURSEFORGE_API_KEY` stay valid, they just
+/// cannot reach the official API until a key is provided.
 fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource) {
-    let override_key = curseforge_api_key_override_if_ready();
-    if let Some(key) = curseforge_settings::normalize(override_key) {
-        return (Some(key), CurseForgeApiKeySource::Override);
-    }
-
     let launcher_key = std::env::var("AXOLOTL_CURSEFORGE_API_KEY")
         .ok()
         .or_else(|| option_env!("CURSEFORGE_API_KEY").map(str::to_string));
+
+    resolve_api_key(curseforge_api_key_override_if_ready(), launcher_key)
+}
+
+fn resolve_api_key(
+    override_key: Option<String>,
+    launcher_key: Option<String>,
+) -> (Option<String>, CurseForgeApiKeySource) {
+    if let Some(key) = curseforge_settings::normalize(override_key) {
+        return (Some(key), CurseForgeApiKeySource::Override);
+    }
 
     match curseforge_settings::normalize(launcher_key) {
         Some(key) => (Some(key), CurseForgeApiKeySource::Launcher),
@@ -13480,5 +13487,57 @@ mod tests {
         assert!(validate_world_archive_name("WORLD.ZIP").is_ok());
         assert!(validate_world_archive_name("world.rar").is_err());
         assert!(validate_world_archive_name("../world.zip").is_err());
+    }
+
+    #[test]
+    fn a_key_set_in_the_launcher_wins_over_the_launcher_key() {
+        assert_eq!(
+            resolve_api_key(Some("override".into()), Some("launcher".into())),
+            (
+                Some("override".to_string()),
+                CurseForgeApiKeySource::Override
+            ),
+        );
+    }
+
+    #[test]
+    fn a_blank_override_falls_back_to_the_launcher_key() {
+        assert_eq!(
+            resolve_api_key(Some("   ".into()), Some("launcher".into())),
+            (
+                Some("launcher".to_string()),
+                CurseForgeApiKeySource::Launcher
+            ),
+        );
+        assert_eq!(
+            resolve_api_key(None, Some("launcher".into())),
+            (
+                Some("launcher".to_string()),
+                CurseForgeApiKeySource::Launcher
+            ),
+        );
+    }
+
+    #[test]
+    fn keys_are_trimmed_before_they_are_used() {
+        assert_eq!(
+            resolve_api_key(Some(" override\n".into()), None),
+            (
+                Some("override".to_string()),
+                CurseForgeApiKeySource::Override
+            ),
+        );
+    }
+
+    #[test]
+    fn a_build_without_any_key_reports_no_key() {
+        assert_eq!(
+            resolve_api_key(None, None),
+            (None, CurseForgeApiKeySource::Missing),
+        );
+        assert_eq!(
+            resolve_api_key(Some(" ".into()), Some("\t".into())),
+            (None, CurseForgeApiKeySource::Missing),
+        );
     }
 }

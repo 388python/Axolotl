@@ -10230,13 +10230,13 @@
     "message": "CurseForge API key"
   },
   "app.settings.resources.curseforge-api-key-description": {
-    "message": "Used for CurseForge search, project pages, and installations. A key entered here replaces the one this launcher was built with."
+    "message": "Used for CurseForge search, project pages, and installations. A key entered here replaces the one the launcher provides."
   },
   "app.settings.resources.curseforge-api-key-field": {
     "message": "API key"
   },
   "app.settings.resources.curseforge-api-key-placeholder": {
-    "message": "Save an empty key to use the launcher key"
+    "message": "Leave empty to drop the key entered here"
   },
   "app.settings.resources.curseforge-api-key-save": {
     "message": "Save key"
@@ -10252,6 +10252,12 @@
   },
   "app.settings.resources.curseforge-api-key-status-override": {
     "message": "Using the key entered here. The launcher key is not used."
+  },
+  "app.settings.resources.curseforge-api-key-status-unauthorized": {
+    "message": "CurseForge rejected this key. Check it or enter another one."
+  },
+  "app.settings.resources.curseforge-api-key-unsaved": {
+    "message": "Unsaved changes"
   },
   "app.settings.resources.curseforge-api-key-verified": {
     "message": "CurseForge accepted the key."
