@@ -4380,7 +4380,7 @@
     "message": "非官方工具"
   },
   "app.lab.seed-map.copyright.engine-body": {
-    "message": "群系、地形、出生點與結構數據由 cubiomes 和 Axolotl 原生集成在本地生成。cubiomes 版權所有 (c) 2020 Cubitect，並依據 MIT 許可證提供。"
+    "message": "群系、地形、出生點與結構數據由 xpple/cubiomes 和 Axolotl 原生集成在本地生成。該引擎基於 Cubitect/cubiomes，版權所有 (c) 2020 Cubitect，並依據 MIT 許可證提供。"
   },
   "app.lab.seed-map.copyright.engine-heading": {
     "message": "本地地圖引擎"
