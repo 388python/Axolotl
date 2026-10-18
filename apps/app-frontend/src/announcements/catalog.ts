@@ -30,6 +30,62 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-1.10.0-beta.2',
+        version: '1.10.0-beta.2',
+        publishedAt: '2026-10-18',
+        title: {
+            'en-US': 'Axolotl Launcher 1.10.0-beta.2',
+            'zh-CN': 'Axolotl Launcher 1.10.0-beta.2',
+        },
+        changes: {
+            changed: [
+                {
+                    'en-US':
+                        'Improved recovery from abnormally slow HTTP/2 downloads, including small files, by comparing HTTP/1.1 and available alternative download sources.',
+                    'zh-CN':
+                        '改进 HTTP/2 异常低速下载的恢复，覆盖小文件，并比较 HTTP/1.1 与可用备用来源以选择恢复线路。',
+                },
+                {
+                    'en-US':
+                        'Improved download recovery by retaining resumable partial files when integrity verification is available.',
+                    'zh-CN': '改进下载恢复，在支持完整性校验的情况下保留可续传的已下载内容。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed dependency parsing failures when installing Modrinth modpacks such as Sodium Plus.',
+                    'zh-CN': '修复安装 Sodium Plus 等 Modrinth 整合包时的依赖解析失败。',
+                },
+                {
+                    'en-US':
+                        'Fixed expired-result errors when loading additional CurseForge project versions during installation.',
+                    'zh-CN': '修复安装时加载更多 CurseForge 项目版本可能出现的内容已过期错误。',
+                },
+                {
+                    'en-US':
+                        'Fixed downloads failing when CurseForge CDN redirects returned a 404 response to partial download requests.',
+                    'zh-CN': '修复 CurseForge CDN 重定向对分段下载请求返回 404 时导致的下载失败。',
+                },
+                {
+                    'en-US':
+                        'Fixed a slow, timed-out, or reset HTTP/2 download interrupting other active downloads sharing its connection.',
+                    'zh-CN': '修复单个 HTTP/2 下载低速、超时或重置时，连带中断同一连接上其他下载的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed delayed progress and speed updates during slow downloads.',
+                    'zh-CN': '修复低速下载时进度与速度长时间不更新的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed unnecessary HTTP/2 fallback when past peak speeds caused normal concurrent downloads to be classified as too slow.',
+                    'zh-CN': '修复历史峰值速度导致正常并发下载被误判为低速并触发 HTTP/2 降级的问题。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-1.10.0-beta.1',
         version: '1.10.0-beta.1',
         publishedAt: '2026-10-15',
