@@ -82,6 +82,9 @@ const DEPENDENCY_PLAN_TTL: Duration = Duration::from_secs(10 * 60);
 const OVERRIDE_EXTRACTION_CONCURRENCY: usize = 4;
 
 static UNAUTHORIZED: AtomicBool = AtomicBool::new(false);
+/// Bumped whenever the effective key is replaced. A response that arrives after
+/// that can only describe the previous key, so it must not change the flag.
+static API_KEY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static CATEGORY_CACHE: LazyLock<RwLock<Option<Vec<CurseForgeCategory>>>> =
     LazyLock::new(|| RwLock::new(None));
 static MANUAL_IMPORT_SCAN_LOCK: LazyLock<tokio::sync::Mutex<()>> =
@@ -1137,14 +1140,31 @@ pub fn capability() -> CurseForgeCapability {
 }
 
 /// Stores the API key the user entered in the launcher. `None` removes the
-/// override so the key the build injected applies again, when there is one.
+/// override so the key the launcher was started or built with applies again,
+/// when there is one.
 pub async fn set_api_key_override(
     api_key: Option<String>,
 ) -> crate::Result<CurseForgeCapability> {
     let state = State::get().await?;
     state.update_curseforge_api_key(api_key).await?;
+    // Invalidate responses still in flight for the previous key before clearing
+    // the flag, so they cannot report an outdated status for the new one.
+    API_KEY_GENERATION.fetch_add(1, Ordering::Relaxed);
     UNAUTHORIZED.store(false, Ordering::Relaxed);
     Ok(capability())
+}
+
+fn api_key_generation() -> u64 {
+    API_KEY_GENERATION.load(Ordering::Relaxed)
+}
+
+/// Applies the authorization outcome of a response only while it still belongs
+/// to the current key, so a late response cannot speak for a replaced one.
+fn record_key_response(generation: u64, unauthorized: bool) {
+    if generation != api_key_generation() {
+        return;
+    }
+    UNAUTHORIZED.store(unauthorized, Ordering::Relaxed);
 }
 
 /// The API key the user entered in the launcher, if any, for redisplaying it.
@@ -1154,6 +1174,7 @@ pub async fn api_key_override() -> crate::Result<Option<String>> {
 }
 
 pub async fn validate_credentials() -> crate::Result<CurseForgeCapability> {
+    let generation = api_key_generation();
     let _: CurseForgeResponse<Vec<CurseForgeProject>> = request_json(
         Method::GET,
         "/v1/mods/search",
@@ -1166,7 +1187,7 @@ pub async fn validate_credentials() -> crate::Result<CurseForgeCapability> {
         MirrorPolicy::OfficialOnly,
     )
     .await?;
-    UNAUTHORIZED.store(false, Ordering::Relaxed);
+    record_key_response(generation, false);
     Ok(capability())
 }
 
@@ -10024,6 +10045,7 @@ async fn request_json<T: DeserializeOwned>(
     mirror_policy: MirrorPolicy,
 ) -> crate::Result<T> {
     let key = api_key();
+    let key_generation = api_key_generation();
     let state = State::get().await?;
     let source_mode = if method != Method::GET
         || mirror_policy == MirrorPolicy::OfficialOnly
@@ -10109,7 +10131,7 @@ async fn request_json<T: DeserializeOwned>(
         if status.is_success() {
             match serde_json::from_slice(&bytes) {
                 Ok(value) => {
-                    UNAUTHORIZED.store(false, Ordering::Relaxed);
+                    record_key_response(key_generation, false);
                     return Ok(value);
                 }
                 Err(error)
@@ -10130,7 +10152,7 @@ async fn request_json<T: DeserializeOwned>(
         }
 
         if status == StatusCode::UNAUTHORIZED {
-            UNAUTHORIZED.store(true, Ordering::Relaxed);
+            record_key_response(key_generation, true);
         }
 
         let message = response_error_message(status, &bytes);

@@ -192,12 +192,17 @@ const curseforgeApiKeyStatus = computed(() => {
 })
 
 async function writeCurseForgeApiKey(apiKey) {
+    const submittedInput = curseforgeApiKeyInput.value
     curseforgeApiKeySaving.value = true
     curseforgeApiKeyResult.value = ''
     try {
         curseforgeCapability.value = await setCurseForgeApiKeyOverride(apiKey)
-        curseforgeApiKeyInput.value = apiKey ?? ''
         curseforgeApiKeySaved.value = apiKey ?? ''
+        // Keep edits made while the request was running instead of replacing
+        // them with the key that was just stored.
+        if (curseforgeApiKeyInput.value === submittedInput) {
+            curseforgeApiKeyInput.value = apiKey ?? ''
+        }
     } catch (error) {
         handleError(error)
     } finally {
@@ -216,10 +221,13 @@ async function verifyCurseForgeApiKey() {
         curseforgeCapability.value = await validateCurseForgeCredentials()
         curseforgeApiKeyResult.value = formatMessage(messages.curseforgeApiKeyVerified)
     } catch (error) {
-        console.error('CurseForge rejected the key check', error)
-        curseforgeApiKeyResult.value = formatMessage(messages.curseforgeApiKeyVerifyFailed)
-        curseforgeCapability.value = await getCurseForgeCapability().catch(
-            () => curseforgeCapability.value,
+        console.error('CurseForge key check failed', error)
+        const capability = await getCurseForgeCapability().catch(() => curseforgeCapability.value)
+        curseforgeCapability.value = capability
+        curseforgeApiKeyResult.value = formatMessage(
+            capability?.status === 'unauthorized'
+                ? messages.curseforgeApiKeyVerifyFailed
+                : messages.curseforgeApiKeyVerifyUnavailable,
         )
     } finally {
         curseforgeApiKeyVerifying.value = false
@@ -456,6 +464,10 @@ const messages = defineMessages({
     curseforgeApiKeyVerifyFailed: {
         id: 'app.settings.resources.curseforge-api-key-verify-failed',
         defaultMessage: 'CurseForge did not accept the key.',
+    },
+    curseforgeApiKeyVerifyUnavailable: {
+        id: 'app.settings.resources.curseforge-api-key-verify-unavailable',
+        defaultMessage: 'Could not check the key. Try again later.',
     },
     mojangAuthService: {
         id: 'app.settings.resources.mojang-auth-service',

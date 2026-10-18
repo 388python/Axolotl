@@ -10268,6 +10268,9 @@
   "app.settings.resources.curseforge-api-key-verify-failed": {
     "message": "CurseForge did not accept the key."
   },
+  "app.settings.resources.curseforge-api-key-verify-unavailable": {
+    "message": "Could not check the key. Try again later."
+  },
   "app.settings.resources.curseforge-api-key-verifying": {
     "message": "Checking…"
   },

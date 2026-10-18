@@ -9365,6 +9365,9 @@
   "app.settings.resources.curseforge-api-key-verify-failed": {
     "message": "CurseForge 未接受该密钥。"
   },
+  "app.settings.resources.curseforge-api-key-verify-unavailable": {
+    "message": "无法完成密钥检查，请稍后再试。"
+  },
   "app.settings.resources.curseforge-api-key-verifying": {
     "message": "正在检查…"
   },
