@@ -15,6 +15,8 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("curseforge")
         .invoke_handler(tauri::generate_handler![
             curseforge_capability,
+            curseforge_api_key_override,
+            curseforge_set_api_key,
             curseforge_validate_credentials,
             curseforge_search_projects,
             curseforge_get_project,
@@ -42,6 +44,18 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 #[tauri::command]
 pub fn curseforge_capability() -> CurseForgeCapability {
     theseus::curseforge::capability()
+}
+
+#[tauri::command]
+pub async fn curseforge_api_key_override() -> Result<Option<String>> {
+    Ok(theseus::curseforge::api_key_override().await?)
+}
+
+#[tauri::command]
+pub async fn curseforge_set_api_key(
+    api_key: Option<String>,
+) -> Result<CurseForgeCapability> {
+    Ok(theseus::curseforge::set_api_key_override(api_key).await?)
 }
 
 #[tauri::command]

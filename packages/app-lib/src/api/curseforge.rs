@@ -17,7 +17,7 @@ use crate::state::{
     DependencyResolutionTarget, DependencySelectionReason, DownloadSourceMode,
     EditInstance, InstanceInstallStage, InstanceLink, ModLoader,
     ModrinthProjectId, ModrinthVersionId, ProjectType, ReleaseChannel,
-    Settings,
+    Settings, curseforge_api_key_override_if_ready, curseforge_settings,
 };
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, DownloadRouteSource, FetchProgressFn,
@@ -195,10 +195,23 @@ pub enum CurseForgeCapabilityStatus {
     Unauthorized,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CurseForgeApiKeySource {
+    /// Set by the user in the launcher.
+    Override,
+    /// Injected when the launcher was built, or exported as
+    /// `AXOLOTL_CURSEFORGE_API_KEY` before starting it.
+    Launcher,
+    /// No key is available at all.
+    Missing,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CurseForgeCapability {
     pub status: CurseForgeCapabilityStatus,
     pub configured: bool,
+    pub key_source: CurseForgeApiKeySource,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1106,7 +1119,8 @@ pub struct CurseForgeFingerprintResult {
 }
 
 pub fn capability() -> CurseForgeCapability {
-    let configured = api_key().is_some();
+    let (key, key_source) = api_key_with_source();
+    let configured = key.is_some();
     let status = if !configured {
         CurseForgeCapabilityStatus::MissingKey
     } else if UNAUTHORIZED.load(Ordering::Relaxed) {
@@ -1115,7 +1129,28 @@ pub fn capability() -> CurseForgeCapability {
         CurseForgeCapabilityStatus::Ready
     };
 
-    CurseForgeCapability { status, configured }
+    CurseForgeCapability {
+        status,
+        configured,
+        key_source,
+    }
+}
+
+/// Stores the API key the user entered in the launcher. `None` removes the
+/// override so the key the build injected applies again, when there is one.
+pub async fn set_api_key_override(
+    api_key: Option<String>,
+) -> crate::Result<CurseForgeCapability> {
+    let state = State::get().await?;
+    state.update_curseforge_api_key(api_key).await?;
+    UNAUTHORIZED.store(false, Ordering::Relaxed);
+    Ok(capability())
+}
+
+/// The API key the user entered in the launcher, if any, for redisplaying it.
+pub async fn api_key_override() -> crate::Result<Option<String>> {
+    let state = State::get().await?;
+    Ok(state.curseforge_api_key_override())
 }
 
 pub async fn validate_credentials() -> crate::Result<CurseForgeCapability> {
@@ -9858,11 +9893,26 @@ impl From<CurseForgeProject> for UnifiedSearchHit {
 }
 
 fn api_key() -> Option<String> {
-    std::env::var("AXOLOTL_CURSEFORGE_API_KEY")
+    api_key_with_source().0
+}
+
+/// A key set in the launcher wins over the one this build was given, which in
+/// turn can be absent: builds without `CURSEFORGE_API_KEY` stay valid, they just
+/// cannot reach the official API without a key.
+fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource) {
+    let override_key = curseforge_api_key_override_if_ready();
+    if let Some(key) = curseforge_settings::normalize(override_key) {
+        return (Some(key), CurseForgeApiKeySource::Override);
+    }
+
+    let launcher_key = std::env::var("AXOLOTL_CURSEFORGE_API_KEY")
         .ok()
-        .or_else(|| option_env!("CURSEFORGE_API_KEY").map(str::to_string))
-        .map(|key| key.trim().to_string())
-        .filter(|key| !key.is_empty())
+        .or_else(|| option_env!("CURSEFORGE_API_KEY").map(str::to_string));
+
+    match curseforge_settings::normalize(launcher_key) {
+        Some(key) => (Some(key), CurseForgeApiKeySource::Launcher),
+        None => (None, CurseForgeApiKeySource::Missing),
+    }
 }
 
 fn api_base_url() -> String {

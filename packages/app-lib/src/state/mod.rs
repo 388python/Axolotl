@@ -34,6 +34,8 @@ pub(crate) use self::game_options::*;
 
 mod proxy_settings;
 
+pub(crate) mod curseforge_settings;
+
 mod installer_settings;
 
 mod process;
@@ -99,6 +101,16 @@ const AUTO_DOWNLOAD_CONCURRENCY_STEP: usize = 8;
 const AUTO_DOWNLOAD_PRESSURE_WINDOWS: usize = 2;
 const AUTO_DOWNLOAD_SAMPLE_INTERVAL: Duration = Duration::from_secs(3);
 const AUTO_DOWNLOAD_PROBE_COOLDOWN: Duration = Duration::from_secs(30);
+
+/// The CurseForge API key set in the launcher, if any. Returns `None` while the
+/// launcher state is still initializing, which lets synchronous callers fall
+/// back to the build-time key without waiting.
+pub(crate) fn curseforge_api_key_override_if_ready() -> Option<String> {
+    LAUNCHER_STATE
+        .get()
+        .and_then(|state| state.curseforge_api_key_override())
+}
+
 pub struct State {
     /// Information on the location of files used in the launcher
     pub directories: DirectoryInfo,
@@ -161,6 +173,10 @@ pub struct State {
 
     pub(crate) pool: SqlitePool,
     resource_service: OnceCell<Arc<crate::resources::ResourceService>>,
+
+    /// CurseForge API key set in the launcher. Takes precedence over the key
+    /// the build injected, which stays the fallback until the user sets one.
+    curseforge_api_key: RwLock<Option<String>>,
 
     // Cloning reqwest::Client retains its underlying connection pool.
     configured_http_client: RwLock<crate::util::fetch::DownloadClients>,
@@ -707,6 +723,20 @@ impl State {
         crate::state::proxy_settings::get(&self.pool).await
     }
 
+    pub fn curseforge_api_key_override(&self) -> Option<String> {
+        self.curseforge_api_key.read().clone()
+    }
+
+    pub async fn update_curseforge_api_key(
+        &self,
+        api_key: Option<String>,
+    ) -> crate::Result<()> {
+        let api_key = curseforge_settings::normalize(api_key);
+        curseforge_settings::set(&self.pool, api_key.as_deref()).await?;
+        *self.curseforge_api_key.write() = api_key;
+        Ok(())
+    }
+
     pub async fn update_proxy_config(
         &self,
         config: &crate::util::proxy::ProxyConfig,
@@ -978,6 +1008,7 @@ impl State {
         let api_semaphore =
             FetchSemaphore(Semaphore::new(download_concurrency));
         let auto_prefers_mirror = settings.auto_prefers_mirror();
+        let curseforge_api_key = curseforge_settings::get(&pool).await?;
         let proxy_config = proxy_settings::get(&pool).await?;
         let configured_http_client =
             crate::util::fetch::DownloadClients::build(
@@ -1059,6 +1090,7 @@ impl State {
             instance_locks: Arc::new(InstanceLockManager::default()),
             pool,
             resource_service: OnceCell::new(),
+            curseforge_api_key: RwLock::new(curseforge_api_key),
             configured_http_client: RwLock::new(configured_http_client),
             configured_http_client_update: AsyncMutex::new(()),
             file_watcher,
@@ -1132,6 +1164,7 @@ pub(crate) async fn test_state(
     pool: SqlitePool,
 ) -> crate::Result<Arc<State>> {
     let file_watcher = instances::watcher::init_watcher().await?;
+    let curseforge_api_key = curseforge_settings::get(&pool).await?;
     let proxy_config = proxy_settings::get(&pool).await?;
     let settings = Settings::get(&pool).await?;
     let configured_http_client = crate::util::fetch::DownloadClients::build(
@@ -1175,6 +1208,7 @@ pub(crate) async fn test_state(
         instance_locks: Arc::new(InstanceLockManager::default()),
         pool,
         resource_service: OnceCell::new(),
+        curseforge_api_key: RwLock::new(curseforge_api_key),
         configured_http_client: RwLock::new(configured_http_client),
         configured_http_client_update: AsyncMutex::new(()),
         file_watcher,
