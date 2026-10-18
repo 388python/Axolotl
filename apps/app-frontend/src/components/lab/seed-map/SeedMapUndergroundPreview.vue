@@ -141,14 +141,6 @@ let disposed = false
 let initialCanceled = false
 let initialization: Promise<void> | undefined
 const resourceAbort = new AbortController()
-const lavaLevel = computed(() =>
-    props.query.dimension === 'nether'
-        ? 31
-        : Number(props.query.version.split('.')[0]) >= 26 ||
-            /^1\.(?:1[89]|2\d)(?:\.|$)/.test(props.query.version)
-          ? -54
-          : 10,
-)
 const generating = computed(
     () => (busy.value || pendingChunks.value) && !failed.value && !contextLost.value,
 )
