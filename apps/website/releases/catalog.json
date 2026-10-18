@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-18T16:46:19.000Z",
+  "updated_at": "2026-10-18T12:15:28.854Z",
   "announcements": [
     {
       "id": "launcher-1.10.0-beta.2",
@@ -84,6 +84,22 @@
           {
             "en-US": "Increased the top bar's background blur to improve text readability.",
             "zh-CN": "增强顶部栏背景模糊，提高文字可读性。"
+          },
+          {
+            "en-US": "Improved recovery from abnormally slow HTTP/2 downloads, including small files, by comparing HTTP/1.1 and available alternative download sources.",
+            "zh-CN": "改进 HTTP/2 异常低速下载的恢复，覆盖小文件，并比较 HTTP/1.1 与可用备用来源以选择恢复线路。"
+          },
+          {
+            "en-US": "Improved download recovery by retaining resumable partial files when integrity verification is available.",
+            "zh-CN": "改进下载恢复，在支持完整性校验的情况下保留可续传的已下载内容。"
+          },
+          {
+            "en-US": "deepened the top-bar background blur to improve readability.",
+            "zh-CN": "在浏览页恢复了顶部栏的磨砂背景效果，增强可读性。"
+          },
+          {
+            "en-US": "Added a localized error message when file is locked by another program.",
+            "zh-CN": "新增文件被其他程序锁定时的本地化错误提示。"
           }
         ],
         "fixed": [
@@ -134,6 +150,30 @@
           {
             "en-US": "Fixed dismissed download notifications returning after restarting the launcher.",
             "zh-CN": "修复已关闭的下载通知在重启启动器后重新出现的问题。"
+          },
+          {
+            "en-US": "Fixed dependency parsing failures when installing Modrinth modpacks such as Sodium Plus.",
+            "zh-CN": "修复安装 Sodium Plus 等 Modrinth 整合包时的依赖解析失败。"
+          },
+          {
+            "en-US": "Fixed expired-result errors when loading additional CurseForge project versions during installation.",
+            "zh-CN": "修复安装时加载更多 CurseForge 项目版本可能出现的内容已过期错误。"
+          },
+          {
+            "en-US": "Fixed downloads failing when CurseForge CDN redirects returned a 404 response to partial download requests.",
+            "zh-CN": "修复 CurseForge CDN 重定向对分段下载请求返回 404 时导致的下载失败。"
+          },
+          {
+            "en-US": "Fixed a slow, timed-out, or reset HTTP/2 download interrupting other active downloads sharing its connection.",
+            "zh-CN": "修复单个 HTTP/2 下载低速、超时或重置时，连带中断同一连接上其他下载的问题。"
+          },
+          {
+            "en-US": "Fixed delayed progress and speed updates during slow downloads.",
+            "zh-CN": "修复低速下载时进度与速度长时间不更新的问题。"
+          },
+          {
+            "en-US": "Fixed unnecessary HTTP/2 fallback when past peak speeds caused normal concurrent downloads to be classified as too slow.",
+            "zh-CN": "修复历史峰值速度导致正常并发下载被误判为低速并触发 HTTP/2 降级的问题。"
           }
         ]
       }
