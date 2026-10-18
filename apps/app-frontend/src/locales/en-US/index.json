@@ -1,4 +1,160 @@
 {
+  "app.settings.network.title": {
+    "message": "Connection tests"
+  },
+  "app.settings.network.mode": {
+    "message": "Connection method"
+  },
+  "app.settings.network.launcher": {
+    "message": "Use launcher proxy settings"
+  },
+  "app.settings.network.direct": {
+    "message": "Direct connection"
+  },
+  "app.settings.network.run-all": {
+    "message": "Test all services"
+  },
+  "app.settings.network.stop": {
+    "message": "Stop testing"
+  },
+  "app.settings.network.run": {
+    "message": "Test"
+  },
+  "app.settings.network.run-target": {
+    "message": "Test {name}"
+  },
+  "app.settings.network.copy": {
+    "message": "Copy report"
+  },
+  "app.settings.network.copied": {
+    "message": "Report copied"
+  },
+  "app.settings.network.copy-failed": {
+    "message": "Could not copy the report. Try again."
+  },
+  "app.settings.network.idle": {
+    "message": "Not tested"
+  },
+  "app.settings.network.queued": {
+    "message": "Waiting"
+  },
+  "app.settings.network.running": {
+    "message": "Testing…"
+  },
+  "app.settings.network.cancelled": {
+    "message": "Stopped"
+  },
+  "app.settings.network.failed": {
+    "message": "Connection failed"
+  },
+  "app.settings.network.success": {
+    "message": "Responding"
+  },
+  "app.settings.network.restricted": {
+    "message": "Access restricted"
+  },
+  "app.settings.network.http-error": {
+    "message": "HTTP error"
+  },
+  "app.settings.network.response": {
+    "message": "Response time"
+  },
+  "app.settings.network.peer": {
+    "message": "Connection peer IP"
+  },
+  "app.settings.network.sample": {
+    "message": "Short download sample"
+  },
+  "app.settings.network.details": {
+    "message": "Connection details"
+  },
+  "app.settings.network.resolved": {
+    "message": "DNS addresses"
+  },
+  "app.settings.network.dns-time": {
+    "message": "DNS lookup time"
+  },
+  "app.settings.network.dns-mode": {
+    "message": "DNS method"
+  },
+  "app.settings.network.system-dns": {
+    "message": "System DNS"
+  },
+  "app.settings.network.doh": {
+    "message": "DNS over HTTPS"
+  },
+  "app.settings.network.proxy": {
+    "message": "Proxy setting"
+  },
+  "app.settings.network.system-proxy": {
+    "message": "System proxy"
+  },
+  "app.settings.network.custom-proxy": {
+    "message": "Custom proxy"
+  },
+  "app.settings.network.proxy-help": {
+    "message": "With a proxy or VPN, the peer IP may belong to the proxy. DNS addresses are resolved by the launcher and may differ from the proxy’s destination."
+  },
+  "app.settings.network.dns-failed": {
+    "message": "DNS lookup failed"
+  },
+  "app.settings.network.request-failed": {
+    "message": "The test could not start. Retry this service."
+  },
+  "app.settings.network.restricted-help": {
+    "message": "The server refused this request."
+  },
+  "app.settings.network.error.timeout": {
+    "message": "The connection timed out."
+  },
+  "app.settings.network.error.connection": {
+    "message": "Could not connect. Check DNS, your proxy, or the TLS connection."
+  },
+  "app.settings.network.error.body": {
+    "message": "The response body could not be read."
+  },
+  "app.settings.network.error.request": {
+    "message": "The request failed."
+  },
+  "app.settings.network.error.empty-body": {
+    "message": "No download data was received."
+  },
+  "app.settings.network.status": {
+    "message": "HTTP status"
+  },
+  "app.settings.network.protocol": {
+    "message": "HTTP protocol"
+  },
+  "app.settings.network.tested": {
+    "message": "Tested at"
+  },
+  "app.settings.network.url": {
+    "message": "Request URL"
+  },
+  "app.settings.network.tls": {
+    "message": "TLS certificate verification"
+  },
+  "app.settings.network.tls-on": {
+    "message": "Enabled"
+  },
+  "app.settings.network.tls-off": {
+    "message": "Disabled in launcher settings"
+  },
+  "app.settings.network.stale": {
+    "message": "Previous result"
+  },
+  "app.settings.network.launcher-version": {
+    "message": "Launcher version"
+  },
+  "app.settings.network.platform": {
+    "message": "Platform"
+  },
+  "app.settings.tabs.network-connection": {
+    "message": "Network tests"
+  },
+  "app.settings.network.search": {
+    "message": "DNS IP latency speed connectivity diagnostics CurseForge CF Modrinth MR CDN Mojang API proxy"
+  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },

@@ -838,6 +838,8 @@ fn main() {
                         "proxy_get",
                         "proxy_set",
                         "proxy_test",
+                        "network_test",
+                        "network_test_cancel",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

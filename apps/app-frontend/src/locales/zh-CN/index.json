@@ -1,4 +1,160 @@
 {
+  "app.settings.network.title": {
+    "message": "连接测试"
+  },
+  "app.settings.network.mode": {
+    "message": "连接方式"
+  },
+  "app.settings.network.launcher": {
+    "message": "使用启动器代理设置"
+  },
+  "app.settings.network.direct": {
+    "message": "直接连接"
+  },
+  "app.settings.network.run-all": {
+    "message": "测试全部服务"
+  },
+  "app.settings.network.stop": {
+    "message": "停止测试"
+  },
+  "app.settings.network.run": {
+    "message": "测试"
+  },
+  "app.settings.network.run-target": {
+    "message": "测试 {name}"
+  },
+  "app.settings.network.copy": {
+    "message": "复制诊断报告"
+  },
+  "app.settings.network.copied": {
+    "message": "已复制报告"
+  },
+  "app.settings.network.copy-failed": {
+    "message": "无法复制报告，请重试。"
+  },
+  "app.settings.network.idle": {
+    "message": "尚未测试"
+  },
+  "app.settings.network.queued": {
+    "message": "等待测试"
+  },
+  "app.settings.network.running": {
+    "message": "正在测试…"
+  },
+  "app.settings.network.cancelled": {
+    "message": "已停止"
+  },
+  "app.settings.network.failed": {
+    "message": "连接失败"
+  },
+  "app.settings.network.success": {
+    "message": "响应正常"
+  },
+  "app.settings.network.restricted": {
+    "message": "访问受限"
+  },
+  "app.settings.network.http-error": {
+    "message": "HTTP 错误"
+  },
+  "app.settings.network.response": {
+    "message": "响应耗时"
+  },
+  "app.settings.network.peer": {
+    "message": "实际连接 IP"
+  },
+  "app.settings.network.sample": {
+    "message": "短时下载采样"
+  },
+  "app.settings.network.details": {
+    "message": "连接详情"
+  },
+  "app.settings.network.resolved": {
+    "message": "DNS 解析地址"
+  },
+  "app.settings.network.dns-time": {
+    "message": "DNS 解析耗时"
+  },
+  "app.settings.network.dns-mode": {
+    "message": "DNS 解析方式"
+  },
+  "app.settings.network.system-dns": {
+    "message": "系统 DNS"
+  },
+  "app.settings.network.doh": {
+    "message": "DNS over HTTPS"
+  },
+  "app.settings.network.proxy": {
+    "message": "代理设置"
+  },
+  "app.settings.network.system-proxy": {
+    "message": "系统代理"
+  },
+  "app.settings.network.custom-proxy": {
+    "message": "自定义代理"
+  },
+  "app.settings.network.proxy-help": {
+    "message": "使用代理或 VPN 时，实际连接 IP 可能属于代理服务器。DNS 地址由启动器解析，可能与代理实际访问的目标不同。"
+  },
+  "app.settings.network.dns-failed": {
+    "message": "DNS 解析失败"
+  },
+  "app.settings.network.request-failed": {
+    "message": "测试未能启动，请重试此服务。"
+  },
+  "app.settings.network.restricted-help": {
+    "message": "服务器拒绝了请求。"
+  },
+  "app.settings.network.error.timeout": {
+    "message": "连接超时。"
+  },
+  "app.settings.network.error.connection": {
+    "message": "无法建立连接，请检查 DNS、代理或 TLS 连接。"
+  },
+  "app.settings.network.error.body": {
+    "message": "无法读取响应内容。"
+  },
+  "app.settings.network.error.request": {
+    "message": "请求失败。"
+  },
+  "app.settings.network.error.empty-body": {
+    "message": "未收到下载数据。"
+  },
+  "app.settings.network.status": {
+    "message": "HTTP 状态"
+  },
+  "app.settings.network.protocol": {
+    "message": "HTTP 协议"
+  },
+  "app.settings.network.tested": {
+    "message": "测试时间"
+  },
+  "app.settings.network.url": {
+    "message": "请求地址"
+  },
+  "app.settings.network.tls": {
+    "message": "TLS 证书验证"
+  },
+  "app.settings.network.tls-on": {
+    "message": "已开启"
+  },
+  "app.settings.network.tls-off": {
+    "message": "已在启动器设置中关闭"
+  },
+  "app.settings.network.stale": {
+    "message": "上次测试结果"
+  },
+  "app.settings.network.launcher-version": {
+    "message": "启动器版本"
+  },
+  "app.settings.network.platform": {
+    "message": "运行平台"
+  },
+  "app.settings.tabs.network-connection": {
+    "message": "网络测试"
+  },
+  "app.settings.network.search": {
+    "message": "DNS IP 延迟 速度 网络 连通性 诊断 CurseForge CF Modrinth MR CDN Mojang API 代理"
+  },
   "app.files.error.in-use": {
     "message": "文件正被占用，请关闭游戏或其他占用该文件的程序后重试。"
   },

@@ -18,6 +18,18 @@ const message = (id: string, defaultMessage: string): MessageDescriptor => ({ id
 
 export const settingsSearchEntries: SettingsSearchEntry[] = [
     {
+        id: 'network-tests',
+        categoryId: 'network-connection',
+        targetId: 'settings-target-network-tests',
+        label: message('app.settings.network.title', 'Connection tests'),
+        keywords: [
+            message(
+                'app.settings.network.search',
+                'DNS IP latency speed connectivity diagnostics CurseForge CF Modrinth MR CDN Mojang API proxy',
+            ),
+        ],
+    },
+    {
         id: 'appearance-color-theme',
         categoryId: 'interface',
         targetId: 'settings-target-appearance-color-theme',
