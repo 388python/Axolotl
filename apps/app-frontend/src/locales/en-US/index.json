@@ -14525,6 +14525,69 @@
   "app.lab.seed-map.underground-caves": {
     "message": "Cave carvers"
   },
+  "app.lab.seed-map.underground-3d.back": {
+    "message": "Back to map"
+  },
+  "app.lab.seed-map.underground-3d.cancel": {
+    "message": "Cancel generation"
+  },
+  "app.lab.seed-map.underground-3d.context-lost": {
+    "message": "The 3D graphics context was lost. Return to the map and reopen this view."
+  },
+  "app.lab.seed-map.underground-3d.controls": {
+    "message": "Mouse: look · WASD: move · Space / Shift: up / down · Wheel: speed · Esc: release mouse. Free flight, without collision."
+  },
+  "app.lab.seed-map.underground-3d.failed": {
+    "message": "Could not generate this region. Your previous view is kept. Retry or return to the map."
+  },
+  "app.lab.seed-map.underground-3d.generate": {
+    "message": "Generate around camera"
+  },
+  "app.lab.seed-map.underground-3d.generating": {
+    "message": "Computing terrain, caves and minerals…"
+  },
+  "app.lab.seed-map.underground-3d.lava": {
+    "message": "Lava (estimated)"
+  },
+  "app.lab.seed-map.underground-3d.limits": {
+    "message": "Only cavity-facing rock is drawn; other solid rock is hidden. Stone / deepslate / netherrack are representative wall materials. Water is estimated only above the terrain surface below Y=63; underground aquifers are omitted. Lava fills empty space below Y={lava}. Fluids use static original textures. Mineral replacement, air-exposure rules, decorations and player changes are not fully simulated."
+  },
+  "app.lab.seed-map.underground-3d.meshing": {
+    "message": "Building textured cave boundaries…"
+  },
+  "app.lab.seed-map.underground-3d.no-air": {
+    "message": "No open cave was found near this position. You can fly through rock or generate another region."
+  },
+  "app.lab.seed-map.underground-3d.open": {
+    "message": "Explore in 3D"
+  },
+  "app.lab.seed-map.underground-3d.ores": {
+    "message": "Mineral candidates"
+  },
+  "app.lab.seed-map.underground-3d.paused": {
+    "message": "Click the view to explore"
+  },
+  "app.lab.seed-map.underground-3d.position": {
+    "message": "X {x} · Y {y} · Z {z} · {speed} blocks/s"
+  },
+  "app.lab.seed-map.underground-3d.range": {
+    "message": "Loaded 64 × 64 × 64 blocks: X {x}…{maxX}, Y {y}…{maxY}, Z {z}…{maxZ}. Nearby regions load automatically as you move."
+  },
+  "app.lab.seed-map.underground-3d.retry": {
+    "message": "Retry region"
+  },
+  "app.lab.seed-map.underground-3d.terrain": {
+    "message": "Cave boundaries"
+  },
+  "app.lab.seed-map.underground-3d.title": {
+    "message": "3D underground · X-Ray"
+  },
+  "app.lab.seed-map.underground-3d.truncated": {
+    "message": "The mineral candidate limit was reached; some deposits are omitted."
+  },
+  "app.lab.seed-map.underground-3d.water": {
+    "message": "Water (estimated)"
+  },
   "app.lab.seed-map.underground-canyons": {
     "message": "Canyon carvers"
   },
@@ -14547,7 +14610,7 @@
     "message": "Look below the surface"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. These predictions do not simulate water, aquifers or later world changes."
+    "message": "Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view around the map center: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Nearby regions load automatically as you move. Fluids are estimates, aquifers are omitted, and mineral positions are candidates."
   },
   "app.onboarding.brewing.title": {
     "message": "Create a brewing recipe"
@@ -15139,5 +15202,8 @@
   },
   "app.lab.seed-map.preview.estimated-loot": {
     "message": "Loot seed is estimated; items may differ from the game."
+  },
+  "app.lab.seed-map.underground-3d.auto-paused": {
+    "message": "Automatic loading is paused. Generate around the camera to resume."
   }
 }

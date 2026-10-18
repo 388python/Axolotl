@@ -14546,6 +14546,69 @@
   "app.lab.seed-map.underground-caves": {
     "message": "洞穴雕刻层"
   },
+  "app.lab.seed-map.underground-3d.back": {
+    "message": "返回地图"
+  },
+  "app.lab.seed-map.underground-3d.cancel": {
+    "message": "取消生成"
+  },
+  "app.lab.seed-map.underground-3d.context-lost": {
+    "message": "3D 图形上下文已丢失，请返回地图后重新打开此视图。"
+  },
+  "app.lab.seed-map.underground-3d.controls": {
+    "message": "鼠标转向 · WASD 移动 · 空格 / Shift 上升 / 下降 · 滚轮调整速度 · Esc 释放鼠标。自由飞行，不检测碰撞。"
+  },
+  "app.lab.seed-map.underground-3d.failed": {
+    "message": "无法生成此区域，已保留上一次的视图。可重试或返回地图。"
+  },
+  "app.lab.seed-map.underground-3d.generate": {
+    "message": "生成镜头周围区域"
+  },
+  "app.lab.seed-map.underground-3d.generating": {
+    "message": "正在计算地形、洞穴和矿物…"
+  },
+  "app.lab.seed-map.underground-3d.lava": {
+    "message": "岩浆（估算）"
+  },
+  "app.lab.seed-map.underground-3d.limits": {
+    "message": "仅绘制紧贴空腔的岩层，其余实心岩层隐藏。石头、深板岩和下界岩为代表性洞壁材质。水仅估算地形表面以上、Y=63 以下的部分，不模拟地下含水层。岩浆填充 Y={lava} 以下的空腔。流体使用静态原版贴图。矿物替换、空气暴露规则、装饰和玩家改动尚未完整模拟。"
+  },
+  "app.lab.seed-map.underground-3d.meshing": {
+    "message": "正在构建带贴图的洞壁…"
+  },
+  "app.lab.seed-map.underground-3d.no-air": {
+    "message": "此位置附近未找到开放洞穴。可以穿过岩层飞行，或生成其他区域。"
+  },
+  "app.lab.seed-map.underground-3d.open": {
+    "message": "3D 地下探索"
+  },
+  "app.lab.seed-map.underground-3d.ores": {
+    "message": "矿物候选"
+  },
+  "app.lab.seed-map.underground-3d.paused": {
+    "message": "点击画面开始探索"
+  },
+  "app.lab.seed-map.underground-3d.position": {
+    "message": "X {x} · Y {y} · Z {z} · {speed} 方块/秒"
+  },
+  "app.lab.seed-map.underground-3d.range": {
+    "message": "已加载 64 × 64 × 64 方块：X {x}…{maxX}，Y {y}…{maxY}，Z {z}…{maxZ}。行走时会自动加载周边区域。"
+  },
+  "app.lab.seed-map.underground-3d.retry": {
+    "message": "重试此区域"
+  },
+  "app.lab.seed-map.underground-3d.terrain": {
+    "message": "洞穴边界"
+  },
+  "app.lab.seed-map.underground-3d.title": {
+    "message": "3D 地下 · X-Ray"
+  },
+  "app.lab.seed-map.underground-3d.truncated": {
+    "message": "矿物候选达到数量上限，部分矿床未显示。"
+  },
+  "app.lab.seed-map.underground-3d.water": {
+    "message": "水（估算）"
+  },
   "app.lab.seed-map.underground-canyons": {
     "message": "峡谷雕刻层"
   },
@@ -14568,7 +14631,7 @@
     "message": "查看地表之下"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "地下模式显示指定高度的切片。放大地图、选择 Y 高度，并独立开关地形密度、洞穴和峡谷雕刻层。预测不模拟水、含水层和后续世界变化。"
+    "message": "地下模式显示指定高度的切片。放大后选择 Y 高度，并独立开关地形密度、洞穴和峡谷。3D 地下探索会打开地图中心附近带真实贴图的 X-Ray 视图：点击画面转向，WASD 移动，空格 / Shift 上升或下降，Esc 释放鼠标。行走时会自动加载周边区域。流体为估算，不模拟含水层，矿物位置为候选结果。"
   },
   "app.onboarding.brewing.title": {
     "message": "创建酿造配方"
@@ -15160,5 +15223,8 @@
   },
   "app.lab.seed-map.preview.estimated-loot": {
     "message": "战利品随机种子为估算值，物品可能与游戏内结果不同。"
+  },
+  "app.lab.seed-map.underground-3d.auto-paused": {
+    "message": "自动加载已暂停，点击“生成镜头周围区域”即可恢复。"
   }
 }

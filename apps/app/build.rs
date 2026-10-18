@@ -188,12 +188,14 @@ fn build_seed_map_engine() {
     let mut sources = vec![
         std::path::PathBuf::from("src/seed_map/cubiomes_bridge.c"),
         std::path::PathBuf::from("src/seed_map/cubiomes_details.c"),
+        std::path::PathBuf::from("src/seed_map/underground_volume.c"),
         std::path::PathBuf::from("src/seed_map/ancient_city_layout.c"),
     ];
     collect_engine_sources(source, &mut sources);
     sources.sort();
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.c");
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_details.c");
+    println!("cargo:rerun-if-changed=src/seed_map/underground_volume.c");
     println!("cargo:rerun-if-changed=src/seed_map/ancient_city_layout.c");
     println!("cargo:rerun-if-changed=src/seed_map/ancient_city_layout.h");
     println!("cargo:rerun-if-changed=src/seed_map/cubiomes_bridge.h");
@@ -855,6 +857,8 @@ fn main() {
                         "seed_map_structure_details",
                         "seed_map_container_loot",
                         "seed_map_underground_tile",
+                        "seed_map_underground_volume",
+                        "seed_map_cancel_underground",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

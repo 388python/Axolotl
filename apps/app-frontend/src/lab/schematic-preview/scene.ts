@@ -26,6 +26,8 @@ type SceneOptions = {
     onWalkSpeedChange: (speed: number) => void
     onNativeWalkLock?: () => Promise<boolean>
     onNativeWalkUnlock?: () => Promise<void>
+    requireWalkLock?: boolean
+    doubleSided?: boolean
 }
 
 type Projection = 'perspective' | 'orthographic'
@@ -106,6 +108,7 @@ export class SchematicPreviewScene {
     private readonly walkEuler = new THREE.Euler(0, 0, 0, 'YXZ')
     private nativeWalkLockPending = false
     private nativeWalkLocked = false
+    private readonly requireWalkLock: boolean
 
     constructor(options: SceneOptions) {
         this.canvas = options.canvas
@@ -116,6 +119,11 @@ export class SchematicPreviewScene {
         this.onWalkSpeedChange = options.onWalkSpeedChange
         this.onNativeWalkLock = options.onNativeWalkLock
         this.onNativeWalkUnlock = options.onNativeWalkUnlock
+        this.requireWalkLock = options.requireWalkLock ?? false
+        if (options.doubleSided) {
+            this.opaqueMaterial.side = THREE.DoubleSide
+            this.translucentMaterial.side = THREE.DoubleSide
+        }
         this.renderer = new THREE.WebGLRenderer({
             canvas: options.canvas,
             antialias: true,
@@ -221,6 +229,8 @@ export class SchematicPreviewScene {
         const oldTranslucent = this.translucentMaterial
         this.opaqueMaterial = this.createMaterial(false, texture)
         this.translucentMaterial = this.createMaterial(true, texture)
+        this.opaqueMaterial.side = oldOpaque.side
+        this.translucentMaterial.side = oldTranslucent.side
         for (const chunk of this.chunks.values()) {
             for (const child of chunk.children) {
                 if (!(child instanceof THREE.Mesh)) continue
@@ -368,6 +378,18 @@ export class SchematicPreviewScene {
             this.startWalkLoop()
         }
         this.onViewModeChange(mode)
+        this.requestRender()
+    }
+
+    getCameraPosition(): [number, number, number] {
+        return this.activeCamera.position.toArray()
+    }
+
+    setCameraPosition(position: [number, number, number]) {
+        const direction = this.activeCamera.getWorldDirection(new THREE.Vector3())
+        this.activeCamera.position.set(...position)
+        this.controls.target.copy(this.activeCamera.position).addScaledVector(direction, 8)
+        this.controls.update()
         this.requestRender()
     }
 
@@ -867,6 +889,7 @@ export class SchematicPreviewScene {
             void this.releaseNativeWalkLock()
             return
         }
+        if (this.requireWalkLock && !this.walkControls.isLocked && !this.nativeWalkLocked) return
         if (
             ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(
                 event.code,
@@ -886,7 +909,8 @@ export class SchematicPreviewScene {
         void this.releaseNativeWalkLock()
     }
 
-    private readonly handleWalkClick = () => {
+    private readonly handleWalkClick = (event: MouseEvent) => {
+        if (this.requireWalkLock && event.target !== this.canvas) return
         if (this.viewMode === 'walk') this.requestWalkLock()
     }
 
@@ -927,6 +951,7 @@ export class SchematicPreviewScene {
     }
 
     private readonly handleWalkUnlock = () => {
+        this.pressedKeys.clear()
         if (!this.nativeWalkLocked) this.onWalkLockChange(false)
     }
 
@@ -1009,7 +1034,10 @@ export class SchematicPreviewScene {
                 this.perspectiveCamera.fov = targetFov
                 this.perspectiveCamera.updateProjectionMatrix()
             }
-            if (this.viewMode === 'walk') {
+            if (
+                this.viewMode === 'walk' &&
+                (!this.requireWalkLock || this.walkControls.isLocked || this.nativeWalkLocked)
+            ) {
                 const forward =
                     Number(this.pressedKeys.has('KeyW')) - Number(this.pressedKeys.has('KeyS'))
                 const right =

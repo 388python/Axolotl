@@ -44,6 +44,7 @@ import {
 } from '@modrinth/ui'
 import {
     computed,
+    defineAsyncComponent,
     inject,
     nextTick,
     onMounted,
@@ -136,6 +137,10 @@ import {
     type SeedMapTileView,
 } from '@/lab/seed-map/tile-layer'
 
+const SeedMapUndergroundPreview = defineAsyncComponent(
+    () => import('@/components/lab/seed-map/SeedMapUndergroundPreview.vue'),
+)
+
 type MapBounds = {
     minX: number
     minZ: number
@@ -176,6 +181,7 @@ const markerName = ref('')
 const markerColor = ref('#22C55E')
 const markerDraftOpen = ref(false)
 const advancedOpen = ref(false)
+const underground3dOpen = ref(false)
 const layersExpanded = ref(false)
 const showLayerNames = ref(false)
 const rulerPoints = ref<{ x: number; z: number }[]>([])
@@ -341,6 +347,7 @@ const messages = defineMessages({
         defaultMessage: 'Result limit reached. Select fewer ore types to see more positions.',
     },
     undergroundMode: { id: 'app.lab.seed-map.underground-mode', defaultMessage: 'Underground' },
+    underground3d: { id: 'app.lab.seed-map.underground-3d.open', defaultMessage: 'Explore in 3D' },
     undergroundDensity: {
         id: 'app.lab.seed-map.underground-density',
         defaultMessage: 'Terrain density',
@@ -1176,6 +1183,7 @@ function setDisplayMode(mode: SeedMapDisplayMode) {
     if (mode === 'underground' && !undergroundMask.value) return
     if (mode === 'ores' && workspace.dimension === 'end') workspace.dimension = 'overworld'
     workspace.displayMode = mode
+    underground3dOpen.value = false
     ensureDimensionOreSelection()
     selection.value = null
 }
@@ -1976,6 +1984,7 @@ function onContextMenu(event: MouseEvent) {
 }
 
 function onMapKeydown(event: KeyboardEvent) {
+    if (underground3dOpen.value) return
     const target = event.target
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
     let mapMoved = false
@@ -3420,6 +3429,14 @@ function clampWorldCoordinate(value: number) {
                             @pointerdown.stop
                             @wheel.stop
                         >
+                            <Button
+                                size="2xs"
+                                type="outlined"
+                                :disabled="!(undergroundMask & 1) || workspace.dimension === 'end'"
+                                data-onboarding-id="seed-map-underground-3d-open"
+                                @click="underground3dOpen = true"
+                                ><LayersIcon />{{ formatMessage(messages.underground3d) }}</Button
+                            >
                             <label class="flex items-center gap-2"
                                 >Y
                                 <StyledInput
@@ -3457,6 +3474,20 @@ function clampWorldCoordinate(value: number) {
                                 {{ formatMessage(messages.undergroundLimit) }}
                             </p>
                         </div>
+                        <SeedMapUndergroundPreview
+                            v-if="underground3dOpen && workspace.displayMode === 'underground'"
+                            :key="`${workspace.seed}:${workspace.edition}:${workspace.gameVersion}:${workspace.dimension}`"
+                            :query="{
+                                seed: workspace.seed,
+                                edition: workspace.edition,
+                                version: workspace.gameVersion,
+                                dimension: workspace.dimension,
+                                x: workspace.center.x,
+                                y: workspace.undergroundY,
+                                z: workspace.center.z,
+                            }"
+                            @close="underground3dOpen = false"
+                        />
                         <div class="map-bottom-toolbar">
                             <SeedMapBiomePicker
                                 class="map-bottom-biomes"

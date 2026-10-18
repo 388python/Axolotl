@@ -43,7 +43,7 @@ export const onboardingMessages = defineMessages({
     mapUndergroundDescription: {
         id: 'app.onboarding.seed-map-underground.description',
         defaultMessage:
-            'Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. These predictions do not simulate water, aquifers or later world changes.',
+            'Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. Explore in 3D opens a textured X-Ray view around the map center: click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Nearby regions load automatically as you move. Fluids are estimates, aquifers are omitted, and mineral positions are candidates.',
     },
     brewingTitle: { id: 'app.onboarding.brewing.title', defaultMessage: 'Create a brewing recipe' },
     brewingDescription: {

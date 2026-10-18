@@ -147,17 +147,6 @@ const missingModels = ref(0)
 const blocksAvailable = computed(() =>
     supportsStructureBlocks(props.version ?? '', props.kind ?? ''),
 )
-const templateLimit = computed(() =>
-    props.kind === 'shipwreck'
-        ? messages.shipwreckLimit
-        : props.kind === 'outpost'
-          ? messages.outpostLimit
-          : props.kind === 'ruined-portal'
-            ? messages.portalLimit
-            : props.kind === 'ancient-city'
-              ? messages.ancientCityLimit
-              : undefined,
-)
 let blockResult: StructureBlocksResult | undefined
 let worker: Worker | undefined
 let timeout: ReturnType<typeof setTimeout> | undefined

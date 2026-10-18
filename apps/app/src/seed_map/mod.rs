@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod details;
 pub mod ores;
+pub mod underground;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

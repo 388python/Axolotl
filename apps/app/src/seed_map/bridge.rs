@@ -151,3 +151,4 @@ engine_function!(axolotl_seed_map_ancient_city_layout(seed: u64, mc: i32, x: i32
 engine_function!(axolotl_seed_map_generate_loot(table_json: *const c_char, table_len: usize, seed: u64, mc: i32) -> *mut c_char, std::ptr::null_mut());
 engine_function!(axolotl_seed_map_free_result(result: *mut c_char) -> (), ());
 engine_function!(axolotl_seed_map_underground(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, scale: i32, width: i32, height: i32, y: i32, layers: u32, rgba: *mut u8, length: u64) -> i32, -1);
+engine_function!(axolotl_seed_map_underground_volume(seed: u64, mc: i32, flags: i32, dimension: i32, x: i32, z: i32, y: i32, width: i32, height: i32, blocks: *mut u8, length: u64) -> i32, -1);
