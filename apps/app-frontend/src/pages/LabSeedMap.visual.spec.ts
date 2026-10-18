@@ -6,8 +6,13 @@ import { page, userEvent } from 'vitest/browser'
 import { defineComponent, h, Suspense, Transition, type VNode } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 
-import type { SeedMapStructureDetails, SeedMapStructurePiece } from '@/lab/seed-map/advanced'
-import type { SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
+import type {
+    SeedMapLoot,
+    SeedMapStructureDetails,
+    SeedMapStructurePiece,
+} from '@/lab/seed-map/advanced'
+import type { SeedMapArea } from '@/lab/seed-map/area-analysis'
+import type { SeedMapOreScanChunk, SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
 import type { SeedMapFeature } from '@/lab/seed-map/features'
 import { createDefaultSeedMapWorkspace, type SeedMapWorkspace } from '@/lab/seed-map/workspace'
 
@@ -19,14 +24,25 @@ const backend = vi.hoisted(() => ({
         seed: string
         resolve: (spawn: { x: number; z: number; approximate: boolean }) => void
     }[],
-    features: vi.fn(async () => []),
-    ores: vi.fn(async () => []),
+    features: vi.fn(async (): Promise<SeedMapFeature[]> => []),
+    loot: vi.fn(async (): Promise<SeedMapLoot> => ({
+        supported: true,
+        truncated: false,
+        items: [],
+        limits: [],
+    })),
+    ores: vi.fn(
+        async (_request: {
+            ores: string[]
+            chunks: number[]
+        }): Promise<SeedMapOreScanChunk[]> => [],
+    ),
     details: vi.fn(),
 }))
 
 vi.mock('@/lab/seed-map/advanced', () => ({
     getSeedMapStructureDetails: backend.details,
-    getSeedMapContainerLoot: vi.fn(),
+    getSeedMapContainerLoot: backend.loot,
 }))
 
 vi.mock('vue-router', async (importOriginal) => ({
@@ -128,9 +144,179 @@ type MapVm = {
     addMarker: () => void
     markerName: string
     dimensionMarkers: SeedMapWorkspace['markers']
+    selectedArea: SeedMapArea | null
+    markerDraftOpen: boolean
 }
 let wrapper: VueWrapper | undefined
 let closed: ReturnType<typeof vi.spyOn>[] = []
+
+it('validates numeric and cleared heights and cancels a pending batch when area analysis closes', async () => {
+    const { vm } = await openMap()
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    const panel = wrapper!.getComponent({ name: 'SeedMapAreaAnalysis' })
+    const state = panel.vm as unknown as { minY: number | undefined }
+    state.minY = undefined
+    await flushPromises()
+    expect(
+        panel
+            .findAll('button')
+            .find((button) => button.text() === 'Count mineral blocks')!
+            .attributes('disabled'),
+    ).toBeDefined()
+    state.minY = -64
+    await flushPromises()
+    let finish: ((value: SeedMapOreScanChunk[]) => void) | undefined
+    backend.ores.mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve
+            }),
+    )
+    await userEvent.click(page.getByRole('button', { name: 'Count mineral blocks', exact: true }))
+    await vi.waitFor(() => expect(panel.find('progress').exists()).toBe(true))
+    expect(Number(panel.get('progress').attributes('max'))).toBeGreaterThan(0)
+    const calls = backend.ores.mock.calls.length
+    await userEvent.click(page.getByRole('button', { name: 'Close area analysis', exact: true }))
+    finish!([])
+    await flushPromises()
+    expect(backend.ores.mock.calls).toHaveLength(calls)
+    expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(false)
+})
+
+it('searches supported loot outside visible layers and locates a chest while retaining area results', async () => {
+    const { vm } = await openMap()
+    backend.features.mockResolvedValue([{ kind: 'outpost', x: 100, z: 100, approximate: false }])
+    backend.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        pieces: [],
+        containers: [{ id: 0, piece: 0, x: 5, z: 7 }],
+        limits: ['container_positions_approximate'],
+    })
+    backend.loot.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        items: [{ id: 'minecraft:diamond', count: 3, enchantments: [] }],
+        limits: [],
+    })
+    vm.workspace.visibleFeatures = []
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    await userEvent.click(page.getByRole('tab', { name: 'Find loot', exact: true }))
+    const panel = wrapper!.get('[data-testid="seed-map-area-analysis"]')
+    await panel.get('input').setValue('diamond')
+    await userEvent.click(page.getByRole('button', { name: 'Search container loot', exact: true }))
+    await vi.waitFor(() => expect(panel.text()).toContain('Diamond ×3'))
+    expect(panel.text()).toContain('Chest coordinates and inclusion in this area are approximate')
+    await userEvent.click(page.getByRole('button', { name: 'Locate chest', exact: true }))
+    expect(vm.workspace.center).toEqual({ x: 5, z: 7 })
+    expect(vm.selectedArea).not.toBeNull()
+    expect(panel.text()).toContain('Diamond ×3')
+})
+
+it('draws a live deep-purple right-drag rectangle without panning or opening a native context menu', async () => {
+    const { vm, canvas } = await openMap()
+    const capture = vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => {})
+    const release = vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => {})
+    try {
+        const center = { ...vm.workspace.center }
+        const rect = canvas.getBoundingClientRect()
+        const pointer = (type: string, x: number, y: number) =>
+            canvas.dispatchEvent(
+                new PointerEvent(type, {
+                    button: 2,
+                    buttons: type === 'pointerup' ? 0 : 2,
+                    pointerId: 22,
+                    clientX: rect.left + x,
+                    clientY: rect.top + y,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            )
+        pointer('pointerdown', 120, 80)
+        pointer('pointermove', 180, 140)
+        await flushPromises()
+        const box = () => wrapper!.get('[data-testid="seed-map-area-selection"]')
+        expect(box().classes()).toContain('border-purple-800')
+        expect(getComputedStyle(box().element).borderTopWidth).toBe('2px')
+        const width = (box().element as HTMLElement).style.width
+        pointer('pointermove', 240, 180)
+        await flushPromises()
+        expect((box().element as HTMLElement).style.width).not.toBe(width)
+        expect(vm.workspace.center).toEqual(center)
+        pointer('pointerup', 240, 180)
+        await flushPromises()
+        expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(true)
+        const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        wrapper!.get('[data-testid="seed-map-area-analysis"]').element.dispatchEvent(menu)
+        expect(menu.defaultPrevented).toBe(true)
+        expect(vm.markerDraftOpen).toBe(false)
+        expect(vm.selectedArea).not.toBeNull()
+        const inputMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        wrapper!
+            .get('[data-testid="seed-map-area-analysis"] input')
+            .element.dispatchEvent(inputMenu)
+        expect(inputMenu.defaultPrevented).toBe(false)
+        pointer('pointerdown', 100, 100)
+        pointer('pointerup', 100, 100)
+        const markerMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        canvas.dispatchEvent(markerMenu)
+        expect(markerMenu.defaultPrevented).toBe(true)
+        expect(vm.markerDraftOpen).toBe(true)
+        vm.workspace.dimension = 'nether'
+        await flushPromises()
+        expect(wrapper!.find('[data-testid="seed-map-area-selection"]').exists()).toBe(false)
+        expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(false)
+    } finally {
+        capture.mockRestore()
+        release.mockRestore()
+    }
+})
+
+it('counts the entire selected area and omits zero mineral rows independently of map filters', async () => {
+    const { vm } = await openMap()
+    backend.ores.mockImplementation(async (request) => [
+        {
+            cx: 0,
+            cz: 0,
+            truncated: false,
+            hits:
+                request.ores[0] === 'diamond'
+                    ? [
+                          {
+                              ore: 'diamond',
+                              x: 0,
+                              y: -40,
+                              z: 0,
+                              yMin: -40,
+                              yMax: -40,
+                              status: 'terrain_unverified',
+                          },
+                          {
+                              ore: 'diamond',
+                              x: 0,
+                              y: 4,
+                              z: 0,
+                              yMin: 4,
+                              yMax: 4,
+                              status: 'terrain_unverified',
+                          },
+                      ]
+                    : [],
+        },
+    ])
+    vm.workspace.selectedOres = ['iron']
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    await userEvent.click(page.getByRole('button', { name: 'Count mineral blocks', exact: true }))
+    const panel = wrapper!.get('[data-testid="seed-map-area-analysis"]')
+    await vi.waitFor(() => expect(panel.attributes('aria-busy')).toBe('false'))
+    expect(panel.findAll('tbody tr')).toHaveLength(1)
+    expect(panel.get('tbody tr').text()).toContain('Diamond')
+    expect(panel.get('tbody tr').text()).toContain('2')
+    expect(backend.ores.mock.calls.some(([request]) => request.ores.includes('diamond'))).toBe(true)
+})
 
 it('anchors a plain location selection with a crosshair that follows the map and closes with its card', async () => {
     const { vm } = await openMap()
@@ -219,8 +405,11 @@ beforeEach(() => {
     localStorage.removeItem('axolotl.lab.seed-map.history.v1')
     backend.tiles = []
     backend.spawns = []
-    backend.features.mockClear()
-    backend.ores.mockClear()
+    backend.features.mockReset().mockResolvedValue([])
+    backend.loot
+        .mockReset()
+        .mockResolvedValue({ supported: true, truncated: false, items: [], limits: [] })
+    backend.ores.mockReset().mockResolvedValue([])
     backend.details.mockReset().mockResolvedValue({
         supported: false,
         truncated: false,

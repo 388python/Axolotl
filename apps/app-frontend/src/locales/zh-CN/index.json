@@ -15217,5 +15217,110 @@
   },
   "app.lab.seed-map.underground-3d.complete-status": {
     "message": "已就绪 · 已加载 {count} 区块"
+  },
+  "app.lab.seed-map.area.title": {
+    "message": "区域分析"
+  },
+  "app.lab.seed-map.area.close": {
+    "message": "关闭区域分析"
+  },
+  "app.lab.seed-map.area.ores": {
+    "message": "矿物统计"
+  },
+  "app.lab.seed-map.area.loot": {
+    "message": "搜索战利品"
+  },
+  "app.lab.seed-map.area.height": {
+    "message": "高度范围"
+  },
+  "app.lab.seed-map.area.min-y": {
+    "message": "最低 Y"
+  },
+  "app.lab.seed-map.area.max-y": {
+    "message": "最高 Y"
+  },
+  "app.lab.seed-map.area.analyze": {
+    "message": "统计矿石方块"
+  },
+  "app.lab.seed-map.area.search": {
+    "message": "搜索箱子战利品"
+  },
+  "app.lab.seed-map.area.query": {
+    "message": "物品名称或 minecraft:物品ID"
+  },
+  "app.lab.seed-map.area.cancel": {
+    "message": "取消"
+  },
+  "app.lab.seed-map.area.progress": {
+    "message": "正在分析 {done} / {total}"
+  },
+  "app.lab.seed-map.area.discover": {
+    "message": "正在查找结构 {done} / {total}"
+  },
+  "app.lab.seed-map.area.ore-limit": {
+    "message": "仅统计预测矿石候选方块，尚未验证地形替换。普通矿石与深板岩矿石合并，普通矿床和大型矿脉的重叠位置只统计一次。数量不代表保证可挖掘的产量。"
+  },
+  "app.lab.seed-map.area.loot-limit": {
+    "message": "搜索此 X/Z 区域内所有高度的受支持箱子，也会检查起点位于区域外 512 方块内的结构。起点更远的结构及不受支持的战利品表不在搜索范围内。"
+  },
+  "app.lab.seed-map.area.too-large": {
+    "message": "请将区域缩小至不超过 {max} 区块。"
+  },
+  "app.lab.seed-map.area.unavailable": {
+    "message": "此版本或维度不支持矿物预测。"
+  },
+  "app.lab.seed-map.area.invalid-y": {
+    "message": "请输入 {min} 至 {max} 之间有效的高度范围。"
+  },
+  "app.lab.seed-map.area.partial": {
+    "message": "结果不完整：部分预测未实现、部分查询失败，或已达到结果数量上限。"
+  },
+  "app.lab.seed-map.area.canceled": {
+    "message": "已取消，可重新分析选定区域。"
+  },
+  "app.lab.seed-map.area.failed": {
+    "message": "分析失败，可在此区域重试。"
+  },
+  "app.lab.seed-map.area.no-ores": {
+    "message": "该区域及高度范围内未找到矿物候选。"
+  },
+  "app.lab.seed-map.area.no-loot": {
+    "message": "已搜索的箱子中未找到匹配的战利品。"
+  },
+  "app.lab.seed-map.area.checked": {
+    "message": "已搜索 {count} 个箱子 · {unsupported} 项不支持 · {failed} 项失败"
+  },
+  "app.lab.seed-map.area.missing": {
+    "message": "部分战利品子表缺失，搜索结果不完整。"
+  },
+  "app.lab.seed-map.area.estimated": {
+    "message": "战利品为估算结果"
+  },
+  "app.lab.seed-map.area.position-estimated": {
+    "message": "箱子坐标及其是否位于该区域内为估算结果。"
+  },
+  "app.lab.seed-map.area.locate": {
+    "message": "定位箱子"
+  },
+  "app.lab.seed-map.area.snapshot": {
+    "message": "“{query}”的搜索结果"
+  },
+  "app.lab.seed-map.area.mineral": {
+    "message": "矿物"
+  },
+  "app.lab.seed-map.area.blocks": {
+    "message": "候选方块数"
+  },
+  "app.lab.seed-map.area.container": {
+    "message": "箱子 {number}"
+  },
+  "app.lab.seed-map.area.chunks": {
+    "message": "{count} 区块 · {width} × {depth} 方块"
+  },
+  "app.onboarding.seed-map-area.title": {
+    "message": "分析选定区域"
+  },
+  "app.onboarding.seed-map-area.description": {
+    "message": "在二维地图上按住鼠标右键拖动即可框选区域。可以按高度范围统计矿石候选方块，也能按物品名称或 ID 搜索受支持箱子的战利品。分析支持取消，并会说明预测限制。右键单击仍可添加标记。"
   }
 }

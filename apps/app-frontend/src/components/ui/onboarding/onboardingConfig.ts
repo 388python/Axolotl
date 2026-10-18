@@ -27,6 +27,15 @@ export type OnboardingStep = {
 }
 
 export const onboardingMessages = defineMessages({
+    mapAreaTitle: {
+        id: 'app.onboarding.seed-map-area.title',
+        defaultMessage: 'Analyze a selected area',
+    },
+    mapAreaDescription: {
+        id: 'app.onboarding.seed-map-area.description',
+        defaultMessage:
+            'Hold the right mouse button and drag on the 2D map to select an area. Count mineral candidate blocks at a chosen height range, or search supported container loot by item name or ID. Results include prediction limits and can be canceled. A right-click without dragging still adds a marker.',
+    },
     mapAdvancedTitle: {
         id: 'app.onboarding.seed-map.title',
         defaultMessage: 'Explore structure details',
@@ -530,6 +539,12 @@ const settingsTourSteps: Array<{
 
 export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
     'seed-map': [
+        inspect(
+            'seed-map-area',
+            'seed-map-canvas',
+            onboardingMessages.mapAreaTitle,
+            onboardingMessages.mapAreaDescription,
+        ),
         inspect(
             'seed-map-advanced',
             'seed-map-advanced-guide',

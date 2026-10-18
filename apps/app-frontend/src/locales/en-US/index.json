@@ -15196,5 +15196,110 @@
   },
   "app.lab.seed-map.underground-3d.complete-status": {
     "message": "Ready · {count} chunks loaded"
+  },
+  "app.lab.seed-map.area.title": {
+    "message": "Area analysis"
+  },
+  "app.lab.seed-map.area.close": {
+    "message": "Close area analysis"
+  },
+  "app.lab.seed-map.area.ores": {
+    "message": "Minerals"
+  },
+  "app.lab.seed-map.area.loot": {
+    "message": "Find loot"
+  },
+  "app.lab.seed-map.area.height": {
+    "message": "Height range"
+  },
+  "app.lab.seed-map.area.min-y": {
+    "message": "Minimum Y"
+  },
+  "app.lab.seed-map.area.max-y": {
+    "message": "Maximum Y"
+  },
+  "app.lab.seed-map.area.analyze": {
+    "message": "Count mineral blocks"
+  },
+  "app.lab.seed-map.area.search": {
+    "message": "Search container loot"
+  },
+  "app.lab.seed-map.area.query": {
+    "message": "Item name or minecraft:item_id"
+  },
+  "app.lab.seed-map.area.cancel": {
+    "message": "Cancel"
+  },
+  "app.lab.seed-map.area.progress": {
+    "message": "Processing {done} / {total}"
+  },
+  "app.lab.seed-map.area.discover": {
+    "message": "Finding structures {done} / {total}"
+  },
+  "app.lab.seed-map.area.ore-limit": {
+    "message": "Candidate block counts only; terrain replacements are not verified. Regular and deepslate ores are combined; overlapping vein candidates count once. These are not guaranteed mining yields."
+  },
+  "app.lab.seed-map.area.loot-limit": {
+    "message": "Searches supported containers inside this X/Z area at all heights, including structures starting up to 512 blocks outside it. More distant structure starts and unsupported loot tables are not searched."
+  },
+  "app.lab.seed-map.area.too-large": {
+    "message": "Select at most {max} chunks to analyze this area."
+  },
+  "app.lab.seed-map.area.unavailable": {
+    "message": "Mineral prediction is unavailable for this version or dimension."
+  },
+  "app.lab.seed-map.area.invalid-y": {
+    "message": "Enter a valid height range between {min} and {max}."
+  },
+  "app.lab.seed-map.area.partial": {
+    "message": "Results are incomplete: a prediction was partial, a query failed, or a result limit was reached."
+  },
+  "app.lab.seed-map.area.canceled": {
+    "message": "Canceled. Start again to analyze the selected area."
+  },
+  "app.lab.seed-map.area.failed": {
+    "message": "Analysis failed. Try again with this area."
+  },
+  "app.lab.seed-map.area.no-ores": {
+    "message": "No mineral candidates were found in this area and height range."
+  },
+  "app.lab.seed-map.area.no-loot": {
+    "message": "No matching loot was found in the searched containers."
+  },
+  "app.lab.seed-map.area.checked": {
+    "message": "{count} containers searched · {unsupported} unsupported · {failed} failed"
+  },
+  "app.lab.seed-map.area.missing": {
+    "message": "Some loot subtables are missing; the search is incomplete."
+  },
+  "app.lab.seed-map.area.estimated": {
+    "message": "Estimated loot"
+  },
+  "app.lab.seed-map.area.position-estimated": {
+    "message": "Chest coordinates and inclusion in this area are approximate."
+  },
+  "app.lab.seed-map.area.locate": {
+    "message": "Locate chest"
+  },
+  "app.lab.seed-map.area.snapshot": {
+    "message": "Results for “{query}”"
+  },
+  "app.lab.seed-map.area.mineral": {
+    "message": "Mineral"
+  },
+  "app.lab.seed-map.area.blocks": {
+    "message": "Candidate blocks"
+  },
+  "app.lab.seed-map.area.container": {
+    "message": "Chest {number}"
+  },
+  "app.lab.seed-map.area.chunks": {
+    "message": "{count} chunks · {width} × {depth} blocks"
+  },
+  "app.onboarding.seed-map-area.title": {
+    "message": "Analyze a selected area"
+  },
+  "app.onboarding.seed-map-area.description": {
+    "message": "Hold the right mouse button and drag on the 2D map to select an area. Count mineral candidate blocks at a chosen height range, or search supported container loot by item name or ID. Results include prediction limits and can be canceled. A right-click without dragging still adds a marker."
   }
 }

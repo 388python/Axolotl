@@ -57,6 +57,7 @@ import {
 } from 'vue'
 import { useRoute } from 'vue-router'
 
+import SeedMapAreaAnalysis from '@/components/lab/seed-map/SeedMapAreaAnalysis.vue'
 import SeedMapBiomePicker from '@/components/lab/seed-map/SeedMapBiomePicker.vue'
 import SeedMapCopyrightModal from '@/components/lab/seed-map/SeedMapCopyrightModal.vue'
 import SeedMapSplitView from '@/components/lab/seed-map/SeedMapSplitView.vue'
@@ -123,6 +124,7 @@ import {
     type SeedMapStructurePiece,
     type SeedMapStructureQuery,
 } from '@/lab/seed-map/advanced'
+import { type AreaLootMatch, type SeedMapArea, seedMapArea } from '@/lab/seed-map/area-analysis'
 import { compareSeedMapVersions } from '@/lab/seed-map/backend'
 import { createSeedMapLayoutLayer } from '@/lab/seed-map/layout-layer'
 import {
@@ -180,6 +182,39 @@ const profilesResolved = ref(false)
 const features = ref<SeedMapFeature[]>([])
 const spawn = ref<SeedMapSpawnPoint | null>(null)
 const selection = ref<Selection | null>(null)
+const selectedArea = ref<SeedMapArea | null>(null)
+const areaDrag = ref<{
+    id: number
+    start: { x: number; z: number }
+    end: { x: number; z: number }
+    screenX: number
+    screenY: number
+    moved: boolean
+} | null>(null)
+let suppressAreaContextMenu = false
+let areaContextMenuTimer: ReturnType<typeof setTimeout> | undefined
+function captureAreaContextMenu(event: MouseEvent) {
+    if (!areaDrag.value && !suppressAreaContextMenu) return
+    event.preventDefault()
+    if (areaDrag.value?.moved || suppressAreaContextMenu) {
+        event.stopImmediatePropagation()
+        suppressAreaContextMenu = false
+    }
+}
+const areaStyle = computed(() => {
+    const area = areaDrag.value?.moved
+        ? seedMapArea(areaDrag.value.start, areaDrag.value.end)
+        : selectedArea.value
+    if (!area) return undefined
+    const min = worldToScreen(area.minX, area.minZ)
+    const max = worldToScreen(area.maxX + 1, area.maxZ + 1)
+    return {
+        left: `${min.x}px`,
+        top: `${min.y}px`,
+        width: `${max.x - min.x}px`,
+        height: `${max.y - min.y}px`,
+    }
+})
 const markerName = ref('')
 const markerColor = ref('#22C55E')
 const markerDraftOpen = ref(false)
@@ -1116,6 +1151,7 @@ onMounted(async () => {
     resizeObserver = new ResizeObserver(resizeCanvas)
     if (canvas.value) resizeObserver.observe(canvas.value)
     document.addEventListener('fullscreenchange', onFullscreenChange)
+    document.addEventListener('contextmenu', captureAreaContextMenu, true)
     profiles.value = await getSeedMapProfiles().catch(() => fallbackSeedMapProfiles())
     if (disposed) return
     profilesResolved.value = true
@@ -1155,6 +1191,8 @@ onUnmounted(() => {
     spawnImage = undefined
     resizeObserver?.disconnect()
     document.removeEventListener('fullscreenchange', onFullscreenChange)
+    document.removeEventListener('contextmenu', captureAreaContextMenu, true)
+    if (areaContextMenuTimer) clearTimeout(areaContextMenuTimer)
 })
 
 function ensureProfile() {
@@ -1861,6 +1899,25 @@ async function requestSpawn() {
 }
 
 function onPointerDown(event: PointerEvent) {
+    if (canvas.value && event.button === 2) {
+        event.preventDefault()
+        clearWheelGesture()
+        stopZoomAnimation()
+        flushPendingPan()
+        const start = screenToWorld(event.offsetX, event.offsetY)
+        areaDrag.value = {
+            id: event.pointerId,
+            start,
+            end: start,
+            screenX: event.offsetX,
+            screenY: event.offsetY,
+            moved: false,
+        }
+        suppressAreaContextMenu = false
+        if (areaContextMenuTimer) clearTimeout(areaContextMenuTimer)
+        canvas.value.setPointerCapture(event.pointerId)
+        return
+    }
     if (!canvas.value || event.button !== 0) return
     clearWheelGesture()
     stopZoomAnimation()
@@ -1891,6 +1948,13 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
+    if (areaDrag.value?.id === event.pointerId) {
+        const drag = areaDrag.value
+        drag.end = screenToWorld(event.offsetX, event.offsetY)
+        drag.moved ||= Math.hypot(event.offsetX - drag.screenX, event.offsetY - drag.screenY) > 4
+        suppressAreaContextMenu ||= drag.moved
+        return
+    }
     if (!activePointers.has(event.pointerId)) return
     activePointers.set(event.pointerId, { x: event.offsetX, y: event.offsetY })
     if (activePointers.size === 2) {
@@ -1925,6 +1989,24 @@ function onPointerMove(event: PointerEvent) {
 }
 
 function onPointerUp(event: PointerEvent) {
+    if (areaDrag.value?.id === event.pointerId) {
+        const drag = areaDrag.value
+        if (event.type !== 'pointercancel' && drag.moved) {
+            selectedArea.value = seedMapArea(
+                drag.start,
+                screenToWorld(event.offsetX, event.offsetY),
+            )
+            selection.value = null
+            markerDraftOpen.value = false
+        }
+        areaDrag.value = null
+        if (suppressAreaContextMenu)
+            areaContextMenuTimer = setTimeout(() => {
+                suppressAreaContextMenu = false
+            }, 1000)
+        canvas.value?.releasePointerCapture(event.pointerId)
+        return
+    }
     if (!activePointers.has(event.pointerId)) return
     activePointers.delete(event.pointerId)
     clearLongPress()
@@ -2017,6 +2099,10 @@ function onDoubleClick(event: MouseEvent) {
 
 function onContextMenu(event: MouseEvent) {
     event.preventDefault()
+    if (suppressAreaContextMenu) {
+        suppressAreaContextMenu = false
+        return
+    }
     openMarkerDraftAt(event.offsetX, event.offsetY)
 }
 
@@ -2045,6 +2131,8 @@ function onMapKeydown(event: KeyboardEvent) {
     else if (event.key === '-') zoomBy(0.5)
     else if (event.key.toLowerCase() === 'f') void toggleFullscreen()
     else if (event.key === 'Escape') {
+        selectedArea.value = null
+        areaDrag.value = null
         selection.value = null
         advancedOpen.value = false
         layersExpanded.value = false
@@ -2147,6 +2235,26 @@ function selectAt(x: number, y: number) {
     }
     redraw()
 }
+
+function locateAreaLoot(match: AreaLootMatch) {
+    workspace.center = { x: match.container.x, z: match.container.z }
+    selection.value = { ...workspace.center }
+    scheduleRefresh()
+}
+
+watch(
+    () => [
+        workspace.seed,
+        workspace.edition,
+        workspace.gameVersion,
+        workspace.dimension,
+        workspace.displayMode,
+    ],
+    () => {
+        selectedArea.value = null
+        areaDrag.value = null
+    },
+)
 
 async function lookupSelectionBiome(point: { x: number; z: number }) {
     if (!workspace.seed.trim() || !selectedProfile.value?.available) return
@@ -3085,13 +3193,14 @@ function clampWorldCoordinate(value: number) {
             </div>
 
             <SeedMapSplitView
-                :open="!!structureQuery"
+                :open="!!structureQuery || !!selectedArea"
                 class="seed-map-workspace-panes min-h-[32rem] rounded-b-[var(--radius-md)] border-x border-b border-surface-5"
             >
                 <template #default="{ canvasSize, visibleSize }">
                     <div
                         class="seed-map-canvas-shell relative min-h-0 min-w-0 flex-1 overflow-hidden bg-surface-2"
                         data-onboarding-id="seed-map-canvas"
+                        @contextmenu.prevent
                     >
                         <canvas
                             v-show="workspace.displayMode !== 'underground'"
@@ -3107,15 +3216,22 @@ function clampWorldCoordinate(value: number) {
                             "
                             :class="{ 'cursor-crosshair': rulerEnabled }"
                             @pointerdown="onPointerDown"
+                            @mousedown.right.prevent
                             @pointermove="onPointerMove"
                             @pointerup="onPointerUp"
                             @pointercancel="onPointerUp"
                             @wheel="onWheel"
                             @dblclick="onDoubleClick"
-                            @contextmenu="onContextMenu"
+                            @contextmenu.prevent.stop="onContextMenu"
                         />
 
                         <template v-if="workspace.displayMode !== 'underground'">
+                            <div
+                                v-if="areaStyle"
+                                class="pointer-events-none absolute z-[4] border-2 border-solid border-purple-800 bg-highlight-purple"
+                                :style="areaStyle"
+                                data-testid="seed-map-area-selection"
+                            />
                             <span
                                 v-if="selectionVisible && selectionPointStyle"
                                 class="pointer-events-none absolute z-[5] size-6 -translate-x-1/2 -translate-y-1/2"
@@ -3566,8 +3682,30 @@ function clampWorldCoordinate(value: number) {
                     </div>
                 </template>
                 <template #details>
+                    <SeedMapAreaAnalysis
+                        v-if="selectedArea"
+                        :area="selectedArea"
+                        :context="{
+                            seed: workspace.seed,
+                            edition: workspace.edition,
+                            version: workspace.gameVersion,
+                            dimension: workspace.dimension,
+                        }"
+                        :ores="dimensionOres.map((ore) => ore.kind)"
+                        :y-range="
+                            selectedProfile?.undergroundYRanges?.[dimensionsIndex] ??
+                            (workspace.dimension === 'nether' ? [0, 127] : [-64, 319])
+                        "
+                        :feature-mask="
+                            selectedProfile?.featureMasks?.[dimensionsIndex] ?? 0x3ffffff
+                        "
+                        :feature-label="featureLabel"
+                        :ore-label="oreLabel"
+                        @close="selectedArea = null"
+                        @locate="locateAreaLoot"
+                    />
                     <SeedMapStructureDetails
-                        v-if="structureQuery && selection?.feature"
+                        v-else-if="structureQuery && selection?.feature"
                         :query="structureQuery"
                         :kind="selection.feature.kind"
                         :title="featureResultLabel(selection.feature)"

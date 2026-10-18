@@ -21,6 +21,7 @@ import {
     type SeedMapStructureQuery,
 } from '@/lab/seed-map/advanced'
 import type { SeedMapFeatureKind } from '@/lab/seed-map/features'
+import { mergeSeedMapLootItems as mergeLootItems } from '@/lab/seed-map/loot-items'
 import { seedMapTemplatePieces } from '@/lab/seed-map/structure-blocks'
 import { createSeedMapLabels, seedMapEffectDuration } from '@/lab/seed-map/structure-labels'
 import {
@@ -328,30 +329,6 @@ async function fetchContainerLoot(container: number, query = props.query) {
             .catch(() => {})
     }
     return mergedResult
-}
-
-function mergeLootItems(items: LootItem[]) {
-    const merged = new Map<string, LootItem>()
-    for (const item of items) {
-        const key = JSON.stringify([
-            item.id,
-            [...item.enchantments]
-                .map((enchantment) => [enchantment.id, enchantment.level])
-                .sort(([leftId, leftLevel], [rightId, rightLevel]) =>
-                    `${leftId}:${leftLevel}`.localeCompare(`${rightId}:${rightLevel}`),
-                ),
-            item.effect ?? null,
-            item.duration ?? null,
-        ])
-        const existing = merged.get(key)
-        if (existing) existing.count += item.count
-        else
-            merged.set(key, {
-                ...item,
-                enchantments: item.enchantments.map((value) => ({ ...value })),
-            })
-    }
-    return [...merged.values()]
 }
 
 async function fetchAllContainerLoot(query = props.query) {

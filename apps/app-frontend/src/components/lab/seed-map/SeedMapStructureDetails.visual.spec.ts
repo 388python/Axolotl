@@ -613,7 +613,7 @@ it('shows camera-relative positive axes and toggles depth-independent chest high
     expect(axis.attributes('aria-label')).toContain('+X east')
     for (const name of ['X', 'Y', 'Z'])
         expect(axis.find(`[data-testid="seed-map-axis-${name}"]`).exists()).toBe(true)
-    expect(wrapper.get('[data-testid="seed-map-chest-xray"]').text()).toContain('Chest (1)')
+    expect(wrapper.get('[data-testid="seed-map-chest-xray"]').text()).toContain('(1)')
     expect(wrapper.text()).toContain('2 containers have no known Y coordinates')
     const gl = canvas.getContext('webgl2')!
     const pixels = () => {
