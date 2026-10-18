@@ -50,6 +50,12 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
                         'Improved download recovery by retaining resumable partial files when integrity verification is available.',
                     'zh-CN': '改进下载恢复，在支持完整性校验的情况下保留可续传的已下载内容。',
                 },
+                {
+                    'en-US':
+                        'deepened the top-bar background blur to improve readability.',
+                    'zh-CN':
+                        '在浏览页恢复了顶部栏的磨砂背景效果，增强可读性。',
+                }
             ],
             fixed: [
                 {
