@@ -801,10 +801,10 @@ async fn shared_connection_single(
             || connection.is_retiring()
             || connection.is_idle_expired()
     }) {
-        if let Some(connection) = cached.as_ref() {
-            if !connection.is_retiring() {
-                connection.evict();
-            }
+        if let Some(connection) = cached.as_ref()
+            && !connection.is_retiring()
+        {
+            connection.evict();
         }
         *cached = None;
     }

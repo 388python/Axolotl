@@ -42,20 +42,40 @@ runs:
       if: runner.os == 'Windows' && inputs.package-only != 'true'
       with:
         msystem: UCRT64
-        update: false
+        update: true
     - name: Install pinned seed map compiler
       if: runner.os == 'Windows' && inputs.package-only != 'true'
       shell: msys2 {0}
       run: |
-        pacman -U --noconfirm --needed \
-          https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-16.2.0-6-any.pkg.tar.zst \
-          https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gcc-libs-16.2.0-6-any.pkg.tar.zst
+        set -euo pipefail
+        gcc_version=16.2.0-6
+        packages=(gcc gcc-libs libgcc 'libstdc++' cc-libs libatomic libgomp libquadmath)
+        urls=()
+        for package in "${packages[@]}"; do
+          urls+=("https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-${package}-${gcc_version}-any.pkg.tar.zst")
+        done
+        pacman -U --noconfirm --needed "${urls[@]}"
+        for package in "${packages[@]}"; do
+          installed="$(pacman -Q "mingw-w64-ucrt-x86_64-$package")"
+          expected="mingw-w64-ucrt-x86_64-$package $gcc_version"
+          if [ "$installed" != "$expected" ]; then
+            echo "Seed map toolchain package mismatch: expected $expected, got $installed" >&2
+            exit 1
+          fi
+        done
     - name: Select native seed map compiler
       if: runner.os == 'Windows' && inputs.package-only != 'true'
       shell: pwsh
       run: |
         $compiler = Join-Path '${{ steps.seed-map-toolchain.outputs.msys2-location }}' 'ucrt64/bin/gcc.exe'
-        if (!(Test-Path $compiler)) { throw "Seed map compiler is missing: $compiler" }
+        if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) { throw "Seed map compiler is missing: $compiler" }
+        $compilerDirectory = Split-Path -Parent $compiler
+        $env:PATH = "$compilerDirectory;$env:PATH"
+        & $compiler --version
+        if ($LASTEXITCODE -ne 0) { throw "Seed map compiler could not run: $compiler" }
+        'int axolotl_seed_map_compiler_check(void) { return 0; }' | & $compiler -x c -fsyntax-only -
+        if ($LASTEXITCODE -ne 0) { throw "Seed map compiler could not compile C source: $compiler" }
+        $compilerDirectory >> $env:GITHUB_PATH
         "AXOLOTL_CUBIOMES_CC=$compiler" >> $env:GITHUB_ENV
     - shell: bash
       run: pnpm install --frozen-lockfile

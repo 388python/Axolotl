@@ -1,7 +1,4 @@
 {
-  "app.files.error.in-use": {
-    "message": "This file is in use. Close the game or any other program using it, then try again."
-  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },
@@ -2317,6 +2314,9 @@
   },
   "app.export.writing": {
     "message": "Writing the export archive…"
+  },
+  "app.files.error.in-use": {
+    "message": "This file is in use. Close the game or any other program using it, then try again."
   },
   "app.gc-notice.fallback": {
     "message": "Java did not accept {preferred}; using {chosen}."

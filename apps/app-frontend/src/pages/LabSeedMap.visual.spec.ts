@@ -913,25 +913,24 @@ it('keeps real canvas pixels across LoD changes and progressively paints new det
     vm.drawMap()
     expect(sample()).toEqual([255, 0, 0, 255])
     expect(closed.every((spy) => spy.mock.calls.length === 0)).toBe(true)
-    for (
-        let batch = 0;
-        batch < 8 &&
-        !backend.tiles.some((job) => job.request.scale === 1 && job.request.width === 256);
-        batch++
-    ) {
-        for (const job of backend.tiles.splice(0)) await complete(job, '#ff0000')
-        await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    const fine = backend.tiles.find(
-        (job) =>
-            job.request.scale === 1 &&
-            job.request.width === 256 &&
-            job.request.x === 0 &&
-            job.request.z === 0,
-    )
-    expect(fine).toBeDefined()
-    backend.tiles.splice(backend.tiles.indexOf(fine!), 1)
-    await complete(fine!, '#00ff00')
+    const isTarget = (job: (typeof backend.tiles)[number]) =>
+        job.request.scale === 1 &&
+        job.request.width === 256 &&
+        job.request.x === 0 &&
+        job.request.z === 0
+    await expect
+        .poll(async () => {
+            for (const job of [...backend.tiles]) {
+                if (isTarget(job)) continue
+                backend.tiles.splice(backend.tiles.indexOf(job), 1)
+                await complete(job, '#ff0000')
+            }
+            return backend.tiles.find(isTarget)
+        })
+        .toBeDefined()
+    const fine = backend.tiles.find(isTarget)!
+    backend.tiles.splice(backend.tiles.indexOf(fine), 1)
+    await complete(fine, '#00ff00')
     vm.drawMap()
     expect(sample()).toEqual([0, 255, 0, 255])
     expect(closed.every((spy) => spy.mock.calls.length === 0)).toBe(true)

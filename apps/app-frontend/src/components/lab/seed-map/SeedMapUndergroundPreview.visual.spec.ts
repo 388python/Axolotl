@@ -346,6 +346,7 @@ it('targets visible block coordinates after chunk translation and ignores hidden
 })
 
 it('loads textured cavity geometry, switches layers, keeps the view on failure and cancels pending generation on exit', async () => {
+    backend.maxChunks = 2
     const volume = () => {
         const result = new ArrayBuffer(16 + 18 * 18 * 384 + 18 * 18 * 2)
         const header = new DataView(result)
@@ -386,10 +387,15 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
             },
         },
     })
-    await expect.poll(() => wrapper?.text(), { timeout: 30000 }).toMatch(/\d+ chunks/)
-    expect(wrapper.text()).toContain('other solid rock is hidden')
-    expect(wrapper.text()).toContain('aquifers are omitted')
-    expect(wrapper.text()).toContain('Target:')
+    await expect
+        .poll(() => wrapper?.text(), { timeout: 30000 })
+        .toContain('Click the view to explore')
+    expect(wrapper.get('[data-testid=underground-generation-status]').text()).toMatch(
+        /[1-9]\d* chunks/,
+    )
+    expect(wrapper.text()).toContain('Water (estimated)')
+    expect(wrapper.text()).toContain('Lava (estimated)')
+    expect(wrapper.text()).toMatch(/X -?\d+ · Y -?\d+ · Z -?\d+ · 8 blocks\/s/)
     await userEvent.click(page.getByRole('checkbox', { name: 'Bedrock' }))
     expect(wrapper.get('[data-testid=underground-settings]').text()).not.toContain('chunks')
     expect(
@@ -414,6 +420,13 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
     expect(new Set(requests.map((request) => `${request.x}:${request.y}:${request.z}`)).size).toBe(
         requests.length,
     )
+    await expect
+        .poll(() =>
+            wrapper
+                ?.get('[data-testid=underground-generation-status]')
+                .attributes('data-generating'),
+        )
+        .toBe('false')
     const canvas = wrapper.get('canvas').element as HTMLCanvasElement
     expect(canvas.width).toBeGreaterThan(1)
     await userEvent.click(page.elementLocator(canvas), { position: { x: 800, y: 500 } })
@@ -423,9 +436,9 @@ it('loads textured cavity geometry, switches layers, keeps the view on failure a
             command.endsWith('seed_map_underground_volume'),
         ).length
     const callsBeforeWalking = generationCalls()
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }))
     await expect.poll(generationCalls, { timeout: 6000 }).toBeGreaterThan(callsBeforeWalking)
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }))
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }))
     expect(wrapper.get('canvas').element).toBe(canvas)
     expect(wrapper.text()).not.toContain('Could not generate')
     const beforeMove = wrapper.text().match(/X -?\d+ · Y -?\d+ · Z -?\d+ · \d+ blocks\/s/)?.[0]

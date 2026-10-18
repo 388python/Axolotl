@@ -28,10 +28,11 @@ function page(start: number, count: number, cursor: string | null) {
 
 beforeEach(() => {
     vi.resetAllMocks()
-    vi.mocked(resourceReleaseDocuments).mockImplementation(async (_source, ids) =>
-        ids.map((id) => ({ protocol: { id: Number(id) } })) as Awaited<
-            ReturnType<typeof resourceReleaseDocuments>
-        >,
+    vi.mocked(resourceReleaseDocuments).mockImplementation(
+        async (_source, ids) =>
+            ids.map((id) => ({ protocol: { id: Number(id) } })) as Awaited<
+                ReturnType<typeof resourceReleaseDocuments>
+            >,
     )
 })
 
@@ -58,7 +59,9 @@ it('resolves a numeric page offset by walking source cursors', async () => {
     expect(result.files.map((file) => file.id)).toEqual([51])
     expect(resourceReleaseDocuments).toHaveBeenCalledTimes(1)
     expect(resourceReleases).toHaveBeenLastCalledWith(
-        expect.anything(), expect.anything(), 'next-token',
+        expect.anything(),
+        expect.anything(),
+        'next-token',
     )
 })
 

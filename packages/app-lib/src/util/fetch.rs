@@ -3736,12 +3736,11 @@ async fn probe_faster_route(
             probe.bytes_per_second,
             total_size.saturating_sub(downloaded_bytes),
             total_size,
-        ) {
-            if best.as_ref().is_none_or(|best| {
-                probe.bytes_per_second > best.bytes_per_second
-            }) {
-                best = Some(probe);
-            }
+        ) && best
+            .as_ref()
+            .is_none_or(|best| probe.bytes_per_second > best.bytes_per_second)
+        {
+            best = Some(probe);
         }
     }
     best

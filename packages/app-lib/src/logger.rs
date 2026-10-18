@@ -1551,10 +1551,7 @@ pub fn start_logger(app_identifier: &str) -> Option<()> {
         return None;
     }
 
-    let filter = match initial_log_filter(DEFAULT_LOG_LEVEL) {
-        Some(filter) => filter,
-        None => return None,
-    };
+    let filter = initial_log_filter(DEFAULT_LOG_LEVEL)?;
     let (filter_layer, reload_handle) =
         tracing_subscriber::reload::Layer::new(filter);
 

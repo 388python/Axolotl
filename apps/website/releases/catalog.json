@@ -1,6 +1,143 @@
 {
-  "updated_at": "2026-10-15T21:46:24.000Z",
+  "updated_at": "2026-10-18T16:46:19.000Z",
   "announcements": [
+    {
+      "id": "launcher-1.10.0-beta.2",
+      "version": "1.10.0-beta.2",
+      "publishedAt": "2026-10-18",
+      "title": {
+        "en-US": "Axolotl Launcher 1.10.0-beta.2",
+        "zh-CN": "Axolotl Launcher 1.10.0-beta.2"
+      },
+      "changes": {
+        "added": [
+          {
+            "en-US": "Added local LogAgent crash analysis using a configured AI model to inspect and search relevant log excerpts.",
+            "zh-CN": "新增本地 LogAgent 崩溃分析，使用配置的 AI 模型读取和搜索相关日志片段。"
+          },
+          {
+            "en-US": "Added per-analysis switching between local LogAgent and cloud LogShare.",
+            "zh-CN": "新增单次分析来源切换，支持选择本地 LogAgent 或云端 LogShare。"
+          },
+          {
+            "en-US": "Added live crash investigation steps and streaming diagnostic replies when supported by the AI provider.",
+            "zh-CN": "新增实时崩溃调查步骤，并在 AI 服务支持时逐步显示生成的诊断内容。"
+          },
+          {
+            "en-US": "Added Minecraft 26.3 support to Seed Map and its mineral predictions.",
+            "zh-CN": "种子地图及矿物预测新增 Minecraft 26.3 支持。"
+          },
+          {
+            "en-US": "Added structure details with map projections, split previews, and version-specific block models.",
+            "zh-CN": "新增结构详情，支持地图投影、分栏预览和对应游戏版本的方块模型。"
+          },
+          {
+            "en-US": "Added ancient city layout previews and loot predictions for supported versions.",
+            "zh-CN": "新增受支持版本的远古城市布局预览和战利品预测。"
+          },
+          {
+            "en-US": "Added stronghold portal-room highlighting in structure previews.",
+            "zh-CN": "新增结构预览中的要塞传送门房间高亮。"
+          },
+          {
+            "en-US": "Added textured 3D underground exploration with progressively loaded terrain and configurable display layers.",
+            "zh-CN": "新增带纹理的地下三维探索，支持逐步加载地形和切换显示图层。"
+          },
+          {
+            "en-US": "Added selected-area mineral candidate counts with adjustable height ranges in Seed Map.",
+            "zh-CN": "种子地图新增选区矿物候选方块统计，支持调整分析高度范围。"
+          },
+          {
+            "en-US": "Added item searches across predicted loot in supported containers within a selected map area.",
+            "zh-CN": "新增地图选区战利品搜索，可按物品查找受支持容器中的预测战利品。"
+          },
+          {
+            "en-US": "Added Minecraft 26.3 brewing recipes to Recipe Generator.",
+            "zh-CN": "配方生成器新增 Minecraft 26.3 酿造配方支持。"
+          },
+          {
+            "en-US": "Added a localized explanation when file operations fail because another program is using the file.",
+            "zh-CN": "新增文件被其他程序占用时的本地化错误说明。"
+          }
+        ],
+        "changed": [
+          {
+            "en-US": "Reorganized crash analysis settings around analysis sources, diagnostic sharing, and progress display.",
+            "zh-CN": "重新组织崩溃分析设置，分别展示分析来源、诊断分享和进度显示选项。"
+          },
+          {
+            "en-US": "Expanded AI protocol support for LogAgent and added guidance for choosing tool-capable models.",
+            "zh-CN": "扩展 LogAgent 的 AI 协议支持，并新增支持工具调用的模型选择说明。"
+          },
+          {
+            "en-US": "Improved Seed Map detail as the map zooms in and sorted game versions from newest to oldest.",
+            "zh-CN": "改进种子地图随缩放逐步显示细节的效果，并将游戏版本按从新到旧排序。"
+          },
+          {
+            "en-US": "Improved underground preview loading speed and memory management.",
+            "zh-CN": "改进地下预览加载速度和内存管理。"
+          },
+          {
+            "en-US": "Updated schematic preview block models and textures for newer game versions.",
+            "zh-CN": "更新投影预览的方块模型和纹理，以支持较新的游戏版本。"
+          },
+          {
+            "en-US": "Increased the top bar's background blur to improve text readability.",
+            "zh-CN": "增强顶部栏背景模糊，提高文字可读性。"
+          }
+        ],
+        "fixed": [
+          {
+            "en-US": "Fixed crash analysis source settings becoming inconsistent and outdated diagnostics remaining visible.",
+            "zh-CN": "修复崩溃分析来源设置不一致，以及旧诊断结果仍然显示的问题。"
+          },
+          {
+            "en-US": "Fixed delayed crash notifications replacing the current analysis workspace.",
+            "zh-CN": "修复延迟到达的崩溃通知替换当前分析工作区的问题。"
+          },
+          {
+            "en-US": "Fixed LogAgent handling of parallel tool calls, unavailable tools, and final diagnostic replies.",
+            "zh-CN": "修复 LogAgent 对并行工具调用、不可用工具和最终诊断回复的处理。"
+          },
+          {
+            "en-US": "Fixed the log analysis settings entry not appearing correctly in settings search.",
+            "zh-CN": "修复日志分析设置入口无法在设置搜索中正确定位的问题。"
+          },
+          {
+            "en-US": "Fixed ancient city layout coordinates and adjoining structure pieces in map previews.",
+            "zh-CN": "修复地图预览中远古城市布局坐标和相邻结构部件的问题。"
+          },
+          {
+            "en-US": "Fixed map markers appearing in the wrong dimension and selected locations not being highlighted correctly.",
+            "zh-CN": "修复地图标记出现在错误维度，以及选中位置未正确高亮的问题。"
+          },
+          {
+            "en-US": "Fixed map position shifting when resizing structure details and incorrect colors in detailed End void tiles.",
+            "zh-CN": "修复调整结构详情区域大小时地图位置偏移，以及末地虚空细节图块颜色错误的问题。"
+          },
+          {
+            "en-US": "Fixed newer data-pack metadata parsing and offline skin resource-pack compatibility with Minecraft 26.3 and snapshots.",
+            "zh-CN": "修复新版数据包元数据解析，以及离线皮肤资源包与 Minecraft 26.3 和快照版本的兼容性问题。"
+          },
+          {
+            "en-US": "Fixed CurseForge file pagination and downloads failing when ForgeCDN range requests require a redirect.",
+            "zh-CN": "修复 CurseForge 文件分页，以及 ForgeCDN 分段请求需要重定向时下载失败的问题。"
+          },
+          {
+            "en-US": "Fixed download integrity checks, retry cooldowns, and recovery after connection failures.",
+            "zh-CN": "修复下载完整性校验、重试冷却和连接失败后的恢复问题。"
+          },
+          {
+            "en-US": "Fixed platform-specific native libraries being merged incorrectly in loader metadata.",
+            "zh-CN": "修复加载器元数据中平台专用原生库被错误合并的问题。"
+          },
+          {
+            "en-US": "Fixed dismissed download notifications returning after restarting the launcher.",
+            "zh-CN": "修复已关闭的下载通知在重启启动器后重新出现的问题。"
+          }
+        ]
+      }
+    },
     {
       "id": "launcher-1.10.0-beta.1",
       "version": "1.10.0-beta.1",
