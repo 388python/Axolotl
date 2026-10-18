@@ -125,9 +125,94 @@ type MapVm = {
     focusedPiece: SeedMapStructurePiece | null
     selectAt: (x: number, y: number) => void
     worldToScreen: (x: number, z: number) => { x: number; y: number }
+    addMarker: () => void
+    markerName: string
+    dimensionMarkers: SeedMapWorkspace['markers']
 }
 let wrapper: VueWrapper | undefined
 let closed: ReturnType<typeof vi.spyOn>[] = []
+
+it('anchors a plain location selection with a crosshair that follows the map and closes with its card', async () => {
+    const { vm } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.selectAt(180, 140)
+    await flushPromises()
+    const crosshair = () => wrapper!.find('[data-testid="seed-map-selection-point"]')
+    expect(crosshair().findAll('svg')).toHaveLength(2)
+    const position = vm.worldToScreen(vm.selection!.x, vm.selection!.z)
+    expect((crosshair().element as HTMLElement).style.left).toBe(`${position.x}px`)
+    const before = (crosshair().element as HTMLElement).style.left
+    vm.workspace.center.x += 64
+    await flushPromises()
+    expect((crosshair().element as HTMLElement).style.left).not.toBe(before)
+    vm.selection = null
+    await flushPromises()
+    expect(crosshair().exists()).toBe(false)
+})
+
+it('enlarges POI images and their hit targets only when closer than four blocks per pixel', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = ['village']
+    vm.features = [{ kind: 'village', x: 0, z: 0, approximate: true }]
+    const drawImage = vi.spyOn(canvas.getContext('2d')!, 'drawImage')
+    try {
+        for (const [zoom, expectedSize, hit] of [
+            [1, 28, false],
+            [0.5, 42, true],
+            [1.5, 28, false],
+        ] as const) {
+            vm.selection = null
+            vm.workspace.zoom = zoom
+            await flushPromises()
+            await vi.waitFor(() => {
+                drawImage.mockClear()
+                vm.drawMap()
+                expect(
+                    drawImage.mock.calls.some(
+                        (call) =>
+                            call[0] instanceof HTMLImageElement &&
+                            call[3] === expectedSize &&
+                            call[4] === expectedSize,
+                    ),
+                ).toBe(true)
+            })
+            const point = vm.worldToScreen(0, 0)
+            vm.selectAt(point.x + 18, point.y)
+            expect(!!vm.selection?.feature).toBe(hit)
+        }
+    } finally {
+        drawImage.mockRestore()
+    }
+})
+
+it('isolates saved marker rendering and selection by dimension and preserves their creation dimension', async () => {
+    const { vm } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.selectAt(180, 140)
+    vm.markerName = 'Overworld camp'
+    vm.addMarker()
+    const overworld = vm.workspace.markers[0]
+    expect(overworld.dimension).toBe('overworld')
+    vm.workspace.dimension = 'nether'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([])
+    const point = vm.worldToScreen(overworld.x, overworld.z)
+    vm.selectAt(point.x, point.y)
+    expect(vm.selection).not.toHaveProperty('markerId')
+    vm.markerName = 'Nether camp'
+    vm.addMarker()
+    expect(vm.workspace.markers[1].dimension).toBe('nether')
+    expect(vm.dimensionMarkers.map((marker) => marker.name)).toEqual(['Nether camp'])
+    vm.workspace.dimension = 'end'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([])
+    vm.workspace.dimension = 'overworld'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([overworld])
+    vm.selectAt(point.x, point.y)
+    expect(vm.selection).toHaveProperty('markerId', overworld.id)
+})
 
 beforeEach(() => {
     localStorage.removeItem('axolotl.lab.seed-map.v1')

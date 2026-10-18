@@ -575,6 +575,7 @@ const dimensions = computed(
     () => selectedProfile.value?.dimensions ?? ['overworld', 'nether', 'end'],
 )
 const scale = computed(() => 4 ** workspace.zoom)
+const poiIconScale = computed(() => (scale.value < 4 ? 1.5 : 1))
 const tileLevel = computed(() => seedMapTileLevel(scale.value))
 const tileScale = computed(() => tileLevel.value.scale)
 const undergroundMask = computed(
@@ -832,9 +833,12 @@ const selectedOreCompleted = computed({
             : workspace.completedOres.filter((item) => item !== key)
     },
 })
+const dimensionMarkers = computed(() =>
+    workspace.markers.filter((marker) => marker.dimension === workspace.dimension),
+)
 const selectedMarker = computed(() =>
     selection.value?.markerId
-        ? (workspace.markers.find((marker) => marker.id === selection.value?.markerId) ?? null)
+        ? (dimensionMarkers.value.find((marker) => marker.id === selection.value?.markerId) ?? null)
         : null,
 )
 const rulerDistance = computed(() => {
@@ -849,6 +853,13 @@ const selectionStyle = computed(() => {
         left: `${Math.min(Math.max(point.x + 14, 8), Math.max(viewport.width - 286, 8))}px`,
         top: `${Math.min(Math.max(point.y + 14, 8), Math.max(viewport.height - 226, 8))}px`,
     }
+})
+const selectionPointStyle = computed(() => {
+    const current = selection.value
+    if (!current || current.feature || current.ore || current.markerId || current.spawn)
+        return undefined
+    const point = worldToScreen(current.x, current.z)
+    return { left: `${point.x}px`, top: `${point.y}px` }
 })
 const selectionVisible = computed(() => {
     if (!selection.value) return false
@@ -1473,10 +1484,10 @@ function drawFeatures(context: CanvasRenderingContext2D) {
         if (projectedFeatureKeys.value.has(featureKey(feature))) continue
         const point = worldToScreen(feature.x, feature.z)
         if (
-            point.x < -18 ||
-            point.x > viewport.width + 18 ||
-            point.y < -18 ||
-            point.y > viewport.height + 18
+            point.x < -28 ||
+            point.x > viewport.width + 28 ||
+            point.y < -28 ||
+            point.y > viewport.height + 28
         )
             continue
         const selected = selectedFeatureKey.value === featureKey(feature)
@@ -1495,7 +1506,7 @@ function drawFeatures(context: CanvasRenderingContext2D) {
         } else {
             const icon = featureImages.get(featureImageKey(feature))
             if (icon) {
-                const size = selected ? 32 : 28
+                const size = (selected ? 32 : 28) * poiIconScale.value
                 context.shadowColor = 'rgba(0, 0, 0, 0.48)'
                 context.shadowBlur = 5
                 context.shadowOffsetY = 2
@@ -1509,7 +1520,7 @@ function drawFeatures(context: CanvasRenderingContext2D) {
                     context.stroke()
                 }
             } else {
-                const radius = selected ? 10 : 8
+                const radius = (selected ? 10 : 8) * poiIconScale.value
                 context.fillStyle = featureColors[feature.kind]
                 context.strokeStyle = selected ? '#FFFFFF' : 'rgba(15, 18, 20, 0.86)'
                 context.lineWidth = selected ? 3 : 2
@@ -1518,7 +1529,7 @@ function drawFeatures(context: CanvasRenderingContext2D) {
                 context.fill()
                 context.stroke()
                 context.fillStyle = '#FFFFFF'
-                context.font = '700 9px system-ui'
+                context.font = `700 ${9 * poiIconScale.value}px system-ui`
                 context.textAlign = 'center'
                 context.textBaseline = 'middle'
                 context.fillText(
@@ -1528,7 +1539,12 @@ function drawFeatures(context: CanvasRenderingContext2D) {
                 )
             }
         }
-        if (completed) drawCompletionBadge(context, point.x + 10, point.y - 10)
+        if (completed)
+            drawCompletionBadge(
+                context,
+                point.x + 10 * poiIconScale.value,
+                point.y - 10 * poiIconScale.value,
+            )
         context.restore()
     }
 }
@@ -1550,7 +1566,9 @@ function drawOres(context: CanvasRenderingContext2D) {
         const definition = seedMapOreDefinition(hit.ore)
         const variant = hit.y < 0 && definition.deepslateTexture ? 'deepslate' : 'stone'
         const image = oreImages.get(`${hit.ore}:${variant}`)
-        const size = Math.max(10, Math.min(18, 1.2 / scale.value)) + (selected ? 4 : 0)
+        const size =
+            (Math.max(10, Math.min(18, 1.2 / scale.value)) + (selected ? 4 : 0)) *
+            poiIconScale.value
         context.save()
         context.globalAlpha = completed ? 0.42 : 0.78
         context.imageSmoothingEnabled = false
@@ -1575,7 +1593,7 @@ function drawSpawn(context: CanvasRenderingContext2D) {
             selection.value?.spawn === true &&
             selection.value.x === spawn.value.x &&
             selection.value.z === spawn.value.z
-        const size = selected ? 36 : 32
+        const size = (selected ? 36 : 32) * poiIconScale.value
         context.save()
         if (spawnImage) {
             context.shadowColor = 'rgba(0, 0, 0, 0.48)'
@@ -1587,7 +1605,7 @@ function drawSpawn(context: CanvasRenderingContext2D) {
             context.strokeStyle = '#FFFFFF'
             context.lineWidth = 2
             context.beginPath()
-            context.arc(point.x, point.y, 10, 0, Math.PI * 2)
+            context.arc(point.x, point.y, 10 * poiIconScale.value, 0, Math.PI * 2)
             context.fill()
             context.stroke()
         }
@@ -1625,7 +1643,7 @@ function drawCompletionBadge(context: CanvasRenderingContext2D, x: number, y: nu
 }
 
 function drawMarkers(context: CanvasRenderingContext2D) {
-    for (const marker of workspace.markers) {
+    for (const marker of dimensionMarkers.value) {
         const point = worldToScreen(marker.x, marker.z)
         if (
             point.x < -20 ||
@@ -1638,13 +1656,17 @@ function drawMarkers(context: CanvasRenderingContext2D) {
         context.fillStyle = marker.color
         context.strokeStyle = '#FFFFFF'
         context.lineWidth = 2
+        context.save()
+        context.translate(point.x, point.y)
+        context.scale(poiIconScale.value, poiIconScale.value)
         context.beginPath()
-        context.arc(point.x, point.y - 3, 7, 0, Math.PI * 2)
-        context.moveTo(point.x - 4, point.y + 2)
-        context.lineTo(point.x, point.y + 11)
-        context.lineTo(point.x + 4, point.y + 2)
+        context.arc(0, -3, 7, 0, Math.PI * 2)
+        context.moveTo(-4, 2)
+        context.lineTo(0, 11)
+        context.lineTo(4, 2)
         context.fill()
         context.stroke()
+        context.restore()
         if (showLayerNames.value) {
             context.font = '600 11px system-ui'
             const width = context.measureText(marker.name).width + 10
@@ -2047,9 +2069,9 @@ function clearLongPress() {
 
 function selectAt(x: number, y: number) {
     const point = screenToWorld(x, y)
-    const marker = workspace.markers.find((item) => {
+    const marker = dimensionMarkers.value.find((item) => {
         const screen = worldToScreen(item.x, item.z)
-        return Math.hypot(screen.x - x, screen.y - y) <= 13
+        return Math.hypot(screen.x - x, screen.y - y) <= 13 * poiIconScale.value
     })
     if (
         !marker &&
@@ -2078,7 +2100,9 @@ function selectAt(x: number, y: number) {
             ? displayedFeatures.value
                   .map((item) => ({ item, point: worldToScreen(item.x, item.z) }))
                   .find(
-                      (candidate) => Math.hypot(candidate.point.x - x, candidate.point.y - y) <= 13,
+                      (candidate) =>
+                          Math.hypot(candidate.point.x - x, candidate.point.y - y) <=
+                          13 * (candidate.item.kind === 'slime-chunk' ? 1 : poiIconScale.value),
                   )?.item
             : undefined
     const ore =
@@ -2086,7 +2110,9 @@ function selectAt(x: number, y: number) {
             ? oreHits.value
                   .map((item) => ({ item, point: worldToScreen(item.x, item.z) }))
                   .filter(
-                      (candidate) => Math.hypot(candidate.point.x - x, candidate.point.y - y) <= 12,
+                      (candidate) =>
+                          Math.hypot(candidate.point.x - x, candidate.point.y - y) <=
+                          12 * poiIconScale.value,
                   )
                   .sort(
                       (a, b) =>
@@ -2096,11 +2122,13 @@ function selectAt(x: number, y: number) {
             : undefined
     const spawnSelected =
         workspace.showSpawn &&
+        workspace.dimension === 'overworld' &&
         spawn.value !== null &&
         Math.hypot(
             worldToScreen(spawn.value.x, spawn.value.z).x - x,
             worldToScreen(spawn.value.x, spawn.value.z).y - y,
-        ) <= 14
+        ) <=
+            14 * poiIconScale.value
     selection.value = marker
         ? { x: marker.x, z: marker.z, markerId: marker.id }
         : feature
@@ -2422,6 +2450,7 @@ function addMarker() {
         x: selection.value.x,
         z: selection.value.z,
         color: markerColor.value,
+        dimension: workspace.dimension,
     }
     workspace.markers.push(marker)
     selection.value = { x: marker.x, z: marker.z, markerId: marker.id }
@@ -2436,6 +2465,7 @@ function removeMarker(id: string) {
 }
 
 function jumpToMarker(marker: SeedMapMarker) {
+    if (marker.dimension !== workspace.dimension) return
     workspace.center = { x: marker.x, z: marker.z }
     selection.value = { x: marker.x, z: marker.z, markerId: marker.id }
     advancedOpen.value = false
@@ -3086,6 +3116,18 @@ function clampWorldCoordinate(value: number) {
                         />
 
                         <template v-if="workspace.displayMode !== 'underground'">
+                            <span
+                                v-if="selectionVisible && selectionPointStyle"
+                                class="pointer-events-none absolute z-[5] size-6 -translate-x-1/2 -translate-y-1/2"
+                                :style="selectionPointStyle"
+                                data-testid="seed-map-selection-point"
+                                aria-hidden="true"
+                            >
+                                <PlusIcon
+                                    class="absolute inset-0 size-full text-black [stroke-width:4]"
+                                />
+                                <PlusIcon class="absolute inset-0 size-full text-white" />
+                            </span>
                             <button
                                 v-for="badge in structureBadges(visibleSize)"
                                 :key="badge.id"
@@ -3115,7 +3157,11 @@ function clampWorldCoordinate(value: number) {
                                             : featureImageSource(badge.feature.kind)
                                     "
                                     alt=""
-                                    class="size-5 shrink-0 [image-rendering:pixelated]"
+                                    class="shrink-0 [image-rendering:pixelated]"
+                                    :style="{
+                                        width: `${20 * poiIconScale}px`,
+                                        height: `${20 * poiIconScale}px`,
+                                    }"
                                 />
                                 <span class="truncate">{{
                                     featureResultLabel(badge.feature)
@@ -3422,17 +3468,17 @@ function clampWorldCoordinate(value: number) {
                                             formatMessage(messages.markers)
                                         }}</strong
                                         ><span class="text-xs text-[var(--color-text-tertiary)]">{{
-                                            workspace.markers.length
+                                            dimensionMarkers.length
                                         }}</span>
                                     </div>
                                     <p
-                                        v-if="!workspace.markers.length"
+                                        v-if="!dimensionMarkers.length"
                                         class="m-0 text-xs text-[var(--color-text-tertiary)]"
                                     >
                                         {{ formatMessage(messages.noMarkers) }}
                                     </p>
                                     <div v-else class="marker-list flex flex-col gap-1">
-                                        <div v-for="marker in workspace.markers" :key="marker.id">
+                                        <div v-for="marker in dimensionMarkers" :key="marker.id">
                                             <button
                                                 class="marker-jump"
                                                 @click="jumpToMarker(marker)"

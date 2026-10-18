@@ -271,9 +271,34 @@ test('v3 migration retains version, markers and completion records', () => {
     const migrated = sanitizeSeedMapWorkspace(previous)
     assert.equal(migrated.version, 4)
     assert.equal(migrated.gameVersion, '26.2')
-    assert.deepEqual(migrated.markers, previous.markers)
+    assert.deepEqual(
+        migrated.markers,
+        previous.markers.map((marker) => ({ ...marker, dimension: 'overworld' })),
+    )
     assert.deepEqual(migrated.completedFeatures, previous.completedFeatures)
     assert.deepEqual(migrated.completedOres, previous.completedOres)
+})
+
+test('markers preserve dimension on reload and legacy or invalid dimensions default to overworld', () => {
+    const marker = { id: 'camp', name: 'Camp', x: -20, z: 42, color: '#FF0000' }
+    const workspace = sanitizeSeedMapWorkspace({
+        ...createDefaultSeedMapWorkspace(),
+        dimension: 'end',
+        markers: [
+            marker,
+            { ...marker, id: 'nether', dimension: 'nether' },
+            { ...marker, id: 'end', dimension: 'end' },
+            { ...marker, id: 'invalid', dimension: 'unknown' },
+        ],
+    })
+    assert.deepEqual(
+        workspace.markers.map((item) => item.dimension),
+        ['overworld', 'nether', 'end', 'overworld'],
+    )
+    assert.deepEqual(
+        sanitizeSeedMapWorkspace(JSON.parse(JSON.stringify(workspace))).markers,
+        workspace.markers,
+    )
 })
 
 test('sharing underground view preserves height and individual layers', () => {

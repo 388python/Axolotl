@@ -9,6 +9,7 @@ export type SeedMapMarker = {
     x: number
     z: number
     color: string
+    dimension: SeedMapDimension
 }
 
 export type SeedMapWorkspace = {
@@ -316,6 +317,10 @@ function sanitizeMarkers(value: unknown): SeedMapMarker[] {
                     name: source.name.slice(0, 128),
                     x: Math.round(source.x as number),
                     z: Math.round(source.z as number),
+                    dimension:
+                        source.dimension === 'nether' || source.dimension === 'end'
+                            ? source.dimension
+                            : ('overworld' as SeedMapDimension),
                     color:
                         typeof source.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(source.color)
                             ? source.color
