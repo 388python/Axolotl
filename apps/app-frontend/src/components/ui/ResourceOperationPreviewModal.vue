@@ -314,6 +314,7 @@ async function enrich(value: ResourceOperationPlan, signal: AbortSignal, current
             const cachedRef =
                 node.artifact?.reference.release.project ??
                 (node.resource.kind === 'source' ? node.resource.project : null)
+            if (cachedRef?.source === 'local') return
             if (node.state === 'satisfied' && cachedRef) {
                 const [document] = await resourceProjectDocuments(
                     cachedRef.source,

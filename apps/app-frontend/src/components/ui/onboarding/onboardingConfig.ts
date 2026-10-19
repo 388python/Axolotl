@@ -391,7 +391,7 @@ export const onboardingMessages = defineMessages({
     instanceTabsDescription: {
         id: 'app.onboarding.instance-tabs.description',
         defaultMessage:
-            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Mod updates and version switches queue directly without resolving dependencies. New installations use a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
+            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Installations, Mod updates, and version switches use a dependency preview. Review missing or conflicting dependencies before continuing; use + to add optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
     },
     labTitle: {
         id: 'app.onboarding.lab.title',
