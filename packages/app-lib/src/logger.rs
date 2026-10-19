@@ -179,10 +179,6 @@ impl RotatingLogWriter {
                 .max(normal_max_bytes)
                 .max(1),
         };
-        writer.cleanup_old_logs();
-        // Apply the retention ladder once at startup so logs left behind by a
-        // previous session are degraded immediately.
-        writer.prune_old_logs();
         Ok(writer)
     }
 
@@ -1170,6 +1166,36 @@ mod tests {
     }
 
     #[test]
+    fn creating_writer_defers_history_maintenance() {
+        let directory = tempfile::tempdir().unwrap();
+        let old_path = directory.path().join("session_20260718_120000.log");
+        let now = test_now();
+        let contents =
+            log_line(now, chrono::Duration::hours(3), "DEBUG", "old debug");
+        std::fs::write(&old_path, &contents).unwrap();
+        let writer = RotatingLogWriter::new(
+            directory.path().to_path_buf(),
+            "session_20260722_120000".to_string(),
+            10_000,
+            30_000,
+            1,
+            std::time::Duration::from_secs(3 * 24 * 60 * 60),
+        )
+        .unwrap();
+        assert_eq!(std::fs::read_to_string(&old_path).unwrap(), contents);
+        writer.write_event(b"first event\n", 10_000).unwrap();
+        writer.flush().unwrap();
+        writer.cleanup_old_logs();
+        writer.prune_old_logs();
+        assert!(!old_path.exists());
+        let active_path = directory.path().join("session_20260722_120000.log");
+        assert_eq!(
+            std::fs::read_to_string(active_path).unwrap(),
+            "first event\n"
+        );
+    }
+
+    #[test]
     fn launcher_logs_rotate_by_size_and_keep_only_recent_files() {
         let directory = tempfile::tempdir().unwrap();
         let writer = RotatingLogWriter::new(
@@ -1579,9 +1605,12 @@ pub fn start_logger(app_identifier: &str) -> Option<()> {
         std::thread::Builder::new()
             .name("launcher-log-prune".to_string())
             .spawn(move || {
+                // Let the shell begin creating its window before scanning history.
+                std::thread::sleep(std::time::Duration::from_secs(2));
                 loop {
-                    std::thread::sleep(LAUNCHER_LOG_PRUNE_INTERVAL);
+                    prune_writer.cleanup_old_logs();
                     prune_writer.prune_old_logs();
+                    std::thread::sleep(LAUNCHER_LOG_PRUNE_INTERVAL);
                 }
             })
             .ok();

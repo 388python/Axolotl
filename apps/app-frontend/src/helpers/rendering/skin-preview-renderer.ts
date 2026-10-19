@@ -1,10 +1,5 @@
 import { ClassicPlayerModel, SlimPlayerModel } from '@modrinth/assets'
-import {
-    applyCapeTexture,
-    createTransparentTexture,
-    disposeCaches,
-    setupSkinModel,
-} from '@modrinth/ui'
+import { loadSkinRendering } from '@modrinth/ui'
 import * as THREE from 'three'
 
 import type { Cape, Skin } from '../skins'
@@ -32,7 +27,11 @@ class BatchSkinRenderer {
     private readonly width: number
     private readonly height: number
 
-    constructor(width: number = 360, height: number = 504) {
+    constructor(
+        private readonly skinRendering: Awaited<ReturnType<typeof loadSkinRendering>>,
+        width: number = 360,
+        height: number = 504,
+    ) {
         this.width = width
         this.height = height
     }
@@ -135,10 +134,10 @@ class BatchSkinRenderer {
             throw new Error('Renderer not initialized')
         }
 
-        const { model } = await setupSkinModel(modelUrl, textureUrl, capeUrl)
+        const { model } = await this.skinRendering.setupSkinModel(modelUrl, textureUrl, capeUrl)
 
         if (!capeUrl) {
-            applyCapeTexture(model, null, this.getTransparentTexture())
+            this.skinRendering.applyCapeTexture(model, null, this.getTransparentTexture())
         }
 
         const group = new THREE.Group()
@@ -152,7 +151,7 @@ class BatchSkinRenderer {
 
     private getTransparentTexture(): THREE.Texture {
         if (!this.transparentTexture) {
-            this.transparentTexture = createTransparentTexture()
+            this.transparentTexture = this.skinRendering.createTransparentTexture()
         }
 
         return this.transparentTexture
@@ -188,7 +187,7 @@ class BatchSkinRenderer {
         this.scene = null
         this.camera = null
 
-        disposeCaches()
+        this.skinRendering.disposeCaches()
     }
 }
 
@@ -209,9 +208,10 @@ let sharedRenderer: BatchSkinRenderer | null = null
 let latestPreviewGeneration = 0
 let previewGenerationQueue: Promise<void> = Promise.resolve()
 
-function getSharedRenderer(): BatchSkinRenderer {
+async function getSharedRenderer(): Promise<BatchSkinRenderer> {
     if (!sharedRenderer) {
-        sharedRenderer = new BatchSkinRenderer()
+        const skinRendering = await loadSkinRendering()
+        sharedRenderer ??= new BatchSkinRenderer(skinRendering)
     }
     return sharedRenderer
 }
@@ -294,7 +294,7 @@ async function generateSkinPreviewsForGeneration(
                 } else continue
             }
 
-            const renderer = getSharedRenderer()
+            const renderer = await getSharedRenderer()
 
             let variant = skin.variant
             if (variant === 'UNKNOWN') {

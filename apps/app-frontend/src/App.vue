@@ -62,6 +62,7 @@ import {
     useModalStack,
     useVIntl,
 } from '@modrinth/ui'
+import { useQueryClient } from '@tanstack/vue-query'
 import { getVersion } from '@tauri-apps/api/app'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -142,6 +143,7 @@ import {
 } from '@/helpers/resource-operation-logic'
 import { getQuickScrollEnabled, getShowScrollTop } from '@/helpers/scroll-top-state'
 import {
+    appSettingsKeys,
     get as getSettings,
     getLastBrowseContentProjectType,
     getPrivacySettings,
@@ -203,7 +205,6 @@ import { setupLoadingStateProvider } from '@/providers/setup/loading-state'
 import { useError } from '@/store/error.js'
 import { useTheming } from '@/store/state'
 
-import { get_available_capes, get_available_skins } from './helpers/skins'
 import { AppNotificationManager } from './providers/app-notifications'
 import { AppPopupNotificationManager } from './providers/app-popup-notifications'
 
@@ -1369,9 +1370,12 @@ async function applyThemeFromSettings(s: Awaited<ReturnType<typeof getSettings>>
     themeStore.setCustomBackgroundClass()
 }
 
+const queryClient = useQueryClient()
+
 async function setupApp() {
     const initialSettings = await getSettings()
-    await downloadManager.start()
+    queryClient.setQueryData(appSettingsKeys.all, initialSettings)
+    void downloadManager.start().catch(handleError)
     const {
         native_decorations,
         theme,
@@ -1411,11 +1415,14 @@ async function setupApp() {
     // flag) keeps tracking the OS language and stores a concrete locale for backend
     // checks that compare against codes like `zh-CN`.
     if (!locale) setFollowSystemLocale(true)
-    const resolvedLocale = await applyLocalePreference(locale)
-    if (!locale || locale !== resolvedLocale) {
-        initialSettings.locale = resolvedLocale
-        await updateSettings({ locale: resolvedLocale })
-    }
+    const localePreparation = applyLocalePreference(locale).then(async (resolvedLocale) => {
+        if (!locale || locale !== resolvedLocale) {
+            initialSettings.locale = resolvedLocale
+            await updateSettings({ locale: resolvedLocale })
+        }
+    })
+    // Attach a handler immediately while window/theme setup proceeds in parallel.
+    void localePreparation.catch(console.error)
 
     const defaultPageRoutes = {
         Home: '/',
@@ -1478,6 +1485,7 @@ async function setupApp() {
             themeStore[shortcut.enabledField] = getNavShortcutEnabled(shortcut.id)
     }
     themeStore.shortcutBindings = resolveAllBindings()
+    await localePreparation
     stateInitialized.value = true
     if (privacyConsentPending.value) {
         await nextTick()
@@ -1543,15 +1551,6 @@ async function setupApp() {
 
     get_opening_command().then(handleCommand)
     fetchCredentials()
-
-    try {
-        const skins = (await get_available_skins()) ?? []
-        const capes = (await get_available_capes()) ?? []
-        const { generateSkinPreviews } = await import('./helpers/rendering/skin-preview-renderer')
-        generateSkinPreviews(skins, capes)
-    } catch (error) {
-        console.warn('Failed to generate skin previews in app setup.', error)
-    }
 }
 
 type SystemAccentColorPayload = {

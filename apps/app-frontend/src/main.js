@@ -28,6 +28,5 @@ app.use(i18nDebugPlugin)
 app.directive('overlay-scrollbars', overlayScrollbarsDirective)
 app.directive('tooltip', tooltipDirective)
 
-void initializeLocale()
-    .catch(console.error)
-    .finally(() => app.mount('#app'))
+app.mount('#app')
+void initializeLocale().catch(console.error)

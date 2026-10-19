@@ -54,7 +54,29 @@
         </div>
 
         <div
-            v-if="visibleJobs.length || (tab === 'active' && legacyDownloads.length)"
+            v-if="manager.initializationState.value === 'loading'"
+            class="flex flex-col gap-3"
+            aria-hidden="true"
+        >
+            <Card v-for="index in 2" :key="index" class="!p-4">
+                <div class="flex items-center gap-3">
+                    <div class="size-12 shrink-0 animate-pulse rounded-xl bg-surface-4" />
+                    <div class="flex flex-1 flex-col gap-2">
+                        <div class="h-4 w-1/2 animate-pulse rounded bg-surface-4" />
+                        <div class="h-3 w-1/3 animate-pulse rounded bg-surface-4" />
+                    </div>
+                </div>
+                <div class="mt-4 h-2 w-full animate-pulse rounded bg-surface-4" />
+            </Card>
+        </div>
+        <Button
+            v-else-if="manager.initializationState.value === 'error'"
+            @click="manager.start().catch(handleError)"
+        >
+            {{ formatMessage(commonMessages.retryButton) }}
+        </Button>
+        <div
+            v-else-if="visibleJobs.length || (tab === 'active' && legacyDownloads.length)"
             class="flex flex-col gap-3"
         >
             <Card

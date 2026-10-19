@@ -53,3 +53,19 @@ test('failed language loads preserve the active language and can be retried', as
     await loader.select('zh-CN')
     assert.deepEqual(active, ['zh-CN'])
 })
+
+test('an eager fallback is reused without dispatching a language request', async () => {
+    const loaded: string[] = []
+    const active: string[] = []
+    const loader = createLocaleLoader(
+        async (locale) => {
+            loaded.push(locale)
+        },
+        (locale) => active.push(locale),
+        ['en-US'],
+    )
+    await loader.select('en-US')
+    await loader.select('zh-CN')
+    assert.deepEqual(loaded, ['zh-CN'])
+    assert.deepEqual(active, ['en-US', 'zh-CN'])
+})

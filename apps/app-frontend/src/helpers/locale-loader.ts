@@ -2,8 +2,9 @@
 export function createLocaleLoader(
     load: (locale: string) => Promise<void>,
     activate: (locale: string) => void,
+    initialLocales: readonly string[] = [],
 ) {
-    const loaded = new Set<string>()
+    const loaded = new Set(initialLocales)
     const pending = new Map<string, Promise<void>>()
     let selection = 0
 

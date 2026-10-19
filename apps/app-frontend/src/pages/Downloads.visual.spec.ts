@@ -56,6 +56,7 @@ vi.mock('@modrinth/ui', async () => {
             ].map((name) => [name, control]),
         ),
         ProgressBar,
+        commonMessages: { retryButton: { defaultMessage: 'Retry' } },
         defineMessages: (messages: unknown) => messages,
         defineMessage: (message: unknown) => message,
         injectNotificationManager: () => ({ handleError: vi.fn() }),
@@ -94,7 +95,13 @@ function downloadingJob(provider: InstallJobSnapshot['provider']): InstallJobSna
 it('returning from history without a valid tab query displays active downloads', async () => {
     fixture.route = reactive({ query: { tab: 'history' } as Record<string, unknown> })
     const jobs = ref([downloadingJob('modrinth')])
-    fixture.manager = { jobs, activeJobs: jobs, historyJobs: ref([]), legacyDownloads: ref([]) }
+    fixture.manager = {
+        initializationState: ref('ready'),
+        jobs,
+        activeJobs: jobs,
+        historyJobs: ref([]),
+        legacyDownloads: ref([]),
+    }
     const wrapper = mount(Downloads, { global: { directives: { tooltip: () => {} } } })
     try {
         const tabs = () => wrapper.get('[data-onboarding-id="downloads-tabs"] > div')
@@ -114,7 +121,13 @@ it.each(['curse_forge', 'local'] as const)(
     '%s extraction clears the previous download percentage and accepts new phase progress',
     async (provider) => {
         const jobs = ref([downloadingJob(provider)])
-        fixture.manager = { jobs, activeJobs: jobs, historyJobs: ref([]), legacyDownloads: ref([]) }
+        fixture.manager = {
+            initializationState: ref('ready'),
+            jobs,
+            activeJobs: jobs,
+            historyJobs: ref([]),
+            legacyDownloads: ref([]),
+        }
         const wrapper = mount(Downloads, { global: { directives: { tooltip: () => {} } } })
         const bar = () => wrapper.get('[role=progressbar]')
         try {
