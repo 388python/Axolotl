@@ -42,7 +42,7 @@ import HomeMinimal from '@/components/home/HomeMinimal.vue'
 import HomePlayInsights from '@/components/home/HomePlayInsights.vue'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { get_default_user, users } from '@/helpers/auth'
-import { DIRECT_LINKS_SYNCED_EVENT } from '@/helpers/direct-link-sync'
+import { DIRECT_LINKS_CHANGED_EVENT } from '@/helpers/direct-link-sync'
 import { instance_groups_listener, instance_listener } from '@/helpers/events'
 import { list } from '@/helpers/instance'
 import { get as getSettings, update as updateSettings } from '@/helpers/settings'
@@ -319,7 +319,7 @@ const instancesLoaded = await fetchInstances()
 if (!instancesLoaded || instances.value.length > 0) void fetchPlayerName()
 await loadDashboardConfig()
 
-window.addEventListener(DIRECT_LINKS_SYNCED_EVENT, fetchInstances)
+window.addEventListener(DIRECT_LINKS_CHANGED_EVENT, fetchInstances)
 
 const unlistenInstance = await instance_listener(async () => {
     await fetchInstances()
@@ -331,7 +331,7 @@ const unlistenInstanceGroups = await instance_groups_listener(async () => {
 onUnmounted(() => {
     unlistenInstance()
     unlistenInstanceGroups()
-    window.removeEventListener(DIRECT_LINKS_SYNCED_EVENT, fetchInstances)
+    window.removeEventListener(DIRECT_LINKS_CHANGED_EVENT, fetchInstances)
 })
 </script>
 

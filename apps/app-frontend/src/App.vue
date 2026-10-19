@@ -116,7 +116,10 @@ import { get_user, get_version } from '@/helpers/cache.js'
 import { configureCurseForgeManualDownloadWatcher } from '@/helpers/curseforge'
 import { applySettingChanges } from '@/helpers/deep-link-settings.ts'
 import { resolveOpenRoute, resolveSettingsRoute } from '@/helpers/deep-links.ts'
-import { DIRECT_LINKS_SYNCED_EVENT, syncConfiguredDirectLinks } from '@/helpers/direct-link-sync'
+import {
+    DIRECT_LINKS_SYNCED_EVENT,
+    startConfiguredDirectLinkSync,
+} from '@/helpers/direct-link-sync'
 import { getMissingContentScannerSettings } from '@/helpers/downloads-scanner'
 import { classifyDroppedItem } from '@/helpers/drop'
 import {
@@ -777,13 +780,14 @@ onMounted(async () => {
 
     // Background maintenance must not compete with first paint / route enter.
     runWhenIdle(() => {
+        if (appUnmounted) return
         void checkUpdates()
         void warnIfRunningElevated()
         startDirectLinkSync()
     })
 })
 
-let directLinkSync: (() => Promise<void>) | undefined
+let appUnmounted = false
 let stopDirectLinkSync: (() => void) | undefined
 let directLinkSyncErrorSignature = ''
 
@@ -845,22 +849,12 @@ function startDirectLinkSync() {
             return []
         }
     }
-    const sync = () => syncConfiguredDirectLinks(readRoots()).catch(handleError)
-    const handleWindowFocus = () => {
-        void sync()
-    }
-
-    directLinkSync = sync
-    window.addEventListener('focus', handleWindowFocus)
-    void sync()
-    stopDirectLinkSync = () => {
-        window.removeEventListener('focus', handleWindowFocus)
-        if (directLinkSync === sync) directLinkSync = undefined
-        if (stopDirectLinkSync) stopDirectLinkSync = undefined
-    }
+    stopDirectLinkSync?.()
+    stopDirectLinkSync = startConfiguredDirectLinkSync(readRoots, handleError)
 }
 
 onUnmounted(async () => {
+    appUnmounted = true
     windowAppearance.dispose()
     stopNativeEditMenu?.()
     if (maximizedStateTimer) clearTimeout(maximizedStateTimer)
@@ -2013,7 +2007,6 @@ router.afterEach((to, from, failure) => {
         failed: failure,
     })
     if (!failure) {
-        void directLinkSync?.()
         if (stateInitialized.value) syncDiscordActivity(to)
     }
     setTimeout(() => {
