@@ -1468,7 +1468,7 @@ async function setupApp() {
     // flag) keeps tracking the OS language and stores a concrete locale for backend
     // checks that compare against codes like `zh-CN`.
     if (!locale) setFollowSystemLocale(true)
-    const resolvedLocale = applyLocalePreference(locale)
+    const resolvedLocale = await applyLocalePreference(locale)
     if (!locale || locale !== resolvedLocale) {
         initialSettings.locale = resolvedLocale
         await updateSettings({ locale: resolvedLocale })
@@ -2478,7 +2478,7 @@ async function handlePrivilegedCommand(e) {
         await updateSettings(diffSettings(before, latest)).catch(handleError)
         await applyThemeFromSettings(latest)
         setFollowSystemLocale(!latest.locale || latest.locale === 'system')
-        applyLocalePreference(latest.locale)
+        await applyLocalePreference(latest.locale)
         addNotification({
             title: formatMessage(privilegedMessages.applied),
             type: 'success',

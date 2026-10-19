@@ -1,10 +1,15 @@
-import { buildLocaleMessages, createMessageCompiler, type CrowdinMessages } from '@modrinth/ui'
-import { uiLocaleModulesEager } from '@modrinth/ui/locales.eager'
+import {
+    buildLocaleMessages,
+    createMessageCompiler,
+    type CrowdinMessages,
+    uiLocaleModules,
+} from '@modrinth/ui'
 import { createI18n } from 'vue-i18n'
 
-const localeModules = import.meta.glob<{ default: CrowdinMessages }>('./locales/*/index.json', {
-    eager: true,
-})
+import { createLocaleLoader } from '@/helpers/locale-loader'
+
+const localeModules = import.meta.glob<{ default: CrowdinMessages }>('./locales/*/index.json')
+const availableLocales = Object.keys(localeModules).map((path) => path.split('/').at(-2)!)
 
 const i18n = createI18n({
     legacy: false,
@@ -13,15 +18,39 @@ const i18n = createI18n({
     messageCompiler: createMessageCompiler(),
     missingWarn: false,
     fallbackWarn: false,
-    messages: buildLocaleMessages(localeModules, uiLocaleModulesEager),
+    messages: {} as Record<string, Record<string, string>>,
 })
 
-export function resolveInitialLocale(preferredLocales: readonly string[]): string {
-    const availableLocales = new Set(i18n.global.availableLocales)
+const localeLoader = createLocaleLoader(
+    async (locale) => {
+        const appPath = `./locales/${locale}/index.json`
+        const [appMessages, uiMessages] = await Promise.all([
+            localeModules[appPath](),
+            uiLocaleModules[appPath](),
+        ])
+        i18n.global.setLocaleMessage(
+            locale,
+            buildLocaleMessages({ [appPath]: appMessages }, { [appPath]: uiMessages })[locale],
+        )
+    },
+    (locale) => {
+        i18n.global.locale.value = locale
+    },
+)
 
+export async function setAppLocale(locale: string): Promise<void> {
+    await localeLoader.select(availableLocales.includes(locale) ? locale : 'en-US')
+}
+
+export async function initializeLocale(): Promise<void> {
+    await localeLoader.ensure('en-US')
+    await applyLocalePreference(null)
+}
+
+export function resolveInitialLocale(preferredLocales: readonly string[]): string {
     for (const preferredLocale of preferredLocales) {
         const normalizedLocale = preferredLocale.replace('_', '-')
-        if (availableLocales.has(normalizedLocale)) return normalizedLocale
+        if (availableLocales.includes(normalizedLocale)) return normalizedLocale
 
         const language = normalizedLocale.split('-')[0].toLowerCase()
         if (language === 'zh') {
@@ -29,7 +58,7 @@ export function resolveInitialLocale(preferredLocales: readonly string[]): strin
             return traditionalChinese ? 'zh-TW' : 'zh-CN'
         }
 
-        const languageMatch = i18n.global.availableLocales.find((locale) =>
+        const languageMatch = availableLocales.find((locale) =>
             locale.toLowerCase().startsWith(`${language}-`),
         )
         if (languageMatch) return languageMatch
@@ -68,15 +97,15 @@ export function setFollowSystemLocale(follow: boolean) {
 }
 
 /** Applies the stored locale preference and returns the concrete locale used. */
-export function applyLocalePreference(storedLocale: string | null | undefined): string {
-    if (isFollowingSystemLocale(storedLocale)) {
-        const resolved = getSystemResolvedLocale()
-        i18n.global.locale.value = resolved
-        return resolved
-    }
-
-    const locale = storedLocale && storedLocale !== SYSTEM_LOCALE_VALUE ? storedLocale : 'en-US'
-    i18n.global.locale.value = locale
+export async function applyLocalePreference(
+    storedLocale: string | null | undefined,
+): Promise<string> {
+    const locale = isFollowingSystemLocale(storedLocale)
+        ? getSystemResolvedLocale()
+        : availableLocales.includes(storedLocale ?? '')
+          ? storedLocale!
+          : 'en-US'
+    await setAppLocale(locale)
     return locale
 }
 
@@ -85,6 +114,4 @@ export function applyLocalePreference(storedLocale: string | null | undefined): 
 // dialogs matter most. Starting from the system language keeps them in a
 // language the user reads; `setupApp` still applies the saved locale once the
 // database is available.
-i18n.global.locale.value = getSystemResolvedLocale()
-
 export default i18n
