@@ -1691,9 +1691,6 @@
   "app.downloads.local": {
     "message": "本地"
   },
-  "app.downloads.manual-download-project-file": {
-    "message": "项目 {projectId} · 文件 {fileId}"
-  },
   "app.downloads.manual-download-required": {
     "message": "CurseForge 要求手动下载此文件。"
   },
@@ -1789,9 +1786,6 @@
   },
   "app.downloads.missing-required-content": {
     "message": "已完成 {completed} / {total} 个必需文件，还有 {missing} 个文件需要补全。点击 补全缺失文件 按钮可以选择下载或让启动器自动从监听文件夹中导入。"
-  },
-  "app.downloads.more-active-requests": {
-    "message": "另有 {count} 个进行中的请求"
   },
   "app.downloads.new-download": {
     "message": "新建下载"
@@ -15523,8 +15517,7 @@
   },
   "app.onboarding.seed-map-area.description": {
     "message": "在二维地图上按住鼠标右键拖动即可框选区域。可以按高度范围统计矿石候选方块，也能按物品名称或 ID 搜索受支持箱子的战利品。分析支持取消，并会说明预测限制。右键单击仍可添加标记。"
-  }
-,
+  },
   "app.resources.error.incomplete-versions": {
     "message": "内容来源未能返回全部版本，请打开项目的“版本”标签页选择文件。"
   }

@@ -2785,10 +2785,9 @@ async fn selected_counterparts_trust_curated_pairs_without_artifact_probes() {
                 .confirm_counterpart(metadata, &CancellationToken::new())
                 .await
                 .unwrap();
-            assert_eq!(
+            assert!(
                 store.lookup(&mr_doc.metadata.project).await.unwrap()
                     == store.lookup(&cf_doc.metadata.project).await.unwrap(),
-                true,
                 "origin={origin:?}, requests={:?}",
                 requests.lock().unwrap().clone(),
             );

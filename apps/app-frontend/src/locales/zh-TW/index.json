@@ -1313,9 +1313,6 @@
   "app.downloads.missing-required-content": {
     "message": "已完成 {completed} / {total} 個必要檔案，還有 {missing} 個檔案需要補全。"
   },
-  "app.downloads.more-active-requests": {
-    "message": "另有 {count} 個進行中的請求"
-  },
   "app.downloads.new-download": {
     "message": "新建下載"
   },

@@ -1,46 +1,4 @@
 {
-  "app.content-favorites.browse-resources": {
-    "message": "Browse resources"
-  },
-  "app.content-favorites.clear-filters": {
-    "message": "Clear search and filters"
-  },
-  "app.downloads.file-details": {
-    "message": "File details"
-  },
-  "app.downloads.open-file-details": {
-    "message": "View details for {name}"
-  },
-  "app.downloads.copy-file-details": {
-    "message": "Copy file details"
-  },
-  "app.downloads.job-id": {
-    "message": "Task ID"
-  },
-  "app.downloads.instance-id": {
-    "message": "Instance ID"
-  },
-  "app.downloads.project-id": {
-    "message": "Project ID"
-  },
-  "app.downloads.version-id": {
-    "message": "Version ID"
-  },
-  "app.downloads.request-url": {
-    "message": "Request URL"
-  },
-  "instance.settings.general.name-required": {
-    "message": "Enter a name with no more than 80 characters."
-  },
-  "instance.settings.general.name-save-failed": {
-    "message": "The name could not be saved."
-  },
-  "app.servers.load-failed": {
-    "message": "Failed to load servers"
-  },
-  "app.content-favorites.load-failed": {
-    "message": "Failed to load favorites"
-  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },
@@ -1076,11 +1034,20 @@
   "app.content-favorites.add": {
     "message": "Add to favorites"
   },
+  "app.content-favorites.browse-resources": {
+    "message": "Browse resources"
+  },
+  "app.content-favorites.clear-filters": {
+    "message": "Clear search and filters"
+  },
   "app.content-favorites.empty-description": {
     "message": "Bookmark mods, resource packs, data packs, and shaders to install them later."
   },
   "app.content-favorites.empty-title": {
     "message": "No favorites yet"
+  },
+  "app.content-favorites.load-failed": {
+    "message": "Failed to load favorites"
   },
   "app.content-favorites.loading": {
     "message": "Updating favorites…"
@@ -1475,6 +1442,9 @@
   "app.downloads.copy-diagnostics": {
     "message": "Copy diagnostics"
   },
+  "app.downloads.copy-file-details": {
+    "message": "Copy file details"
+  },
   "app.downloads.delete-record": {
     "message": "Delete record"
   },
@@ -1508,6 +1478,9 @@
   "app.downloads.error-details": {
     "message": "Download failed"
   },
+  "app.downloads.file-details": {
+    "message": "File details"
+  },
   "app.downloads.hide-details": {
     "message": "Hide details"
   },
@@ -1519,6 +1492,9 @@
   },
   "app.downloads.instance-deleted": {
     "message": "Instance deleted"
+  },
+  "app.downloads.instance-id": {
+    "message": "Instance ID"
   },
   "app.downloads.instance-target": {
     "message": "Instance: {instance}"
@@ -1577,11 +1553,11 @@
   "app.downloads.item-status.writing": {
     "message": "Writing"
   },
+  "app.downloads.job-id": {
+    "message": "Task ID"
+  },
   "app.downloads.local": {
     "message": "Local"
-  },
-  "app.downloads.manual-download-project-file": {
-    "message": "Project {projectId} · File {fileId}"
   },
   "app.downloads.manual-download-required": {
     "message": "CurseForge requires this file to be downloaded manually."
@@ -1679,9 +1655,6 @@
   "app.downloads.missing-required-content": {
     "message": "{completed} / {total} required files are ready. {missing, plural, one {# file still needs to be downloaded.} other {# files still need to be downloaded.}}"
   },
-  "app.downloads.more-active-requests": {
-    "message": "+{count} active requests"
-  },
   "app.downloads.new-download": {
     "message": "New download"
   },
@@ -1699,6 +1672,9 @@
   },
   "app.downloads.not-available": {
     "message": "—"
+  },
+  "app.downloads.open-file-details": {
+    "message": "View details for {name}"
   },
   "app.downloads.open-instance": {
     "message": "Open instance"
@@ -1787,6 +1763,12 @@
   "app.downloads.progress": {
     "message": "Progress"
   },
+  "app.downloads.project-id": {
+    "message": "Project ID"
+  },
+  "app.downloads.request-url": {
+    "message": "Request URL"
+  },
   "app.downloads.retired-source": {
     "message": "This download source has been retired. Resolve the file again or choose a verified local file."
   },
@@ -1837,6 +1819,9 @@
   },
   "app.downloads.status.waiting-for-user": {
     "message": "Action needed"
+  },
+  "app.downloads.version-id": {
+    "message": "Version ID"
   },
   "app.downloads.view-upgrade-result": {
     "message": "View upgrade result"
@@ -8966,6 +8951,9 @@
   "app.servers.icon.select": {
     "message": "Select icon"
   },
+  "app.servers.load-failed": {
+    "message": "Failed to load servers"
+  },
   "app.servers.loading": {
     "message": "Loading servers..."
   },
@@ -13840,6 +13828,12 @@
   },
   "instance.server-modal.resource-pack": {
     "message": "Resource pack"
+  },
+  "instance.settings.general.name-required": {
+    "message": "Enter a name with no more than 80 characters."
+  },
+  "instance.settings.general.name-save-failed": {
+    "message": "The name could not be saved."
   },
   "instance.settings.sync.command-history": {
     "message": "Command history"
