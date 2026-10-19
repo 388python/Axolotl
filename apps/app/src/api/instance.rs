@@ -2,6 +2,7 @@ use crate::api::Result;
 use crate::api::files::local_instance_icon_path;
 use chrono::NaiveDate;
 use dashmap::DashMap;
+use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
@@ -967,20 +968,21 @@ pub async fn instance_get_many(
     instance_ids: Vec<String>,
 ) -> Result<Vec<Instance>> {
     let ids = instance_ids.iter().map(|x| &**x).collect::<Vec<&str>>();
-    let mut instances = Vec::with_capacity(ids.len());
-    for metadata in theseus::instance::get_many(&ids).await? {
-        instances.push(instance_from_metadata(metadata).await?);
-    }
-    Ok(instances)
+    instances_from_metadata(theseus::instance::get_many(&ids).await?).await
 }
 
 #[tauri::command]
 pub async fn instance_list() -> Result<Vec<Instance>> {
-    let mut instances = Vec::new();
-    for metadata in theseus::instance::list().await? {
-        instances.push(instance_from_metadata(metadata).await?);
-    }
-    Ok(instances)
+    instances_from_metadata(theseus::instance::list().await?).await
+}
+
+async fn instances_from_metadata(
+    metadata: Vec<InstanceMetadata>,
+) -> Result<Vec<Instance>> {
+    futures::stream::iter(metadata.into_iter().map(instance_from_metadata))
+        .buffered(4)
+        .try_collect()
+        .await
 }
 
 #[tauri::command]
