@@ -288,9 +288,6 @@ onBeforeUnmount(cancel)
             <p v-if="!validY" class="m-0 text-xs" role="alert">
                 {{ formatMessage(messages.invalidY, { min: yRange[0], max: yRange[1] }) }}
             </p>
-            <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                {{ formatMessage(messages.oreLimit) }}
-            </p>
             <p v-if="!ores.length" class="m-0 text-sm">{{ formatMessage(messages.unavailable) }}</p>
             <Button :disabled="busy || tooLarge || !validY || !ores.length" @click="run">{{
                 formatMessage(messages.analyze)
@@ -329,9 +326,6 @@ onBeforeUnmount(cancel)
                 :aria-label="formatMessage(messages.query)"
                 @keydown.enter="run"
             />
-            <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                {{ formatMessage(messages.lootLimit) }}
-            </p>
             <Button :disabled="busy || tooLarge || !query.trim()" @click="run">{{
                 formatMessage(messages.search)
             }}</Button>
@@ -347,13 +341,6 @@ onBeforeUnmount(cancel)
                             failed: lootResult.failed,
                         })
                     }}
-                </p>
-                <p
-                    v-if="lootResult.truncated || lootResult.failed"
-                    class="m-0 text-sm"
-                    role="alert"
-                >
-                    {{ formatMessage(messages.partial) }}
                 </p>
                 <p v-if="lootResult.unresolved" class="m-0 text-xs">
                     {{ formatMessage(messages.missing) }}

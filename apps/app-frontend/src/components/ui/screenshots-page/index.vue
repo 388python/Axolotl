@@ -1609,9 +1609,6 @@ onBeforeUnmount(() => {
                 :group-options="groupOptions"
                 @new-group="createCustomGroup"
             />
-            <p class="m-0 text-xs text-[var(--color-text-tertiary)]">
-                {{ formatMessage(messages.selectionHint) }}
-            </p>
         </template>
 
         <ReadyTransition :pending="screenshotsReadyPending">
