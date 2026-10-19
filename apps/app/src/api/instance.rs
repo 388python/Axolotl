@@ -62,6 +62,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_apply_content_update_plan,
             instance_plan_upgrade,
             instance_get_upgrade_plan,
+            instance_discard_upgrade_plan,
             instance_update_upgrade_resolution,
             instance_update_upgrade_resolutions,
             instance_reset_upgrade_resolution,
@@ -1144,6 +1145,12 @@ pub async fn instance_plan_upgrade(
         target_environment,
     )
     .await?)
+}
+
+#[tauri::command]
+pub async fn instance_discard_upgrade_plan(plan_id: &str) -> Result<()> {
+    theseus::instance::discard_instance_upgrade_plan(plan_id);
+    Ok(())
 }
 
 #[tauri::command]

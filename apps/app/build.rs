@@ -721,6 +721,7 @@ fn main() {
                         "instance_apply_content_update_plan",
                         "instance_plan_upgrade",
                         "instance_get_upgrade_plan",
+                        "instance_discard_upgrade_plan",
                         "instance_update_upgrade_resolution",
                         "instance_update_upgrade_resolutions",
                         "instance_reset_upgrade_resolution",

@@ -56,28 +56,43 @@ vi.mock('@/components/ui/library/InstanceGroup.vue', async () => {
     const { defineComponent, h } = await import('vue')
     return {
         default: defineComponent({
-            props: ['instances', 'sectionKey', 'isCollapsed', 'selectedInstanceIds'],
+            props: [
+                'instances',
+                'sectionKey',
+                'isCollapsed',
+                'selectedInstanceIds',
+                'runningInstanceIds',
+            ],
             setup:
                 (props, { emit }) =>
                 () =>
-                    h('section', [
-                        h(
-                            'button',
-                            { onClick: () => emit('toggle-collapse', props.sectionKey) },
-                            'Collapse',
-                        ),
-                        ...(props.isCollapsed
-                            ? []
-                            : props.instances.map((instance: Pick<GameInstance, 'id' | 'name'>) =>
-                                  h('input', {
-                                      type: 'checkbox',
-                                      'aria-label': instance.name,
-                                      checked: props.selectedInstanceIds.has(instance.id),
-                                      onClick: (event: MouseEvent) =>
-                                          emit('handle-checkbox-click', instance.id, event),
-                                  }),
-                              )),
-                    ]),
+                    h(
+                        'section',
+                        {
+                            'data-running-supplied': String(
+                                props.runningInstanceIds instanceof Set,
+                            ),
+                        },
+                        [
+                            h(
+                                'button',
+                                { onClick: () => emit('toggle-collapse', props.sectionKey) },
+                                'Collapse',
+                            ),
+                            ...(props.isCollapsed
+                                ? []
+                                : props.instances.map(
+                                      (instance: Pick<GameInstance, 'id' | 'name'>) =>
+                                          h('input', {
+                                              type: 'checkbox',
+                                              'aria-label': instance.name,
+                                              checked: props.selectedInstanceIds.has(instance.id),
+                                              onClick: (event: MouseEvent) =>
+                                                  emit('handle-checkbox-click', instance.id, event),
+                                          }),
+                                  )),
+                        ],
+                    ),
         }),
     }
 })
@@ -263,4 +278,11 @@ it('lists every batch target and preserves a failed deletion for retry', async (
     expect(backend.instances).toEqual(['beta'])
     expect(wrapper.get<HTMLInputElement>('input[aria-label="Alpha"]').element.checked).toBe(false)
     expect(wrapper.get<HTMLInputElement>('input[aria-label="Beta"]').element.checked).toBe(true)
+})
+
+it('supplies the shared running-process set to every instance group', async () => {
+    const wrapper = await library()
+    const groups = wrapper.findAll('[data-running-supplied]')
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) expect(group.attributes('data-running-supplied')).toBe('true')
 })

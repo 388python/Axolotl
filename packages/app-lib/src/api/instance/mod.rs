@@ -152,9 +152,10 @@ pub use self::synced_servers::{
     list_synced_servers, remove_synced_server, update_synced_server,
 };
 pub use self::upgrade::{
-    dismiss_instance_post_upgrade_notice, execute_instance_upgrade,
-    get_instance_post_upgrade_notice, get_instance_upgrade_plan,
-    plan_instance_upgrade, reset_instance_upgrade_resolution,
+    discard_instance_upgrade_plan, dismiss_instance_post_upgrade_notice,
+    execute_instance_upgrade, get_instance_post_upgrade_notice,
+    get_instance_upgrade_plan, plan_instance_upgrade,
+    reset_instance_upgrade_resolution,
     resolve_custom_instance_upgrade_solution, select_instance_upgrade_solution,
     update_instance_upgrade_resolution, update_instance_upgrade_resolutions,
 };
@@ -168,3 +169,5 @@ pub use self::groups::{
     rename_group, set_group_memberships, set_group_order,
     update_group_memberships,
 };
+
+mod upgrade_plan_registry;

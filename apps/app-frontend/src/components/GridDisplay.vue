@@ -1020,6 +1020,7 @@ async function handleInstanceDragEnd(event: {
                 :section-key="pinnedSection.key"
                 :group-name="groupNameMap.get(pinnedSection.key) || pinnedSection.key"
                 :instances="pinnedSection.instances"
+                :running-instance-ids="runningInstanceIds"
                 :grouping="grouping"
                 :is-collapsed="isSectionCollapsed(pinnedSection.key)"
                 :display-mode="displayMode"
@@ -1075,6 +1076,7 @@ async function handleInstanceDragEnd(event: {
                                 groupNameMap.get(instanceSection.key) || instanceSection.key
                             "
                             :instances="instanceSection.instances"
+                            :running-instance-ids="runningInstanceIds"
                             :grouping="grouping"
                             :is-collapsed="isSectionCollapsed(instanceSection.key)"
                             :display-mode="displayMode"

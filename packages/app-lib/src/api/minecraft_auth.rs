@@ -226,7 +226,7 @@ pub async fn get_default_user(
     let user = if offline_mode {
         Credentials::get_offline_credential(&state.pool).await?
     } else {
-        Credentials::get_active(&state.pool).await?
+        Credentials::get_active_without_refresh(&state.pool).await?
     };
     Ok(user.map(|user| user.account_id()))
 }

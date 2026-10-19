@@ -31,7 +31,13 @@ fn runtime_commands(source: &str) -> BTreeSet<&str> {
 
 fn manifest_commands<'a>(source: &'a str, plugin: &str) -> BTreeSet<&'a str> {
     let instance_plugin = source
-        .find(&format!(".plugin(\n                \"{plugin}\","))
+        .match_indices(".plugin(")
+        .find(|(index, _)| {
+            source[index + ".plugin(".len()..]
+                .trim_start()
+                .starts_with(&format!("\"{plugin}\","))
+        })
+        .map(|(index, _)| index)
         .expect("missing InlinedPlugin");
     bracket_contents_after(&source[instance_plugin..], ".commands(&[")
         .split(',')
@@ -52,6 +58,7 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
         missing.join(", ")
     );
     for command in [
+        "instance_discard_upgrade_plan",
         "instance_get_post_upgrade_notice",
         "instance_dismiss_post_upgrade_notice",
     ] {

@@ -38,6 +38,7 @@ import SkinListSkeleton from '@/components/ui/skin/SkinListSkeleton.vue'
 import VirtualSkinSectionList from '@/components/ui/skin/VirtualSkinSectionList.vue'
 import { useMojangAuthStatus } from '@/composables/useMojangAuth'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
+import { accountSelectionRevision } from '@/helpers/account-state'
 import { get_default_user, users } from '@/helpers/auth'
 import type { RenderResult } from '@/helpers/rendering/batch-skin-renderer.ts'
 import { setActiveSkinPreviews, skinBlobUrlMap } from '@/helpers/rendering/batch-skin-renderer.ts'
@@ -306,7 +307,6 @@ const { offline } = useNetworkStatus()
 const mojangAuth = useMojangAuthStatus()
 
 const accountsCard = inject('accountsCard') as Ref<typeof AccountsCard>
-const accountChangeRevision = computed(() => accountsCard.value?.accountChangeRevision)
 const currentUser = ref(undefined)
 const currentUserId = ref<string | undefined>(undefined)
 const currentAccountType = ref<'microsoft' | 'offline' | 'yggdrasil' | undefined>(undefined)
@@ -390,7 +390,6 @@ const hasPendingSkinChange = computed(
     () => !skinsMatch(selectedSkin.value, originalSelectedSkin.value),
 )
 
-let userCheckInterval: number | null = null
 let pendingSkinRefreshTimeout: number | null = null
 let isUnmounted = false
 const skinAccountSessions = createSkinAccountSession()
@@ -898,8 +897,7 @@ async function refreshSelectedAccount() {
     await Promise.all([loadCapes(generation), loadSkins(generation)])
 }
 
-watch(accountChangeRevision, (revision, previousRevision) => {
-    if (revision === undefined || previousRevision === undefined) return
+watch(accountSelectionRevision, () => {
     void refreshSelectedAccount()
 })
 
@@ -1070,7 +1068,6 @@ onBeforeRouteLeave(async (to) => {
 })
 
 onMounted(() => {
-    userCheckInterval = window.setInterval(checkUserChanges, 250)
     void setupNativeDropHandler()
 })
 
@@ -1079,9 +1076,6 @@ onUnmounted(() => {
     cancelSkinPreviews?.()
     setActiveSkinPreviews([])
     removeNavigationFailureHandler()
-    if (userCheckInterval !== null) {
-        window.clearInterval(userCheckInterval)
-    }
 
     if (unlistenNativeDrop) {
         unlistenNativeDrop()
@@ -1094,18 +1088,9 @@ onUnmounted(() => {
     }
 })
 
-async function checkUserChanges() {
-    try {
-        const defaultId = await get_default_user(offline.value)
-        if (defaultId !== currentUserId.value) {
-            await refreshSelectedAccount()
-        }
-    } catch (error) {
-        if (currentUser.value && error instanceof Error) {
-            handleError(error)
-        }
-    }
-}
+watch(offline, () => {
+    void refreshSelectedAccount()
+})
 
 await refreshSelectedAccount()
 </script>
