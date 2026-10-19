@@ -114,6 +114,12 @@ impl Subscription {
 }
 
 pub struct ResourceService {
+    pub(crate) artifact_metadata_reader:
+        Arc<dyn super::plans::artifact_metadata::ArtifactMetadataReader>,
+    pub(crate) artifact_metadata: DashMap<
+        SourceArtifactRef,
+        (ArtifactIntegrity, crate::mod_metadata::LocalModMetadata),
+    >,
     pub(crate) export_plans: DashMap<
         PlanId,
         Arc<tokio::sync::Mutex<super::export::plan::PreparedExport>>,
@@ -187,6 +193,10 @@ impl ResourceService {
             }
         }
         Ok(Arc::new(Self {
+            artifact_metadata_reader: Arc::new(
+                super::plans::artifact_metadata::RuntimeArtifactMetadataReader,
+            ),
+            artifact_metadata: DashMap::new(),
             export_sessions: DashMap::new(),
             export_plans: DashMap::new(),
             searches: DashMap::new(),

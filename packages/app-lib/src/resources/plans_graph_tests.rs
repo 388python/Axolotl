@@ -386,3 +386,393 @@ async fn fixed_and_project_only_parent_requirements_share_the_fixed_release_in_b
     }
     service.cache().close().await;
 }
+
+#[tokio::test]
+async fn updates_resolve_new_required_dependencies_and_respect_manual_policy() {
+    let old = release("root0000", "1", 'a');
+    let mut new = release("root0000", "2", 'b');
+    let dependency = release("depend00", "1", 'c');
+    requires(&mut new, &dependency, ResourceDependencyKind::Required);
+    let (_temp, service) =
+        service(vec![old.clone(), new.clone(), dependency]).await;
+    for automatic in [false, true] {
+        let mut request = draft(
+            vec![selection("root", &new, Some("root-entry"))],
+            ResourceOperationIntent::Update,
+        );
+        request.install_dependencies = automatic;
+        let plan = service
+            .build_operation(
+                request,
+                &target(),
+                &[installed(&old, "root-entry", "mods/root.jar")],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        assert_eq!(plan.actions.len(), if automatic { 2 } else { 1 });
+        assert_eq!(
+            plan.issues.iter().any(|issue| issue.blocking
+                && issue.code == ResourceIssueCode::MissingDependency),
+            !automatic
+        );
+        assert_eq!(plan.edges.len(), 1);
+    }
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn updates_choose_the_newest_release_allowed_by_retained_parents() {
+    let mut parent = release("parent00", "1", 'a');
+    let old = release("depend00", "1", 'b');
+    let compatible = release("depend00", "2", 'c');
+    let latest = release("depend00", "3", 'd');
+    parent.artifacts[0].dependencies.push(ArtifactDependency {
+        target: DependencyTarget::Resource {
+            reference: ResourceRef::Source {
+                project: old.reference.project.clone(),
+            },
+        },
+        kind: ResourceDependencyKind::Required,
+        version_constraint: Some("<3".into()),
+    });
+    let (_temp, service) = service(vec![
+        parent.clone(),
+        old.clone(),
+        compatible.clone(),
+        latest.clone(),
+    ])
+    .await;
+    let entries = [
+        installed(&parent, "parent", "mods/parent.jar"),
+        installed(&old, "child", "mods/child.jar"),
+    ];
+    let mut automatic = selection("child", &old, Some("child"));
+    automatic.release = ReleaseSelection::Automatic;
+    let plan = service
+        .build_operation(
+            draft(vec![automatic], ResourceOperationIntent::Update),
+            &target(),
+            &entries,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(
+        plan.actions[0].target.reference,
+        compatible.artifacts[0].reference
+    );
+    let explicit = service
+        .build_operation(
+            draft(
+                vec![selection("child", &latest, Some("child"))],
+                ResourceOperationIntent::SwitchVersion,
+            ),
+            &target(),
+            &entries,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(explicit.issues.iter().any(|issue| issue.blocking
+        && issue.code == ResourceIssueCode::VersionConflict));
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn exact_retained_requirements_prevent_updates_but_replaced_parents_do_not_pin_old_releases()
+ {
+    let mut parent = release("parent00", "1", 'a');
+    let mut new_parent = release("parent00", "2", 'd');
+    let old = release("depend00", "1", 'b');
+    let new = release("depend00", "2", 'c');
+    requires(&mut parent, &old, ResourceDependencyKind::Required);
+    requires(&mut new_parent, &new, ResourceDependencyKind::Required);
+    let (_temp, service) = service(vec![
+        parent.clone(),
+        new_parent.clone(),
+        old.clone(),
+        new.clone(),
+    ])
+    .await;
+    let entries = [
+        installed(&parent, "parent", "mods/parent.jar"),
+        installed(&old, "child", "mods/child.jar"),
+    ];
+    let mut automatic = selection("child", &old, Some("child"));
+    automatic.release = ReleaseSelection::Automatic;
+    let plan = service
+        .build_operation(
+            draft(vec![automatic.clone()], ResourceOperationIntent::Update),
+            &target(),
+            &entries,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.actions.is_empty());
+    let plan = service
+        .build_operation(
+            draft(
+                vec![
+                    selection("parent", &new_parent, Some("parent")),
+                    automatic,
+                ],
+                ResourceOperationIntent::Update,
+            ),
+            &target(),
+            &entries,
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(plan.actions.len(), 2);
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn retained_local_jar_ranges_filter_updates_even_without_online_parent_identity()
+ {
+    let parent = release("parent00", "1", 'a');
+    let old = release("depend00", "1", 'b');
+    let mut compatible = release("depend00", "2", 'c');
+    let mut latest = release("depend00", "3", 'd');
+    compatible.version = "Library Forge build two".into();
+    latest.version = "Library Forge build three".into();
+    let versions = [
+        (old.artifacts[0].reference.clone(), "1"),
+        (compatible.artifacts[0].reference.clone(), "2"),
+        (latest.artifacts[0].reference.clone(), "3"),
+    ]
+    .into_iter()
+    .map(|(reference, version)| (reference, version.to_string()))
+    .collect();
+    let (_temp, mut service) =
+        service(vec![old.clone(), compatible.clone(), latest]).await;
+    Arc::get_mut(&mut service).unwrap().artifact_metadata_reader =
+        Arc::new(FixtureMetadataReader(versions));
+    let mut local_parent = installed(&parent, "parent", "mods/local.jar");
+    local_parent.artifact = None;
+    local_parent.known_artifacts.clear();
+    let child = installed(&old, "child", "mods/child.jar");
+    let mut automatic = selection("child", &old, Some("child"));
+    automatic.release = ReleaseSelection::Automatic;
+    let mut request = draft(vec![automatic], ResourceOperationIntent::Update);
+    for (id, mod_id, dependencies) in [
+        (
+            "parent",
+            "parent",
+            serde_json::json!([{"mod_id":"child", "version_range":"<3"}]),
+        ),
+        ("child", "child", serde_json::json!([])),
+    ] {
+        request.local_metadata.insert(
+            InstalledEntryId::new(id).unwrap(),
+            serde_json::from_value(serde_json::json!({
+                "mod_id":mod_id,"version":"1","dependencies":dependencies
+            }))
+            .unwrap(),
+        );
+    }
+    let plan = service
+        .build_operation(
+            request,
+            &target(),
+            &[local_parent, child],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(
+        plan.actions[0].target.reference,
+        compatible.artifacts[0].reference
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn filename_dependencies_match_unrecognized_files_and_keep_disabled_missing_and_ambiguous_files_blocked()
+ {
+    let mut parent = release("parent00", "1", 'a');
+    let file = release("depend00", "1", 'b');
+    parent.artifacts[0].dependencies.push(ArtifactDependency {
+        target: DependencyTarget::FileName {
+            name: "local.jar".into(),
+        },
+        kind: ResourceDependencyKind::Required,
+        version_constraint: None,
+    });
+    let (_temp, service) = service(vec![parent.clone()]).await;
+    let mut local = installed(&file, "local", "mods/local.jar");
+    local.artifact = None;
+    local.known_artifacts.clear();
+    for scenario in
+        ["present", "disabled", "missing", "ambiguous", "other-scope"]
+    {
+        let mut entry = local.clone();
+        match scenario {
+            "disabled" => {
+                entry.enabled = false;
+                entry.relative_path.push_str(".disabled");
+            }
+            "missing" => entry.missing = true,
+            "other-scope" => {
+                entry.scope = InstallScope::World {
+                    relative_path: "saves/world".into(),
+                }
+            }
+            _ => {}
+        }
+        let mut entries = vec![entry];
+        if scenario == "ambiguous" {
+            let mut other = local.clone();
+            other.entry_id = InstalledEntryId::new("duplicate").unwrap();
+            entries.push(other);
+        }
+        let plan = service
+            .build_operation(
+                draft(
+                    vec![selection("parent", &parent, None)],
+                    ResourceOperationIntent::Install,
+                ),
+                &target(),
+                &entries,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        assert_eq!(
+            plan.issues.iter().any(|issue| issue.blocking),
+            scenario != "present",
+            "{scenario}: {:?}",
+            plan.issues
+        );
+        if scenario == "present" {
+            assert_eq!(plan.actions.len(), 1);
+            let node = plan
+                .nodes
+                .iter()
+                .find(|node| node.state == DependencyNodeState::Satisfied)
+                .unwrap();
+            assert!(node.installed_entries.contains(&local.entry_id));
+            assert_eq!(plan.edges.len(), 1);
+        }
+    }
+    service.cache().close().await;
+}
+
+#[test]
+fn local_mod_version_ranges_use_fabric_and_forge_semantics() {
+    for (range, version, expected) in [
+        ("~1.2", "1.2.4", true),
+        ("~1.2", "1.3.0", false),
+        ("^0.2.1", "0.2.9", true),
+        ("^0.2.1", "0.3.0", false),
+        (">=1.0 <2.0", "1.9.0", true),
+        ("[1.0,2.0)", "2.0", false),
+        (">=1.0 || ~0.9", "0.9.2", true),
+        ("1.2", "1.3.0", false),
+        ("1.0.0-beta.2", "1.0.0-beta.2", true),
+        ("unknown", "1.0.0", false),
+    ] {
+        assert_eq!(
+            plans::requirements::mod_version_matches(range, version),
+            expected,
+            "{range}: {version}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn updating_a_parent_can_review_and_replace_an_outdated_installed_dependency()
+ {
+    let old_parent = release("parent00", "1", 'a');
+    let mut new_parent = release("parent00", "2", 'b');
+    let old_child = release("depend00", "1", 'c');
+    let new_child = release("depend00", "2", 'd');
+    requires(
+        &mut new_parent,
+        &new_child,
+        ResourceDependencyKind::Required,
+    );
+    let (_temp, service) = service(vec![
+        old_parent.clone(),
+        new_parent.clone(),
+        old_child.clone(),
+        new_child.clone(),
+    ])
+    .await;
+    for automatic in [false, true] {
+        let mut request = draft(
+            vec![selection("parent", &new_parent, Some("parent"))],
+            ResourceOperationIntent::Update,
+        );
+        request.install_dependencies = automatic;
+        let entries = [
+            installed(&old_parent, "parent", "mods/parent.jar"),
+            installed(&old_child, "child", "mods/custom-child.jar"),
+        ];
+        let plan = service
+            .build_operation(
+                request,
+                &target(),
+                &entries,
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        if automatic {
+            assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+            assert_eq!(plan.actions.len(), 2);
+            let child = plan
+                .actions
+                .iter()
+                .find(|action| action.entry_id.as_str() == "child")
+                .unwrap();
+            assert_eq!(child.kind, ResourceActionKind::Replace);
+            assert_eq!(
+                child.target.reference,
+                new_child.artifacts[0].reference
+            );
+            assert_eq!(
+                child.current.as_ref().unwrap().relative_path,
+                "mods/custom-child.jar"
+            );
+        } else {
+            assert!(plan.issues.iter().any(|issue| issue.blocking));
+            assert_eq!(plan.actions.len(), 1);
+        }
+    }
+    service.cache().close().await;
+}
+
+struct FixtureMetadataReader(HashMap<SourceArtifactRef, String>);
+
+#[async_trait]
+impl plans::artifact_metadata::ArtifactMetadataReader
+    for FixtureMetadataReader
+{
+    async fn read(
+        &self,
+        artifact: &ResourceArtifact,
+        _cancel: &CancellationToken,
+    ) -> ResourceResult<Option<crate::mod_metadata::LocalModMetadata>> {
+        Ok(self.0.get(&artifact.reference).map(|version| {
+            serde_json::from_value(serde_json::json!({
+                "mod_id":"child", "version":version, "dependencies":[]
+            }))
+            .unwrap()
+        }))
+    }
+}

@@ -1,3 +1,8 @@
+pub(crate) mod artifact_metadata;
+pub(crate) mod requirements;
+
+use requirements::RetainedRequirement;
+
 use super::{ipc::ResourceTarget, providers::*, *};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
@@ -36,6 +41,11 @@ fn report_node(
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct OperationDraft {
+    #[serde(default)]
+    pub local_metadata:
+        HashMap<InstalledEntryId, crate::mod_metadata::LocalModMetadata>,
+    #[serde(default)]
+    pub retained_requirements: Vec<RetainedRequirement>,
     #[serde(default = "resolve_dependencies_default")]
     pub resolve_dependencies: bool,
     #[serde(default)]
@@ -640,6 +650,32 @@ impl ResourceService {
         ResourceArtifact,
         ReleaseSelectionBasis,
     )> {
+        self.selected_release_with_requirements(
+            selection,
+            target,
+            preferred,
+            cancel,
+            current,
+            constraints,
+            &[],
+        )
+        .await
+    }
+
+    pub(crate) async fn selected_release_with_requirements(
+        self: &Arc<Self>,
+        selection: &ResourceSelection,
+        target: &ResourceTarget,
+        preferred: &SourceId,
+        cancel: &CancellationToken,
+        current: Option<&ResourceRelease>,
+        constraints: &[String],
+        requirements: &[RetainedRequirement],
+    ) -> ResourceResult<(
+        ResourceRelease,
+        ResourceArtifact,
+        ReleaseSelectionBasis,
+    )> {
         let mut dependency_target;
         let target = if selection.id.as_str().starts_with("dependency:") {
             dependency_target = target.clone();
@@ -734,7 +770,9 @@ impl ResourceService {
                                     target,
                                     selection.resource_type,
                                 );
-                                compatibility.game_version
+                                requirements.iter().all(|requirement| {
+                                    requirement.accepts(release)
+                                }) && compatibility.game_version
                                     == CompatibilityState::Compatible
                                     && compatibility.loader
                                         == CompatibilityState::Compatible
@@ -779,23 +817,38 @@ impl ResourceService {
                 if !preferred_channels.is_empty() {
                     releases = preferred_channels;
                 }
-                select_automatic_release(releases, preferred).ok_or_else(
-                    || {
-                        if failures.is_empty() {
-                            return ResourceError::NoCompatibleRelease;
-                        }
-                        invalid(format!(
-                            "no compatible release found for {:?} / {:?}{}",
-                            target.game_versions,
-                            target.loaders,
+                loop {
+                    let selected =
+                        select_automatic_release(releases.clone(), preferred)
+                            .ok_or_else(|| {
                             if failures.is_empty() {
-                                String::new()
-                            } else {
-                                format!("; {}", failures.join("; "))
+                                return ResourceError::NoCompatibleRelease;
                             }
-                        ))
-                    },
-                )?
+                            invalid(format!(
+                                "no compatible release found for {:?} / {:?}{}",
+                                target.game_versions,
+                                target.loaders,
+                                if failures.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("; {}", failures.join("; "))
+                                }
+                            ))
+                        })?;
+                    if self
+                        .local_requirements_accept(
+                            &selected.0,
+                            requirements,
+                            cancel,
+                        )
+                        .await?
+                    {
+                        break selected;
+                    }
+                    releases.retain(|release| {
+                        release.reference != selected.0.reference
+                    });
+                }
             }
         };
         if !constraints.iter().all(|constraint| {
@@ -803,6 +856,22 @@ impl ResourceService {
         }) {
             return Err(invalid(
                 "selected release does not satisfy all dependency version constraints",
+            ));
+        }
+        if !requirements
+            .iter()
+            .all(|requirement| requirement.accepts(&release))
+        {
+            return Err(invalid(
+                "selected release conflicts with an installed dependent",
+            ));
+        }
+        if !self
+            .local_requirements_accept(&release, requirements, cancel)
+            .await?
+        {
+            return Err(invalid(
+                "selected mod does not satisfy an installed dependent's version range",
             ));
         }
         let artifact = match &selection.release {
@@ -936,6 +1005,15 @@ impl ResourceService {
         cancel: &CancellationToken,
         progress: OperationProgress<'_>,
     ) -> ResourceResult<OperationDraft> {
+        let mut draft = draft;
+        draft.retained_requirements = self
+            .retained_requirements(
+                &draft.plan.selections,
+                installed,
+                &draft.local_metadata,
+                cancel,
+            )
+            .await?;
         let original = draft.clone();
         let mut seeded: HashMap<SelectionKey, Vec<String>> = HashMap::new();
         for _ in 0..32 {
@@ -1127,6 +1205,9 @@ impl ResourceService {
                 constraints.sort();
                 constraints.dedup();
             }
+            let requirements = self
+                .requirements_for(&selection, &draft.retained_requirements)
+                .await?;
             let satisfied_dependency =
                 if selection.id.as_str().starts_with("dependency:")
                     && selection.entry_id.is_none()
@@ -1146,13 +1227,14 @@ impl ResourceService {
                 match if let Some(selected) = satisfied_dependency {
                     Ok(selected)
                 } else {
-                    self.selected_release_with_constraints(
+                    self.selected_release_with_requirements(
                         &selection,
                         target,
                         &preferred,
                         cancel,
                         previous_release.as_ref(),
                         &constraints,
+                        &requirements,
                     )
                     .await
                 } {
@@ -1163,7 +1245,15 @@ impl ResourceService {
                     Err(error) => {
                         issue(
                             &mut draft.plan,
-                            if constraints.is_empty() {
+                            if matches!(
+                                error,
+                                ResourceError::Network { .. }
+                                    | ResourceError::Unavailable
+                            ) {
+                                ResourceIssueCode::SourceUnavailable
+                            } else if constraints.is_empty()
+                                && requirements.is_empty()
+                            {
                                 ResourceIssueCode::MissingDependency
                             } else {
                                 ResourceIssueCode::VersionConflict
@@ -1175,6 +1265,22 @@ impl ResourceService {
                         continue;
                     }
                 };
+            if !requirements
+                .iter()
+                .all(|requirement| requirement.accepts(&release))
+                || !self
+                    .local_requirements_accept(&release, &requirements, cancel)
+                    .await?
+            {
+                issue(
+                    &mut draft.plan,
+                    ResourceIssueCode::VersionConflict,
+                    &selection.id,
+                    true,
+                    "dependency release conflicts with an installed dependent",
+                );
+                continue;
+            }
             if artifact.reference.release.project.source
                 == SourceId::curseforge()
                 && self.sources().iter().any(|source| {
@@ -1241,6 +1347,45 @@ impl ResourceService {
                     {
                         *id = current;
                     }
+                }
+            }
+            if selection.id.as_str().starts_with("dependency:")
+                && selection.entry_id.is_none()
+                && draft.install_dependencies
+                && draft.plan.intent != ResourceOperationIntent::Install
+            {
+                let mut candidates = Vec::new();
+                for entry in installed.iter().filter(|entry| {
+                    entry.enabled
+                        && !entry.missing
+                        && entry.scope == selection.scope
+                        && entry.resource_type == selection.resource_type
+                }) {
+                    let reference = entry
+                        .resource_id
+                        .as_ref()
+                        .map(|id| ResourceRef::Resource { id: id.clone() })
+                        .or_else(|| {
+                            entry.artifact.as_ref().map(|artifact| {
+                                ResourceRef::Source {
+                                    project: artifact.release.project.clone(),
+                                }
+                            })
+                        });
+                    if let Some(reference) = reference
+                        && self.normalized_reference(&reference).await?
+                            == selection.resource
+                    {
+                        candidates.push(entry);
+                    }
+                }
+                if candidates.len() == 1
+                    && !identity::exact_integrity(
+                        &candidates[0].integrity,
+                        &artifact.integrity,
+                    )
+                {
+                    selection.entry_id = Some(candidates[0].entry_id.clone());
                 }
             }
             let resource_key = selection_key(&selection);
@@ -1677,6 +1822,15 @@ impl ResourceService {
             }
             for dependency in &artifact.dependencies {
                 if dependency.kind == ResourceDependencyKind::Embedded {
+                    continue;
+                }
+                if requirements::local_file_dependency(
+                    &mut draft,
+                    &selection,
+                    &artifact.reference,
+                    dependency,
+                    installed,
+                )? {
                     continue;
                 }
                 let child = match self
@@ -2302,6 +2456,9 @@ pub(crate) async fn prepare_with_installed(
         .map(|selection| selection.id.clone())
         .collect();
     let draft = OperationDraft {
+        local_metadata: requirements::local_metadata(&state.pool, &instance_id)
+            .await?,
+        retained_requirements: Vec::new(),
         resolve_dependencies,
         import_files: Default::default(),
         naming: {

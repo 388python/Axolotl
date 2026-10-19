@@ -1024,6 +1024,8 @@ async fn local_plan(
         selection_reasons: vec![],
     };
     let draft = plans::OperationDraft {
+        local_metadata: Default::default(),
+        retained_requirements: Vec::new(),
         resolve_dependencies: true,
         import_files: Default::default(),
         naming: Default::default(),
@@ -2325,5 +2327,116 @@ async fn backup_cleanup_refuses_current_files_and_shared_history_references() {
             .unwrap();
     assert_eq!(result.removed.len(), 2);
     assert!(!root.join(path).exists());
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn a_satisfied_filename_dependency_is_rechecked_before_any_file_is_replaced()
+ {
+    let (_temp, state, original, old, root) = fixture().await;
+    std::fs::create_dir_all(root.join("mods")).unwrap();
+    let local =
+        artifact(SourceId::modrinth(), "local000", "localver", b"local bytes");
+    std::fs::write(root.join("mods/local.jar"), b"local bytes").unwrap();
+    let file = content_rows::upsert_instance_file_from_parts(
+        content_rows::UpsertInstanceFile {
+            instance_id: "instance",
+            relative_path: "mods/local.jar",
+            file_name: "local.jar",
+            enabled: true,
+            sha1: &local.integrity.hashes[0].value,
+            size: 11,
+            missing: false,
+            local_mod_data: None,
+            icon_path: None,
+        },
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    let entry = content_rows::upsert_content_entry_from_parts(
+        content_rows::UpsertContentEntry {
+            instance_id: "instance",
+            content_set_id: "set",
+            file_id: Some(&file.id),
+            project_type: ProjectType::Mod,
+            source_kind: ContentSourceKind::Local,
+            ownership_kind: ContentOwnershipKind::UserAdded,
+            auto_dependency: false,
+            server_requirement: ContentRequirement::Unknown,
+            client_requirement: ContentRequirement::Unknown,
+            enabled: true,
+        },
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    std::fs::write(root.join("download.zip"), b"old bytes").unwrap();
+    let mut plan =
+        local_plan(&state, original.clone(), old.clone(), "download.zip", None)
+            .await;
+    let node_id = SelectionId::new("local-file").unwrap();
+    plan.nodes.push(ResourceDependencyNode {
+        id: node_id.clone(),
+        root_selection_ids: vec![],
+        resource_type: Some(ResourceType::Mod),
+        resource: ResourceRef::Source {
+            project: crate::resources::providers::source_project(
+                SourceId::new("local").unwrap(),
+                "local.jar",
+            )
+            .unwrap(),
+        },
+        scope: InstallScope::Instance,
+        state: DependencyNodeState::Satisfied,
+        artifact: None,
+        installed_entries: vec![InstalledEntryId::new(entry.id).unwrap()],
+        compatibility: CompatibilityAssessment {
+            game_version: CompatibilityState::Unknown,
+            loader: CompatibilityState::Unknown,
+            reasons: vec![],
+        },
+        declared_compatibility: None,
+    });
+    plan.edges.push(ResourceDependencyEdge {
+        parent: plan.actions[0].node_id.clone(),
+        child: node_id,
+        declared_by: old.reference.clone(),
+        kind: ResourceDependencyKind::Required,
+        release_selection: None,
+        version_constraint: None,
+    });
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM resource_operation_plans WHERE id = ?",
+    )
+    .bind(plan.id.as_str())
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    let mut draft: plans::OperationDraft =
+        serde_json::from_str(&payload).unwrap();
+    draft.plan = plan.clone();
+    sqlx::query("UPDATE resource_operation_plans SET payload = ? WHERE id = ?")
+        .bind(serde_json::to_string(&draft).unwrap())
+        .bind(plan.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+    std::fs::write(root.join("mods/local.jar"), b"other bytes").unwrap();
+    let error = execute("instance", &plan, None, &state).await.unwrap_err();
+    assert!(
+        error.to_string().contains("satisfied dependency changed"),
+        "{error}"
+    );
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    std::fs::write(root.join("mods/local.jar"), b"local bytes").unwrap();
+    execute("instance", &plan, None, &state).await.unwrap();
+    assert_eq!(
+        std::fs::read(root.join("mods/local.jar")).unwrap(),
+        b"local bytes"
+    );
     state.pool.close().await;
 }
