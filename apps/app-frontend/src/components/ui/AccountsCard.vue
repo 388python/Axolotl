@@ -449,7 +449,10 @@ import {
     users,
 } from '@/helpers/auth'
 import { process_listener } from '@/helpers/events'
-import { getPlayerHeadUrl } from '@/helpers/rendering/batch-skin-renderer.ts'
+import {
+    getPlayerHeadUrl,
+    retainPlayerHeadTextures,
+} from '@/helpers/rendering/batch-skin-renderer.ts'
 import type { Skin } from '@/helpers/skins'
 import { get_available_skins } from '@/helpers/skins'
 import { handleSevereError, useError } from '@/store/error.js'
@@ -715,6 +718,27 @@ defineExpose({
     setLoginDisabled,
     loginDisabled,
 })
+
+watch(
+    () => [
+        ...accounts.value.map((account) => getAccountSkin(account)?.texture_key),
+        equippedSkin.value?.texture_key,
+    ],
+    (keys, _, onCleanup) => {
+        onCleanup(retainPlayerHeadTextures(keys.filter((key): key is string => !!key)))
+        const accountIds = new Set(accounts.value.map((account) => account.account_id))
+        accountHeadUrlCache.value = new Map(
+            [...accountHeadUrlCache.value].filter(([id]) => accountIds.has(id)),
+        )
+        accountHeadTextureKeyCache.value = new Map(
+            [...accountHeadTextureKeyCache.value].filter(([id]) => accountIds.has(id)),
+        )
+        headUrlCache.value = new Map(
+            [...headUrlCache.value].filter(([key]) => key === equippedSkin.value?.texture_key),
+        )
+    },
+    { immediate: true, flush: 'sync' },
+)
 
 await refreshValues()
 

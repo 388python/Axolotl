@@ -16,8 +16,10 @@ import {
     generateHeadRender,
     getHeadRenderKey,
     headBlobUrlMap,
+    pruneSkinPreviewMemory,
     type RawRenderResult,
     type RenderResult,
+    setActiveSkinPreviews,
     skinBlobUrlMap,
 } from './batch-skin-renderer'
 
@@ -222,6 +224,7 @@ export function disposeSharedRenderer(): void {
 }
 
 export function generateSkinPreviews(skins: Skin[], capes: Cape[]): Promise<void> {
+    setActiveSkinPreviews(skins)
     const generation = ++latestPreviewGeneration
     const skinsSnapshot = [...skins]
     const capesSnapshot = [...capes]
@@ -233,6 +236,11 @@ export function generateSkinPreviews(skins: Skin[], capes: Cape[]): Promise<void
     previewGenerationQueue = generationPromise.catch(() => {})
 
     return generationPromise
+}
+
+export function cancelSkinPreviews(): void {
+    latestPreviewGeneration++
+    setActiveSkinPreviews([])
 }
 
 async function generateSkinPreviewsForGeneration(
@@ -327,12 +335,15 @@ async function generateSkinPreviewsForGeneration(
         }
     } finally {
         disposeSharedRenderer()
+        pruneSkinPreviewMemory()
 
         if (isCurrentGeneration()) {
             await cleanupUnusedPreviews(skins)
 
-            await skinPreviewStorage.debugCalculateStorage()
-            await headStorage.debugCalculateStorage()
+            if (DEBUG_MODE) {
+                await skinPreviewStorage.debugCalculateStorage()
+                await headStorage.debugCalculateStorage()
+            }
         }
     }
 }

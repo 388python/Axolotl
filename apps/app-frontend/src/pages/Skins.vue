@@ -40,7 +40,7 @@ import VirtualSkinSectionList from '@/components/ui/skin/VirtualSkinSectionList.
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { check_reachable, get_default_user, users } from '@/helpers/auth'
 import type { RenderResult } from '@/helpers/rendering/batch-skin-renderer.ts'
-import { skinBlobUrlMap } from '@/helpers/rendering/batch-skin-renderer.ts'
+import { setActiveSkinPreviews, skinBlobUrlMap } from '@/helpers/rendering/batch-skin-renderer.ts'
 import { createSkinAccountSession } from '@/helpers/skin-account-session'
 import { loadSkinArmorPreview, saveSkinArmorPreview } from '@/helpers/skin-armor-preview'
 import type { Cape, Skin, SkinTextureUrl } from '@/helpers/skins.ts'
@@ -60,9 +60,12 @@ import {
 } from '@/helpers/skins.ts'
 import { useTheming } from '@/store/state'
 
+let cancelSkinPreviews: (() => void) | undefined
 async function generateSkinPreviews(skins: Skin[], capes: Cape[]) {
-    const { generateSkinPreviews: generate } =
+    const { generateSkinPreviews: generate, cancelSkinPreviews: cancel } =
         await import('@/helpers/rendering/skin-preview-renderer')
+    if (isUnmounted) return
+    cancelSkinPreviews = cancel
     await generate(skins, capes)
 }
 
@@ -1089,6 +1092,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     isUnmounted = true
+    cancelSkinPreviews?.()
+    setActiveSkinPreviews([])
     removeNavigationFailureHandler()
     if (userCheckInterval !== null) {
         window.clearInterval(userCheckInterval)
