@@ -23,7 +23,6 @@ import {
     useVIntl,
 } from '@modrinth/ui'
 import { arrayBufferToBase64 } from '@modrinth/utils'
-import { useQuery } from '@tanstack/vue-query'
 import { invoke } from '@tauri-apps/api/core'
 import type { DragDropEvent } from '@tauri-apps/api/webview'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -37,8 +36,9 @@ import ArmorTrimTab from '@/components/ui/skin/ArmorTrimTab.vue'
 import EditSkinModal from '@/components/ui/skin/EditSkinModal.vue'
 import SkinListSkeleton from '@/components/ui/skin/SkinListSkeleton.vue'
 import VirtualSkinSectionList from '@/components/ui/skin/VirtualSkinSectionList.vue'
+import { useMojangAuthStatus } from '@/composables/useMojangAuth'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
-import { check_reachable, get_default_user, users } from '@/helpers/auth'
+import { get_default_user, users } from '@/helpers/auth'
 import type { RenderResult } from '@/helpers/rendering/batch-skin-renderer.ts'
 import { setActiveSkinPreviews, skinBlobUrlMap } from '@/helpers/rendering/batch-skin-renderer.ts'
 import { createSkinAccountSession } from '@/helpers/skin-account-session'
@@ -302,7 +302,8 @@ const { addNotification, handleError } = notifications
 const themeStore = useTheming()
 const skins = ref<Skin[]>([])
 const capes = ref<Cape[]>([])
-const { browserOffline, offline, setNetworkReachable } = useNetworkStatus()
+const { offline } = useNetworkStatus()
+const mojangAuth = useMojangAuthStatus()
 
 const accountsCard = inject('accountsCard') as Ref<typeof AccountsCard>
 const accountChangeRevision = computed(() => accountsCard.value?.accountChangeRevision)
@@ -323,23 +324,6 @@ const savedSkins = computed(() => {
         handleError(error as Error)
         return []
     }
-})
-const authServerQuery = useQuery({
-    queryKey: ['authServerReachability'],
-    enabled: computed(() => !browserOffline.value),
-    queryFn: async () => {
-        try {
-            await check_reachable()
-            setNetworkReachable(true)
-            return true
-        } catch (error) {
-            setNetworkReachable(false)
-            throw error
-        }
-    },
-    refetchInterval: 5 * 60 * 1000,
-    retry: false,
-    refetchOnWindowFocus: false,
 })
 const defaultSkins = computed(() => filterDefaultSkins(skins.value))
 const defaultSkinSections = computed(() => {
@@ -400,7 +384,7 @@ const isSkinManagementReadOnly = computed(
     () =>
         currentAccountType.value === 'yggdrasil' ||
         (currentAccountType.value !== 'offline' &&
-            (offline.value || (authServerQuery.isError.value && !authServerQuery.isLoading.value))),
+            (offline.value || mojangAuth.reachable.value === false)),
 )
 const hasPendingSkinChange = computed(
     () => !skinsMatch(selectedSkin.value, originalSelectedSkin.value),

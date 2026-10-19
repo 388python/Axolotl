@@ -58,12 +58,10 @@ import {
     providePopupNotificationManager,
     ScrollToTopButton,
     SymlinkMethodCards,
-    useDebugLogger,
     useFormatBytes,
     useModalStack,
     useVIntl,
 } from '@modrinth/ui'
-import { useQuery } from '@tanstack/vue-query'
 import { getVersion } from '@tauri-apps/api/app'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -108,10 +106,10 @@ import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { isOfflineAccountRestrictedError } from '@/composables/useAntiPiracyStatus'
 import { useDropImport } from '@/composables/useDropImport'
 import { minecraftLaunchErrorKey } from '@/composables/useMinecraftLaunchError'
+import { setupMojangAuthMonitor, useMojangAuthStatus } from '@/composables/useMojangAuth'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { AxolotlBrandConfig, config, getOfficialLabrinthBaseUrl } from '@/config'
 import { trackEvent } from '@/helpers/analytics'
-import { check_reachable } from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
 import { configureCurseForgeManualDownloadWatcher } from '@/helpers/curseforge'
 import { applySettingChanges } from '@/helpers/deep-link-settings.ts'
@@ -132,10 +130,6 @@ import { fileOperationError } from '@/helpers/file-operation-errors'
 import { install_create_modpack_instance, install_get_modpack_preview } from '@/helpers/install'
 import { type DirectLinkSyncReport, get as getInstance, run } from '@/helpers/instance'
 import { type BackupOperation, cancelBackup, listBackupOperations } from '@/helpers/instance-backup'
-import {
-    reconcileMojangAuthSourceAtStartup,
-    reconcileMojangAuthSourceIfMirrored,
-} from '@/helpers/mojang-auth'
 import { cancelLogin, get as getCreds, login, logout } from '@/helpers/mr_auth.ts'
 import { installNativeEditMenuBoundary } from '@/helpers/native-edit-menu'
 import { getNavShortcutEnabled } from '@/helpers/nav-shortcut-state'
@@ -375,7 +369,7 @@ const {
     fileDrop,
 } = setupProviders(notificationManager, popupNotificationManager, stateInitialization)
 
-const { browserOffline, offline, setNetworkReachable } = useNetworkStatus()
+const { offline } = useNetworkStatus()
 
 const showOnboarding = ref(false)
 const onboardingMode = ref('main')
@@ -452,52 +446,9 @@ const javaDownloadConfirmationModal = ref()
 const pendingUpdateAnnouncementVersion = ref(null)
 const updateAnnouncementShowing = ref(false)
 
-const mojangAuthSourceReady = ref(false)
-
-const authUnreachableDebug = useDebugLogger('AuthReachableChecker')
-const authServerRefetchInterval = ref(5 * 60 * 1000)
-const authServerQuery = useQuery({
-    queryKey: ['authServerReachability'],
-    enabled: computed(() => mojangAuthSourceReady.value && !browserOffline.value),
-    queryFn: async () => {
-        try {
-            await check_reachable()
-            setNetworkReachable(true)
-            authServerRefetchInterval.value = 5 * 60 * 1000
-            authUnreachableDebug('Auth servers are reachable')
-        } catch (error) {
-            setNetworkReachable(false)
-            // Keep probing while the temporary outage is active so the launcher
-            // can return online without requiring a restart or manual refresh.
-            authServerRefetchInterval.value = 15 * 1000
-            throw error
-        }
-        try {
-            await reconcileMojangAuthSourceIfMirrored()
-        } catch (error) {
-            console.warn('Failed to reconcile the Mojang auth source', error)
-        }
-        return true
-    },
-    refetchInterval: () => authServerRefetchInterval.value,
-    // A single slow probe is not enough to declare the auth servers down.
-    retry: 1,
-    retryDelay: 1000,
-    refetchOnWindowFocus: false,
-})
-
-const authUnreachable = computed(
-    () => !offline.value && authServerQuery.isError.value && !authServerQuery.isLoading.value,
-)
-
-watch(
-    () => authServerQuery.error.value,
-    (error) => {
-        if (!error) return
-        setNetworkReachable(false)
-        console.warn('Failed to reach auth servers', error)
-    },
-)
+setupMojangAuthMonitor(stateInitialized)
+const mojangAuth = useMojangAuthStatus()
+const authUnreachable = computed(() => !offline.value && mojangAuth.reachable.value === false)
 
 const appUpdateDownload = {
     progress: appUpdateState.progress,
@@ -1419,14 +1370,6 @@ async function applyThemeFromSettings(s: Awaited<ReturnType<typeof getSettings>>
 }
 
 async function setupApp() {
-    try {
-        await reconcileMojangAuthSourceAtStartup()
-    } catch (error) {
-        handleError(error)
-    } finally {
-        mojangAuthSourceReady.value = true
-    }
-
     const initialSettings = await getSettings()
     await downloadManager.start()
     const {

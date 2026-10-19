@@ -153,10 +153,14 @@ pub async fn proxy_get() -> Result<ProxyConfig> {
 }
 
 #[tauri::command]
-pub async fn proxy_set(config: ProxyConfig) -> Result<()> {
+pub async fn proxy_set(
+    app: tauri::AppHandle<impl Runtime>,
+    config: ProxyConfig,
+) -> Result<()> {
     let state = State::get().await?;
     config.validate()?;
     state.update_proxy_config(&config).await?;
+    let _ = app.emit("settings", ());
     Ok(())
 }
 

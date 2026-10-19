@@ -449,6 +449,7 @@ import {
     users,
 } from '@/helpers/auth'
 import { process_listener } from '@/helpers/events'
+import { mojangAuthKeys } from '@/helpers/mojang-auth/monitor'
 import {
     getPlayerHeadUrl,
     retainPlayerHeadTextures,
@@ -469,7 +470,7 @@ const refreshingNetwork = ref(false)
 /**
  * Re-checks session server reachability on demand so users can leave offline
  * mode without restarting the launcher. Goes through the shared
- * `authServerReachability` query so the reachability state and the auth
+ * application-owned Mojang query so the reachability state and the auth
  * warning banner stay consistent.
  */
 async function refreshNetworkStatus() {
@@ -478,7 +479,10 @@ async function refreshNetworkStatus() {
     try {
         refreshBrowserOffline()
         await nextTick()
-        await queryClient.refetchQueries({ queryKey: ['authServerReachability'] })
+        await queryClient.refetchQueries(
+            { queryKey: mojangAuthKeys.status, exact: true },
+            { cancelRefetch: false },
+        )
     } finally {
         refreshingNetwork.value = false
     }

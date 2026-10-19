@@ -57,10 +57,10 @@ pub async fn check_mojang_services()
 #[tauri::command]
 pub async fn set_mojang_auth_use_mirror(
     use_mirror: bool,
-    automatic: bool,
-) -> Result<()> {
+    expected_source: theseus::settings::DownloadSourceMode,
+) -> Result<bool> {
     Ok(
-        minecraft_auth::set_mojang_auth_use_mirror(use_mirror, automatic)
+        minecraft_auth::set_mojang_auth_use_mirror(use_mirror, expected_source)
             .await?,
     )
 }

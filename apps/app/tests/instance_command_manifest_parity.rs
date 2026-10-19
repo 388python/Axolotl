@@ -91,3 +91,42 @@ fn server_log_delta_is_registered_and_allowed_for_the_main_window() {
             .any(|permission| permission == "servers:default")
     );
 }
+
+#[test]
+fn mojang_monitor_commands_are_registered_and_allowed_for_the_main_window() {
+    let runtime = runtime_commands(include_str!("../src/api/auth.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "auth");
+    for command in [
+        "check_reachable",
+        "check_mojang_services",
+        "set_mojang_auth_use_mirror",
+    ] {
+        assert!(runtime.contains(command));
+        assert!(manifest.contains(command));
+    }
+    let settings = runtime_commands(include_str!("../src/api/settings.rs"));
+    assert!(settings.contains("proxy_set"));
+    assert!(
+        manifest_commands(include_str!("../build.rs"), "settings")
+            .contains("proxy_set")
+    );
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|window| window == "main")
+    );
+    for permission in ["auth:default", "settings:default"] {
+        assert!(
+            capabilities["permissions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|value| value == permission)
+        );
+    }
+}

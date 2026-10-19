@@ -58,16 +58,26 @@ pub async fn check_reachable() -> crate::Result<()> {
 
 pub async fn set_mojang_auth_use_mirror(
     use_mirror: bool,
-    automatic: bool,
-) -> crate::Result<()> {
-    let state = State::get().await?;
-    state.set_mojang_auth_use_mirror(use_mirror);
-    if use_mirror && automatic {
+    expected_source: crate::state::DownloadSourceMode,
+) -> crate::Result<bool> {
+    let applied = crate::api::settings::apply_mojang_auth_source(
+        expected_source,
+        use_mirror,
+    )
+    .await?;
+    if applied
+        && use_mirror
+        && matches!(
+            expected_source,
+            crate::state::DownloadSourceMode::Auto
+                | crate::state::DownloadSourceMode::OfficialPreferred
+        )
+    {
         tracing::info!(
             "Mojang services are unreachable; routing Mojang service requests through the Fallen proxy"
         );
     }
-    Ok(())
+    Ok(applied)
 }
 
 /// Whether Mojang service requests currently go out through the Fallen proxy.
@@ -82,8 +92,7 @@ pub struct MojangServiceStatus {
     pub reachable: bool,
 }
 
-const MOJANG_SERVICES: [(&str, &str); 5] = [
-    ("auth", "https://authserver.mojang.com/"),
+const MOJANG_SERVICES: [(&str, &str); 4] = [
     ("account", "https://api.mojang.com/"),
     (
         "session",
@@ -324,6 +333,12 @@ pub async fn users(offline_mode: bool) -> crate::Result<Vec<MinecraftUser>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mojang_monitor_probes_only_current_required_services() {
+        let services = MOJANG_SERVICES.map(|(service, _)| service);
+        assert_eq!(services, ["account", "session", "services", "profiles"]);
+    }
 
     /// The probes run against hosts that answer in one to six seconds on a
     /// proxied connection, so a budget inside that range declares a healthy
