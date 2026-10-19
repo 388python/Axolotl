@@ -2292,6 +2292,10 @@ pub(crate) async fn prepare_with_installed(
     {
         return Err(invalid("instance is not ready for resource changes"));
     }
+    if verified.is_none() {
+        super::installed::refresh_snapshot(&state, &instance_id, cancel)
+            .await?;
+    }
     let revision = instance_revision(&state.pool, &instance_id).await?;
     let roots = selections
         .iter()
@@ -2335,11 +2339,15 @@ pub(crate) async fn prepare_with_installed(
     };
     let installed = if let Some(verified) = verified {
         verified.to_vec()
-    } else if draft.plan.intent == ResourceOperationIntent::Install {
-        installed(&state.pool, &draft.plan.instance_id).await?
     } else {
-        super::installed::hydrate(&state, &draft.plan.instance_id, cancel)
-            .await?
+        super::installed::hydrate_selected(
+            &state,
+            &draft.plan.instance_id,
+            cancel,
+            None,
+        )
+        .await?
+        .entries
     };
     let draft = state
         .resources()

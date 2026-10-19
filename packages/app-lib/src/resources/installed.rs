@@ -349,6 +349,76 @@ pub(crate) async fn cached_file_compatibility(
     declarations
 }
 
+pub(crate) async fn refresh_snapshot(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+) -> ResourceResult<()> {
+    use crate::state::instances::adapters::sqlite::content_rows;
+    use crate::state::{
+        ContentOwnershipKind, ContentRequirement, ContentSourceKind,
+    };
+    if cancel.is_cancelled() {
+        return Err(ResourceError::Canceled);
+    }
+    crate::state::instances::commands::sync_content_files_for_operation(
+        instance_id,
+        state,
+    )
+    .await?;
+    let _writer = state.acquire_install_db_permit().await?;
+    let _lock = state.lock_instance_content_exclusive(instance_id).await;
+    let scope = crate::state::instances::commands::resolve_content_scope(
+        instance_id,
+        None,
+        state,
+    )
+    .await?;
+    let mut tx = state.pool.begin().await.map_err(plans::db)?;
+    let rows: Vec<(String, String, i64)> = sqlx::query_as(
+        "SELECT file.id, file.relative_path, file.enabled FROM instance_files file WHERE file.instance_id = ? AND file.missing = 0 AND NOT EXISTS (SELECT 1 FROM instance_content_entries entry WHERE entry.content_set_id = ? AND entry.file_id = file.id)"
+    ).bind(instance_id).bind(&scope.content_set_id).fetch_all(&mut *tx).await.map_err(plans::db)?;
+    let mut changed = false;
+    for (id, path, enabled) in rows {
+        let Some(kind) = crate::state::instances::adapters::filesystem::project_type_from_relative_path(&path) else { continue };
+        if !matches!(
+            kind,
+            crate::state::ProjectType::Mod
+                | crate::state::ProjectType::ResourcePack
+                | crate::state::ProjectType::ShaderPack
+                | crate::state::ProjectType::DataPack
+        ) {
+            continue;
+        }
+        content_rows::upsert_content_entry_from_parts_in_transaction(
+            content_rows::UpsertContentEntry {
+                instance_id,
+                content_set_id: &scope.content_set_id,
+                file_id: Some(&id),
+                project_type: kind,
+                source_kind: ContentSourceKind::Local,
+                ownership_kind: ContentOwnershipKind::UserAdded,
+                auto_dependency: false,
+                server_requirement: ContentRequirement::Unknown,
+                client_requirement: ContentRequirement::Unknown,
+                enabled: enabled != 0,
+            },
+            &mut tx,
+        )
+        .await?;
+        changed = true;
+    }
+    if changed {
+        content_rows::bump_content_set_revision_in_transaction(
+            &scope.content_set_id,
+            &mut tx,
+        )
+        .await?;
+    }
+    tx.commit().await.map_err(plans::db)?;
+    Ok(())
+}
+
 pub(crate) async fn hydrate(
     state: &crate::State,
     instance_id: &str,
@@ -369,6 +439,7 @@ pub(crate) async fn hydrate_with_failures(
     instance_id: &str,
     cancel: &CancellationToken,
 ) -> ResourceResult<HydratedInstalled> {
+    refresh_snapshot(state, instance_id, cancel).await?;
     hydrate_selected(state, instance_id, cancel, None).await
 }
 
@@ -399,14 +470,15 @@ pub(crate) async fn hydrate_selected(
     let mut verified = std::collections::HashMap::new();
     let saved_records: std::collections::HashMap<String, String> = sqlx::query_as::<_, (String, String)>("SELECT exact.entry_id, exact.artifact FROM resource_installed_artifacts exact JOIN instance_content_entries entry ON entry.id = exact.entry_id WHERE entry.instance_id = ?")
         .bind(instance_id).fetch_all(&state.pool).await.map_err(plans::db)?.into_iter().collect();
-    for (index, entry) in entries.iter().enumerate().filter(|(_, entry)| {
-        !entry.missing
-            && selected.is_none_or(|ids| ids.contains(&entry.entry_id))
-    }) {
+    for (index, entry) in entries
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| !entry.missing)
+    {
         if cancel.is_cancelled() {
             return Err(ResourceError::Canceled);
         }
-        if selected.is_none()
+        if selected.is_none_or(|ids| !ids.contains(&entry.entry_id))
             && saved_records
                 .get(entry.entry_id.as_str())
                 .and_then(|payload| {
@@ -639,7 +711,7 @@ pub(crate) async fn hydrate_selected(
                     .collect();
                 if origin_matches.len() == 1 {
                     Some(origin_matches[0])
-                } else if origin.is_none() && matches.len() == 1 {
+                } else if origin.is_none() && !recognition.ambiguous {
                     matches.first()
                 } else {
                     None
@@ -830,6 +902,7 @@ pub async fn prepare_entries_with_progress(
         ));
     }
     let state = crate::State::get().await?;
+    refresh_snapshot(&state, &instance_id, cancel).await?;
     let hydrated =
         hydrate_selected(&state, &instance_id, cancel, Some(&entry_ids))
             .await?;
