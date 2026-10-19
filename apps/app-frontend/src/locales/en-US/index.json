@@ -15452,4 +15452,8 @@
   "unknown-pack-warning-modal.warning.title": {
     "message": "Unknown file warning"
   }
+,
+  "app.resources.error.incomplete-versions": {
+    "message": "The source could not return all versions. Open the project’s Versions tab and choose a file."
+  }
 }

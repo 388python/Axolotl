@@ -15473,4 +15473,8 @@
   "app.onboarding.seed-map-area.description": {
     "message": "在二维地图上按住鼠标右键拖动即可框选区域。可以按高度范围统计矿石候选方块，也能按物品名称或 ID 搜索受支持箱子的战利品。分析支持取消，并会说明预测限制。右键单击仍可添加标记。"
   }
+,
+  "app.resources.error.incomplete-versions": {
+    "message": "内容来源未能返回全部版本，请打开项目的“版本”标签页选择文件。"
+  }
 }

@@ -74,11 +74,12 @@ it('starts with a fresh cursor when retrying a failed install lookup', async () 
     expect(resourceReleases).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), null)
 })
 
-it('stops at an exhausted provider window even if the provider reports more files', async () => {
+it('rejects an incomplete install catalog when the provider window is exhausted', async () => {
     const exhausted = page(1, 1, 'unusable-token')
     exhausted.exhaustedSources = ['curseforge']
     vi.mocked(resourceReleases).mockResolvedValueOnce(exhausted)
-    expect((await getCurseForgeFiles(715572, {})).files).toHaveLength(1)
+    await expect(getCurseForgeFiles(715572, {})).rejects.toThrow('release window is incomplete')
+    expect(resourceReleaseDocuments).not.toHaveBeenCalled()
     expect(resourceReleases).toHaveBeenCalledTimes(1)
 })
 
@@ -95,4 +96,13 @@ it('rejects a missing continuation token instead of silently dropping remaining 
     invalid.hasMore = true
     vi.mocked(resourceReleases).mockResolvedValueOnce(invalid)
     await expect(getCurseForgeFiles(715572, {})).rejects.toThrow('invalid release cursor')
+})
+
+it('rejects a cursor cycle across multiple pages without returning a partial catalog', async () => {
+    vi.mocked(resourceReleases)
+        .mockResolvedValueOnce(page(1, 1, 'a'))
+        .mockResolvedValueOnce(page(2, 1, 'b'))
+        .mockResolvedValueOnce(page(3, 1, 'a'))
+    await expect(getCurseForgeFiles(715572, {})).rejects.toThrow('invalid release cursor')
+    expect(resourceReleases).toHaveBeenCalledTimes(3)
 })

@@ -317,7 +317,7 @@ export async function getCurseForgeFiles(projectId: number, request: CurseForgeF
         resultCount: 0,
         totalCount: 0,
     }
-    for await (const page of curseForgeFilePages(projectId, request)) {
+    for await (const page of curseForgeFilePages(projectId, request, true)) {
         files.push(...page.files)
         pagination = page.pagination
     }
@@ -341,6 +341,7 @@ export async function getCurseForgeFilesPage(
 async function* curseForgeFilePages(
     projectId: number,
     request: CurseForgeFilesRequest,
+    requireComplete = false,
 ): AsyncGenerator<CurseForgeFilesResponse> {
     const loaders: Record<number, string> = { 1: 'forge', 4: 'fabric', 5: 'quilt', 6: 'neoforge' }
     const target = {
@@ -351,15 +352,21 @@ async function* curseForgeFilePages(
     const requestedIndex = Math.max(0, request.index ?? 0)
     let cursor: string | null = null
     let index = 0
+    const seen = new Set<string>()
     do {
         const page = await resourceReleases(
             sourceResource('curseforge', String(projectId)),
             target,
             cursor,
         )
+        if (requireComplete && page.exhaustedSources.length > 0) {
+            throw new Error(
+                'Source release window is incomplete; choose a specific game version or file',
+            )
+        }
         const nextIndex = index + page.entries.length
         const hasMore = page.hasMore && page.exhaustedSources.length === 0
-        if (hasMore && (!page.cursor || page.cursor === cursor)) {
+        if (hasMore && (!page.cursor || seen.has(page.cursor))) {
             throw new Error('Source returned an invalid release cursor')
         }
         if (nextIndex > requestedIndex || !hasMore) {
@@ -385,6 +392,7 @@ async function* curseForgeFilePages(
         }
         index = nextIndex
         cursor = hasMore ? page.cursor : null
+        if (cursor) seen.add(cursor)
     } while (cursor)
 }
 
