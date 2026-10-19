@@ -40,6 +40,7 @@ pub use self::backup::{
     list_operations as list_backup_operations,
     list_snapshots as list_backup_snapshots,
     maintain_repository as maintain_backup_repository,
+    recover_repository as recover_backup_repository,
     repository_status as get_backup_repository_status, restore_snapshot,
     start_repository_move as move_backup_repository,
     start_restore_preview as get_backup_restore_preview,
