@@ -142,6 +142,49 @@ pub fn validate_scope(
         )),
     }
 }
+fn dependency_scope(
+    types: &[ResourceType],
+    parent: &ResourceSelection,
+) -> ResourceResult<(ResourceType, InstallScope)> {
+    let installable: Vec<_> = types
+        .iter()
+        .copied()
+        .filter(|kind| {
+            matches!(
+                kind,
+                ResourceType::Mod
+                    | ResourceType::Plugin
+                    | ResourceType::ResourcePack
+                    | ResourceType::Shader
+                    | ResourceType::DataPack
+            )
+        })
+        .collect();
+    let kind = if installable.contains(&parent.resource_type) {
+        parent.resource_type
+    } else if installable.len() == 1 {
+        installable[0]
+    } else {
+        return Err(invalid(
+            "dependency has no unambiguous installable content type",
+        ));
+    };
+    let scope = if kind == ResourceType::DataPack {
+        match &parent.scope {
+            InstallScope::World { .. } => parent.scope.clone(),
+            _ => {
+                return Err(invalid(
+                    "a data pack dependency requires an explicit world target",
+                ));
+            }
+        }
+    } else {
+        InstallScope::Instance
+    };
+    validate_scope(&scope, kind)?;
+    Ok((kind, scope))
+}
+
 pub fn safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && !path.contains(['\\', ':'])
@@ -594,6 +637,7 @@ impl ResourceService {
             .find(|project| project.project == resource.default_project)
             .unwrap()
             .clone();
+        self.confirm_counterpart(&metadata, cancel).await?;
         if !metadata.types.contains(&selection.resource_type) {
             return Err(invalid(
                 "selected project does not provide this content type",
@@ -965,12 +1009,20 @@ impl ResourceService {
             }
             _ => return Ok(None),
         };
+        let metadata = self.get(&resource, None, None, cancel).await?;
+        let types = &metadata
+            .projects
+            .iter()
+            .find(|project| project.project == metadata.default_project)
+            .ok_or_else(|| invalid("dependency project metadata is missing"))?
+            .types;
+        let (resource_type, scope) = dependency_scope(types, parent)?;
         let mut selection = ResourceSelection {
             id: parent.id.clone(),
             resource,
             release,
-            resource_type: parent.resource_type,
-            scope: parent.scope.clone(),
+            resource_type,
+            scope,
             entry_id: None,
         };
         self.canonical(&mut selection, cancel).await?;

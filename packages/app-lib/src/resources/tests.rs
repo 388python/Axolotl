@@ -2597,3 +2597,214 @@ async fn real_http_batches_and_reopened_sqlite_cache_obey_force_refresh() {
     reopened.close().await;
     server.abort();
 }
+
+#[tokio::test]
+async fn selected_counterparts_confirm_historical_bytes_in_both_directions_without_trusting_wiki_hints()
+ {
+    struct CounterpartProvider {
+        source: SourceId,
+        project: ProjectDocument,
+        releases: Vec<ResourceRelease>,
+        identified: ResourceRelease,
+        matches: bool,
+        requests: Arc<Mutex<Vec<ProviderQuery>>>,
+    }
+    #[async_trait]
+    impl ResourceProvider for CounterpartProvider {
+        fn source(&self) -> ResourceSource {
+            ResourceSource {
+                id: self.source.clone(),
+                types: vec![ResourceType::Mod],
+                capabilities: vec![
+                    SourceCapability::Project,
+                    SourceCapability::Search,
+                    SourceCapability::Releases,
+                    if self.source == SourceId::curseforge() {
+                        SourceCapability::IdentifyFingerprint
+                    } else {
+                        SourceCapability::IdentifyHash
+                    },
+                ],
+                available: true,
+                supported_search_sorts: vec![
+                    ipc::ResourceSearchSort::Relevance,
+                ],
+            }
+        }
+        fn namespace(&self) -> String {
+            format!("counterpart-{}", self.source.as_str())
+        }
+        fn batch_limit(&self, _: &ProviderQuery) -> usize {
+            50
+        }
+        async fn fetch_many(
+            &self,
+            queries: &[ProviderQuery],
+        ) -> Vec<ResourceResult<ProviderValue>> {
+            self.requests.lock().unwrap().extend_from_slice(queries);
+            queries
+                .iter()
+                .map(|query| match query {
+                    ProviderQuery::Project { .. }
+                    | ProviderQuery::Locate { .. } => {
+                        Ok(ProviderValue::Project(self.project.clone()))
+                    }
+                    ProviderQuery::Search { .. } => {
+                        Ok(ProviderValue::Search(SourcePage {
+                            entries: vec![self.project.metadata.clone()],
+                            cursor: None,
+                            window_exhausted: false,
+                            total: ipc::ResourceTotal {
+                                value: Some(1),
+                                precision: ipc::TotalPrecision::Exact,
+                            },
+                        }))
+                    }
+                    ProviderQuery::Releases { .. } => {
+                        Ok(ProviderValue::Releases(SourcePage {
+                            entries: self.releases.clone(),
+                            cursor: None,
+                            window_exhausted: false,
+                            total: ipc::ResourceTotal {
+                                value: Some(self.releases.len() as u64),
+                                precision: ipc::TotalPrecision::Exact,
+                            },
+                        }))
+                    }
+                    ProviderQuery::Identify { integrity, .. } => {
+                        Ok(ProviderValue::Matches(
+                            if self.matches
+                                && exact_integrity(
+                                    integrity,
+                                    &self.identified.artifacts[0].integrity,
+                                )
+                            {
+                                self.identified.artifacts.clone()
+                            } else {
+                                vec![]
+                            },
+                        ))
+                    }
+                    _ => Err(ResourceError::Unsupported(
+                        "counterpart fixture".into(),
+                    )),
+                })
+                .collect()
+        }
+    }
+    for origin in [SourceId::modrinth(), SourceId::curseforge()] {
+        for same_bytes in [true, false] {
+            let mut mr_doc =
+                match project_value(SourceId::modrinth(), "abcdefgh", "AE2") {
+                    ProviderValue::Project(doc) => doc,
+                    _ => unreachable!(),
+                };
+            mr_doc.metadata.slug = Some("ae2".into());
+            let mut cf_doc =
+                match project_value(SourceId::curseforge(), "42", "AE2") {
+                    ProviderValue::Project(doc) => doc,
+                    _ => unreachable!(),
+                };
+            cf_doc.metadata.slug = Some("applied-energistics-2".into());
+            let mut mr_value: Value =
+                serde_json::from_str(fixtures::MR_BALM_43).unwrap();
+            mr_value["id"] = json!("release1");
+            mr_value["project_id"] = json!("abcdefgh");
+            let mr = legacy::release(mr_value).unwrap().release;
+            let mut cf_value: Value =
+                serde_json::from_str(fixtures::CF_BALM_43).unwrap();
+            cf_value["id"] = json!(123);
+            cf_value["modId"] = json!(42);
+            let mut historical =
+                legacy::curseforge_file(cf_value).unwrap().release;
+            historical.artifacts[0].integrity =
+                mr.artifacts[0].integrity.clone();
+            let mut latest = historical.clone();
+            latest.reference.release_id = SourceReleaseId::new("124").unwrap();
+            latest.artifacts[0].reference.release = latest.reference.clone();
+            latest.artifacts[0].integrity.hashes = vec![ContentHash {
+                algorithm: HashAlgorithm::Sha1,
+                value: "b".repeat(40),
+            }];
+            let mut latest_releases = Vec::new();
+            for id in [124, 125, 126] {
+                let mut release = latest.clone();
+                release.reference.release_id =
+                    SourceReleaseId::new(id.to_string()).unwrap();
+                release.artifacts[0].reference.release =
+                    release.reference.clone();
+                latest_releases.push(release);
+            }
+            latest_releases.push(historical);
+            let requests = Arc::new(Mutex::new(vec![]));
+            let (_temp, cache) = cache().await;
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .unwrap();
+            sqlx::migrate!().run(&pool).await.unwrap();
+            let store =
+                crate::state::resources::ResourceStore::new(pool.clone());
+            store
+                .ensure_project(&mr_doc.metadata.project, &[ResourceType::Mod])
+                .await
+                .unwrap();
+            store
+                .ensure_project(&cf_doc.metadata.project, &[ResourceType::Mod])
+                .await
+                .unwrap();
+            let service = ResourceService::with_store(
+                cache.clone(),
+                vec![
+                    Arc::new(CounterpartProvider {
+                        source: SourceId::modrinth(),
+                        project: mr_doc.clone(),
+                        releases: vec![mr.clone()],
+                        identified: mr.clone(),
+                        matches: same_bytes,
+                        requests: requests.clone(),
+                    }),
+                    Arc::new(CounterpartProvider {
+                        source: SourceId::curseforge(),
+                        project: cf_doc.clone(),
+                        releases: latest_releases,
+                        identified: mr,
+                        matches: same_bytes,
+                        requests: requests.clone(),
+                    }),
+                ],
+                store.clone(),
+            )
+            .unwrap();
+            let metadata = if origin == SourceId::modrinth() {
+                &mr_doc.metadata
+            } else {
+                &cf_doc.metadata
+            };
+            service
+                .confirm_counterpart(metadata, &CancellationToken::new())
+                .await
+                .unwrap();
+            assert_eq!(
+                store.lookup(&mr_doc.metadata.project).await.unwrap()
+                    == store.lookup(&cf_doc.metadata.project).await.unwrap(),
+                same_bytes,
+                "origin={origin:?}, requests={:?}",
+                requests.lock().unwrap().clone(),
+            );
+            if same_bytes {
+                let count = requests.lock().unwrap().len();
+                cache.clear().await.unwrap();
+                service
+                    .confirm_counterpart(metadata, &CancellationToken::new())
+                    .await
+                    .unwrap();
+                assert_eq!(requests.lock().unwrap().len(), count);
+            }
+            assert!(pool.acquire().await.is_ok());
+            cache.close().await;
+            pool.close().await;
+        }
+    }
+}

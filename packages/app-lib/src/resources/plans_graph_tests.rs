@@ -776,3 +776,170 @@ impl plans::artifact_metadata::ArtifactMetadataReader
         }))
     }
 }
+
+#[tokio::test]
+async fn cross_type_dependencies_use_the_child_type_and_world_scope_is_never_invented()
+ {
+    struct TypedProvider(Vec<ResourceRelease>);
+    #[async_trait]
+    impl ResourceProvider for TypedProvider {
+        fn source(&self) -> ResourceSource {
+            ResourceSource {
+                id: SourceId::modrinth(),
+                types: vec![
+                    ResourceType::Mod,
+                    ResourceType::ResourcePack,
+                    ResourceType::DataPack,
+                ],
+                capabilities: vec![
+                    SourceCapability::Project,
+                    SourceCapability::Releases,
+                ],
+                available: true,
+                supported_search_sorts: vec![],
+            }
+        }
+        fn namespace(&self) -> String {
+            "typed-dependencies".into()
+        }
+        fn batch_limit(&self, _: &ProviderQuery) -> usize {
+            50
+        }
+        async fn fetch_many(
+            &self,
+            queries: &[ProviderQuery],
+        ) -> Vec<ResourceResult<ProviderValue>> {
+            queries
+                .iter()
+                .map(|query| match query {
+                    ProviderQuery::Project { id, .. } => {
+                        let mut value = project_value(
+                            SourceId::modrinth(),
+                            id.as_str(),
+                            id.as_str(),
+                        );
+                        if let ProviderValue::Project(document) = &mut value {
+                            document.metadata.types = vec![match id.as_str() {
+                                "pack0000" => ResourceType::ResourcePack,
+                                "data0000" => ResourceType::DataPack,
+                                _ => ResourceType::Mod,
+                            }];
+                        }
+                        Ok(value)
+                    }
+                    ProviderQuery::Release { release_id, .. } => self
+                        .0
+                        .iter()
+                        .find(|release| {
+                            &release.reference.release_id == release_id
+                        })
+                        .cloned()
+                        .map(|release| {
+                            ProviderValue::Release(ReleaseDocument {
+                                release,
+                                protocol: None,
+                                changelog: None,
+                            })
+                        })
+                        .ok_or(ResourceError::Unavailable),
+                    _ => Err(ResourceError::Unavailable),
+                })
+                .collect()
+        }
+    }
+    let mut pack = release("pack0000", "1", 'a');
+    let child = release("mod00000", "1", 'b');
+    let mut data = release("data0000", "1", 'c');
+    pack.artifacts[0].file_name = Some("pack.zip".into());
+    data.artifacts[0].file_name = Some("data.zip".into());
+    requires(&mut pack, &child, ResourceDependencyKind::Required);
+    requires(&mut data, &child, ResourceDependencyKind::Required);
+    let (_temp, cache) = cache().await;
+    let service = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(TypedProvider(vec![
+            pack.clone(),
+            child.clone(),
+            data.clone(),
+        ]))],
+    )
+    .unwrap();
+    for (root, kind, scope, path) in [
+        (
+            &pack,
+            ResourceType::ResourcePack,
+            InstallScope::Instance,
+            "resourcepacks/pack.zip",
+        ),
+        (
+            &data,
+            ResourceType::DataPack,
+            InstallScope::World {
+                relative_path: "saves/world".into(),
+            },
+            "saves/world/datapacks/data.zip",
+        ),
+    ] {
+        let mut root_selection = selection("root", root, None);
+        root_selection.resource_type = kind;
+        root_selection.scope = scope;
+        let plan = service
+            .build_operation(
+                draft(vec![root_selection], ResourceOperationIntent::Install),
+                &target(),
+                &[],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap()
+            .plan;
+        assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+        assert_eq!(plan.actions.len(), 2);
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.target_relative_path == path)
+        );
+        assert!(
+            plan.actions
+                .iter()
+                .any(|action| action.target_relative_path
+                    == "mods/mod00000-1.jar")
+        );
+        let mod_node = plan
+            .nodes
+            .iter()
+            .find(|node| node.resource_type == Some(ResourceType::Mod))
+            .unwrap();
+        assert_eq!(mod_node.scope, InstallScope::Instance);
+    }
+    let mut mod_parent = child.clone();
+    requires(&mut mod_parent, &data, ResourceDependencyKind::Required);
+    let child_selection = selection("root", &mod_parent, None);
+    let reverse = ResourceService::new(
+        cache.clone(),
+        vec![Arc::new(TypedProvider(vec![
+            mod_parent.clone(),
+            data.clone(),
+        ]))],
+    )
+    .unwrap();
+    cache.clear().await.unwrap();
+    let plan = reverse
+        .build_operation(
+            draft(vec![child_selection], ResourceOperationIntent::Install),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(
+        plan.issues.iter().any(|issue| issue.blocking
+            && issue.message.contains("explicit world target")),
+        "{:?}",
+        plan.issues
+    );
+    cache.close().await;
+}

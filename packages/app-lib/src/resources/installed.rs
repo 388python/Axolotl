@@ -493,6 +493,16 @@ pub(crate) async fn hydrate_selected(
                         && entry.artifact.as_ref() == Some(&artifact.reference)
                 })
         {
+            if let Some(reference) = &entry.artifact {
+                if let Ok(document) = service
+                    .project_document(&reference.release.project, None, cancel)
+                    .await
+                {
+                    service
+                        .confirm_counterpart(&document.metadata, cancel)
+                        .await?;
+                }
+            }
             continue;
         }
         let bytes =
@@ -766,6 +776,7 @@ pub(crate) async fn hydrate_selected(
                 continue;
             }
         };
+        service.confirm_counterpart(&metadata, cancel).await?;
         if !metadata.types.contains(&entry.resource_type) {
             entry.artifact = None;
             continue;
