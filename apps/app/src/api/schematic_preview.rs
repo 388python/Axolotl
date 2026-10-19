@@ -193,7 +193,8 @@ pub enum PreviewTransform {
 
 #[derive(Clone)]
 struct PreviewChunk {
-    blocks: Box<[u32]>,
+    // Transactional session clones share unchanged chunks; edits detach only touched data.
+    blocks: Arc<Vec<u32>>,
     non_air_blocks: u32,
 }
 
@@ -308,7 +309,7 @@ pub async fn schematic_preview_read_chunk(
     output.extend_from_slice(b"SPC1");
     output.extend_from_slice(&(CHUNK_VOLUME as u32).to_le_bytes());
     if let Some(chunk) = region.chunks.get(&position) {
-        for value in &chunk.blocks {
+        for value in chunk.blocks.iter() {
             output.extend_from_slice(&value.to_le_bytes());
         }
     } else {
@@ -1157,13 +1158,13 @@ impl SessionRegion {
             self.chunks
                 .entry(chunk_position)
                 .or_insert_with(|| PreviewChunk {
-                    blocks: vec![0; CHUNK_VOLUME].into_boxed_slice(),
+                    blocks: Arc::new(vec![0; CHUNK_VOLUME]),
                     non_air_blocks: 0,
                 });
         if chunk.blocks[index] == 0 {
             chunk.non_air_blocks += 1;
         }
-        chunk.blocks[index] = palette_index;
+        Arc::make_mut(&mut chunk.blocks)[index] = palette_index;
     }
 
     fn block_at(&self, position: [i32; 3]) -> u32 {
@@ -1187,7 +1188,7 @@ impl SessionRegion {
             if chunk.blocks[index] == 0 {
                 return false;
             }
-            chunk.blocks[index] = 0;
+            Arc::make_mut(&mut chunk.blocks)[index] = 0;
             chunk.non_air_blocks = chunk.non_air_blocks.saturating_sub(1);
             if chunk.non_air_blocks == 0 {
                 self.chunks.remove(&chunk_position);
@@ -1198,7 +1199,7 @@ impl SessionRegion {
             self.chunks
                 .entry(chunk_position)
                 .or_insert_with(|| PreviewChunk {
-                    blocks: vec![0; CHUNK_VOLUME].into_boxed_slice(),
+                    blocks: Arc::new(vec![0; CHUNK_VOLUME]),
                     non_air_blocks: 0,
                 });
         if chunk.blocks[index] == palette_index {
@@ -1207,7 +1208,7 @@ impl SessionRegion {
         if chunk.blocks[index] == 0 {
             chunk.non_air_blocks += 1;
         }
-        chunk.blocks[index] = palette_index;
+        Arc::make_mut(&mut chunk.blocks)[index] = palette_index;
         true
     }
 }
@@ -2112,6 +2113,43 @@ mod tests {
             .unwrap();
         region.put_block([-1, -1, -1], 1);
         assert_eq!(region.chunks[&[-1, -1, -1]].blocks[4095], 1);
+    }
+
+    #[test]
+    fn cloned_schematic_regions_copy_only_edited_chunk_data() {
+        let builder = SessionBuilder::new();
+        let mut original = builder
+            .new_region(
+                "region".to_string(),
+                "Region".to_string(),
+                [0, 0, 0],
+                [32, 1, 1],
+                [0, 0, 0],
+            )
+            .unwrap();
+        original.put_block([0, 0, 0], 1);
+        original.put_block([16, 0, 0], 1);
+        let mut edited = original.clone();
+        for position in [[0, 0, 0], [1, 0, 0]] {
+            assert!(Arc::ptr_eq(
+                &original.chunks[&position].blocks,
+                &edited.chunks[&position].blocks
+            ));
+        }
+        assert!(edited.set_block([0, 0, 0], 2));
+        assert_eq!(original.block_at([0, 0, 0]), 1);
+        assert_eq!(edited.block_at([0, 0, 0]), 2);
+        assert!(!Arc::ptr_eq(
+            &original.chunks[&[0, 0, 0]].blocks,
+            &edited.chunks[&[0, 0, 0]].blocks
+        ));
+        assert!(Arc::ptr_eq(
+            &original.chunks[&[1, 0, 0]].blocks,
+            &edited.chunks[&[1, 0, 0]].blocks
+        ));
+        assert!(edited.set_block([16, 0, 0], 0));
+        assert_eq!(original.block_at([16, 0, 0]), 1);
+        assert_eq!(edited.block_at([16, 0, 0]), 0);
     }
 
     #[test]
