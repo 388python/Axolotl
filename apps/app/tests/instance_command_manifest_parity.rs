@@ -29,10 +29,10 @@ fn runtime_commands(source: &str) -> BTreeSet<&str> {
         .collect()
 }
 
-fn manifest_commands(source: &str) -> BTreeSet<&str> {
+fn manifest_commands<'a>(source: &'a str, plugin: &str) -> BTreeSet<&'a str> {
     let instance_plugin = source
-        .find(".plugin(\n                \"instance\",")
-        .expect("missing instance InlinedPlugin");
+        .find(&format!(".plugin(\n                \"{plugin}\","))
+        .expect("missing InlinedPlugin");
     bracket_contents_after(&source[instance_plugin..], ".commands(&[")
         .split(',')
         .map(str::trim)
@@ -43,7 +43,7 @@ fn manifest_commands(source: &str) -> BTreeSet<&str> {
 #[test]
 fn instance_runtime_handlers_are_registered_in_build_manifest() {
     let runtime = runtime_commands(include_str!("../src/api/instance.rs"));
-    let manifest = manifest_commands(include_str!("../build.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "instance");
     let missing = runtime.difference(&manifest).copied().collect::<Vec<_>>();
 
     assert!(
@@ -64,4 +64,30 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
             "build.rs manifest missing {command}"
         );
     }
+}
+
+#[test]
+fn server_log_delta_is_registered_and_allowed_for_the_main_window() {
+    let runtime = runtime_commands(include_str!("../src/api/servers.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "servers");
+    assert!(runtime.contains("servers_get_log_delta"));
+    assert!(manifest.contains("servers_get_log_delta"));
+    assert!(runtime.difference(&manifest).next().is_none());
+    let capabilities: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/plugins.json"))
+            .unwrap();
+    assert!(
+        capabilities["windows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|window| window == "main")
+    );
+    assert!(
+        capabilities["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|permission| permission == "servers:default")
+    );
 }

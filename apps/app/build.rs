@@ -1131,6 +1131,7 @@ fn main() {
                         "servers_kill_port_process",
                         "servers_port_process",
                         "servers_get_log_buffer",
+                        "servers_get_log_delta",
                         "servers_clear_log",
                     ])
                     .default_permission(

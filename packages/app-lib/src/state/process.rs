@@ -10,13 +10,16 @@ use quick_xml::Reader;
 use quick_xml::events::Event;
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fmt::Debug;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitStatus;
-use std::sync::LazyLock;
+use std::sync::{
+    Arc, LazyLock,
+    atomic::{AtomicU64, Ordering},
+};
 use std::time::Instant;
 #[cfg(feature = "tauri")]
 use tauri::Emitter;
@@ -117,15 +120,36 @@ async fn record_post_upgrade_launch_best_effort(
 }
 
 struct LogRingBuffer {
-    lines: VecDeque<String>,
+    lines: VecDeque<Arc<str>>,
+    occurrences: HashMap<Arc<str>, usize>,
     byte_len: usize,
+    epoch: u64,
+    sequence: u64,
+}
+
+static NEXT_LOG_EPOCH: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct LogCursor {
+    pub epoch: u64,
+    pub sequence: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LogDelta {
+    pub cursor: LogCursor,
+    pub reset: bool,
+    pub lines: Vec<String>,
 }
 
 impl LogRingBuffer {
     fn new() -> Self {
         Self {
             lines: VecDeque::new(),
+            occurrences: HashMap::new(),
             byte_len: 0,
+            epoch: NEXT_LOG_EPOCH.fetch_add(1, Ordering::Relaxed),
+            sequence: 0,
         }
     }
 
@@ -138,18 +162,57 @@ impl LogRingBuffer {
                 break;
             };
             self.byte_len = self.byte_len.saturating_sub(removed.len());
+            if let Some(count) = self.occurrences.get_mut(&removed) {
+                *count -= 1;
+                if *count == 0 {
+                    self.occurrences.remove(&removed);
+                }
+            }
         }
         self.byte_len += line_len;
+        let line: Arc<str> = line.into();
+        *self.occurrences.entry(line.clone()).or_default() += 1;
         self.lines.push_back(line);
+        self.sequence += 1;
     }
 
     fn get_all(&self) -> Vec<String> {
-        self.lines.iter().cloned().collect()
+        self.lines.iter().map(|line| line.to_string()).collect()
+    }
+
+    fn delta(&self, cursor: Option<LogCursor>) -> LogDelta {
+        let first_sequence = self.sequence - self.lines.len() as u64;
+        let reset = cursor.is_none_or(|cursor| {
+            cursor.epoch != self.epoch
+                || cursor.sequence < first_sequence
+                || cursor.sequence > self.sequence
+        });
+        let skip = if reset {
+            0
+        } else {
+            (cursor.unwrap().sequence - first_sequence) as usize
+        };
+        LogDelta {
+            cursor: LogCursor {
+                epoch: self.epoch,
+                sequence: self.sequence,
+            },
+            reset,
+            lines: self
+                .lines
+                .iter()
+                .skip(skip)
+                .map(|line| line.to_string())
+                .collect(),
+        }
     }
 
     fn clear(&mut self) {
         self.lines.clear();
+        self.occurrences.clear();
         self.byte_len = 0;
+        self.epoch = NEXT_LOG_EPOCH.fetch_add(1, Ordering::Relaxed);
+        self.sequence = 0;
     }
 }
 
@@ -232,6 +295,19 @@ pub fn clear_log_buffer(instance_id: &str) {
     if let Some(mut buf) = LOG_BUFFERS.get_mut(instance_id) {
         buf.clear();
     }
+}
+
+pub fn log_buffer_contains(instance_id: &str, line: &str) -> bool {
+    LOG_BUFFERS
+        .get(instance_id)
+        .is_some_and(|buffer| buffer.occurrences.contains_key(line))
+}
+
+pub fn get_log_delta(instance_id: &str, cursor: Option<LogCursor>) -> LogDelta {
+    LOG_BUFFERS
+        .entry(instance_id.to_string())
+        .or_insert_with(LogRingBuffer::new)
+        .delta(cursor)
 }
 
 pub fn remove_log_buffer(instance_id: &str) {
@@ -1337,6 +1413,47 @@ impl Process {
 #[cfg(test)]
 mod post_upgrade_tests {
     use super::*;
+
+    #[test]
+    fn log_delta_tracks_rollover_clear_and_caught_up_cursors() {
+        let mut buffer = LogRingBuffer::new();
+        buffer.push("first".to_string());
+        let initial = buffer.delta(None);
+        assert!(initial.reset);
+        assert_eq!(initial.lines, ["first"]);
+        assert!(buffer.delta(Some(initial.cursor)).lines.is_empty());
+        for index in 0..LOG_BUFFER_CAPACITY {
+            buffer.push(format!("line-{index}"));
+        }
+        let delta = buffer.delta(Some(initial.cursor));
+        assert!(!delta.reset);
+        assert_eq!(delta.lines.len(), LOG_BUFFER_CAPACITY);
+        assert!(!buffer.occurrences.contains_key("first"));
+        buffer.push("next".to_string());
+        assert!(buffer.delta(Some(initial.cursor)).reset);
+        let before_clear = buffer.delta(None).cursor;
+        buffer.clear();
+        buffer.push("new-run".to_string());
+        let restarted = buffer.delta(Some(before_clear));
+        assert!(restarted.reset);
+        assert_eq!(restarted.lines, ["new-run"]);
+    }
+
+    #[test]
+    fn log_dedup_index_preserves_duplicate_counts_until_last_occurrence_expires()
+     {
+        let mut buffer = LogRingBuffer::new();
+        buffer.push("repeated".to_string());
+        buffer.push("repeated".to_string());
+        for index in 0..LOG_BUFFER_CAPACITY - 1 {
+            buffer.push(index.to_string());
+        }
+        assert_eq!(buffer.occurrences.get("repeated"), Some(&1));
+        buffer.push("last".to_string());
+        assert!(!buffer.occurrences.contains_key("repeated"));
+        buffer.clear();
+        assert!(buffer.occurrences.is_empty());
+    }
 
     #[test]
     fn live_log_lines_are_truncated_on_character_boundaries() {
