@@ -259,7 +259,14 @@ fn write_archive_entry_atomically<R: std::io::Read>(
     replacement_order: &mut Vec<PathBuf>,
 ) -> crate::Result<u64> {
     let written = write_archive_entry_to_staging(reader, target, cancellation)?;
-    materialize_staged_archive_entry(target, replacements, replacement_order)?;
+    if let Err(error) = materialize_staged_archive_entry(
+        target,
+        replacements,
+        replacement_order,
+    ) {
+        let _ = remove_file_if_exists(&sibling_path(target, ".installing"));
+        return Err(error);
+    }
     Ok(written)
 }
 
@@ -304,7 +311,22 @@ fn materialize_staged_archive_entry(
     replacement_order: &mut Vec<PathBuf>,
 ) -> crate::Result<()> {
     let temporary = sibling_path(target, ".installing");
-    if replacements.contains_key(target) {
+    let backup = sibling_path(target, ".installing.previous");
+    let created = sibling_path(target, ".installing.created");
+    let has_marker = backup.exists() || created.exists();
+    // On case-insensitive filesystems different ZIP spellings can identify
+    // the same file. Resolve the actual on-disk paths only on a marker
+    // collision so large archives keep constant-time transaction lookups in
+    // the usual case. Preserve the first spelling and its original backup.
+    let already_replaced = replacements.contains_key(target)
+        || (has_marker
+            && std::fs::canonicalize(target).ok().is_some_and(|canonical| {
+                replacements.keys().any(|previous| {
+                    std::fs::canonicalize(previous)
+                        .is_ok_and(|previous| previous == canonical)
+                })
+            }));
+    if already_replaced {
         // Duplicate archive entries for the same normalized path replace the
         // previous entry from this transaction, while the original pre-install
         // backup remains untouched for rollback.
@@ -316,9 +338,7 @@ fn materialize_staged_archive_entry(
         return Ok(());
     }
 
-    let backup = sibling_path(target, ".installing.previous");
-    let created = sibling_path(target, ".installing.created");
-    if backup.exists() || created.exists() {
+    if has_marker {
         return Err(crate::ErrorKind::FSError(format!(
             "Archive target has an unfinished replacement that must be recovered first: {}",
             target.display()
@@ -1004,6 +1024,115 @@ mod tests {
 
         rollback_archive_replacements(&replacements, &order).unwrap();
         assert_eq!(std::fs::read(&target).unwrap(), b"original");
+    }
+
+    #[test]
+    fn case_variant_zip_entries_finalize_and_rollback() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let first_name = "config/Thaumcraft Mob Aspects[ThaumcraftMobAspects]/lang/zh_CN.lang";
+        let second_name = "config/Thaumcraft Mob Aspects[thaumcraftmobaspects]/lang/zh_cn.lang";
+        {
+            let mut archive = zip::ZipWriter::new(
+                std::fs::File::create(&archive_path).unwrap(),
+            );
+            let options = zip::write::SimpleFileOptions::default();
+            for (name, bytes) in [
+                (first_name, b"first".as_slice()),
+                (second_name, b"second".as_slice()),
+            ] {
+                archive.start_file(name, options).unwrap();
+                archive.write_all(bytes).unwrap();
+            }
+            archive.finish().unwrap();
+        }
+        for existing in [false, true] {
+            let target_dir =
+                root.path()
+                    .join(if existing { "existing" } else { "empty" });
+            std::fs::create_dir_all(
+                target_dir.join(first_name).parent().unwrap(),
+            )
+            .unwrap();
+            let first = target_dir.join(first_name);
+            let second = target_dir.join(second_name);
+            if existing {
+                std::fs::write(&first, b"original").unwrap();
+            }
+            let (written, replacements) = materialize_archive_subdir_sync(
+                &archive_path,
+                "",
+                &target_dir,
+                None,
+            )
+            .unwrap();
+            assert_eq!(written, 2);
+            assert_eq!(std::fs::read(&second).unwrap(), b"second");
+            let same_file = std::fs::canonicalize(&first).unwrap()
+                == std::fs::canonicalize(&second).unwrap();
+            assert_eq!(
+                replacements.replacements.len(),
+                if same_file { 1 } else { 2 }
+            );
+            replacements.rollback().unwrap();
+            if existing {
+                assert_eq!(std::fs::read(&first).unwrap(), b"original");
+            } else {
+                assert!(!first.exists());
+            }
+            if !same_file || !existing {
+                assert!(!second.exists());
+            }
+            extract_archive_subdir_sync(&archive_path, "", &target_dir, None)
+                .unwrap();
+            assert_eq!(std::fs::read(&second).unwrap(), b"second");
+            for target in [&first, &second] {
+                for suffix in [
+                    ".installing",
+                    ".installing.previous",
+                    ".installing.created",
+                ] {
+                    assert!(!sibling_path(target, suffix).exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "Set AXOLOTL_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
+    fn real_gtnh_archive_extracts_all_files() {
+        let archive_path = PathBuf::from(
+            std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE")
+                .expect("local archive path"),
+        );
+        let root = tempfile::tempdir().unwrap();
+        let written = extract_archive_subdir_sync(
+            &archive_path,
+            "GT New Horizons 2.8.4/",
+            root.path(),
+            None,
+        )
+        .unwrap();
+        assert!(written > 1000);
+        assert!(root.path().join("mmc-pack.json").is_file());
+        assert!(
+            root.path()
+                .join("patches/net.minecraftforge.json")
+                .is_file()
+        );
+        assert!(
+            root.path()
+                .join("libraries/lwjgl3ify-2.1.16-forgePatches.jar")
+                .is_file()
+        );
+        let file = root.path().join(".minecraft/config/txloader/forceload/Thaumcraft Mob Aspects[thaumcraftmobaspects]/lang/zh_CN.lang");
+        assert_eq!(std::fs::metadata(&file).unwrap().len(), 59);
+        for suffix in
+            [".installing", ".installing.created", ".installing.previous"]
+        {
+            assert!(!sibling_path(&file, suffix).exists());
+        }
+        println!("GTNH archive fully extracted: {written} files");
     }
 
     #[test]

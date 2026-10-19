@@ -568,6 +568,25 @@ pub async fn set_instance_information(
     dependencies: &HashMap<PackDependency, String>,
     _ignore_lock: bool,
 ) -> crate::Result<()> {
+    set_instance_information_with_local_loader_versions(
+        instance_id,
+        description,
+        backup_name,
+        pack_version_id,
+        dependencies,
+        &HashMap::new(),
+    )
+    .await
+}
+
+pub(crate) async fn set_instance_information_with_local_loader_versions(
+    instance_id: String,
+    description: &CreatePackDescription,
+    backup_name: &str,
+    pack_version_id: Option<&str>,
+    dependencies: &HashMap<PackDependency, String>,
+    local_loader_versions: &HashMap<PackDependency, String>,
+) -> crate::Result<()> {
     let mut game_version: Option<&String> = None;
     for (key, value) in dependencies {
         if *key == PackDependency::Minecraft {
@@ -620,6 +639,7 @@ pub async fn set_instance_information(
             *dependency,
             *loader,
             game_version,
+            local_loader_versions,
         )
         .await?;
         components[0].version = Some(version);
@@ -645,6 +665,7 @@ pub async fn set_instance_information(
                 dependency,
                 loader,
                 game_version,
+                local_loader_versions,
             )
             .await?;
             components.push(LoaderComponent {
@@ -746,7 +767,11 @@ async fn resolve_pack_loader_version(
     dependency: PackDependency,
     loader: ModLoader,
     game_version: &str,
+    local_loader_versions: &HashMap<PackDependency, String>,
 ) -> crate::Result<String> {
+    if let Some(version) = local_loader_versions.get(&dependency) {
+        return Ok(version.clone());
+    }
     let requested = dependencies
         .get(&dependency)
         .filter(|version| !version.trim().is_empty())

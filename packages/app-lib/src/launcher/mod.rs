@@ -73,6 +73,7 @@ pub mod download;
 pub mod jvm_args;
 pub mod language;
 pub mod local_version;
+pub(crate) mod multimc;
 pub mod optifine;
 pub mod quick_play_version;
 
@@ -1103,15 +1104,26 @@ async fn install_minecraft_with_local_source(
             .await?;
     }
 
-    let mut loader_version = get_loader_version_from_profile(
+    let mmc_profile = multimc::MultiMcProfile::load(
+        &instance_path,
         &content_set.game_version,
         content_set.loader,
         content_set.loader_version.as_deref(),
     )
     .await?;
+    let metadata_loader =
+        mmc_profile.as_ref().map_or(content_set.loader, |profile| {
+            profile.metadata_loader(content_set.loader)
+        });
+    let mut loader_version = get_loader_version_from_profile(
+        &content_set.game_version,
+        metadata_loader,
+        content_set.loader_version.as_deref(),
+    )
+    .await?;
 
     // If no loader version is selected, try to select the stable version!
-    if content_set.loader != ModLoader::Vanilla && loader_version.is_none() {
+    if metadata_loader != ModLoader::Vanilla && loader_version.is_none() {
         let fallback = missing_loader_version_fallback(
             content_set.loader,
             &content_set.game_version,
@@ -1146,13 +1158,45 @@ async fn install_minecraft_with_local_source(
     let mut version_info = download::download_version_info(
         &state,
         version,
-        content_set.loader,
+        metadata_loader,
         loader_version.as_ref(),
         Some(repairing),
         loading_bar.as_ref(),
         reporter.as_ref(),
     )
     .await?;
+
+    if let Some(profile) = &mmc_profile {
+        let vanilla = if profile.replaces_minecraft()
+            && metadata_loader != ModLoader::Vanilla
+        {
+            Some(
+                download::download_version_info(
+                    &state,
+                    version,
+                    ModLoader::Vanilla,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?,
+            )
+        } else {
+            None
+        };
+        profile
+            .apply(
+                &mut version_info,
+                vanilla.as_ref(),
+                &state.directories.libraries_dir(),
+            )
+            .await?;
+    }
+    let version_jar =
+        mmc_profile.as_ref().map_or(version_jar.clone(), |profile| {
+            profile.cache_key(&version_jar)
+        });
 
     let key = required_java_major(&version_info);
     if let Some(reporter) = &reporter {
@@ -2040,16 +2084,27 @@ pub async fn launch_minecraft(
                 .position(|x| x.id == "22w16a")
                 .unwrap_or(0);
 
+        let mmc_profile = multimc::MultiMcProfile::load(
+            &instance_path,
+            &content_set.game_version,
+            content_set.loader,
+            content_set.loader_version.as_deref(),
+        )
+        .await?;
+        let metadata_loader =
+            mmc_profile.as_ref().map_or(content_set.loader, |profile| {
+                profile.metadata_loader(content_set.loader)
+            });
         let loader_version = if offline_mode {
             if let Some(loader_version) = installed_offline_loader_version(
-                content_set.loader,
+                metadata_loader,
                 content_set.loader_version.as_deref(),
             ) {
                 Some(loader_version)
             } else {
                 get_loader_version_from_profile_with_cache(
                     &content_set.game_version,
-                    content_set.loader,
+                    metadata_loader,
                     content_set.loader_version.as_deref(),
                     cache_behaviour,
                 )
@@ -2058,15 +2113,14 @@ pub async fn launch_minecraft(
         } else {
             get_loader_version_from_profile_with_cache(
                 &content_set.game_version,
-                content_set.loader,
+                metadata_loader,
                 content_set.loader_version.as_deref(),
                 cache_behaviour,
             )
             .await?
         };
 
-        if content_set.loader != ModLoader::Vanilla && loader_version.is_none()
-        {
+        if metadata_loader != ModLoader::Vanilla && loader_version.is_none() {
             return Err(crate::ErrorKind::LauncherError(format!(
                 "No loader version selected for {}",
                 content_set.loader.as_str()
@@ -2083,7 +2137,7 @@ pub async fn launch_minecraft(
             download::load_local_version_info(
                 &state,
                 version,
-                content_set.loader,
+                metadata_loader,
                 loader_version.as_ref(),
             )
             .await?
@@ -2091,7 +2145,7 @@ pub async fn launch_minecraft(
             download::download_version_info(
                 &state,
                 version,
-                content_set.loader,
+                metadata_loader,
                 loader_version.as_ref(),
                 None,
                 None,
@@ -2110,7 +2164,7 @@ pub async fn launch_minecraft(
                 version_info = download::download_version_info(
                     &state,
                     version,
-                    content_set.loader,
+                    metadata_loader,
                     loader_version.as_ref(),
                     Some(true),
                     None,
@@ -2119,6 +2173,46 @@ pub async fn launch_minecraft(
                 .await?;
             }
         }
+
+        if let Some(profile) = &mmc_profile {
+            let vanilla = if profile.replaces_minecraft()
+                && metadata_loader != ModLoader::Vanilla
+            {
+                Some(if offline_mode {
+                    download::load_local_version_info(
+                        &state,
+                        version,
+                        ModLoader::Vanilla,
+                        None,
+                    )
+                    .await?
+                } else {
+                    download::download_version_info(
+                        &state,
+                        version,
+                        ModLoader::Vanilla,
+                        None,
+                        None,
+                        None,
+                        None,
+                    )
+                    .await?
+                })
+            } else {
+                None
+            };
+            profile
+                .apply(
+                    &mut version_info,
+                    vanilla.as_ref(),
+                    &state.directories.libraries_dir(),
+                )
+                .await?;
+        }
+        let version_jar =
+            mmc_profile.as_ref().map_or(version_jar.clone(), |profile| {
+                profile.cache_key(&version_jar)
+            });
 
         let quick_play_version =
             QuickPlayVersion::find_version(version_index, &minecraft.versions);
