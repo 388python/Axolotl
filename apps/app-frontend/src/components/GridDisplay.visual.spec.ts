@@ -132,6 +132,46 @@ vi.mock('@modrinth/ui', async () => {
                             emit('update:modelValue', (event.target as HTMLInputElement).value),
                     }),
         }),
+        ConfirmActionModal: defineComponent({
+            props: ['confirmAction', 'confirmLabel'],
+            setup: (props, { slots, expose }) => {
+                const visible = ref(false)
+                const busy = ref(false)
+                const error = ref(false)
+                expose({
+                    show: () => {
+                        visible.value = true
+                        error.value = false
+                    },
+                })
+                return () =>
+                    visible.value
+                        ? h('dialog', { open: true }, [
+                              slots.default?.(),
+                              error.value ? h('p', 'Deletion failed') : null,
+                              h(
+                                  'button',
+                                  {
+                                      disabled: busy.value,
+                                      onClick: async () => {
+                                          if (busy.value) return
+                                          busy.value = true
+                                          try {
+                                              await props.confirmAction()
+                                              visible.value = false
+                                          } catch {
+                                              error.value = true
+                                          } finally {
+                                              busy.value = false
+                                          }
+                                      },
+                                  },
+                                  props.confirmLabel,
+                              ),
+                          ])
+                        : null
+            },
+        }),
         NewModal: defineComponent({
             setup: (_, { slots, expose }) => {
                 const visible = ref(false)
@@ -278,6 +318,16 @@ it('lists every batch target and preserves a failed deletion for retry', async (
     expect(backend.instances).toEqual(['beta'])
     expect(wrapper.get<HTMLInputElement>('input[aria-label="Alpha"]').element.checked).toBe(false)
     expect(wrapper.get<HTMLInputElement>('input[aria-label="Beta"]').element.checked).toBe(true)
+    expect(wrapper.get('dialog').text()).toContain('Deletion failed')
+    expect(wrapper.get('dialog').text()).not.toContain('Alpha')
+    backend.remove.mockImplementation(async (id: string) => {
+        backend.instances = backend.instances.filter((existing) => existing !== id)
+    })
+    await button(wrapper, 'Delete instance').trigger('click')
+    await flushPromises()
+    expect(backend.instances).toEqual([])
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(backend.remove.mock.calls.filter(([id]) => id === 'alpha')).toHaveLength(1)
 })
 
 it('supplies the shared running-process set to every instance group', async () => {

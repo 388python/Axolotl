@@ -537,7 +537,7 @@ const sortDirectionLabel = computed(() => {
 
 async function deleteInstance() {
     if (currentDeleteInstance.value) {
-        await remove(currentDeleteInstance.value.id).catch(handleError)
+        await remove(currentDeleteInstance.value.id)
     }
 }
 
@@ -864,15 +864,22 @@ async function batchDeleteInstances() {
     const targets = [...batchDeleteTargets.value]
     deletingInstances.value = true
     try {
-        for (const { id } of targets) {
+        const failed: typeof targets = []
+        const errors: unknown[] = []
+        for (const target of targets) {
             try {
-                await remove(id)
-                selectedInstanceIds.value.delete(id)
-            } catch (err) {
-                handleError(err)
+                await remove(target.id)
+                selectedInstanceIds.value.delete(target.id)
+            } catch (error) {
+                failed.push(target)
+                errors.push(error)
             }
         }
         if (selectedInstanceIds.value.size === 0) clearLibraryInstanceSelection()
+        if (errors.length) {
+            batchDeleteTargets.value = failed
+            throw new AggregateError(errors, 'Some instances could not be deleted')
+        }
     } finally {
         deletingInstances.value = false
     }
@@ -1128,13 +1135,13 @@ async function handleInstanceDragEnd(event: {
             :instance-id="currentDeleteInstance?.id"
             :symlink-target="currentDeleteInstance?.symlink_target"
             :instances="currentDeleteInstance ? [currentDeleteInstance] : []"
-            @delete="deleteInstance"
+            :delete-action="deleteInstance"
         />
         <ConfirmDeleteInstanceModal
             ref="batchDeleteConfirmModal"
             :count="batchDeleteTargets.length"
             :instances="batchDeleteTargets"
-            @delete="batchDeleteInstances"
+            :delete-action="batchDeleteInstances"
         />
         <InstanceGroupModal
             ref="batchEditModal"

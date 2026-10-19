@@ -31,6 +31,9 @@ export function setServerExitReasonHandler(handler: ServerExitReasonHandler | nu
 
 const serverList = ref<ServerInfoData[]>([])
 const isRefreshing = ref(false)
+const hasLoaded = ref(false)
+const loadError = ref<unknown>(null)
+let refreshPromise: Promise<void> | null = null
 let listenerPromise: Promise<() => void> | null = null
 const consoleOutputListeners = new Map<string, Set<(data: Uint8Array) => void>>()
 const consoleOutputBuffers = new Map<string, ServerConsoleBuffer>()
@@ -65,12 +68,15 @@ async function ensureListener() {
                     listener(data)
                 }
             } else if (payload.event === 'started') {
-                void refresh()
+                void refresh().catch(() => {})
             } else if (payload.event === 'stopped') {
                 consoleOutputBuffers.delete(serverId)
-                void refresh()
+                void refresh().catch(() => {})
                 if (payload.reason) exitReasonHandler?.(serverId, payload.reason)
             }
+        }).catch((error) => {
+            listenerPromise = null
+            throw error
         })
     }
     return listenerPromise
@@ -91,15 +97,24 @@ export function subscribeServerConsoleOutput(
     }
 }
 
-export async function refresh(): Promise<void> {
-    if (isRefreshing.value) return
+export function refresh(): Promise<void> {
+    if (refreshPromise) return refreshPromise
     isRefreshing.value = true
-    try {
-        await ensureListener()
-        serverList.value = await servers.list()
-    } finally {
-        isRefreshing.value = false
-    }
+    loadError.value = null
+    refreshPromise = (async () => {
+        try {
+            await ensureListener()
+            serverList.value = await servers.list()
+            hasLoaded.value = true
+        } catch (error) {
+            loadError.value = error
+            throw error
+        } finally {
+            isRefreshing.value = false
+            refreshPromise = null
+        }
+    })()
+    return refreshPromise
 }
 
 export function useServers() {
@@ -154,6 +169,8 @@ export function useServers() {
         servers: serverViews,
         rawServers: serverList,
         isRefreshing,
+        hasLoaded,
+        loadError,
         refresh: refreshList,
         startServer,
         stopServer,

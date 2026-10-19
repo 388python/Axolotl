@@ -27,6 +27,12 @@ import MultiplayerIcon from '~/components/landing/MultiplayerIcon.vue'
 import OfflineModeIcon from '~/components/landing/OfflineModeIcon.vue'
 import ProjectsShowcase from '~/components/landing/ProjectsShowcase.vue'
 import WindowsLogo from '~/components/landing/WindowsLogo.vue'
+import {
+    getDownloadAvailability,
+    getReleasePage,
+    type ReleaseChannel,
+    resolveLauncherDownloads,
+} from '~/utils/launcher-downloads'
 
 interface UpdateServerDownloadMetadata {
     version: string
@@ -34,7 +40,6 @@ interface UpdateServerDownloadMetadata {
 }
 
 type OSType = 'Mac' | 'Windows' | 'Linux' | null
-type ReleaseChannel = 'release' | 'beta'
 
 const downloadWindows = ref<HTMLAnchorElement | null>(null)
 const downloadMac = ref<HTMLAnchorElement | null>(null)
@@ -61,46 +66,28 @@ const resetHeroGlow = () => {
 
 const { resolvedSource } = useDownloadSource()
 const UPDATE_SERVER_BASE_URL = 'https://update.axlmc.org'
-const GITHUB_RELEASE_BASE_URL = 'https://github.com/Mystic-Stars/Axolotl/releases/download'
 const releaseChannel = ref<ReleaseChannel>('release')
 const releaseApi = computed(
     () => `${UPDATE_SERVER_BASE_URL}/api/downloads/latest?channel=${releaseChannel.value}`,
 )
 
-const windowsLink = ref<string | null>(null)
-
-const linuxLinks = reactive({
-    appImage: null as string | null,
-    deb: null as string | null,
-    rpm: null as string | null,
-})
-
-const macLinks = reactive({
-    universal: null as string | null,
-})
-
-const resetDownloadLinks = () => {
-    windowsLink.value = null
-    macLinks.universal = null
-    linuxLinks.appImage = null
-    linuxLinks.deb = null
-    linuxLinks.rpm = null
-}
-
 // 使用 Update Server 的下载目录作为默认发布数据源；GitHub 保留为手动备用源。
-const { data: launcherRelease, status: launcherReleaseStatus } =
-    await useFetch<UpdateServerDownloadMetadata>(releaseApi, {
-        // Download metadata is intentionally fetched in the browser. This keeps
-        // static generation independent from the update service's availability and
-        // lets every deployed page resolve the current release after loading.
-        server: false,
-        transform(data: UpdateServerDownloadMetadata) {
-            return {
-                tag_name: `v${data.version}`,
-                assets: data.downloads.map((download) => download.filename),
-            }
-        },
-    })
+const {
+    data: launcherRelease,
+    status: launcherReleaseStatus,
+    refresh: refreshLauncherRelease,
+} = await useFetch<UpdateServerDownloadMetadata>(releaseApi, {
+    // Download metadata is intentionally fetched in the browser. This keeps
+    // static generation independent from the update service's availability and
+    // lets every deployed page resolve the current release after loading.
+    server: false,
+    transform(data: UpdateServerDownloadMetadata) {
+        return {
+            tag_name: `v${data.version}`,
+            assets: data.downloads.map((download) => download.filename),
+        }
+    },
+})
 
 // 下载链接的三种状态：获取中 / 就绪 / 失败。失败时主 CTA 降级为跳转下载区，
 // 下载区显示错误提示与 GitHub Releases 手动下载入口，避免点击死链接。
@@ -110,10 +97,43 @@ const downloadState = computed<'loading' | 'ready' | 'error'>(() => {
     return 'loading'
 })
 
+const downloadLinks = computed(() =>
+    resolveLauncherDownloads(
+        launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
+        resolvedSource.value,
+    ),
+)
+const windowsLink = computed(() => downloadLinks.value.windows)
+const macLinks = computed(() => ({ universal: downloadLinks.value.mac }))
+const linuxLinks = computed(() => ({
+    appImage: downloadLinks.value.appImage,
+    deb: downloadLinks.value.deb,
+    rpm: downloadLinks.value.rpm,
+}))
+const releasePage = computed(() =>
+    getReleasePage(
+        releaseChannel.value,
+        launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
+    ),
+)
 const linkUnavailableLabel = computed(() =>
-    downloadState.value === 'error'
-        ? formatMessage(messages.downloadLinksFailed)
-        : formatMessage(messages.fetchingDownloadLinks),
+    formatMessage(
+        downloadState.value === 'error'
+            ? messages.downloadLinksFailed
+            : downloadState.value === 'ready'
+              ? messages.packageUnavailable
+              : messages.fetchingDownloadLinks,
+    ),
+)
+const heroDownloadState = computed(() =>
+    getDownloadAvailability(
+        launcherReleaseStatus.value,
+        os.value === 'Windows'
+            ? windowsLink.value
+            : os.value === 'Mac'
+              ? macLinks.value.universal
+              : linuxLinks.value.appImage,
+    ),
 )
 
 const latestVersion = computed(() => {
@@ -213,58 +233,18 @@ const removeMod = (index: number) => {
     checkedMods.value.splice(index, 1)
 }
 
-const downloadLauncher = computed(() => {
-    // 获取中：按钮禁用，不做任何事
-    if (downloadState.value === 'loading') return () => {}
-    // 获取失败：降级为跳转下载区（那里有错误提示和手动下载入口）
-    if (downloadState.value === 'error') return scrollToSection
-    if (os.value === 'Windows') {
-        return () => {
-            downloadWindows.value?.click()
-        }
-    } else if (os.value === 'Mac') {
-        return () => {
-            downloadMac.value?.click()
-        }
-    } else {
-        return () => {
-            scrollToSection()
-        }
-    }
-})
-
 const handleDownload = () => {
-    downloadLauncher.value()
+    if (heroDownloadState.value === 'loading') return
+    if (heroDownloadState.value !== 'ready' || os.value === 'Linux') {
+        scrollToSection()
+    } else if (os.value === 'Windows') {
+        downloadWindows.value?.click()
+    } else if (os.value === 'Mac') {
+        downloadMac.value?.click()
+    } else {
+        scrollToSection()
+    }
 }
-
-watch(
-    [launcherRelease, resolvedSource, launcherReleaseStatus],
-    ([release, source, status]) => {
-        resetDownloadLinks()
-        if (status !== 'success' || !release) return
-
-        const findAsset = (patterns: RegExp[]) => {
-            const assetName = release?.assets.find((name) =>
-                patterns.some((pattern) => pattern.test(name)),
-            )
-            if (!assetName) return null
-
-            if (source === 'update-server') {
-                const version = release.tag_name.replace(/^v/, '')
-                return `${UPDATE_SERVER_BASE_URL}/dist/${encodeURIComponent(version)}/${encodeURIComponent(assetName)}`
-            }
-
-            return `${GITHUB_RELEASE_BASE_URL}/${encodeURIComponent(release.tag_name)}/${encodeURIComponent(assetName)}`
-        }
-
-        windowsLink.value = findAsset([/x64-setup\.exe$/i, /\.exe$/i])
-        macLinks.universal = findAsset([/universal\.dmg$/i, /\.dmg$/i])
-        linuxLinks.appImage = findAsset([/(amd64|x86_64)\.AppImage$/i])
-        linuxLinks.deb = findAsset([/_amd64\.deb$/i, /(amd64|x86_64).*\.deb$/i])
-        linuxLinks.rpm = findAsset([/(x86_64|amd64).*\.rpm$/i])
-    },
-    { immediate: true },
-)
 
 const scrollToSection = () => {
     nextTick(() => {
@@ -280,6 +260,15 @@ const scrollToSection = () => {
 const { formatMessage, locale } = useVIntl()
 
 const messages = defineMessages({
+    packageUnavailable: {
+        id: 'axolotl-marketing.download.package-unavailable',
+        defaultMessage: 'No package is available for this version.',
+    },
+    viewDownloads: {
+        id: 'axolotl-marketing.download.view-options',
+        defaultMessage: 'View download options',
+    },
+    retryDownloads: { id: 'axolotl-marketing.download.retry', defaultMessage: 'Retry' },
     recentEyebrow: {
         id: 'axolotl-marketing.recent.eyebrow',
         defaultMessage: 'Made for everyday play',
@@ -1057,15 +1046,17 @@ useHead(() => ({
                         color="brand"
                         size="xl"
                         class="hero-download-button"
-                        :disabled="downloadState === 'loading'"
+                        :disabled="heroDownloadState === 'loading'"
                         @click="handleDownload"
                         ><LinuxIcon v-if="os === 'Linux'" />
                         <WindowsIcon v-else-if="os === 'Windows'" />
                         <AppleIcon v-else-if="os === 'Mac'" />
                         {{
-                            downloadState === 'loading'
+                            heroDownloadState === 'loading'
                                 ? formatMessage(messages.fetchingDownloadLinks)
-                                : formatMessage(messages.downloadAxolotlButton)
+                                : heroDownloadState === 'ready'
+                                  ? formatMessage(messages.downloadAxolotlButton)
+                                  : formatMessage(messages.viewDownloads)
                         }}
                     </Button>
                     <Button type="outlined" size="xl" @click="scrollToSection"
@@ -1556,14 +1547,26 @@ useHead(() => ({
                     </div>
                 </div>
             </div>
-            <div v-if="downloadState === 'error'" class="download-error-banner" role="alert">
-                <span>{{ formatMessage(messages.downloadLinksFailed) }}</span>
+            <div
+                v-if="
+                    downloadState === 'error' ||
+                    (downloadState === 'ready' &&
+                        Object.values(downloadLinks).some((link) => !link))
+                "
+                class="download-error-banner"
+                role="status"
+            >
+                <span v-if="downloadState === 'error'">{{
+                    formatMessage(messages.downloadLinksFailed)
+                }}</span>
+                <Button
+                    v-if="downloadState === 'error'"
+                    type="outlined"
+                    @click="refreshLauncherRelease()"
+                    >{{ formatMessage(messages.retryDownloads) }}</Button
+                >
                 <span class="download-error-links">
-                    <a
-                        href="https://github.com/Mystic-Stars/Axolotl/releases/latest"
-                        target="_blank"
-                        rel="noopener"
-                    >
+                    <a :href="releasePage" target="_blank" rel="noopener">
                         {{ formatMessage(messages.manualDownloadFallback) }}
                     </a>
                 </span>
@@ -1591,7 +1594,7 @@ useHead(() => ({
                     <template #issues-link="{ children }">
                         <a
                             class="underline hover:brightness-[--hover-brightness]"
-                            href="https://github.com/Mystic-Stars/Axolotl/releases/latest"
+                            :href="releasePage"
                             target="_blank"
                             rel="noopener"
                         >

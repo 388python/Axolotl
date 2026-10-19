@@ -13,6 +13,7 @@ import {
     SpinnerIcon,
 } from '@modrinth/assets'
 import {
+    Admonition,
     type BrowseInstallContext,
     BrowseInstallHeader,
     Button,
@@ -119,8 +120,14 @@ const browseReturnSnapshot = navReturn.consumeBrowseReturnSnapshot<FavoritesRetu
     route.fullPath,
 )
 if (browseReturnSnapshot) projects.value = browseReturnSnapshot.state.projects
+const projectsLoadFailed = ref(false)
+const hasProjectsSnapshot = ref(!!browseReturnSnapshot)
 
 const messages = defineMessages({
+    loadFailed: {
+        id: 'app.content-favorites.load-failed',
+        defaultMessage: 'Failed to load favorites',
+    },
     title: {
         id: 'app.content-favorites.title',
         defaultMessage: 'Favorites',
@@ -372,6 +379,7 @@ async function refreshProjects() {
     projectsController = new AbortController()
     const signal = projectsController.signal
     loadingProjects.value = true
+    projectsLoadFailed.value = false
     try {
         await contentFavorites.load(true)
         const favorites = [...contentFavorites.favorites.value]
@@ -407,9 +415,12 @@ async function refreshProjects() {
                 }
             }),
         )
-        if (requestId === projectRequestId && !signal.aborted) projects.value = resolved
-    } catch (error) {
-        if (!signal.aborted) handleError(error)
+        if (requestId === projectRequestId && !signal.aborted) {
+            projects.value = resolved
+            hasProjectsSnapshot.value = true
+        }
+    } catch {
+        if (requestId === projectRequestId && !signal.aborted) projectsLoadFailed.value = true
     } finally {
         if (requestId === projectRequestId) loadingProjects.value = false
     }
@@ -801,8 +812,28 @@ onMounted(async () => {
             </div>
         </div>
 
+        <Admonition
+            v-if="projectsLoadFailed && hasProjectsSnapshot"
+            type="warning"
+            :header="formatMessage(messages.loadFailed)"
+        >
+            <Button type="outlined" :loading="loadingProjects" @click="refreshProjects">{{
+                formatMessage(commonMessages.retryButton)
+            }}</Button>
+        </Admonition>
+        <EmptyState
+            v-if="projectsLoadFailed && !hasProjectsSnapshot"
+            type="error"
+            :heading="formatMessage(messages.loadFailed)"
+        >
+            <template #actions>
+                <Button type="outlined" :loading="loadingProjects" @click="refreshProjects">{{
+                    formatMessage(commonMessages.retryButton)
+                }}</Button>
+            </template>
+        </EmptyState>
         <section
-            v-if="loadingProjects && availableProjects.length === 0"
+            v-else-if="!hasProjectsSnapshot && !projectsLoadFailed"
             class="flex min-h-64 items-center justify-center"
         >
             <LoadingIndicator />

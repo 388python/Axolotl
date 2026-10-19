@@ -1,4 +1,16 @@
 {
+  "instance.settings.general.name-required": {
+    "message": "请输入不超过 80 个字符的名称。"
+  },
+  "instance.settings.general.name-save-failed": {
+    "message": "名称未能保存。"
+  },
+  "app.servers.load-failed": {
+    "message": "无法读取服务器"
+  },
+  "app.content-favorites.load-failed": {
+    "message": "无法读取收藏"
+  },
   "app.settings.logs.export.modal.network-connections": {
     "message": "网络连接"
   },

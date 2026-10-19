@@ -1,9 +1,15 @@
 <template>
-    <NewModal
+    <ConfirmActionModal
         ref="modal"
         :header="formatMessage(count > 1 ? messages.batchHeader : messages.header)"
         fade="danger"
         max-width="500px"
+        :confirm-action="deleteAction"
+        :confirm-icon="TrashIcon"
+        confirm-color="red"
+        :confirm-label="
+            formatMessage(count > 1 ? messages.batchDeleteButton : messages.deleteButton, { count })
+        "
     >
         <Admonition
             v-if="!symlinkTarget && count <= 1"
@@ -36,37 +42,15 @@
                 })
             }}
         </p>
-
-        <template #actions>
-            <div class="flex gap-2 justify-end">
-                <Button type="outlined" @click="modal?.hide()"
-                    ><XIcon />
-                    {{ formatMessage(commonMessages.cancelButton) }}
-                </Button>
-                <Button type="colored" color="red" @click="confirm"
-                    ><TrashIcon />
-                    {{
-                        formatMessage(
-                            count > 1 ? messages.batchDeleteButton : messages.deleteButton,
-                            {
-                                count,
-                            },
-                        )
-                    }}
-                </Button>
-            </div>
-        </template>
-    </NewModal>
+    </ConfirmActionModal>
 </template>
 
 <script setup lang="ts">
-import { TrashIcon, XIcon } from '@modrinth/assets'
+import { TrashIcon } from '@modrinth/assets'
 import {
     Admonition,
-    Button,
-    commonMessages,
+    ConfirmActionModal,
     defineMessages,
-    NewModal,
     useFormatBytes,
     useVIntl,
 } from '@modrinth/ui'
@@ -79,6 +63,7 @@ const formatBytes = useFormatBytes()
 
 const props = withDefaults(
     defineProps<{
+        deleteAction: () => Promise<void>
         instanceId?: string | null
         symlinkTarget?: string | null
         count?: number
@@ -135,11 +120,7 @@ const messages = defineMessages({
     },
 })
 
-const emit = defineEmits<{
-    (e: 'delete'): void
-}>()
-
-const modal = ref<InstanceType<typeof NewModal>>()
+const modal = ref<InstanceType<typeof ConfirmActionModal>>()
 const backupSummary = ref<BackupDeleteSummary | null>(null)
 
 async function show() {
@@ -148,11 +129,6 @@ async function show() {
     if (props.instanceId && props.count <= 1) {
         backupSummary.value = await getBackupDeleteSummary(props.instanceId).catch(() => null)
     }
-}
-
-function confirm() {
-    modal.value?.hide()
-    emit('delete')
 }
 
 defineExpose({

@@ -1,4 +1,16 @@
 {
+  "instance.settings.general.name-required": {
+    "message": "Enter a name with no more than 80 characters."
+  },
+  "instance.settings.general.name-save-failed": {
+    "message": "The name could not be saved."
+  },
+  "app.servers.load-failed": {
+    "message": "Failed to load servers"
+  },
+  "app.content-favorites.load-failed": {
+    "message": "Failed to load favorites"
+  },
   "app.settings.logs.export.modal.network-connections": {
     "message": "Network connections"
   },
