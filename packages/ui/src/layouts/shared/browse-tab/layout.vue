@@ -171,7 +171,7 @@ const skeletonCount = computed(() => {
                 : '',
             ctx.variant === 'web'
                 ? 'mb-3 rounded-xl bg-surface-1 p-3'
-                : '-mx-6 -mt-6 rounded-tl-[--radius-xl] rounded-tr-[--radius-xl] border-0 bg-[color-mix(in_srgb,var(--surface-1-opaque,var(--surface-1))_20%,transparent)] backdrop-blur-xl',
+                : '-mx-6 -mt-6 border-0 bg-[color-mix(in_srgb,var(--surface-1-opaque,var(--surface-1))_20%,transparent)] backdrop-blur-xl',
         ]"
     >
         <div v-if="showInstallHeader" class="p-3 pb-0">
