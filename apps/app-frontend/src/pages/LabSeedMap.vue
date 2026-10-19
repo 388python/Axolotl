@@ -128,6 +128,11 @@ import { type AreaLootMatch, type SeedMapArea, seedMapArea } from '@/lab/seed-ma
 import { compareSeedMapVersions } from '@/lab/seed-map/backend'
 import { createSeedMapLayoutLayer } from '@/lab/seed-map/layout-layer'
 import {
+    drawSeedMapMarkers,
+    hitSeedMapMarker,
+    layoutSeedMapMarkers,
+} from '@/lab/seed-map/marker-rendering'
+import {
     drawSeedMapLayout,
     hitSeedMapLayout,
     SEED_MAP_LAYOUT_MAX_SCALE,
@@ -1681,42 +1686,18 @@ function drawCompletionBadge(context: CanvasRenderingContext2D, x: number, y: nu
 }
 
 function drawMarkers(context: CanvasRenderingContext2D) {
-    for (const marker of dimensionMarkers.value) {
-        const point = worldToScreen(marker.x, marker.z)
-        if (
-            point.x < -20 ||
-            point.x > viewport.width + 20 ||
-            point.y < -20 ||
-            point.y > viewport.height + 20
-        )
-            continue
-        context.save()
-        context.fillStyle = marker.color
-        context.strokeStyle = '#FFFFFF'
-        context.lineWidth = 2
-        context.save()
-        context.translate(point.x, point.y)
-        context.scale(poiIconScale.value, poiIconScale.value)
-        context.beginPath()
-        context.arc(0, -3, 7, 0, Math.PI * 2)
-        context.moveTo(-4, 2)
-        context.lineTo(0, 11)
-        context.lineTo(4, 2)
-        context.fill()
-        context.stroke()
-        context.restore()
-        if (showLayerNames.value) {
-            context.font = '600 11px system-ui'
-            const width = context.measureText(marker.name).width + 10
-            context.fillStyle = 'rgba(20, 22, 26, 0.86)'
-            context.fillRect(point.x + 10, point.y - 12, width, 22)
-            context.fillStyle = '#FFFFFF'
-            context.textAlign = 'left'
-            context.textBaseline = 'middle'
-            context.fillText(marker.name, point.x + 15, point.y - 1)
-        }
-        context.restore()
-    }
+    drawSeedMapMarkers(context, markerPlacements(context))
+}
+
+function markerPlacements(context: CanvasRenderingContext2D) {
+    return layoutSeedMapMarkers(
+        context,
+        dimensionMarkers.value,
+        worldToScreen,
+        viewport,
+        poiIconScale.value,
+        selection.value?.markerId,
+    )
 }
 
 function drawRuler(context: CanvasRenderingContext2D) {
@@ -2157,10 +2138,8 @@ function clearLongPress() {
 
 function selectAt(x: number, y: number) {
     const point = screenToWorld(x, y)
-    const marker = dimensionMarkers.value.find((item) => {
-        const screen = worldToScreen(item.x, item.z)
-        return Math.hypot(screen.x - x, screen.y - y) <= 13 * poiIconScale.value
-    })
+    const context = canvas.value?.getContext('2d')
+    const marker = context ? hitSeedMapMarker(markerPlacements(context), x, y) : undefined
     if (
         !marker &&
         scale.value <= SEED_MAP_LAYOUT_MAX_SCALE &&

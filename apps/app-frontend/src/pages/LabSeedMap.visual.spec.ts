@@ -14,6 +14,7 @@ import type {
 import type { SeedMapArea } from '@/lab/seed-map/area-analysis'
 import type { SeedMapOreScanChunk, SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
 import type { SeedMapFeature } from '@/lab/seed-map/features'
+import { layoutSeedMapMarkers } from '@/lab/seed-map/marker-rendering'
 import { createDefaultSeedMapWorkspace, type SeedMapWorkspace } from '@/lab/seed-map/workspace'
 
 import LabSeedMap from './LabSeedMap.vue'
@@ -398,6 +399,88 @@ it('isolates saved marker rendering and selection by dimension and preserves the
     expect(vm.dimensionMarkers).toEqual([overworld])
     vm.selectAt(point.x, point.y)
     expect(vm.selection).toHaveProperty('markerId', overworld.id)
+})
+
+it('draws saved marker names above the pins by default and selects their visible names at both icon scales', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = []
+    const context = canvas.getContext('2d')!
+    const text = vi.spyOn(context, 'fillText')
+    const curve = vi.spyOn(context, 'bezierCurveTo')
+    vm.workspace.markers = [
+        { id: 'home', name: '基地 Home', x: 0, z: 0, color: '#22C55E', dimension: 'overworld' },
+    ]
+    try {
+        for (const zoom of [1, 0.5]) {
+            vm.workspace.zoom = zoom
+            vm.selection = null
+            await flushPromises()
+            text.mockClear()
+            curve.mockClear()
+            vm.drawMap()
+            const point = vm.worldToScreen(0, 0)
+            const name = text.mock.calls.find(([value]) => value === '基地 Home')
+            expect(name).toBeDefined()
+            expect(name![1]).toBe(point.x)
+            expect(name![2]).toBeLessThan(point.y - 30 * (zoom === 1 ? 1 : 1.5))
+            expect(curve.mock.calls.length).toBe(4)
+            vm.selectAt(name![1], name![2])
+            expect(vm.selection).toHaveProperty('markerId', 'home')
+            vm.selection = null
+            vm.selectAt(point.x, point.y - 25 * (zoom === 1 ? 1 : 1.5))
+            expect(vm.selection).toHaveProperty('markerId', 'home')
+        }
+        vm.workspace.dimension = 'nether'
+        await flushPromises()
+        text.mockClear()
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value === '基地 Home')).toBe(false)
+    } finally {
+        text.mockRestore()
+        curve.mockRestore()
+    }
+})
+
+it('keeps selected marker names above overlapping markers and clips long names without changing saved data', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = []
+    vm.workspace.zoom = 1
+    vm.workspace.markers = [
+        { id: 'home', name: '基地 Home', x: 0, z: 0, color: '#22C55E', dimension: 'overworld' },
+        { id: 'mine', name: '矿场 Mine', x: 0, z: 0, color: '#EF4444', dimension: 'overworld' },
+    ]
+    vm.selection = { x: 0, z: 0, markerId: 'home' }
+    await flushPromises()
+    const context = canvas.getContext('2d')!
+    const text = vi.spyOn(context, 'fillText')
+    try {
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value === '基地 Home')).toBe(true)
+        expect(text.mock.calls.some(([value]) => value === '矿场 Mine')).toBe(false)
+        const point = vm.worldToScreen(0, 0)
+        vm.selectAt(point.x, point.y - 15)
+        expect(vm.selection).toHaveProperty('markerId', 'home')
+        const longName = '基地😀'.repeat(40)
+        vm.workspace.markers = [{ ...vm.workspace.markers[0], name: longName }]
+        await flushPromises()
+        text.mockClear()
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value.endsWith('…'))).toBe(true)
+        expect(vm.workspace.markers[0].name).toBe(longName)
+        const placements = layoutSeedMapMarkers(
+            context,
+            vm.dimensionMarkers,
+            vm.worldToScreen,
+            { width: 512, height: 256 },
+            1,
+            'home',
+        )
+        expect(placements[0].label!.width).toBeLessThanOrEqual(168)
+    } finally {
+        text.mockRestore()
+    }
 })
 
 beforeEach(() => {
