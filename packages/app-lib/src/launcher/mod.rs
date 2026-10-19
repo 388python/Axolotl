@@ -28,8 +28,8 @@ use crate::state::{
     InstanceLaunchContext, InstanceLink, JavaVersion, MemorySettings,
     ProcessMetadata, WindowSize,
 };
-use crate::util::io;
 use crate::util::rpc::RpcServerBuilder;
+use crate::util::{io, java_environment};
 use crate::{State, get_resource_file, process};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
@@ -1517,7 +1517,8 @@ async fn install_minecraft_with_local_source(
                     cp
                 };
 
-                let mut command = Command::new(&java_version.path);
+                let mut command =
+                    java_environment::tokio_command(&java_version.path);
                 command
                     .args(&java_proxy_args)
                     .arg("-cp")
@@ -2642,13 +2643,7 @@ pub async fn launch_minecraft(
         .args(extra_game_args)
         .current_dir(instance_path.clone());
 
-    // CARGO-set DYLD_LIBRARY_PATH breaks Minecraft on macOS during testing on playground
-    #[cfg(target_os = "macos")]
-    if std::env::var("CARGO").is_ok() {
-        command.env_remove("DYLD_FALLBACK_LIBRARY_PATH");
-    }
-    // Java options should be set in instance options (the existence of _JAVA_OPTIONS overwrites them)
-    command.env_remove("_JAVA_OPTIONS");
+    java_environment::configure_java_environment(command.as_std_mut());
 
     command.envs(env_args);
 

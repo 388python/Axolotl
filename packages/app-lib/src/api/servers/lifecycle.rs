@@ -16,6 +16,7 @@ use crate::event::ServerPayloadType;
 use crate::event::emit::emit_server;
 use crate::state::{clear_log_buffer, get_log_buffer, push_log_line};
 use crate::util::io::IOError;
+use crate::util::java_environment;
 use crate::{ErrorKind, Result};
 
 use super::logs::{
@@ -203,6 +204,7 @@ async fn start_inner(
                 .as_error()
             })?;
             let mut command = CommandBuilder::new(&java);
+            java_environment::configure_pty_java_environment(&mut command);
             command.args(&args);
             command.cwd(&dir);
             command.env("TERM", "xterm-256color");
@@ -224,7 +226,7 @@ async fn start_inner(
                 Some(reader),
             )
         } else {
-            let mut command = Command::new(&java);
+            let mut command = java_environment::tokio_command(&java);
             command.args(&args);
             command.current_dir(&dir);
             for variable in removed_environment {
@@ -364,7 +366,9 @@ async fn run_pre_launch_hook(
     }
     let program = parts.remove(0);
     push_log_line(server_id, format!("[hook] Running pre-launch hook: {hook}"));
-    let status = Command::new(&program)
+    let mut command = Command::new(&program);
+    java_environment::configure_child_environment(command.as_std_mut());
+    let status = command
         .args(&parts)
         .current_dir(dir)
         .status()

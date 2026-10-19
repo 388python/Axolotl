@@ -7,7 +7,7 @@
 //! down the loader, its libraries, and the `@args` launch files. The regular
 //! `servers.start` flow then boots that output (see `lifecycle::forge_launch_args`).
 
-use tokio::process::Command;
+use crate::util::java_environment;
 
 use crate::event::ServerPayloadType;
 use crate::event::emit::emit_server;
@@ -56,7 +56,7 @@ pub async fn install_forge(
     let java = java_path.clone().unwrap_or_else(|| "java".to_string());
 
     log(server_id, "Running Forge installer (this may take a while)").await?;
-    let output = Command::new(&java)
+    let output = java_environment::tokio_command(&java)
         .arg("-jar")
         .arg(&installer_path)
         .arg("--installServer")

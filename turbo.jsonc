@@ -67,6 +67,11 @@
                 "THESEUS_DB_BACKUP_DIR"
             ]
         },
+        "@modrinth/app#dev": {
+            "cache": false,
+            "persistent": true,
+            "passThroughEnv": ["*"]
+        },
         "@modrinth/app#build": {
             "cache": false,
             "env": ["CARGO_*", "RUST_*", "RUSTFLAGS", "SQLX_OFFLINE"],

@@ -6,6 +6,7 @@ pub mod downloads;
 pub mod fetch;
 pub mod file_lock;
 pub mod io;
+pub(crate) mod java_environment;
 pub mod jre;
 pub mod mojang;
 pub mod network;

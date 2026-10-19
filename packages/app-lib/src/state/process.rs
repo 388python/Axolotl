@@ -1400,6 +1400,9 @@ impl Process {
                         state.directories.instances_dir().join(&instance_path)
                     });
                     let mut command = Command::new(command);
+                    crate::util::java_environment::configure_child_environment(
+                        command.as_std_mut(),
+                    );
                     command.args(cmd).current_dir(game_dir);
                     command.spawn().map_err(IOError::from)?;
                 }
