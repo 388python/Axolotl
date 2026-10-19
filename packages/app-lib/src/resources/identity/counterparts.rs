@@ -59,15 +59,13 @@ impl ResourceService {
         };
         if let Some(store) = self.store()
             && let Some(id) = store.lookup(&metadata.project).await?
-        {
-            if store
+            && store
                 .projects(&id)
                 .await?
                 .iter()
                 .any(|project| project.source == opposite)
-            {
-                return Ok(());
-            }
+        {
+            return Ok(());
         }
         let project = if opposite == SourceId::modrinth() {
             match self.locate(&opposite, hint.slug.clone(), cancel).await {

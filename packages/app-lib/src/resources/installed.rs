@@ -493,15 +493,14 @@ pub(crate) async fn hydrate_selected(
                         && entry.artifact.as_ref() == Some(&artifact.reference)
                 })
         {
-            if let Some(reference) = &entry.artifact {
-                if let Ok(document) = service
+            if let Some(reference) = &entry.artifact
+                && let Ok(document) = service
                     .project_document(&reference.release.project, None, cancel)
                     .await
-                {
-                    service
-                        .confirm_counterpart(&document.metadata, cancel)
-                        .await?;
-                }
+            {
+                service
+                    .confirm_counterpart(&document.metadata, cancel)
+                    .await?;
             }
             continue;
         }

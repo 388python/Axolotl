@@ -596,15 +596,14 @@ impl Credentials {
         {
             *state = CredentialRefreshState::default();
         }
-        if let Some(refreshed) = &state.refreshed {
-            if state.source_token.as_ref() == Some(&self.refresh_token)
-                && refreshed.expires > self.expires
-            {
-                self.access_token = refreshed.access_token.clone();
-                self.refresh_token = refreshed.refresh_token.clone();
-                self.expires = refreshed.expires;
-                self.yggdrasil = refreshed.yggdrasil.clone();
-            }
+        if let Some(refreshed) = &state.refreshed
+            && state.source_token.as_ref() == Some(&self.refresh_token)
+            && refreshed.expires > self.expires
+        {
+            self.access_token = refreshed.access_token.clone();
+            self.refresh_token = refreshed.refresh_token.clone();
+            self.expires = refreshed.expires;
+            self.yggdrasil = refreshed.yggdrasil.clone();
         }
         if self.expires > Utc::now() + refresh_margin {
             return Ok(());

@@ -85,10 +85,10 @@ pub(super) async fn persist_backfill(
     Ok(())
 }
 
-fn provider_ref<'a>(
-    references: &'a [ContentProviderRef],
+fn provider_ref(
+    references: &[ContentProviderRef],
     provider: ContentProvider,
-) -> Option<&'a ContentProviderRef> {
+) -> Option<&ContentProviderRef> {
     references.iter().find(|reference| {
         reference.provider() == provider
             && reference.database_release_id().is_some()

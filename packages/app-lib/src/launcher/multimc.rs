@@ -297,12 +297,11 @@ impl MultiMcProfile {
             }
             if let Some(arguments) =
                 patch.get("minecraftArguments").and_then(Value::as_str)
+                && (uid != "net.minecraft" || vanilla.is_none())
             {
-                if uid != "net.minecraft" || vanilla.is_none() {
-                    info.minecraft_arguments = Some(arguments.to_string());
-                    if let Some(arguments) = info.arguments.as_mut() {
-                        arguments.remove(&ArgumentType::Game);
-                    }
+                info.minecraft_arguments = Some(arguments.to_string());
+                if let Some(arguments) = info.arguments.as_mut() {
+                    arguments.remove(&ArgumentType::Game);
                 }
             }
             if uid == "net.minecraft" {
@@ -435,11 +434,11 @@ impl MultiMcProfile {
             for (key, value) in downloads {
                 if key == "artifact" {
                     normalize_download(value);
-                } else if key == "classifiers" {
-                    if let Some(classifiers) = value.as_object_mut() {
-                        for download in classifiers.values_mut() {
-                            normalize_download(download);
-                        }
+                } else if key == "classifiers"
+                    && let Some(classifiers) = value.as_object_mut()
+                {
+                    for download in classifiers.values_mut() {
+                        normalize_download(download);
                     }
                 }
             }
