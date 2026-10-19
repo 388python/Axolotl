@@ -387,6 +387,7 @@ impl ProcessManager {
                 instance_name: instance_name.to_string(),
             },
             child: mc_proc,
+            exit_status: tokio::sync::watch::channel(None).0,
             manually_killed: false,
             output_tasks: Vec::new(),
             rpc_server,
@@ -578,29 +579,54 @@ impl ProcessManager {
         id: Uuid,
     ) -> crate::Result<Option<Option<ExitStatus>>> {
         if let Some(mut process) = self.processes.get_mut(&id) {
-            Ok(Some(process.child.try_wait()?))
+            match process.child.try_wait() {
+                Ok(status) => {
+                    if let Some(status) = status {
+                        process.exit_status.send_replace(Some(Ok(status)));
+                    }
+                    Ok(Some(status))
+                }
+                Err(error) => {
+                    process
+                        .exit_status
+                        .send_replace(Some(Err(error.to_string())));
+                    Err(error.into())
+                }
+            }
         } else {
             Ok(None)
         }
     }
 
     pub async fn wait_for(&self, id: Uuid) -> crate::Result<()> {
-        if let Some(mut process) = self.processes.get_mut(&id) {
-            process.child.wait().await?;
+        let Some(mut exit_status) = self
+            .processes
+            .get(&id)
+            .map(|process| process.exit_status.subscribe())
+        else {
+            return Ok(());
+        };
+        loop {
+            let result = exit_status.borrow_and_update().clone();
+            if let Some(result) = result {
+                return result.map(|_| ()).map_err(|error| {
+                    crate::ErrorKind::LauncherError(error).into()
+                });
+            }
+            if exit_status.changed().await.is_err() {
+                return Ok(());
+            }
         }
-        Ok(())
     }
 
     pub async fn kill(&self, id: Uuid) -> crate::Result<()> {
-        if let Some(mut process) = self.processes.get_mut(&id) {
-            process.manually_killed = true;
-            if let Err(error) = process.child.kill().await {
-                process.manually_killed = false;
-                return Err(error.into());
+        {
+            if let Some(mut process) = self.processes.get_mut(&id) {
+                process.child.start_kill()?;
+                process.manually_killed = true;
             }
         }
-
-        Ok(())
+        self.wait_for(id).await
     }
 
     fn remove(&self, id: Uuid) -> Option<Process> {
@@ -631,6 +657,7 @@ pub struct ProcessMetadata {
 struct Process {
     metadata: ProcessMetadata,
     child: Child,
+    exit_status: tokio::sync::watch::Sender<Option<Result<ExitStatus, String>>>,
     manually_killed: bool,
     output_tasks: Vec<tokio::task::JoinHandle<()>>,
     _main_class_keep_alive: TempDir,
@@ -1520,5 +1547,86 @@ mod post_upgrade_tests {
         assert!(!crash_reports_changed(&before, &unchanged));
         assert!(crash_reports_changed(&before, &added));
         assert!(crash_reports_changed(&before, &modified));
+    }
+}
+
+#[cfg(test)]
+mod process_wait_tests {
+    use super::*;
+
+    #[test]
+    fn sleeping_child() {
+        if std::env::var_os("AXOLOTL_PROCESS_WAIT_TEST").is_some() {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    }
+
+    #[tokio::test]
+    async fn waiters_do_not_block_queries_or_kill_and_observe_the_same_exit() {
+        let manager = Arc::new(ProcessManager::new());
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "state::process::process_wait_tests::sleeping_child",
+            ])
+            .env("AXOLOTL_PROCESS_WAIT_TEST", "1")
+            .kill_on_drop(true)
+            .stdout(std::process::Stdio::null());
+        let child = command.spawn().unwrap();
+        let id = Uuid::new_v4();
+        manager.processes.insert(
+            id,
+            Process {
+                metadata: ProcessMetadata {
+                    uuid: id,
+                    pid: child.id().unwrap(),
+                    maximize_window: false,
+                    window_title: None,
+                    instance_id: "test".into(),
+                    instance_path: "test".into(),
+                    instance_name: "test".into(),
+                    start_time: Utc::now(),
+                },
+                child,
+                exit_status: tokio::sync::watch::channel(None).0,
+                manually_killed: false,
+                output_tasks: Vec::new(),
+                _main_class_keep_alive: TempDir::new().unwrap(),
+                rpc_server: crate::util::rpc::RpcServerBuilder::new()
+                    .launch()
+                    .await
+                    .unwrap(),
+            },
+        );
+        let waiters = (0..3)
+            .map(|_| {
+                let manager = manager.clone();
+                tokio::spawn(async move { manager.wait_for(id).await.unwrap() })
+            })
+            .collect::<Vec<_>>();
+        tokio::task::yield_now().await;
+        assert_eq!(manager.get_all().len(), 1);
+        assert!(manager.try_wait(id).unwrap().unwrap().is_none());
+        let monitor = manager.clone();
+        let polling = tokio::spawn(async move {
+            while monitor.try_wait(id).unwrap().unwrap().is_none() {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        });
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            manager.kill(id),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(manager.was_manually_killed(id));
+        for waiter in waiters {
+            waiter.await.unwrap();
+        }
+        polling.await.unwrap();
+        manager.remove(id);
+        manager.wait_for(id).await.unwrap();
     }
 }

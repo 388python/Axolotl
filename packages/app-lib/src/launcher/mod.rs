@@ -116,32 +116,57 @@ fn set_high_performance_gpu_preference(
     Ok(())
 }
 
+#[cfg(any(target_os = "linux", test))]
+mod gpu_environment;
+
 #[cfg(target_os = "linux")]
 async fn high_performance_gpu_environment() -> Vec<(String, String)> {
-    match switcheroo_gpu_environment().await {
-        Ok(Some(environment)) => {
-            tracing::info!(
-                "Using switcheroo-control environment for high-performance GPU"
-            );
-            environment
-        }
-        Ok(None) => fallback_high_performance_gpu_environment(),
-        Err(error) => {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        switcheroo_gpu_environment(),
+    )
+    .await
+    {
+        Ok(Ok(environment)) => environment,
+        result => {
             tracing::debug!(
-                %error,
-                "Failed to query switcheroo-control; using PRIME fallback"
+                ?result,
+                "GPU topology unavailable; preserving the system GPU selection"
             );
-            fallback_high_performance_gpu_environment()
+            Vec::new()
         }
     }
 }
 
 #[cfg(target_os = "linux")]
-async fn switcheroo_gpu_environment()
--> crate::Result<Option<Vec<(String, String)>>> {
+async fn switcheroo_gpu_environment() -> crate::Result<Vec<(String, String)>> {
     use std::collections::HashMap;
     use zbus::zvariant::OwnedValue;
     use zbus::{Connection, Proxy};
+    let x11_session = std::env::var("XDG_SESSION_TYPE")
+        .is_ok_and(|value| value == "x11")
+        || (std::env::var_os("DISPLAY").is_some()
+            && std::env::var_os("WAYLAND_DISPLAY").is_none());
+    if x11_session {
+        let mut command = Command::new("glxinfo");
+        java_environment::configure_child_environment(command.as_std_mut());
+        let output = command.arg("-B").kill_on_drop(true).output().await;
+        let renderer_is_nvidia = output
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| {
+                gpu_environment::glx_renderer_is_nvidia(
+                    &String::from_utf8_lossy(&output.stdout),
+                )
+            });
+        if renderer_is_nvidia != Some(false) {
+            tracing::debug!(
+                ?renderer_is_nvidia,
+                "Preserving the current X11 renderer without PRIME injection"
+            );
+            return Ok(Vec::new());
+        }
+    }
 
     let connection = Connection::system().await?;
     let proxy = Proxy::new(
@@ -153,46 +178,23 @@ async fn switcheroo_gpu_environment()
     .await?;
     let gpus: Vec<HashMap<String, OwnedValue>> =
         proxy.get_property("GPUs").await?;
-
-    for mut gpu in gpus {
-        let is_default = gpu
-            .get("Default")
-            .and_then(|value| bool::try_from(value).ok());
-        if is_default != Some(false) {
-            continue;
-        }
-
-        let Some(environment) = gpu
-            .remove("Environment")
-            .and_then(|value| Vec::<String>::try_from(value).ok())
-        else {
-            continue;
-        };
-        let mut entries = environment.chunks_exact(2);
-        let parsed = entries
-            .by_ref()
-            .filter(|entry| !entry[0].is_empty())
-            .map(|entry| (entry[0].clone(), entry[1].clone()))
-            .collect::<Vec<_>>();
-        if entries.remainder().is_empty() && !parsed.is_empty() {
-            return Ok(Some(parsed));
-        }
-    }
-
-    Ok(None)
-}
-
-#[cfg(target_os = "linux")]
-fn fallback_high_performance_gpu_environment() -> Vec<(String, String)> {
-    [
-        ("DRI_PRIME", "1"),
-        ("__NV_PRIME_RENDER_OFFLOAD", "1"),
-        ("__VK_LAYER_NV_optimus", "NVIDIA_only"),
-        ("__GLX_VENDOR_LIBRARY_NAME", "nvidia"),
-    ]
-    .into_iter()
-    .map(|(key, value)| (key.to_string(), value.to_string()))
-    .collect()
+    let gpus = gpus
+        .into_iter()
+        .map(|mut gpu| gpu_environment::GpuEnvironment {
+            is_default: gpu
+                .get("Default")
+                .and_then(|value| bool::try_from(value).ok()),
+            name: gpu
+                .remove("Name")
+                .and_then(|value| String::try_from(value).ok())
+                .unwrap_or_default(),
+            environment: gpu
+                .remove("Environment")
+                .and_then(|value| Vec::<String>::try_from(value).ok())
+                .unwrap_or_default(),
+        })
+        .collect();
+    Ok(gpu_environment::select_offload_environment(gpus))
 }
 
 /// Mojang/HMCL ordered rule semantics: an empty list allows, a non-empty list
@@ -2645,10 +2647,11 @@ pub async fn launch_minecraft(
 
     java_environment::configure_java_environment(command.as_std_mut());
 
-    command.envs(env_args);
-
     #[cfg(target_os = "linux")]
     command.envs(high_performance_gpu_environment);
+
+    // Explicit instance choices override automatic GPU selection.
+    command.envs(env_args);
 
     // Overwrites the minecraft options.txt file with the settings from the profile
     // Uses 'a:b' syntax which is not quite yaml
