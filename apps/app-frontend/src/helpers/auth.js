@@ -141,6 +141,6 @@ export async function remove_user(user) {
  * Returns a list of users
  * @returns {Promise<Credential[]>}
  */
-export async function users(offlineMode = false) {
-    return await invoke('plugin:auth|get_users', { offlineMode })
+export async function users(offlineMode = false, cachedOnly = false) {
+    return await invoke('plugin:auth|get_users', { offlineMode, cachedOnly })
 }

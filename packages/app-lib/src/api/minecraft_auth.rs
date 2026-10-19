@@ -1,5 +1,7 @@
 //! Authentication flow interface
 
+mod profile_cache;
+
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -270,6 +272,11 @@ pub async fn remove_user(account_id: &str) -> crate::Result<()> {
     {
         let user = users.remove(index);
         Credentials::remove(account_id, &state.pool).await?;
+        profile_cache::remove(
+            &state.directories.caches_dir().join("minecraft-profiles"),
+            &user,
+        )
+        .await;
 
         if user.active
             && let Some(mut user) = users.into_iter().next()
@@ -295,8 +302,23 @@ pub struct MinecraftUser {
 }
 
 impl MinecraftUser {
-    async fn from_credentials(credentials: Credentials) -> Self {
-        let profile = (*credentials.maybe_online_profile().await).clone();
+    async fn from_credentials(
+        credentials: Credentials,
+        cached_only: bool,
+        cache_dir: &std::path::Path,
+    ) -> Self {
+        let cached = profile_cache::read(cache_dir, &credentials).await;
+        let profile = if cached_only {
+            cached.unwrap_or_else(|| credentials.offline_profile.clone())
+        } else {
+            let profile = (*credentials.maybe_online_profile().await).clone();
+            if !profile.skins.is_empty() {
+                profile_cache::write(cache_dir, &credentials, &profile).await;
+                profile
+            } else {
+                cached.unwrap_or(profile)
+            }
+        };
         Self {
             account_id: credentials.account_id(),
             profile,
@@ -314,8 +336,17 @@ impl MinecraftUser {
 /// serialization.
 #[tracing::instrument]
 pub async fn users(offline_mode: bool) -> crate::Result<Vec<MinecraftUser>> {
+    users_with_cache(offline_mode, false).await
+}
+
+/// Reads saved account and skin metadata without refreshing tokens or making
+/// profile requests when `cached_only` is set.
+pub async fn users_with_cache(
+    offline_mode: bool,
+    cached_only: bool,
+) -> crate::Result<Vec<MinecraftUser>> {
     let state = State::get().await?;
-    let users = if offline_mode {
+    let users = if offline_mode || cached_only {
         Credentials::get_all_without_refresh(&state.pool).await?
     } else {
         Credentials::get_all(&state.pool).await?
@@ -324,8 +355,16 @@ pub async fn users(offline_mode: bool) -> crate::Result<Vec<MinecraftUser>> {
         .into_iter()
         .filter(|credentials| !offline_mode || credentials.is_offline());
     let mut hydrated_users = Vec::new();
+    let cache_dir = state.directories.caches_dir().join("minecraft-profiles");
     for credentials in credentials {
-        hydrated_users.push(MinecraftUser::from_credentials(credentials).await);
+        hydrated_users.push(
+            MinecraftUser::from_credentials(
+                credentials,
+                cached_only,
+                &cache_dir,
+            )
+            .await,
+        );
     }
     Ok(hydrated_users)
 }
