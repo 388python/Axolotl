@@ -846,7 +846,9 @@ function handleCheckboxClick(instanceId, event) {
 }
 
 const batchDeleteConfirmModal = ref(null)
-const batchDeleteTargets = ref<Pick<GameInstance, 'id' | 'name'>[]>([])
+const batchDeleteTargets = ref<
+    Pick<GameInstance, 'id' | 'name' | 'icon_path' | 'loader' | 'game_version' | 'path'>[]
+>([])
 
 function showBatchDeleteConfirmation() {
     if (busy.value) return
@@ -855,7 +857,14 @@ function showBatchDeleteConfirmation() {
         .filter(
             (instance) => selectedInstanceIds.value.has(instance.id) && visibleIds.has(instance.id),
         )
-        .map(({ id, name }) => ({ id, name }))
+        .map(({ id, name, icon_path, loader, game_version, path }) => ({
+            id,
+            name,
+            icon_path,
+            loader,
+            game_version,
+            path,
+        }))
     if (batchDeleteTargets.value.length > 0) batchDeleteConfirmModal.value?.show()
 }
 

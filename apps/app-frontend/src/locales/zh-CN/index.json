@@ -1,4 +1,34 @@
 {
+  "app.content-favorites.browse-resources": {
+    "message": "浏览资源"
+  },
+  "app.content-favorites.clear-filters": {
+    "message": "清除搜索和筛选"
+  },
+  "app.downloads.file-details": {
+    "message": "文件详情"
+  },
+  "app.downloads.open-file-details": {
+    "message": "查看 {name} 的详情"
+  },
+  "app.downloads.copy-file-details": {
+    "message": "复制文件详情"
+  },
+  "app.downloads.job-id": {
+    "message": "任务 ID"
+  },
+  "app.downloads.instance-id": {
+    "message": "实例 ID"
+  },
+  "app.downloads.project-id": {
+    "message": "项目 ID"
+  },
+  "app.downloads.version-id": {
+    "message": "版本 ID"
+  },
+  "app.downloads.request-url": {
+    "message": "请求地址"
+  },
   "instance.settings.general.name-required": {
     "message": "请输入不超过 80 个字符的名称。"
   },

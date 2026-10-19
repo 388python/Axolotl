@@ -280,6 +280,7 @@ onUnmounted(() => {
         ref="deleteConfirmModal"
         :instance-id="currentDeleteInstance?.id"
         :symlink-target="currentDeleteInstance?.symlink_target"
+        :instances="currentDeleteInstance ? [currentDeleteInstance] : []"
         :delete-action="deleteInstance"
     />
     <div ref="rowContainer" class="flex flex-col gap-4">

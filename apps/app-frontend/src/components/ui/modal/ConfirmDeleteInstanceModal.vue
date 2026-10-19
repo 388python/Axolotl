@@ -28,10 +28,45 @@
         <Admonition v-else type="critical">
             {{ formatMessage(messages.symlinkDeleteWarning, { path: symlinkTarget }) }}
         </Admonition>
-        <ul v-if="instances.length" class="m-0 max-h-48 overflow-y-auto pl-5">
-            <li v-for="instance in instances" :key="instance.id" class="mb-2 break-words">
-                <span class="font-semibold">{{ instance.name }}</span>
-                <div class="text-sm text-[var(--color-text-tertiary)]">{{ instance.id }}</div>
+        <ul
+            v-if="instances.length"
+            class="m-0 flex max-h-48 list-none flex-col gap-3 overflow-y-auto p-0"
+        >
+            <li
+                v-for="instance in instances"
+                :key="instance.id"
+                class="flex min-w-0 items-start gap-3"
+            >
+                <InstanceIcon
+                    :instance-id="instance.id"
+                    :icon-path="instance.icon_path"
+                    :loader="instance.loader"
+                    class="size-10 shrink-0"
+                />
+                <div class="min-w-0 flex-1">
+                    <div
+                        class="break-words font-semibold text-[var(--color-text-primary)] [overflow-wrap:anywhere]"
+                    >
+                        {{ instance.name }}
+                    </div>
+                    <div
+                        v-if="instance.loader || instance.game_version"
+                        class="text-sm capitalize text-[var(--color-text-tertiary)]"
+                    >
+                        {{ instance.loader }} {{ instance.game_version }}
+                    </div>
+                    <div
+                        v-if="
+                            instance.path &&
+                            instances.some(
+                                (other) => other.id !== instance.id && other.name === instance.name,
+                            )
+                        "
+                        class="break-words text-sm text-[var(--color-text-tertiary)] [overflow-wrap:anywhere]"
+                    >
+                        {{ instance.path }}
+                    </div>
+                </div>
             </li>
         </ul>
         <p v-if="backupSummary?.snapshot_count" class="m-0 text-[var(--color-text-tertiary)]">
@@ -56,7 +91,9 @@ import {
 } from '@modrinth/ui'
 import { ref } from 'vue'
 
+import InstanceIcon from '@/components/ui/InstanceIcon.vue'
 import { type BackupDeleteSummary, getBackupDeleteSummary } from '@/helpers/instance-backup'
+import type { GameInstance } from '@/helpers/types'
 
 const { formatMessage } = useVIntl()
 const formatBytes = useFormatBytes()
@@ -67,7 +104,8 @@ const props = withDefaults(
         instanceId?: string | null
         symlinkTarget?: string | null
         count?: number
-        instances?: { id: string; name: string }[]
+        instances?: (Pick<GameInstance, 'id' | 'name'> &
+            Partial<Pick<GameInstance, 'icon_path' | 'loader' | 'game_version' | 'path'>>)[]
     }>(),
     {
         instanceId: null,

@@ -40,6 +40,7 @@ vi.mock('@/helpers/install', () => ({ install_duplicate_instance: vi.fn() }))
 vi.mock('@/helpers/analytics', () => ({ trackEvent: vi.fn() }))
 vi.mock('@/helpers/utils.js', () => ({ showInstanceInFolder: vi.fn() }))
 vi.mock('@/components/ui/modal/InstanceGroupModal.vue', () => ({ default: { render: () => null } }))
+vi.mock('@/components/ui/InstanceIcon.vue', () => ({ default: { render: () => null } }))
 vi.mock('@/components/ui/ContextMenu.vue', () => ({ default: { render: () => null } }))
 vi.mock('@dnd-kit/vue', async () => {
     const { defineComponent, h } = await import('vue')

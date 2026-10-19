@@ -1,4 +1,34 @@
 {
+  "app.content-favorites.browse-resources": {
+    "message": "Browse resources"
+  },
+  "app.content-favorites.clear-filters": {
+    "message": "Clear search and filters"
+  },
+  "app.downloads.file-details": {
+    "message": "File details"
+  },
+  "app.downloads.open-file-details": {
+    "message": "View details for {name}"
+  },
+  "app.downloads.copy-file-details": {
+    "message": "Copy file details"
+  },
+  "app.downloads.job-id": {
+    "message": "Task ID"
+  },
+  "app.downloads.instance-id": {
+    "message": "Instance ID"
+  },
+  "app.downloads.project-id": {
+    "message": "Project ID"
+  },
+  "app.downloads.version-id": {
+    "message": "Version ID"
+  },
+  "app.downloads.request-url": {
+    "message": "Request URL"
+  },
   "instance.settings.general.name-required": {
     "message": "Enter a name with no more than 80 characters."
   },

@@ -124,6 +124,14 @@ const projectsLoadFailed = ref(false)
 const hasProjectsSnapshot = ref(!!browseReturnSnapshot)
 
 const messages = defineMessages({
+    browseResources: {
+        id: 'app.content-favorites.browse-resources',
+        defaultMessage: 'Browse resources',
+    },
+    clearFilters: {
+        id: 'app.content-favorites.clear-filters',
+        defaultMessage: 'Clear search and filters',
+    },
     loadFailed: {
         id: 'app.content-favorites.load-failed',
         defaultMessage: 'Failed to load favorites',
@@ -265,6 +273,15 @@ function updateQuery(values: Record<string, string | undefined>) {
             ...values,
         },
     })
+}
+
+function browseResources() {
+    const { q: _q, kind: _kind, page: _page, ...query } = route.query
+    void router.push({ path: '/browse/mod', query })
+}
+
+function clearFilters() {
+    updateQuery({ q: undefined, kind: undefined, page: undefined })
 }
 
 const search = computed({
@@ -845,13 +862,25 @@ onMounted(async () => {
             type="empty-inbox"
             :heading="formatMessage(messages.emptyTitle)"
             :description="formatMessage(messages.emptyDescription)"
-        />
+        >
+            <template #actions>
+                <Button type="colored" color="brand" @click="browseResources">{{
+                    formatMessage(messages.browseResources)
+                }}</Button>
+            </template>
+        </EmptyState>
         <EmptyState
             v-else-if="filteredProjects.length === 0"
             type="no-search-result"
             :heading="formatMessage(messages.noMatchesTitle)"
             :description="formatMessage(messages.noMatchesDescription)"
-        />
+        >
+            <template #actions>
+                <Button type="outlined" @click="clearFilters">{{
+                    formatMessage(messages.clearFilters)
+                }}</Button>
+            </template>
+        </EmptyState>
         <ProjectCardList v-else :layout="displayMode">
             <ProjectCard
                 v-for="project in pagedProjects"

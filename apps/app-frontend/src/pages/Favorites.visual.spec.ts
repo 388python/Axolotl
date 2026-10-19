@@ -4,13 +4,20 @@ import { afterEach, expect, it, vi } from 'vitest'
 import Favorites from './Favorites.vue'
 
 const fixture = vi.hoisted(() => ({
+    query: {} as Record<string, string>,
+    push: vi.fn(),
+    replace: vi.fn(),
     load: vi.fn(),
     metadata: vi.fn(),
     refresh: null as null | (() => void),
 }))
 vi.mock('vue-router', () => ({
-    useRoute: () => ({ query: {}, fullPath: '/browse/favorites', path: '/browse/favorites' }),
-    useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+    useRoute: () => ({
+        query: fixture.query,
+        fullPath: '/browse/favorites',
+        path: '/browse/favorites',
+    }),
+    useRouter: () => ({ replace: fixture.replace, push: fixture.push }),
     onBeforeRouteLeave: () => {},
 }))
 vi.mock('@/store/breadcrumbs', () => ({
@@ -141,6 +148,7 @@ const wrappers: ReturnType<typeof mount>[] = []
 afterEach(() => {
     wrappers.splice(0).forEach((wrapper) => wrapper.unmount())
     vi.clearAllMocks()
+    fixture.query = {}
 })
 function render() {
     const wrapper = mount(Favorites, { global: { directives: { tooltip: {} } } })
@@ -174,4 +182,43 @@ it('preserves existing favorites after refresh failure and keeps item metadata f
     await flushPromises()
     await vi.waitFor(() => expect(wrapper.find('[role="alert"]').exists()).toBe(true))
     expect(wrapper.findAll('[data-favorite]')).toHaveLength(1)
+})
+
+it('starts browsing from an empty collection while preserving the installation target', async () => {
+    fixture.query = {
+        i: 'selected-instance',
+        q: 'old query',
+        kind: 'shader',
+        page: '3',
+        server: 'target',
+    }
+    fixture.load.mockResolvedValue([])
+    const wrapper = render()
+    await vi.waitFor(() => expect(wrapper.text()).toContain('No favorites yet'))
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Browse resources')!
+        .trigger('click')
+    expect(fixture.push).toHaveBeenCalledWith({
+        path: '/browse/mod',
+        query: { i: 'selected-instance', server: 'target' },
+    })
+})
+
+it('clears search and filters together without deleting favorites or losing the target', async () => {
+    fixture.query = { i: 'selected-instance', q: 'no-match', kind: 'shader', page: '2' }
+    fixture.load.mockResolvedValue([
+        { provider: 'modrinth', project_id: 'one', content_type: 'mod', saved_at: 1 },
+    ])
+    fixture.metadata.mockRejectedValue(new Error('unavailable'))
+    const wrapper = render()
+    await vi.waitFor(() => expect(wrapper.text()).toContain('No matching favorites'))
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Clear search and filters')!
+        .trigger('click')
+    expect(fixture.replace).toHaveBeenCalledWith({
+        query: { i: 'selected-instance', q: undefined, kind: undefined, page: undefined },
+    })
+    expect(fixture.push).not.toHaveBeenCalled()
 })
