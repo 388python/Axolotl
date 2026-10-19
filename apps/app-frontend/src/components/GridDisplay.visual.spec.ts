@@ -6,7 +6,12 @@ import type { GameInstance } from '@/helpers/types'
 
 import GridDisplay from './GridDisplay.vue'
 
-const backend = vi.hoisted(() => ({ remove: vi.fn(), instances: [] as string[] }))
+const backend = vi.hoisted(() => ({
+    remove: vi.fn(),
+    instances: [] as string[],
+    processes: vi.fn(async () => []),
+    processListener: vi.fn(async () => () => {}),
+}))
 vi.mock('@/helpers/instance', () => ({
     remove: backend.remove,
     kill: vi.fn(),
@@ -16,10 +21,10 @@ vi.mock('@/helpers/instance', () => ({
 vi.mock('@/helpers/instance-backup', () => ({ getBackupDeleteSummary: async () => null }))
 vi.mock('@/helpers/events', () => ({
     instance_groups_listener: async () => () => {},
-    process_listener: async () => () => {},
+    process_listener: backend.processListener,
 }))
 vi.mock('@/helpers/process', () => ({
-    get_all: async () => [],
+    get_all: backend.processes,
     get_by_instance_id: async () => [],
 }))
 vi.mock('@/helpers/instance-groups', () => ({
@@ -145,6 +150,38 @@ const mounted: ReturnType<typeof mount>[] = []
 afterEach(() => {
     mounted.splice(0).forEach((wrapper) => wrapper.unmount())
     localStorage.clear()
+    backend.processes.mockReset().mockResolvedValue([])
+    backend.processListener.mockReset().mockResolvedValue(() => {})
+})
+
+it('does not register a process listener after unmount during the initial read', async () => {
+    let finish!: (value: []) => void
+    backend.processes.mockReturnValueOnce(
+        new Promise((resolve) => {
+            finish = resolve
+        }),
+    )
+    const wrapper = mount(GridDisplay, { props: { instances: [] } })
+    wrapper.unmount()
+    finish([])
+    await flushPromises()
+    expect(backend.processListener).not.toHaveBeenCalled()
+})
+
+it('immediately releases a process listener that registers after unmount', async () => {
+    let finish!: (value: () => void) => void
+    backend.processListener.mockReturnValueOnce(
+        new Promise((resolve) => {
+            finish = resolve
+        }),
+    )
+    const wrapper = mount(GridDisplay, { props: { instances: [] } })
+    await flushPromises()
+    wrapper.unmount()
+    const dispose = vi.fn()
+    finish(dispose)
+    await flushPromises()
+    expect(dispose).toHaveBeenCalledOnce()
 })
 
 async function library() {

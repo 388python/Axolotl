@@ -41,6 +41,7 @@ const hasLogs = computed(() => consoleState.output.value.length > 0)
 const isForge = computed(() => props.server.serverType === 'forge')
 const jlineInput = ref<InstanceType<typeof JLineCommandInput> | null>(null)
 let consumedLines = 0
+let disposed = false
 // Guards the live length-watcher from double-appending while we rebuild the
 // console from the buffer during (re)hydration. Without it, the async
 // hydrate fetch and the streamed `logLines` updates race, dropping or
@@ -73,8 +74,10 @@ watch(
 async function hydrateAndDisplay() {
     hydrating = true
     try {
-        await hydrateLog(props.server.id)
-        const buffer = logLines[props.server.id] ?? []
+        const serverId = props.server.id
+        await hydrateLog(serverId)
+        if (disposed || props.server.id !== serverId) return
+        const buffer = logLines[serverId] ?? []
         if (buffer.length > 0) await consoleState.addLegacyLog(buffer.join('\n'))
         consumedLines = buffer.length
     } finally {
@@ -87,21 +90,23 @@ async function hydrateAndDisplay() {
 // buffer. This guarantees the console always shows the complete history,
 // including the server's startup and command responses that arrived in a
 // single fast burst.
-let syncTimer: ReturnType<typeof setInterval> | null = null
+let syncTimer: ReturnType<typeof setTimeout> | null = null
 function startSync() {
     stopSync()
-    syncTimer = setInterval(() => {
-        if (hydrating) return
-        if (!props.server.running) {
-            stopSync()
-            return
+    if (disposed || !props.server.running) return
+    syncTimer = setTimeout(async () => {
+        syncTimer = null
+        if (disposed || !props.server.running) return
+        try {
+            if (!hydrating) await hydrateLog(props.server.id)
+        } finally {
+            startSync()
         }
-        void hydrateLog(props.server.id)
     }, 1000)
 }
 function stopSync() {
     if (syncTimer) {
-        clearInterval(syncTimer)
+        clearTimeout(syncTimer)
         syncTimer = null
     }
 }
@@ -109,12 +114,15 @@ function stopSync() {
 onMounted(async () => {
     flushConsoleOutput()
     await hydrateAndDisplay()
+    if (disposed) return
     loading.value = false
     startSync()
 })
 
 onUnmounted(() => {
+    disposed = true
     stopSync()
+    consoleState.clear()
     unsubscribeConsoleOutput?.()
 })
 
@@ -154,11 +162,13 @@ watch(
     () => props.server.running,
     async (running, previousRunning) => {
         if (!running) {
+            stopSync()
             pendingConsoleOutput = new ServerConsoleBuffer(PENDING_CONSOLE_OUTPUT_CAPACITY)
             return
         }
         if (previousRunning) return
         await nextTick()
+        if (disposed) return
         flushConsoleOutput()
         consoleState.clear()
         consumedLines = 0
@@ -167,6 +177,8 @@ watch(
         // would be rehydrated into the fresh console on every restart.
         logLines[props.server.id] = []
         await hydrateAndDisplay()
+        if (disposed) return
+        startSync()
         consoleLayout.value?.scrollToBottom()
     },
 )

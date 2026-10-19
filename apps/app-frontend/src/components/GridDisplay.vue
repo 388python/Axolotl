@@ -192,10 +192,11 @@ const displayMode = ref(getLastLibraryDisplayMode())
 const runningInstanceIds = ref(new Set<string>())
 const startingInstanceIds = ref(new Set<string>())
 let unlistenProcesses: (() => void) | undefined
+let disposed = false
 
 async function refreshRunningInstances() {
     const processes = await get_all().catch(handleError)
-    if (processes)
+    if (processes && !disposed)
         runningInstanceIds.value = new Set(processes.map((process) => process.instance_id))
 }
 
@@ -208,14 +209,20 @@ function setInstanceRunning(instanceId: string, running: boolean) {
 
 onMounted(async () => {
     await refreshRunningInstances()
-    unlistenProcesses = await process_listener((event: { instance_id: string; event: string }) => {
-        if (event.event === 'launched' || event.event === 'finished') {
+    if (disposed) return
+    const unlisten = await process_listener((event: { instance_id: string; event: string }) => {
+        if (!disposed && (event.event === 'launched' || event.event === 'finished')) {
             runningInstanceIds.value = updateRunningInstanceIds(runningInstanceIds.value, event)
         }
     })
+    if (disposed) unlisten()
+    else unlistenProcesses = unlisten
 })
 
-onUnmounted(() => unlistenProcesses?.())
+onUnmounted(() => {
+    disposed = true
+    unlistenProcesses?.()
+})
 
 function removeGroup(groupKey: string) {
     if (groupKey === FAVORITES_GROUP_ID) return
