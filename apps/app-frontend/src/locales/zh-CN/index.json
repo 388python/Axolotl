@@ -1,4 +1,13 @@
 {
+  "app.settings.logs.export.modal.network-connections": {
+    "message": "网络连接"
+  },
+  "app.settings.logs.export.modal.network-connections-hint": {
+    "message": "导出时使用启动器网络设置重新测试所有服务，包含短时下载采样。"
+  },
+  "app.settings.logs.export.modal.exporting": {
+    "message": "正在导出…"
+  },
   "app.settings.network.title": {
     "message": "连接测试"
   },
@@ -9354,7 +9363,7 @@
     "message": "崩溃分析（检测到崩溃时）"
   },
   "app.settings.logs.export.modal.description": {
-    "message": "选择要包含的详细程度。导出的日志会把访问令牌、Minecraft 令牌与 IP 地址替换为占位符。"
+    "message": "选择要包含的详细程度。账户凭据会替换为占位符；日志中的 IP 地址会隐藏，网络连接报告中的 IP 地址会完整保留。"
   },
   "app.settings.logs.export.modal.extras": {
     "message": "附加信息"

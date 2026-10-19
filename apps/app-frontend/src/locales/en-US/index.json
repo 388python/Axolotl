@@ -1,4 +1,13 @@
 {
+  "app.settings.logs.export.modal.network-connections": {
+    "message": "Network connections"
+  },
+  "app.settings.logs.export.modal.network-connections-hint": {
+    "message": "Run fresh tests for all services using launcher network settings when exporting, including a short download sample."
+  },
+  "app.settings.logs.export.modal.exporting": {
+    "message": "Exporting…"
+  },
   "app.settings.network.title": {
     "message": "Connection tests"
   },
@@ -11166,7 +11175,7 @@
     "message": "Crash analysis (when a crash is detected)"
   },
   "app.settings.logs.export.modal.description": {
-    "message": "Choose how much detail to include. Exported logs have access tokens, Minecraft tokens, and IP addresses replaced with placeholders."
+    "message": "Choose how much detail to include. Credentials are replaced with placeholders. IP addresses are hidden in logs and preserved in network connection reports."
   },
   "app.settings.logs.export.modal.extras": {
     "message": "Additional information"

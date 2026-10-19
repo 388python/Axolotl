@@ -672,6 +672,13 @@ fn read_file_tail(path: &Path, max_bytes: u64) -> crate::Result<String> {
 }
 
 pub(crate) async fn censor_support_text(
+    text: String,
+    pool: &sqlx::SqlitePool,
+) -> crate::Result<String> {
+    Ok(censor_ip_addresses(censor_credentials(text, pool).await?))
+}
+
+pub(crate) async fn censor_credentials(
     mut text: String,
     pool: &sqlx::SqlitePool,
 ) -> crate::Result<String> {
@@ -690,8 +697,6 @@ pub(crate) async fn censor_support_text(
     for token in minecraft_tokens(pool).await? {
         replace_nonempty(&mut text, &token, "{MINECRAFT_TOKEN}");
     }
-
-    text = censor_ip_addresses(text);
 
     Ok(text)
 }
@@ -839,5 +844,48 @@ mod tests {
             censor_support_text(log.to_string(), &pool).await.unwrap();
 
         assert_eq!(censored, log);
+    }
+
+    #[tokio::test]
+    async fn network_report_preserves_ips_while_censoring_credentials() {
+        let pool = test_pool().await;
+        insert_online_account(&pool, "microsoft", "ms-access", "ms-refresh")
+            .await;
+        insert_online_account(&pool, "yggdrasil", "ygg-access", "ygg-refresh")
+            .await;
+        ModrinthCredentials {
+            session: "modrinth-session".to_string(),
+            expires: chrono::Utc::now(),
+            user_id: "test-user".to_string(),
+            active: true,
+        }
+        .upsert(&pool)
+        .await
+        .unwrap();
+        let report = serde_json::json!({
+            "resolved_ips": ["192.0.2.1", "2001:db8::1"],
+            "peer_ip": "2001:db8::2",
+            "details": "ms-access ms-refresh ygg-access ygg-refresh modrinth-session",
+        });
+
+        let censored =
+            censor_credentials(report.to_string(), &pool).await.unwrap();
+        let censored: serde_json::Value =
+            serde_json::from_str(&censored).unwrap();
+
+        assert_eq!(censored["resolved_ips"], report["resolved_ips"]);
+        assert_eq!(censored["peer_ip"], report["peer_ip"]);
+        assert_eq!(
+            censored["details"],
+            "{MINECRAFT_TOKEN} {MINECRAFT_TOKEN} {MINECRAFT_TOKEN} {MINECRAFT_TOKEN} {MODRINTH_ACCESS_TOKEN}"
+        );
+
+        let log = censor_support_text(report.to_string(), &pool)
+            .await
+            .unwrap();
+        assert!(!log.contains("192.0.2.1"));
+        assert!(!log.contains("2001:db8::1"));
+        assert!(!log.contains("2001:db8::2"));
+        assert!(!log.contains("ms-access"));
     }
 }

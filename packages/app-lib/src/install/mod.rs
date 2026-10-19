@@ -57,6 +57,14 @@ pub async fn censor_shared_text(
     diagnostics::censor_support_text(text, &state.pool).await
 }
 
+/// Replaces credentials while preserving IP addresses for network diagnostics.
+pub async fn censor_shared_credentials(
+    text: String,
+    state: &crate::State,
+) -> crate::Result<String> {
+    diagnostics::censor_credentials(text, &state.pool).await
+}
+
 /// Runs fallible work with bounded concurrency without dropping peer futures
 /// after the first error. The cancellation token is tripped immediately so
 /// producers stop adding work, while every already buffered task still gets
