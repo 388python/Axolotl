@@ -354,6 +354,23 @@ pub(crate) async fn refresh_snapshot(
     instance_id: &str,
     cancel: &CancellationToken,
 ) -> ResourceResult<()> {
+    refresh_snapshot_with_verification(state, instance_id, cancel, true).await
+}
+
+pub(crate) async fn refresh_install_snapshot(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+) -> ResourceResult<()> {
+    refresh_snapshot_with_verification(state, instance_id, cancel, false).await
+}
+
+async fn refresh_snapshot_with_verification(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+    verify_all: bool,
+) -> ResourceResult<()> {
     use crate::state::instances::adapters::sqlite::content_rows;
     use crate::state::{
         ContentOwnershipKind, ContentRequirement, ContentSourceKind,
@@ -361,11 +378,19 @@ pub(crate) async fn refresh_snapshot(
     if cancel.is_cancelled() {
         return Err(ResourceError::Canceled);
     }
-    crate::state::instances::commands::sync_content_files_for_operation(
-        instance_id,
-        state,
-    )
-    .await?;
+    if verify_all {
+        crate::state::instances::commands::sync_content_files_for_operation(
+            instance_id,
+            state,
+        )
+        .await?;
+    } else {
+        crate::state::instances::commands::sync_content_files(
+            instance_id,
+            state,
+        )
+        .await?;
+    }
     let _writer = state.acquire_install_db_permit().await?;
     let _lock = state.lock_instance_content_exclusive(instance_id).await;
     let scope = crate::state::instances::commands::resolve_content_scope(
@@ -450,6 +475,17 @@ pub(crate) async fn hydrate_selected(
     selected: Option<&[InstalledEntryId]>,
 ) -> ResourceResult<HydratedInstalled> {
     let service = state.resources().await?;
+    hydrate_selected_with_service(state, instance_id, cancel, selected, service)
+        .await
+}
+
+pub(crate) async fn hydrate_selected_with_service(
+    state: &crate::State,
+    instance_id: &str,
+    cancel: &CancellationToken,
+    selected: Option<&[InstalledEntryId]>,
+    service: &std::sync::Arc<ResourceService>,
+) -> ResourceResult<HydratedInstalled> {
     let revision = plans::instance_revision(&state.pool, instance_id).await?;
     let scope = crate::state::instances::commands::resolve_content_scope(
         instance_id,
@@ -493,15 +529,9 @@ pub(crate) async fn hydrate_selected(
                         && entry.artifact.as_ref() == Some(&artifact.reference)
                 })
         {
-            if let Some(reference) = &entry.artifact
-                && let Ok(document) = service
-                    .project_document(&reference.release.project, None, cancel)
-                    .await
-            {
-                service
-                    .confirm_counterpart(&document.metadata, cancel)
-                    .await?;
-            }
+            // The snapshot and exact artifact already agree. Installing an
+            // unrelated project must not re-fetch this entry's presentation or
+            // probe its counterpart on another source.
             continue;
         }
         let bytes =
@@ -775,7 +805,8 @@ pub(crate) async fn hydrate_selected(
                 continue;
             }
         };
-        service.confirm_counterpart(&metadata, cancel).await?;
+        // Hash matches below can confirm counterparts without a separate
+        // project-history probe for every file in the instance.
         if !metadata.types.contains(&entry.resource_type) {
             entry.artifact = None;
             continue;

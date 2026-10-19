@@ -1844,6 +1844,26 @@ async fn optional_installed_status_requires_the_declared_release_enabled_file_an
             } else {
                 DependencyNodeState::OptionalCandidate
             }));
+        if valid {
+            let dependency = result
+                .plan
+                .nodes
+                .iter()
+                .find(|node| node.state == DependencyNodeState::Satisfied)
+                .unwrap();
+            assert_eq!(
+                dependency.compatibility.game_version,
+                CompatibilityState::Compatible
+            );
+            assert_eq!(
+                dependency.compatibility.loader,
+                CompatibilityState::Compatible
+            );
+            assert_eq!(
+                dependency.declared_compatibility.as_ref(),
+                Some(&current.compatibility)
+            );
+        }
     }
     service.cache().close().await;
 }

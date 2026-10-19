@@ -1,6 +1,92 @@
 use super::*;
 
 #[tokio::test]
+async fn retained_parents_share_dependency_lookups_without_a_disk_cache() {
+    struct BatchRecorder {
+        provider: Arc<PlanProvider>,
+        sizes: Mutex<Vec<usize>>,
+    }
+    #[async_trait]
+    impl ResourceProvider for BatchRecorder {
+        fn source(&self) -> ResourceSource {
+            self.provider.source()
+        }
+        fn namespace(&self) -> String {
+            self.provider.namespace()
+        }
+        fn batch_limit(&self, query: &ProviderQuery) -> usize {
+            self.provider.batch_limit(query)
+        }
+        async fn fetch_many(
+            &self,
+            queries: &[ProviderQuery],
+        ) -> Vec<ResourceResult<ProviderValue>> {
+            self.sizes.lock().unwrap().push(queries.len());
+            self.provider.fetch_many(queries).await
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    // Opening a directory as SQLite disables the rebuildable disk cache.
+    let cache = Arc::new(
+        cache::ResourceCache::open(directory.path().to_path_buf()).await,
+    );
+    let child = release("shared00", "1", 'c');
+    let mut parents = Vec::new();
+    for index in 0..40 {
+        let mut parent = release(&format!("parent{index:02}"), "1", 'a');
+        requires(&mut parent, &child, ResourceDependencyKind::Required);
+        parents.push(parent);
+    }
+    let provider = Arc::new(PlanProvider {
+        source: SourceId::modrinth(),
+        releases: [parents.clone(), vec![child.clone()]].concat(),
+        requests: Mutex::new(Vec::new()),
+    });
+    let recorder = Arc::new(BatchRecorder {
+        provider: provider.clone(),
+        sizes: Mutex::new(Vec::new()),
+    });
+    let service = ResourceService::new(cache, vec![recorder.clone()]).unwrap();
+    let entries: Vec<_> = parents
+        .iter()
+        .enumerate()
+        .map(|(index, parent)| {
+            installed(
+                parent,
+                &format!("entry-{index}"),
+                &format!("mods/parent-{index}.jar"),
+            )
+        })
+        .collect();
+    let requirements = service
+        .retained_requirements(
+            &[],
+            &entries,
+            &HashMap::new(),
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(requirements.len(), 40);
+    assert!(requirements.iter().all(|requirement| requirement.resource
+        == ResourceRef::Source {
+            project: child.reference.project.clone(),
+        }));
+    let requests = provider.requests.lock().unwrap();
+    assert_eq!(requests.iter().filter(|query| matches!(query, ProviderQuery::Project { id, .. } if id == &child.reference.project.project_id)).count(), 1);
+    assert_eq!(
+        requests
+            .iter()
+            .filter(|query| matches!(query, ProviderQuery::Release { .. }))
+            .count(),
+        41
+    );
+    drop(requests);
+    assert_eq!(*recorder.sizes.lock().unwrap(), vec![40, 1, 1]);
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn constraints_from_deeper_parents_reselect_the_shared_dependency_in_both_root_orders()
  {
     let mut a = release("root0000", "1", 'a');

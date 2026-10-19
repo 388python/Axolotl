@@ -129,30 +129,6 @@ async fn sync_instance_content_files_with_verification(
         .iter()
         .map(|file| file.relative_path.clone())
         .collect::<HashSet<_>>();
-    let cache_keys = scanned
-        .iter()
-        .map(|file| file.hash_cache_key.as_str())
-        .collect::<Vec<_>>();
-    let hashes = CachedEntry::get_file_hash_many(
-        &cache_keys,
-        None,
-        &state.pool,
-        &state.api_semaphore,
-    )
-    .await?;
-    let hashes_by_key = hashes
-        .into_iter()
-        .map(|hash| {
-            (
-                format!(
-                    "{}-{}",
-                    hash.size,
-                    hash.path.trim_end_matches(".disabled")
-                ),
-                hash,
-            )
-        })
-        .collect::<HashMap<_, _>>();
     let existing_files =
         sqlite::content_rows::get_instance_files(&instance.id, &state.pool)
             .await?;
@@ -166,6 +142,37 @@ async fn sync_instance_content_files_with_verification(
             .push(file.clone());
         existing_files_by_path.insert(file.relative_path.clone(), file);
     }
+    // A cache miss computes a hash. Only ask for new paths here; existing
+    // rows are reused or rehashed below according to the watcher snapshot.
+    let cache_keys: Vec<_> = scanned
+        .iter()
+        .filter(|file| {
+            !verify_all
+                && !existing_files_by_path.contains_key(&file.relative_path)
+                && !content_path_is_dirty(&file.relative_path, &dirty_paths)
+        })
+        .map(|file| file.hash_cache_key.as_str())
+        .collect();
+    let hashes = CachedEntry::get_file_hash_many(
+        &cache_keys,
+        Some(CacheBehaviour::CacheOnly),
+        &state.pool,
+        &state.api_semaphore,
+    )
+    .await?;
+    let hashes_by_key: HashMap<_, _> = hashes
+        .into_iter()
+        .map(|hash| {
+            (
+                format!(
+                    "{}-{}",
+                    hash.size,
+                    hash.path.trim_end_matches(".disabled")
+                ),
+                hash,
+            )
+        })
+        .collect();
     let content_set = sqlite::content_rows::get_applied_content_set(
         &instance.id,
         &state.pool,
@@ -197,6 +204,7 @@ async fn sync_instance_content_files_with_verification(
         let (scanned_sha1, scanned_size) = if let Some(existing_file) =
             existing_file
             && !verify_all
+            && !existing_file.missing
             && existing_file.size == file.size
             && !content_path_is_dirty(&file.relative_path, &dirty_paths)
         {

@@ -736,8 +736,9 @@ defineExpose({ show, showInstall, showInstallSelection, cancel })
                 </p>
                 <template
                     v-if="
-                        node.compatibility.gameVersion !== 'compatible' ||
-                        node.compatibility.loader !== 'compatible'
+                        node.artifact &&
+                        (node.compatibility.gameVersion !== 'compatible' ||
+                            node.compatibility.loader !== 'compatible')
                     "
                 >
                     <p class="m-0 text-sm">

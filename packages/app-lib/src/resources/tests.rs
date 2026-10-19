@@ -2599,8 +2599,7 @@ async fn real_http_batches_and_reopened_sqlite_cache_obey_force_refresh() {
 }
 
 #[tokio::test]
-async fn selected_counterparts_confirm_historical_bytes_in_both_directions_without_trusting_wiki_hints()
- {
+async fn selected_counterparts_trust_curated_pairs_without_artifact_probes() {
     struct CounterpartProvider {
         source: SourceId,
         project: ProjectDocument,
@@ -2789,10 +2788,14 @@ async fn selected_counterparts_confirm_historical_bytes_in_both_directions_witho
             assert_eq!(
                 store.lookup(&mr_doc.metadata.project).await.unwrap()
                     == store.lookup(&cf_doc.metadata.project).await.unwrap(),
-                same_bytes,
+                true,
                 "origin={origin:?}, requests={:?}",
                 requests.lock().unwrap().clone(),
             );
+            assert!(!requests.lock().unwrap().iter().any(|query| matches!(
+                query,
+                ProviderQuery::Releases { .. } | ProviderQuery::Identify { .. }
+            )));
             if same_bytes {
                 let count = requests.lock().unwrap().len();
                 cache.clear().await.unwrap();
@@ -2807,4 +2810,45 @@ async fn selected_counterparts_confirm_historical_bytes_in_both_directions_witho
             pool.close().await;
         }
     }
+}
+
+#[tokio::test]
+async fn curated_project_confirmation_rejects_different_mcmod_subvariants() {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::migrate!().run(&pool).await.unwrap();
+    let store = crate::state::resources::ResourceStore::new(pool.clone());
+    let metadata = |source, id, slug: &str| {
+        let ProviderValue::Project(mut document) =
+            project_value(source, id, slug)
+        else {
+            unreachable!()
+        };
+        document.metadata.slug = Some(slug.to_string());
+        document.metadata
+    };
+    let full = metadata(SourceId::modrinth(), "full0000", "itemphysic");
+    let lite = metadata(SourceId::curseforge(), "123", "itemphysic-lite");
+    assert!(store.confirm_curated_projects(&full, &lite).await.is_err());
+    assert!(store.lookup(&full.project).await.unwrap().is_none());
+    assert!(store.lookup(&lite.project).await.unwrap().is_none());
+    let counterpart = metadata(SourceId::curseforge(), "456", "itemphysic");
+    let id = store
+        .confirm_curated_projects(&full, &counterpart)
+        .await
+        .unwrap();
+    assert_eq!(store.lookup(&full.project).await.unwrap(), Some(id.clone()));
+    assert_eq!(store.lookup(&counterpart.project).await.unwrap(), Some(id));
+    assert!(store.lookup(&lite.project).await.unwrap().is_none());
+    let evidence: String =
+        sqlx::query_scalar("SELECT payload FROM resource_identity_evidence")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(evidence.contains("mcmod-source-pair"));
+    assert!(!evidence.contains("leftArtifact"));
+    pool.close().await;
 }

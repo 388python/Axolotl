@@ -120,27 +120,116 @@ impl ResourceService {
             .iter()
             .filter_map(|selection| selection.entry_id.as_ref())
             .collect();
+        let parents: Vec<_> = installed
+            .iter()
+            .filter(|entry| {
+                entry.enabled
+                    && !entry.missing
+                    && !changing.contains(&entry.entry_id)
+            })
+            .collect();
+        let mut saved_artifacts = HashMap::new();
+        if let Some(store) = self.store() {
+            let instance_ids: HashSet<_> =
+                parents.iter().map(|parent| &parent.instance_id).collect();
+            for instance_id in instance_ids {
+                saved_artifacts
+                    .extend(store.installed_artifacts(instance_id).await?);
+            }
+        }
+        saved_artifacts.retain(|id, artifact| {
+            installed.iter().any(|parent| {
+                !parent.missing
+                    && parent.entry_id.as_str() == id.as_str()
+                    && parent.artifact.as_ref() == Some(&artifact.reference)
+                    && super::super::valid_artifact(artifact)
+                    && identity::exact_integrity(
+                        &parent.integrity,
+                        &artifact.integrity,
+                    )
+            })
+        });
+        // A large instance can have hundreds of retained parents. Fetch their
+        // exact declarations in provider batches rather than making a round
+        // trip for each parent before the first new dependency is shown.
+        let references: HashSet<_> = parents
+            .iter()
+            .filter_map(|parent| {
+                if saved_artifacts.contains_key(parent.entry_id.as_str()) {
+                    return None;
+                }
+                parent
+                    .artifact
+                    .as_ref()
+                    .map(|artifact| artifact.release.clone())
+            })
+            .collect();
+        let mut releases = HashMap::new();
+        let mut by_source: HashMap<SourceId, Vec<SourceReleaseRef>> =
+            HashMap::new();
+        for reference in references {
+            by_source
+                .entry(reference.project.source.clone())
+                .or_default()
+                .push(reference);
+        }
+        for (source, references) in by_source {
+            let mut queries = Vec::with_capacity(references.len());
+            for reference in &references {
+                let slug = if let Some(store) = self.store() {
+                    store.project_alias(&reference.project).await?
+                } else {
+                    None
+                };
+                queries.push(ProviderQuery::Release {
+                    project_id: Some(reference.project.project_id.clone()),
+                    release_id: reference.release_id.clone(),
+                    slug,
+                });
+            }
+            let results = self
+                .query_many(&source, queries, CachePolicy::UseFresh, cancel)
+                .await;
+            for (reference, result) in references.into_iter().zip(results) {
+                let ProviderValue::Release(document) = result?.value else {
+                    return Err(invalid(
+                        "installed parent release is unavailable",
+                    ));
+                };
+                if document.release.reference != reference {
+                    return Err(invalid(
+                        "release does not belong to installed project",
+                    ));
+                }
+                releases.insert(reference, document.release);
+            }
+        }
+        // Dependency metadata determines the install scope. Resolve repeated
+        // references once per analysis, including when the disk cache is off.
+        let mut dependency_selections: HashMap<
+            String,
+            Option<ResourceSelection>,
+        > = HashMap::new();
+        let mut exact_dependencies: HashMap<String, Vec<ArtifactIntegrity>> =
+            HashMap::new();
         let mut requirements = Vec::new();
-        for parent in installed.iter().filter(|entry| {
-            entry.enabled
-                && !entry.missing
-                && !changing.contains(&entry.entry_id)
-        }) {
+        for parent in parents {
             if cancel.is_cancelled() {
                 return Err(ResourceError::Canceled);
             }
             if let Some(reference) = &parent.artifact {
-                let release =
-                    self.release(&reference.release, None, cancel).await?;
-                let artifact = release
-                    .artifacts
-                    .iter()
-                    .find(|artifact| {
-                        artifact.reference == *reference
-                            && identity::exact_integrity(
-                                &parent.integrity,
-                                &artifact.integrity,
-                            )
+                let artifact = saved_artifacts
+                    .get(parent.entry_id.as_str())
+                    .or_else(|| {
+                        releases.get(&reference.release).and_then(|release| {
+                            release.artifacts.iter().find(|artifact| {
+                                artifact.reference == *reference
+                                    && identity::exact_integrity(
+                                        &parent.integrity,
+                                        &artifact.integrity,
+                                    )
+                            })
+                        })
                     })
                     .ok_or_else(|| {
                         invalid(format!(
@@ -169,36 +258,86 @@ impl ResourceService {
                         )
                     })
                 {
-                    let Some(selection) = self
-                        .dependency_selection(
-                            dependency,
-                            &parent_selection,
-                            cancel,
-                        )
-                        .await?
-                    else {
+                    let key = serde_json::to_string(&(
+                        &dependency.target,
+                        &parent.scope,
+                        parent.resource_type,
+                    ))?;
+                    let selection = if let Some(selection) =
+                        dependency_selections.get(&key)
+                    {
+                        selection.clone()
+                    } else {
+                        let selection = self
+                            .dependency_selection(
+                                dependency,
+                                &parent_selection,
+                                cancel,
+                            )
+                            .await?;
+                        dependency_selections
+                            .insert(key.clone(), selection.clone());
+                        selection
+                    };
+                    let Some(selection) = selection else {
                         continue;
                     };
-                    let exact = match &selection.release {
-                        ReleaseSelection::Automatic => Vec::new(),
-                        ReleaseSelection::Release { reference } => self
-                            .release(reference, None, cancel)
-                            .await?
-                            .artifacts
-                            .into_iter()
-                            .filter(|artifact| {
-                                artifact.role == ArtifactRole::Primary
+                    let exact = if let Some(exact) =
+                        exact_dependencies.get(&key)
+                    {
+                        exact.clone()
+                    } else {
+                        let cached_exact: Vec<_> = saved_artifacts
+                            .values()
+                            .filter(|artifact| match &selection.release {
+                                ReleaseSelection::Automatic => false,
+                                ReleaseSelection::Release { reference } => {
+                                    artifact.role == ArtifactRole::Primary
+                                        && &artifact.reference.release
+                                            == reference
+                                }
+                                ReleaseSelection::Artifact { reference } => {
+                                    &artifact.reference == reference
+                                }
                             })
-                            .map(|artifact| artifact.integrity)
-                            .collect(),
-                        ReleaseSelection::Artifact { reference } => self
-                            .release(&reference.release, None, cancel)
-                            .await?
-                            .artifacts
-                            .into_iter()
-                            .filter(|artifact| artifact.reference == *reference)
-                            .map(|artifact| artifact.integrity)
-                            .collect(),
+                            .map(|artifact| artifact.integrity.clone())
+                            .collect();
+                        let exact: Vec<ArtifactIntegrity> = if !cached_exact
+                            .is_empty()
+                        {
+                            cached_exact
+                        } else {
+                            match &selection.release {
+                                ReleaseSelection::Automatic => Vec::new(),
+                                ReleaseSelection::Release { reference } => self
+                                    .release(reference, None, cancel)
+                                    .await?
+                                    .artifacts
+                                    .into_iter()
+                                    .filter(|artifact| {
+                                        artifact.role == ArtifactRole::Primary
+                                    })
+                                    .map(|artifact| artifact.integrity)
+                                    .collect(),
+                                ReleaseSelection::Artifact { reference } => {
+                                    self.release(
+                                        &reference.release,
+                                        None,
+                                        cancel,
+                                    )
+                                    .await?
+                                    .artifacts
+                                    .into_iter()
+                                    .filter(|artifact| {
+                                        artifact.reference == *reference
+                                    })
+                                    .map(|artifact| artifact.integrity)
+                                    .collect()
+                                }
+                            }
+                        };
+                        exact_dependencies.insert(key, exact.clone());
+                        exact
                     };
                     if !matches!(selection.release, ReleaseSelection::Automatic)
                         && exact.is_empty()

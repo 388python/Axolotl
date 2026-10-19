@@ -637,6 +637,18 @@ impl ResourceService {
             .find(|project| project.project == resource.default_project)
             .unwrap()
             .clone();
+        self.canonical_project(selection, metadata, resource.id, cancel)
+            .await
+    }
+
+    async fn canonical_project(
+        self: &Arc<Self>,
+        selection: &mut ResourceSelection,
+        metadata: SourceProjectMetadata,
+        known_id: Option<ResourceId>,
+        cancel: &CancellationToken,
+    ) -> ResourceResult<SourceProjectMetadata> {
+        validate_scope(&selection.scope, selection.resource_type)?;
         self.confirm_counterpart(&metadata, cancel).await?;
         if !metadata.types.contains(&selection.resource_type) {
             return Err(invalid(
@@ -650,7 +662,7 @@ impl ResourceService {
                     .await?,
             )
         } else {
-            resource.id
+            known_id
         };
         if let Some(id) = id {
             selection.resource = ResourceRef::Resource { id };
@@ -1009,14 +1021,45 @@ impl ResourceService {
             }
             _ => return Ok(None),
         };
+        // Project types are durable facts, separate from expiring titles and
+        // author metadata. Reuse them for dependencies already known locally.
+        if let Some(store) = self.store() {
+            let projects = match &resource {
+                ResourceRef::Source { project } => vec![project.clone()],
+                ResourceRef::Resource { id } => store.projects(id).await?,
+            };
+            let mut types = Vec::new();
+            for project in projects {
+                types.extend(store.project_types(&project).await?);
+            }
+            if !types.is_empty() {
+                let (resource_type, scope) = dependency_scope(&types, parent)?;
+                let resource = self.normalized_reference(&resource).await?;
+                let id = SelectionId::new(format!(
+                    "dependency:{}:{}:{:?}",
+                    serde_json::to_string(&resource)?,
+                    serde_json::to_string(&scope)?,
+                    resource_type,
+                ))?;
+                return Ok(Some(ResourceSelection {
+                    id,
+                    resource,
+                    release,
+                    resource_type,
+                    scope,
+                    entry_id: None,
+                }));
+            }
+        }
         let metadata = self.get(&resource, None, None, cancel).await?;
-        let types = &metadata
+        let known_id = metadata.id.clone();
+        let metadata = metadata
             .projects
             .iter()
             .find(|project| project.project == metadata.default_project)
             .ok_or_else(|| invalid("dependency project metadata is missing"))?
-            .types;
-        let (resource_type, scope) = dependency_scope(types, parent)?;
+            .clone();
+        let (resource_type, scope) = dependency_scope(&metadata.types, parent)?;
         let mut selection = ResourceSelection {
             id: parent.id.clone(),
             resource,
@@ -1025,7 +1068,8 @@ impl ResourceService {
             scope,
             entry_id: None,
         };
-        self.canonical(&mut selection, cancel).await?;
+        self.canonical_project(&mut selection, metadata, known_id, cancel)
+            .await?;
         selection.id = SelectionId::new(format!(
             "dependency:{}:{}:{:?}",
             serde_json::to_string(&selection.resource)?,
@@ -1068,7 +1112,12 @@ impl ResourceService {
             .await?;
         let original = draft.clone();
         let mut seeded: HashMap<SelectionKey, Vec<String>> = HashMap::new();
-        for _ in 0..32 {
+        for pass in 0..32 {
+            tracing::debug!(
+                instance_id = draft.plan.instance_id,
+                pass = pass + 1,
+                "Resolving resource dependency constraints"
+            );
             let result = self
                 .build_operation_pass(
                     original.clone(),
@@ -2085,6 +2134,23 @@ impl ResourceService {
                 })
                 .map(|item| item.entry_id.clone())
                 .collect();
+            let compatibility = satisfied_artifact.as_ref().map_or_else(
+                || CompatibilityAssessment {
+                    game_version: CompatibilityState::Unknown,
+                    loader: CompatibilityState::Unknown,
+                    reasons: vec![],
+                },
+                |(release, _, _)| {
+                    assess_compatibility(
+                        release,
+                        target,
+                        candidate.resource_type,
+                    )
+                },
+            );
+            let declared_compatibility = satisfied_artifact
+                .as_ref()
+                .map(|(release, _, _)| release.compatibility.clone());
             draft.plan.nodes.push(ResourceDependencyNode {
                 id: candidate.id.clone(),
                 resource_type: Some(candidate.resource_type),
@@ -2098,12 +2164,8 @@ impl ResourceService {
                 },
                 artifact: satisfied_artifact.map(|(_, artifact, _)| artifact),
                 installed_entries: satisfied.clone(),
-                compatibility: CompatibilityAssessment {
-                    game_version: CompatibilityState::Unknown,
-                    loader: CompatibilityState::Unknown,
-                    reasons: vec![],
-                },
-                declared_compatibility: None,
+                compatibility,
+                declared_compatibility,
             });
             report_node(&draft.plan, None, progress);
             if satisfied.is_empty() {
@@ -2435,6 +2497,13 @@ pub async fn prepare_with_progress(
     cancel: &CancellationToken,
     progress: OperationProgress<'_>,
 ) -> ResourceResult<ResourceOperationPlan> {
+    // A span would repeat this selection list on every nested HTTP/file log.
+    // Keep it on one event and bound batch-install diagnostics.
+    tracing::debug!(
+        %instance_id, ?intent, selection_count = selections.len(),
+        selections = ?selections.iter().take(8).collect::<Vec<_>>(),
+        "Preparing resource operation"
+    );
     prepare_with_installed(
         instance_id,
         intent,
@@ -2499,8 +2568,17 @@ pub(crate) async fn prepare_with_installed(
         return Err(invalid("instance is not ready for resource changes"));
     }
     if verified.is_none() {
-        super::installed::refresh_snapshot(&state, &instance_id, cancel)
+        if intent == ResourceOperationIntent::Install {
+            super::installed::refresh_install_snapshot(
+                &state,
+                &instance_id,
+                cancel,
+            )
             .await?;
+        } else {
+            super::installed::refresh_snapshot(&state, &instance_id, cancel)
+                .await?;
+        }
     }
     let revision = instance_revision(&state.pool, &instance_id).await?;
     let roots = selections

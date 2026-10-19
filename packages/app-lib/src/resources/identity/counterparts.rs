@@ -137,25 +137,17 @@ impl ResourceService {
             found
         };
         if let Some(other) = project {
-            let result = self
-                .probe_projects(
-                    &metadata.project,
-                    metadata.slug.clone(),
-                    &other.project,
-                    other.slug,
-                    ipc::ResourceTarget {
-                        game_versions: vec![],
-                        loaders: vec![],
-                        channels: vec![],
-                    },
-                    cancel,
-                )
-                .await;
             if cancel.is_cancelled() {
                 return Err(ResourceError::Canceled);
             }
-            for (source, error) in result.failures {
-                tracing::debug!(source = source.as_str(), %error, "Project counterpart confirmation deferred");
+            if let Some(store) = self.store() {
+                match store.confirm_curated_projects(metadata, &other).await {
+                    Ok(_) => {}
+                    Err(ResourceError::InvalidRequest(reason)) => {
+                        tracing::debug!(%reason, "MCMOD counterpart is not the same subvariant");
+                    }
+                    Err(error) => return Err(error),
+                }
             }
         }
         Ok(())
