@@ -118,6 +118,10 @@ const messages = defineMessages({
         id: 'app.resources.operation.missing-dependency',
         defaultMessage: 'A required dependency could not be resolved.',
     },
+    dependencyAnalysisFailed: {
+        id: 'app.resources.operation.dependency-analysis-failed',
+        defaultMessage: 'Dependency analysis failed. The instance may not work correctly.',
+    },
     unselectedDependency: {
         id: 'app.resources.operation.unselected-dependency',
         defaultMessage:
@@ -204,6 +208,8 @@ function issueNotice(issue: PlanIssue): Notice | null {
             case 'missingDependency':
                 if (node?.state === 'missing') return formatMessage(messages.unselectedDependency)
                 return formatMessage(messages.missingDependency)
+            case 'dependencyAnalysisFailed':
+                return formatMessage(messages.dependencyAnalysisFailed)
             case 'versionConflict':
                 if (
                     issue.message ===
@@ -255,6 +261,9 @@ const canApply = computed(
         !queueing.value &&
         (plan.value?.actions.length ?? 0) > 0 &&
         !plan.value?.issues.some((issue) => issue.blocking),
+)
+const dependencyAnalysisFailed = computed(
+    () => plan.value?.issues.some((issue) => issue.code === 'dependencyAnalysisFailed') ?? false,
 )
 function name(node: ResourceDependencyNode) {
     return (
@@ -850,9 +859,17 @@ defineExpose({ show, showInstall, showInstallSelection, cancel })
                 <Button :disabled="busy" @click="modal?.hide()">{{
                     formatMessage(messages.cancel)
                 }}</Button>
-                <Button color="brand" :disabled="!canApply" @click="apply">{{
-                    formatMessage(messages.apply)
-                }}</Button>
+                <Button
+                    v-tooltip="
+                        dependencyAnalysisFailed
+                            ? formatMessage(messages.dependencyAnalysisFailed)
+                            : undefined
+                    "
+                    color="brand"
+                    :disabled="!canApply"
+                    @click="apply"
+                    >{{ formatMessage(messages.apply) }}</Button
+                >
             </div>
         </template>
     </NewModal>

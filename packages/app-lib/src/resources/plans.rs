@@ -87,6 +87,35 @@ fn issue(
     });
 }
 
+fn dependency_analysis_issue(
+    plan: &mut ResourceOperationPlan,
+    node: &SelectionId,
+    message: impl Into<String>,
+) {
+    let allow_install = plan.intent == ResourceOperationIntent::Install;
+    issue(
+        plan,
+        if allow_install {
+            ResourceIssueCode::DependencyAnalysisFailed
+        } else {
+            ResourceIssueCode::SourceUnavailable
+        },
+        node,
+        !allow_install,
+        message,
+    );
+}
+
+fn dependency_source_failed(error: &ResourceError) -> bool {
+    matches!(
+        error,
+        ResourceError::Network { .. }
+            | ResourceError::Unavailable
+            | ResourceError::InvalidResponse(_)
+            | ResourceError::Unsupported(_)
+    )
+}
+
 fn selection_matches_artifact(
     selection: &ReleaseSelection,
     artifact: Option<&ResourceArtifact>,
@@ -1102,14 +1131,26 @@ impl ResourceService {
         progress: OperationProgress<'_>,
     ) -> ResourceResult<OperationDraft> {
         let mut draft = draft;
-        draft.retained_requirements = self
+        let mut retained_warning = None;
+        draft.retained_requirements = match self
             .retained_requirements(
                 &draft.plan.selections,
                 installed,
                 &draft.local_metadata,
                 cancel,
             )
-            .await?;
+            .await
+        {
+            Ok(requirements) => requirements,
+            Err(error)
+                if draft.plan.intent == ResourceOperationIntent::Install
+                    && dependency_source_failed(&error) =>
+            {
+                retained_warning = Some(error.to_string());
+                Vec::new()
+            }
+            Err(error) => return Err(error),
+        };
         let original = draft.clone();
         let mut seeded: HashMap<SelectionKey, Vec<String>> = HashMap::new();
         for pass in 0..32 {
@@ -1118,7 +1159,7 @@ impl ResourceService {
                 pass = pass + 1,
                 "Resolving resource dependency constraints"
             );
-            let result = self
+            let mut result = self
                 .build_operation_pass(
                     original.clone(),
                     target,
@@ -1128,6 +1169,11 @@ impl ResourceService {
                     &seeded,
                 )
                 .await?;
+            if let Some(message) = &retained_warning {
+                for root in result.plan.active_roots.clone() {
+                    dependency_analysis_issue(&mut result.plan, &root, message);
+                }
+            }
             if !result
                 .plan
                 .issues
@@ -1249,6 +1295,16 @@ impl ResourceService {
                     return Err(ResourceError::Canceled);
                 }
                 Err(error) => {
+                    if !draft.plan.active_roots.contains(&selection.id)
+                        && dependency_source_failed(&error)
+                    {
+                        dependency_analysis_issue(
+                            &mut draft.plan,
+                            &selection.id,
+                            error.to_string(),
+                        );
+                        continue;
+                    }
                     issue(
                         &mut draft.plan,
                         ResourceIssueCode::SourceUnavailable,
@@ -1313,65 +1369,127 @@ impl ResourceService {
                 if selection.id.as_str().starts_with("dependency:")
                     && selection.entry_id.is_none()
                 {
-                    self.installed_dependency(
-                        &selection,
-                        target,
-                        installed,
-                        cancel,
-                        &constraints,
-                    )
-                    .await?
+                    match self
+                        .installed_dependency(
+                            &selection,
+                            target,
+                            installed,
+                            cancel,
+                            &constraints,
+                        )
+                        .await
+                    {
+                        Ok(value) => value,
+                        Err(ResourceError::Canceled) => {
+                            return Err(ResourceError::Canceled);
+                        }
+                        Err(error) => {
+                            if draft.plan.active_roots.contains(&selection.id)
+                                || !dependency_source_failed(&error)
+                            {
+                                issue(
+                                    &mut draft.plan,
+                                    ResourceIssueCode::SourceUnavailable,
+                                    &selection.id,
+                                    true,
+                                    error.to_string(),
+                                );
+                            } else {
+                                dependency_analysis_issue(
+                                    &mut draft.plan,
+                                    &selection.id,
+                                    error.to_string(),
+                                );
+                            }
+                            continue;
+                        }
+                    }
                 } else {
                     None
                 };
-            let (release, artifact, basis) =
-                match if let Some(selected) = satisfied_dependency {
-                    Ok(selected)
-                } else {
-                    self.selected_release_with_requirements(
-                        &selection,
-                        target,
-                        &preferred,
-                        cancel,
-                        previous_release.as_ref(),
-                        &constraints,
-                        &requirements,
-                    )
-                    .await
-                } {
-                    Ok(value) => value,
-                    Err(ResourceError::Canceled) => {
-                        return Err(ResourceError::Canceled);
-                    }
-                    Err(error) => {
-                        issue(
-                            &mut draft.plan,
-                            if matches!(
+            let (release, artifact, basis) = match if let Some(selected) =
+                satisfied_dependency
+            {
+                Ok(selected)
+            } else {
+                self.selected_release_with_requirements(
+                    &selection,
+                    target,
+                    &preferred,
+                    cancel,
+                    previous_release.as_ref(),
+                    &constraints,
+                    &requirements,
+                )
+                .await
+            } {
+                Ok(value) => value,
+                Err(ResourceError::Canceled) => {
+                    return Err(ResourceError::Canceled);
+                }
+                Err(error) => {
+                    if !draft.plan.active_roots.contains(&selection.id)
+                        && (constraints.is_empty() && requirements.is_empty()
+                            || matches!(
                                 error,
                                 ResourceError::Network { .. }
                                     | ResourceError::Unavailable
-                            ) {
-                                ResourceIssueCode::SourceUnavailable
-                            } else if constraints.is_empty()
-                                && requirements.is_empty()
-                            {
-                                ResourceIssueCode::MissingDependency
-                            } else {
-                                ResourceIssueCode::VersionConflict
-                            },
+                            ))
+                    {
+                        dependency_analysis_issue(
+                            &mut draft.plan,
                             &selection.id,
-                            true,
                             error.to_string(),
                         );
                         continue;
                     }
-                };
+                    issue(
+                        &mut draft.plan,
+                        if matches!(
+                            error,
+                            ResourceError::Network { .. }
+                                | ResourceError::Unavailable
+                        ) {
+                            ResourceIssueCode::SourceUnavailable
+                        } else if constraints.is_empty()
+                            && requirements.is_empty()
+                        {
+                            ResourceIssueCode::MissingDependency
+                        } else {
+                            ResourceIssueCode::VersionConflict
+                        },
+                        &selection.id,
+                        true,
+                        error.to_string(),
+                    );
+                    continue;
+                }
+            };
+            let local_requirements_match = match self
+                .local_requirements_accept(&release, &requirements, cancel)
+                .await
+            {
+                Ok(matches) => matches,
+                Err(ResourceError::Canceled) => {
+                    return Err(ResourceError::Canceled);
+                }
+                Err(error)
+                    if draft.plan.intent
+                        == ResourceOperationIntent::Install =>
+                {
+                    dependency_analysis_issue(
+                        &mut draft.plan,
+                        &selection.id,
+                        error.to_string(),
+                    );
+                    true
+                }
+                Err(error) => return Err(error),
+            };
             if !requirements
                 .iter()
                 .all(|requirement| requirement.accepts(&release))
-                || !self
-                    .local_requirements_accept(&release, &requirements, cancel)
-                    .await?
+                || !local_requirements_match
             {
                 issue(
                     &mut draft.plan,
@@ -1941,11 +2059,9 @@ impl ResourceService {
                     Ok(Some(child)) => child,
                     Ok(None) => {
                         if dependency.kind == ResourceDependencyKind::Required {
-                            issue(
+                            dependency_analysis_issue(
                                 &mut draft.plan,
-                                ResourceIssueCode::MissingDependency,
                                 &selection.id,
-                                true,
                                 "dependency requires local metadata verification",
                             );
                         }
@@ -1955,13 +2071,27 @@ impl ResourceService {
                         return Err(ResourceError::Canceled);
                     }
                     Err(error) => {
-                        issue(
-                            &mut draft.plan,
-                            ResourceIssueCode::SourceUnavailable,
-                            &selection.id,
-                            dependency.kind == ResourceDependencyKind::Required,
-                            error.to_string(),
-                        );
+                        if dependency_source_failed(&error)
+                            && (dependency.kind
+                                == ResourceDependencyKind::Required
+                                || draft.plan.intent
+                                    == ResourceOperationIntent::Install)
+                        {
+                            dependency_analysis_issue(
+                                &mut draft.plan,
+                                &selection.id,
+                                error.to_string(),
+                            );
+                        } else {
+                            issue(
+                                &mut draft.plan,
+                                ResourceIssueCode::SourceUnavailable,
+                                &selection.id,
+                                dependency.kind
+                                    == ResourceDependencyKind::Required,
+                                error.to_string(),
+                            );
+                        }
                         continue;
                     }
                 };
@@ -2106,13 +2236,23 @@ impl ResourceService {
                     return Err(ResourceError::Canceled);
                 }
                 Err(error) => {
-                    issue(
-                        &mut draft.plan,
-                        ResourceIssueCode::SourceUnavailable,
-                        &candidate.id,
-                        false,
-                        error.to_string(),
-                    );
+                    if draft.plan.intent == ResourceOperationIntent::Install
+                        && dependency_source_failed(&error)
+                    {
+                        dependency_analysis_issue(
+                            &mut draft.plan,
+                            &candidate.id,
+                            error.to_string(),
+                        );
+                    } else {
+                        issue(
+                            &mut draft.plan,
+                            ResourceIssueCode::SourceUnavailable,
+                            &candidate.id,
+                            false,
+                            error.to_string(),
+                        );
+                    }
                     None
                 }
             };

@@ -8603,6 +8603,9 @@
   "app.resources.operation.manual-download": {
     "message": "{name} requires a manual download and cannot be installed automatically."
   },
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "Dependency analysis failed. The instance may not work correctly."
+  },
   "app.resources.operation.missing-dependency": {
     "message": "A required dependency could not be resolved."
   },

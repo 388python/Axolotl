@@ -13649,6 +13649,9 @@
   "app.resources.operation.unresolved-optional": {
     "message": "部分可选依赖无法解析，已跳过。"
   },
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "依赖分析失败，可能会导致实例工作不正常"
+  },
   "app.resources.operation.missing-dependency": {
     "message": "无法解析所需的依赖。"
   },

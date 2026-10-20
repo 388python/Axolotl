@@ -257,7 +257,7 @@ async fn active_cycles_terminate_and_inactive_optional_closures_stay_unresolved(
     assert!(initial.plan.issues.is_empty());
     assert_eq!(initial.plan.nodes.len(), 3);
     let candidate = initial.candidates[0].clone();
-    let failed = service
+    let revised = service
         .revise_operation(
             initial.clone(),
             vec![ResourcePlanDecision::AddOptional {
@@ -267,8 +267,14 @@ async fn active_cycles_terminate_and_inactive_optional_closures_stay_unresolved(
             &[],
             &CancellationToken::new(),
         )
-        .await;
-    assert!(failed.is_err());
+        .await
+        .unwrap();
+    assert_eq!(revised.plan.actions.len(), 3);
+    assert_eq!(revised.plan.active_roots.len(), 2);
+    assert!(!revised.plan.issues.iter().any(|issue| issue.blocking));
+    assert!(revised.plan.issues.iter().any(|issue| {
+        issue.code == ResourceIssueCode::DependencyAnalysisFailed
+    }));
     assert_eq!(initial.plan.active_roots.len(), 1);
     assert_eq!(initial.plan.actions.len(), 2);
     service.cache().close().await;
