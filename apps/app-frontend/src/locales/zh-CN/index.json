@@ -13958,9 +13958,6 @@
   "app.settings.resources.preserve-names-description": {
     "message": "更新和切换版本时只替换已知的原工件文件名。无法准确匹配的自定义名称会完整保留。"
   },
-  "app.instance.mods.unconfirmed-unlink-history": {
-    "message": "没有明确的解除记录，因此保留了包成员。本地导入包可以没有在线链接；请使用“解除关联”明确取消包归属。"
-  },
   "app.resources.changelog.empty": {
     "message": "此发布没有提供更新日志。"
   },

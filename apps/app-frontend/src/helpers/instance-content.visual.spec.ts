@@ -59,6 +59,37 @@ it('connector installation source comes from exact durable artifact evidence ins
     expect(data?.contentItems[0].instanceOwnershipKind).toBe('user_added')
 })
 
+it('keeps a local pack grouped without an online project and ungroups it only after explicit unlink', async () => {
+    const local = snapshot()
+    local.pack = {
+        name: 'Local pack',
+        iconPath: null,
+        provider: null,
+        projectId: null,
+        versionId: null,
+        reconciled: true,
+        canUpdate: false,
+        metadata: null,
+    }
+    local.items[0].ownershipKind = 'pack_managed'
+    local.items[0].memberId = 'member'
+    vi.mocked(get_content_snapshot).mockResolvedValue(local)
+    const grouped = (await loadInstanceContentData('instance'))!
+    expect(grouped.modpack?.project.title).toBe('Local pack')
+    expect(grouped.linkedContentItems).toHaveLength(1)
+    expect(grouped.contentItems).toHaveLength(0)
+    expect(grouped.snapshot.warnings).toHaveLength(0)
+    expect(local.items[0].ownershipKind).toBe('pack_managed')
+
+    const unlinked = snapshot()
+    vi.mocked(get_content_snapshot).mockResolvedValue(unlinked)
+    const ungrouped = (await loadInstanceContentData('instance'))!
+    expect(ungrouped.modpack).toBeNull()
+    expect(ungrouped.linkedContentItems).toHaveLength(0)
+    expect(ungrouped.contentItems).toHaveLength(1)
+    expect(ungrouped.contentItems[0].file_path).toBe(grouped.linkedContentItems[0].file_path)
+})
+
 const snapshot = (): InstanceContentSnapshot => ({
     instanceId: 'instance',
     revision: 1,
