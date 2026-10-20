@@ -1114,7 +1114,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         download_meta,
         pack_version_id: version_id.clone(),
         pack_project_id: project_id.clone(),
-        reporter: reporter.clone(),
+        reporter: reporter.clone().with_pipeline_cancellation(),
         modpack_details: modpack_details.clone(),
         content_progress,
         content_bytes_progress,
@@ -1310,6 +1310,9 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                     )
                     .await;
                 }
+                if let Err(error) = &result {
+                    completion_context.reporter.fail_pipeline(error);
+                }
                 cancellation.cancel();
             }
             result
@@ -1501,6 +1504,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                     }
                     Ok(())
                 }.await;
+                if let Err(error) = &result { verification_context.reporter.fail_pipeline(error); }
                 result?;
                 Ok(())
                     }
@@ -1508,6 +1512,9 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             )
             .await;
             if result.is_err() {
+                if let Err(error) = &result {
+                    verification_context.reporter.fail_pipeline(error);
+                }
                 cancellation.cancel();
             }
             result
@@ -1780,16 +1787,27 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     .await?;
         drop(completion_tx);
         drop(verification_tx);
-        verification_worker.await.map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "modpack verification worker failed: {error}"
-            ))
-        })??;
-        completion_worker.await.map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "modpack database worker failed: {error}"
-            ))
-        })??;
+        let verification_result = verification_worker
+            .await
+            .map_err(|error| {
+                crate::Error::from(crate::ErrorKind::OtherError(format!(
+                    "modpack verification worker failed: {error}"
+                )))
+            })
+            .and_then(|result| result);
+        let completion_result = completion_worker
+            .await
+            .map_err(|error| {
+                crate::Error::from(crate::ErrorKind::OtherError(format!(
+                    "modpack database worker failed: {error}"
+                )))
+            })
+            .and_then(|result| result);
+        if let Some(error) = content_context.reporter.pipeline_failure() {
+            return Err(error);
+        }
+        verification_result?;
+        completion_result?;
         required_file_failures = pass_failures;
         if required_file_failures.is_empty() {
             break;
