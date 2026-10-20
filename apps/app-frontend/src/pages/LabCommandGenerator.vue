@@ -10,11 +10,11 @@ import CommandGeneratorExecuteChain, {
 import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
     CATEGORY_KEYS,
-    PERMISSION_KEYS,
-    getAllCommands,
     findCommand,
+    getAllCommands,
     getCurrentVersion,
     initializeRegistry,
+    PERMISSION_KEYS,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
 import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
@@ -578,8 +578,8 @@ function presetCategoryLabel(commandId: string): string {
             <CommandGeneratorExecuteChain
                 v-if="isChainCommand && currentCommand.chainCategories"
                 ref="executeChainRef"
-                :categories="currentCommand.chainCategories"
                 v-model="executeChainOutput"
+                :categories="currentCommand.chainCategories"
             />
 
             <template v-else>

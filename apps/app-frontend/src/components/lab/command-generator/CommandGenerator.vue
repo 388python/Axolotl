@@ -4,13 +4,13 @@ import { Button, Combobox, type ComboboxOption, defineMessages, useVIntl } from 
 import { computed, onMounted, ref } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
+import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
     CATEGORY_KEYS,
     findCommand,
     getAllCommands,
     initializeRegistry,
 } from '@/lab/command-generator/commands/registry.ts'
-import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
     buildCommand,
     getDefaultValues,

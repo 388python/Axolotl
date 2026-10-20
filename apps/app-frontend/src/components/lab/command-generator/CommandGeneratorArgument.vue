@@ -2,8 +2,8 @@
 import { Combobox, type ComboboxOption, useVIntl } from '@modrinth/ui'
 import { computed, ref, useTemplateRef } from 'vue'
 
-import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
 import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
+import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
 import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 
 import CommandGeneratorItemPickerModal from './CommandGeneratorItemPickerModal.vue'

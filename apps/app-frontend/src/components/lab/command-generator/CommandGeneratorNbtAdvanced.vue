@@ -6,8 +6,8 @@ import { computed, ref, watch } from 'vue'
 import {
     createItemNbtTree,
     createNbtTag,
-    serializeNbt,
     type NbtTagNode,
+    serializeNbt,
 } from '@/lab/command-generator/nbt-tree.ts'
 
 import CommandGeneratorNbtNode from './CommandGeneratorNbtNode.vue'
