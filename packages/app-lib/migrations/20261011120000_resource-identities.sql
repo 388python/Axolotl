@@ -255,5 +255,3 @@ BEGIN
     SELECT source, project_id, content_type FROM resource_legacy_projects
     WHERE source = NEW.provider AND project_id = NEW.provider_project_id;
 END;
-
--- force update to sync tree
