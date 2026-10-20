@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '!v1.9.9'
 
 permissions:
   contents: write
@@ -44,6 +45,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          node --test scripts/axolotl/release-policy.test.mjs
           node scripts/axolotl/check-migrations.mjs --release
           node scripts/axolotl/brand-guard.mjs
           node scripts/axolotl/i18n-check.mjs
