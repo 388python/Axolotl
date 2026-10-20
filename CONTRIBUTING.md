@@ -135,7 +135,22 @@ git push origin v1.2.3
 
 预发布版本请使用带后缀的标签（如 `v1.2.3-beta.1`）。
 
+### 可选 Release notice
+
+在 [`.github/release-notices.json`](.github/release-notices.json) 的 `notices` 中，以完整标签（包含 `v`）为键提交中英文提示。每项包含 `type`、`zh-CN` 和 `en-US`；`type` 支持 `note`、`tip`、`important`、`warning` 和 `caution`，文本支持 Markdown，多行内容在 JSON 字符串中使用 `\n`。编辑器可通过同目录的 JSON Schema 提供补全和校验。
+
+notice 会显示在 GitHub Release 的发布日期之后、更新内容之前，并随 Release 正文进入更新清单和 CNB 镜像。没有对应标签的条目时不会显示；格式错误、缺失语言或空白文案会使发布预检失败。普通更新条目仍只在 `apps/app-frontend/src/announcements/catalog.ts` 维护，notice 不代替该版本的公告。
+
+请在打标签前提交 notice 配置。Workflow 读取标签对应的文件，之后仅修改 `main` 或重跑同一标签不会读取新的内容。可以在本地预览：
+
+```powershell
+node scripts/axolotl/create-release-notes.mjs v1.10.0-beta.4 release-preview.md
+```
+
+预览要求公告目录中已有对应版本；检查后删除临时的 `release-preview.md`。运行 `node --test scripts/axolotl/create-release-notes.test.mjs` 可检查生成规则。
+
 **自动发布工作流执行步骤**：
+
 1. 将标签版本写入桌面应用构建配置。
 2. 在 GitHub 托管的 Windows、macOS 和 Linux runner 上并行构建安装包。
 3. 使用仓库 Secrets 中的 Tauri 私钥生成签名更新包。

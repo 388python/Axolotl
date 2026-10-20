@@ -65,6 +65,7 @@ jobs:
       - run: node scripts/axolotl/check-scoped-styles.mjs
       - run: node scripts/axolotl/check-retired-ui.mjs
       - run: node scripts/axolotl/downgrade-app-db.test.mjs
+      - run: node --test scripts/axolotl/create-release-notes.test.mjs
       - run: rustup component add rustfmt
       - run: cargo fmt --all --check
 
