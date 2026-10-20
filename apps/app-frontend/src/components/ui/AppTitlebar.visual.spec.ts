@@ -6,7 +6,7 @@ import {
 import { createPinia } from 'pinia'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { defineComponent, h, nextTick, ref, Suspense } from 'vue'
+import { computed, defineComponent, h, nextTick, ref, Suspense } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { mountThemed, waitFor } from '@/test/visual-harness'
@@ -74,11 +74,15 @@ vi.mock('@/providers/download-manager', () => ({
         cancel: vi.fn(),
     }),
 }))
-vi.mock('@/composables/browse/install-job-notifications', () => ({
+vi.mock(import('@/composables/browse/install-job-notifications'), () => ({
     useInstallJobNotifications: async () => ({
-        hasItems: ref(false),
-        progressItems: ref([]),
-        buttons: ref([]),
+        active: computed(() => false),
+        hasItems: computed(() => false),
+        title: computed(() => 'Installs'),
+        progressItems: computed(() => []),
+        stateSignature: computed(() => ''),
+        buttons: computed(() => undefined),
+        refresh: vi.fn(async () => {}),
         dispose: vi.fn(),
     }),
 }))
