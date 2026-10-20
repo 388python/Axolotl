@@ -26,14 +26,15 @@
                         ctx.localCrashAnalysis?.value?.mod_changes.length) &&
                     !isFullscreen
                 "
-                class="flex flex-col gap-2"
+                class="flex max-h-[50%] shrink-0 flex-col gap-2 overflow-y-auto"
             >
                 <CollapsibleAdmonition
+                    class="shrink-0"
                     type="critical"
                     :header="localCrashHeader"
                     :items="localCrashItems"
                 />
-                <div class="flex justify-end">
+                <div class="flex shrink-0 justify-end">
                     <Button
                         type="outlined"
                         :disabled="exportingCrashContext"
