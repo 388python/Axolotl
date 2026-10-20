@@ -176,9 +176,7 @@ const uiArguments = computed<CommandArgument[]>(() => {
 })
 
 const permissionName = computed(() =>
-    currentCommand.value
-        ? t(PERMISSION_KEYS[currentCommand.value.permissionLevel])
-        : '',
+    currentCommand.value ? t(PERMISSION_KEYS[currentCommand.value.permissionLevel]) : '',
 )
 
 const currentPresets = computed<UserPreset[]>(() => {
@@ -427,11 +425,7 @@ function presetCategoryLabel(commandId: string): string {
                     <span class="global-presets-hint">
                         {{ formatMessage(messages.globalPresetsHint) }}
                     </span>
-                    <button
-                        type="button"
-                        class="close-btn"
-                        @click="showGlobalPresets = false"
-                    >
+                    <button type="button" class="close-btn" @click="showGlobalPresets = false">
                         <XIcon />
                     </button>
                 </header>
@@ -559,11 +553,7 @@ function presetCategoryLabel(commandId: string): string {
                     {{ t('app.lab.command-generator.guide-examples') }}
                 </span>
                 <div class="example-list">
-                    <div
-                        v-for="ex in currentGuide.examples"
-                        :key="ex.command"
-                        class="example-row"
-                    >
+                    <div v-for="ex in currentGuide.examples" :key="ex.command" class="example-row">
                         <code class="example-code">{{ ex.command }}</code>
                         <span class="example-desc">{{ t(ex.explanationKey) }}</span>
                     </div>
@@ -594,11 +584,7 @@ function presetCategoryLabel(commandId: string): string {
 
             <template v-else>
                 <div class="preset-toolbar">
-                    <Button
-                        type="outlined"
-                        size="2xs"
-                        @click="showPresetInput = !showPresetInput"
-                    >
+                    <Button type="outlined" size="2xs" @click="showPresetInput = !showPresetInput">
                         <BookmarkIcon />
                         {{ formatMessage(messages.savePreset) }}
                     </Button>
@@ -633,10 +619,7 @@ function presetCategoryLabel(commandId: string): string {
                             @click="loadPreset(preset)"
                         >
                             {{ preset.name }}
-                            <span
-                                class="preset-delete"
-                                @click.stop="removePreset(preset.id)"
-                            >
+                            <span class="preset-delete" @click.stop="removePreset(preset.id)">
                                 <XIcon />
                             </span>
                         </button>
@@ -660,11 +643,7 @@ function presetCategoryLabel(commandId: string): string {
 
             <template v-if="isChainCommand">
                 <div class="preset-toolbar">
-                    <Button
-                        type="outlined"
-                        size="2xs"
-                        @click="showPresetInput = !showPresetInput"
-                    >
+                    <Button type="outlined" size="2xs" @click="showPresetInput = !showPresetInput">
                         <BookmarkIcon />
                         {{ formatMessage(messages.savePreset) }}
                     </Button>
@@ -699,10 +678,7 @@ function presetCategoryLabel(commandId: string): string {
                             @click="loadPreset(preset)"
                         >
                             {{ preset.name }}
-                            <span
-                                class="preset-delete"
-                                @click.stop="removePreset(preset.id)"
-                            >
+                            <span class="preset-delete" @click.stop="removePreset(preset.id)">
                                 <XIcon />
                             </span>
                         </button>

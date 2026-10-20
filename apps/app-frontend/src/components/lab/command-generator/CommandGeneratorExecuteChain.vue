@@ -1,11 +1,5 @@
 <script setup lang="ts">
-import {
-    ChevronDownIcon,
-    ChevronUpIcon,
-    PlusIcon,
-    SparklesIcon,
-    XIcon,
-} from '@modrinth/assets'
+import { ChevronDownIcon, ChevronUpIcon, PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { useVIntl } from '@modrinth/ui'
 import { computed, ref, watch } from 'vue'
 
@@ -337,9 +331,7 @@ defineExpose({ getState, setState })
                             >
                                 <ChevronDownIcon
                                     :style="{
-                                        transform: step.expanded
-                                            ? 'rotate(180deg)'
-                                            : 'none',
+                                        transform: step.expanded ? 'rotate(180deg)' : 'none',
                                         transition: 'transform 0.15s ease',
                                     }"
                                 />
@@ -377,11 +369,7 @@ defineExpose({ getState, setState })
             </div>
 
             <div class="picker-categories">
-                <div
-                    v-for="cat in categories"
-                    :key="cat.id"
-                    class="picker-category"
-                >
+                <div v-for="cat in categories" :key="cat.id" class="picker-category">
                     <span class="picker-category-label">{{ t(cat.labelKey) }}</span>
                     <div class="picker-category-grid">
                         <button

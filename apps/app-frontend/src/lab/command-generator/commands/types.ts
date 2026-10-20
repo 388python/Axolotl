@@ -86,15 +86,7 @@ export interface CommandDefinition {
 }
 
 export type CommandCategory =
-    | 'player'
-    | 'world'
-    | 'entity'
-    | 'block'
-    | 'item'
-    | 'communication'
-    | 'server'
-    | 'data'
-    | 'misc'
+    'player' | 'world' | 'entity' | 'block' | 'item' | 'communication' | 'server' | 'data' | 'misc'
 
 export interface BaseDataFile {
     version: string

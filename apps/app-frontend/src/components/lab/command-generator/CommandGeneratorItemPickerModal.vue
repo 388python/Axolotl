@@ -12,9 +12,7 @@ import {
 } from '@/lab/recipe-generator/resources'
 import type { JavaVersionId, SlotValue } from '@/lab/recipe-generator/types'
 
-import CommandGeneratorItemPicker, {
-    type CommandItemEntry,
-} from './CommandGeneratorItemPicker.vue'
+import CommandGeneratorItemPicker, { type CommandItemEntry } from './CommandGeneratorItemPicker.vue'
 
 const props = defineProps<{
     version: string

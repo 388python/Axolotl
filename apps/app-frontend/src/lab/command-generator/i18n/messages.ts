@@ -7,13 +7,22 @@ export const commandGeneratorMessages = defineMessages({
         id: 'app.lab.command-generator.subtitle',
         defaultMessage: 'Build Minecraft Java Edition commands visually.',
     },
-    selectVersion: { id: 'app.lab.command-generator.select-version', defaultMessage: 'Game version' },
-    selectCommand: { id: 'app.lab.command-generator.select-command', defaultMessage: 'Choose a command' },
+    selectVersion: {
+        id: 'app.lab.command-generator.select-version',
+        defaultMessage: 'Game version',
+    },
+    selectCommand: {
+        id: 'app.lab.command-generator.select-command',
+        defaultMessage: 'Choose a command',
+    },
     selectPlaceholder: {
         id: 'app.lab.command-generator.select-placeholder',
         defaultMessage: 'Search a command…',
     },
-    parametersTitle: { id: 'app.lab.command-generator.parameters-title', defaultMessage: 'Parameters' },
+    parametersTitle: {
+        id: 'app.lab.command-generator.parameters-title',
+        defaultMessage: 'Parameters',
+    },
     parametersEmpty: {
         id: 'app.lab.command-generator.parameters-empty',
         defaultMessage: 'This command takes no arguments.',
@@ -62,7 +71,8 @@ export const commandGeneratorMessages = defineMessages({
     },
     toastPresetCommandMissing: {
         id: 'app.lab.command-generator.preset.toast.command-missing',
-        defaultMessage: 'Preset "{name}" uses command "{command}" which does not exist in this version',
+        defaultMessage:
+            'Preset "{name}" uses command "{command}" which does not exist in this version',
     },
 
     // ===== 参数卡片 =====

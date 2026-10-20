@@ -47,10 +47,19 @@ const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
     { labelKey: 'app.lab.command-generator.preset.entity.endermen', value: '@e[type=enderman]' },
     { labelKey: 'app.lab.command-generator.preset.entity.villagers', value: '@e[type=villager]' },
     { labelKey: 'app.lab.command-generator.preset.entity.items', value: '@e[type=item]' },
-    { labelKey: 'app.lab.command-generator.preset.entity.creative-players', value: '@a[gamemode=creative]' },
-    { labelKey: 'app.lab.command-generator.preset.entity.survival-players', value: '@a[gamemode=survival]' },
+    {
+        labelKey: 'app.lab.command-generator.preset.entity.creative-players',
+        value: '@a[gamemode=creative]',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.entity.survival-players',
+        value: '@a[gamemode=survival]',
+    },
     { labelKey: 'app.lab.command-generator.preset.entity.nearby-10', value: '@p[distance=..10]' },
-    { labelKey: 'app.lab.command-generator.preset.entity.nearby-entities-5', value: '@e[distance=..5]' },
+    {
+        labelKey: 'app.lab.command-generator.preset.entity.nearby-entities-5',
+        value: '@e[distance=..5]',
+    },
 ]
 
 const ADVANCEMENT_DEFAULT_PRESETS: ArgumentPreset[] = [
@@ -59,26 +68,68 @@ const ADVANCEMENT_DEFAULT_PRESETS: ArgumentPreset[] = [
         value: 'everything',
         descriptionKey: 'app.lab.command-generator.preset.advancement.everything.desc',
     },
-    { labelKey: 'app.lab.command-generator.preset.advancement.root', value: 'minecraft:story/root' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.stone-age', value: 'minecraft:story/mine_stone' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.diamonds', value: 'minecraft:story/mine_diamond' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.enter-nether', value: 'minecraft:story/enter_the_nether' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.kill-dragon', value: 'minecraft:end/kill_dragon' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.elytra', value: 'minecraft:end/elytra' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.hero-village', value: 'minecraft:adventure/hero_of_the_village' },
-    { labelKey: 'app.lab.command-generator.preset.advancement.breed-animals', value: 'minecraft:husbandry/breed_an_animal' },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.root',
+        value: 'minecraft:story/root',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.stone-age',
+        value: 'minecraft:story/mine_stone',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.diamonds',
+        value: 'minecraft:story/mine_diamond',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.enter-nether',
+        value: 'minecraft:story/enter_the_nether',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.kill-dragon',
+        value: 'minecraft:end/kill_dragon',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.elytra',
+        value: 'minecraft:end/elytra',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.hero-village',
+        value: 'minecraft:adventure/hero_of_the_village',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.advancement.breed-animals',
+        value: 'minecraft:husbandry/breed_an_animal',
+    },
 ]
 
 const GAMERULE_DEFAULT_PRESETS: ArgumentPreset[] = [
-    { labelKey: 'app.lab.command-generator.preset.gamerule.keep-inventory', value: 'keepInventory' },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.keep-inventory',
+        value: 'keepInventory',
+    },
     { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-griefing', value: 'mobGriefing' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-daylight-cycle', value: 'doDaylightCycle' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-spawning', value: 'doMobSpawning' },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-daylight-cycle',
+        value: 'doDaylightCycle',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-mob-spawning',
+        value: 'doMobSpawning',
+    },
     { labelKey: 'app.lab.command-generator.preset.gamerule.no-fire-tick', value: 'doFireTick' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-weather-cycle', value: 'doWeatherCycle' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-natural-regen', value: 'naturalRegeneration' },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-weather-cycle',
+        value: 'doWeatherCycle',
+    },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-natural-regen',
+        value: 'naturalRegeneration',
+    },
     { labelKey: 'app.lab.command-generator.preset.gamerule.no-insomnia', value: 'doInsomnia' },
-    { labelKey: 'app.lab.command-generator.preset.gamerule.no-command-feedback', value: 'sendCommandFeedback' },
+    {
+        labelKey: 'app.lab.command-generator.preset.gamerule.no-command-feedback',
+        value: 'sendCommandFeedback',
+    },
 ]
 
 // ============ 类型判断 ============
@@ -99,19 +150,15 @@ const hasInlinePresets = computed(
 )
 
 const isEnumDropdown = computed(
-    () =>
-        !hasInlinePresets.value &&
-        !!props.arg.enumValues &&
-        props.arg.enumValues.length > 0,
+    () => !hasInlinePresets.value && !!props.arg.enumValues && props.arg.enumValues.length > 0,
 )
 
 const enumOptions = computed<ComboboxOption<string>[]>(() =>
     (props.arg.enumValues ?? []).map((value) => ({ value, label: value })),
 )
 
-const itemPickerRef = useTemplateRef<InstanceType<typeof CommandGeneratorItemPickerModal>>(
-    'itemPickerRef',
-)
+const itemPickerRef =
+    useTemplateRef<InstanceType<typeof CommandGeneratorItemPickerModal>>('itemPickerRef')
 
 // ============ 预设合并 ============
 
@@ -152,11 +199,7 @@ const mergedPresets = computed<ArgumentPreset[]>(() => {
 })
 
 const showPresets = computed(
-    () =>
-        !isEnumDropdown.value &&
-        !isNbt.value &&
-        !isItem.value &&
-        mergedPresets.value.length > 0,
+    () => !isEnumDropdown.value && !isNbt.value && !isItem.value && mergedPresets.value.length > 0,
 )
 
 const VISIBLE_PRESET_COUNT = 4

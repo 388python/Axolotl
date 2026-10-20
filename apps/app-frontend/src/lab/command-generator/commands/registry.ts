@@ -1,4 +1,4 @@
-import { computed, type ComputedRef,ref } from 'vue'
+import { computed, type ComputedRef, ref } from 'vue'
 
 import { loadCommandsForVersion, loadManifest } from '../loader.ts'
 import type { CommandCategory, CommandDefinition } from './types.ts'
@@ -39,9 +39,7 @@ export function findCommand(id: string): CommandDefinition | undefined {
     return commandIndex.get(id)
 }
 
-export function getCommandsByCategory(
-    category: CommandCategory,
-): CommandDefinition[] {
+export function getCommandsByCategory(category: CommandCategory): CommandDefinition[] {
     return currentCommands.value.filter((c) => c.category === category)
 }
 

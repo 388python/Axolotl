@@ -15,7 +15,8 @@ export const COMMAND_GUIDES: CommandGuideEntry[] = [
                 explanationKey: 'app.lab.command-generator.guide.give.ex1',
             },
             {
-                command: '/give @p minecraft:diamond_sword{Enchantments:[{id:"minecraft:sharpness",lvl:5}]} 1',
+                command:
+                    '/give @p minecraft:diamond_sword{Enchantments:[{id:"minecraft:sharpness",lvl:5}]} 1',
                 explanationKey: 'app.lab.command-generator.guide.give.ex2',
             },
         ],

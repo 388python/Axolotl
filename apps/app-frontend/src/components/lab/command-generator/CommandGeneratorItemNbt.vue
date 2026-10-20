@@ -101,44 +101,180 @@ const messages = defineMessages({
 })
 
 const ENCHANTMENTS: EnchantDefinition[] = [
-    { id: 'minecraft:sharpness', labelKey: 'app.lab.command-generator.enchantment.sharpness', maxLevel: 5 },
+    {
+        id: 'minecraft:sharpness',
+        labelKey: 'app.lab.command-generator.enchantment.sharpness',
+        maxLevel: 5,
+    },
     { id: 'minecraft:smite', labelKey: 'app.lab.command-generator.enchantment.smite', maxLevel: 5 },
-    { id: 'minecraft:bane_of_arthropods', labelKey: 'app.lab.command-generator.enchantment.bane-of-arthropods', maxLevel: 5 },
-    { id: 'minecraft:knockback', labelKey: 'app.lab.command-generator.enchantment.knockback', maxLevel: 2 },
-    { id: 'minecraft:fire_aspect', labelKey: 'app.lab.command-generator.enchantment.fire-aspect', maxLevel: 2 },
-    { id: 'minecraft:looting', labelKey: 'app.lab.command-generator.enchantment.looting', maxLevel: 3 },
-    { id: 'minecraft:sweeping_edge', labelKey: 'app.lab.command-generator.enchantment.sweeping-edge', maxLevel: 3 },
-    { id: 'minecraft:efficiency', labelKey: 'app.lab.command-generator.enchantment.efficiency', maxLevel: 5 },
-    { id: 'minecraft:silk_touch', labelKey: 'app.lab.command-generator.enchantment.silk-touch', maxLevel: 1 },
-    { id: 'minecraft:unbreaking', labelKey: 'app.lab.command-generator.enchantment.unbreaking', maxLevel: 3 },
-    { id: 'minecraft:fortune', labelKey: 'app.lab.command-generator.enchantment.fortune', maxLevel: 3 },
-    { id: 'minecraft:mending', labelKey: 'app.lab.command-generator.enchantment.mending', maxLevel: 1 },
+    {
+        id: 'minecraft:bane_of_arthropods',
+        labelKey: 'app.lab.command-generator.enchantment.bane-of-arthropods',
+        maxLevel: 5,
+    },
+    {
+        id: 'minecraft:knockback',
+        labelKey: 'app.lab.command-generator.enchantment.knockback',
+        maxLevel: 2,
+    },
+    {
+        id: 'minecraft:fire_aspect',
+        labelKey: 'app.lab.command-generator.enchantment.fire-aspect',
+        maxLevel: 2,
+    },
+    {
+        id: 'minecraft:looting',
+        labelKey: 'app.lab.command-generator.enchantment.looting',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:sweeping_edge',
+        labelKey: 'app.lab.command-generator.enchantment.sweeping-edge',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:efficiency',
+        labelKey: 'app.lab.command-generator.enchantment.efficiency',
+        maxLevel: 5,
+    },
+    {
+        id: 'minecraft:silk_touch',
+        labelKey: 'app.lab.command-generator.enchantment.silk-touch',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:unbreaking',
+        labelKey: 'app.lab.command-generator.enchantment.unbreaking',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:fortune',
+        labelKey: 'app.lab.command-generator.enchantment.fortune',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:mending',
+        labelKey: 'app.lab.command-generator.enchantment.mending',
+        maxLevel: 1,
+    },
     { id: 'minecraft:power', labelKey: 'app.lab.command-generator.enchantment.power', maxLevel: 5 },
     { id: 'minecraft:punch', labelKey: 'app.lab.command-generator.enchantment.punch', maxLevel: 2 },
     { id: 'minecraft:flame', labelKey: 'app.lab.command-generator.enchantment.flame', maxLevel: 1 },
-    { id: 'minecraft:infinity', labelKey: 'app.lab.command-generator.enchantment.infinity', maxLevel: 1 },
-    { id: 'minecraft:multishot', labelKey: 'app.lab.command-generator.enchantment.multishot', maxLevel: 1 },
-    { id: 'minecraft:quick_charge', labelKey: 'app.lab.command-generator.enchantment.quick-charge', maxLevel: 3 },
-    { id: 'minecraft:piercing', labelKey: 'app.lab.command-generator.enchantment.piercing', maxLevel: 4 },
-    { id: 'minecraft:protection', labelKey: 'app.lab.command-generator.enchantment.protection', maxLevel: 4 },
-    { id: 'minecraft:fire_protection', labelKey: 'app.lab.command-generator.enchantment.fire-protection', maxLevel: 4 },
-    { id: 'minecraft:feather_falling', labelKey: 'app.lab.command-generator.enchantment.feather-falling', maxLevel: 4 },
-    { id: 'minecraft:blast_protection', labelKey: 'app.lab.command-generator.enchantment.blast-protection', maxLevel: 4 },
-    { id: 'minecraft:projectile_protection', labelKey: 'app.lab.command-generator.enchantment.projectile-protection', maxLevel: 4 },
-    { id: 'minecraft:respiration', labelKey: 'app.lab.command-generator.enchantment.respiration', maxLevel: 3 },
-    { id: 'minecraft:aqua_affinity', labelKey: 'app.lab.command-generator.enchantment.aqua-affinity', maxLevel: 1 },
-    { id: 'minecraft:thorns', labelKey: 'app.lab.command-generator.enchantment.thorns', maxLevel: 3 },
-    { id: 'minecraft:depth_strider', labelKey: 'app.lab.command-generator.enchantment.depth-strider', maxLevel: 3 },
-    { id: 'minecraft:frost_walker', labelKey: 'app.lab.command-generator.enchantment.frost-walker', maxLevel: 2 },
-    { id: 'minecraft:binding_curse', labelKey: 'app.lab.command-generator.enchantment.binding-curse', maxLevel: 1 },
-    { id: 'minecraft:vanishing_curse', labelKey: 'app.lab.command-generator.enchantment.vanishing-curse', maxLevel: 1 },
-    { id: 'minecraft:soul_speed', labelKey: 'app.lab.command-generator.enchantment.soul-speed', maxLevel: 3 },
-    { id: 'minecraft:swift_sneak', labelKey: 'app.lab.command-generator.enchantment.swift-sneak', maxLevel: 3 },
-    { id: 'minecraft:loyalty', labelKey: 'app.lab.command-generator.enchantment.loyalty', maxLevel: 3 },
-    { id: 'minecraft:impaling', labelKey: 'app.lab.command-generator.enchantment.impaling', maxLevel: 5 },
-    { id: 'minecraft:riptide', labelKey: 'app.lab.command-generator.enchantment.riptide', maxLevel: 3 },
-    { id: 'minecraft:channeling', labelKey: 'app.lab.command-generator.enchantment.channeling', maxLevel: 1 },
-    { id: 'minecraft:luck_of_the_sea', labelKey: 'app.lab.command-generator.enchantment.luck-of-the-sea', maxLevel: 3 },
+    {
+        id: 'minecraft:infinity',
+        labelKey: 'app.lab.command-generator.enchantment.infinity',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:multishot',
+        labelKey: 'app.lab.command-generator.enchantment.multishot',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:quick_charge',
+        labelKey: 'app.lab.command-generator.enchantment.quick-charge',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:piercing',
+        labelKey: 'app.lab.command-generator.enchantment.piercing',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:protection',
+        labelKey: 'app.lab.command-generator.enchantment.protection',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:fire_protection',
+        labelKey: 'app.lab.command-generator.enchantment.fire-protection',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:feather_falling',
+        labelKey: 'app.lab.command-generator.enchantment.feather-falling',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:blast_protection',
+        labelKey: 'app.lab.command-generator.enchantment.blast-protection',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:projectile_protection',
+        labelKey: 'app.lab.command-generator.enchantment.projectile-protection',
+        maxLevel: 4,
+    },
+    {
+        id: 'minecraft:respiration',
+        labelKey: 'app.lab.command-generator.enchantment.respiration',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:aqua_affinity',
+        labelKey: 'app.lab.command-generator.enchantment.aqua-affinity',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:thorns',
+        labelKey: 'app.lab.command-generator.enchantment.thorns',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:depth_strider',
+        labelKey: 'app.lab.command-generator.enchantment.depth-strider',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:frost_walker',
+        labelKey: 'app.lab.command-generator.enchantment.frost-walker',
+        maxLevel: 2,
+    },
+    {
+        id: 'minecraft:binding_curse',
+        labelKey: 'app.lab.command-generator.enchantment.binding-curse',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:vanishing_curse',
+        labelKey: 'app.lab.command-generator.enchantment.vanishing-curse',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:soul_speed',
+        labelKey: 'app.lab.command-generator.enchantment.soul-speed',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:swift_sneak',
+        labelKey: 'app.lab.command-generator.enchantment.swift-sneak',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:loyalty',
+        labelKey: 'app.lab.command-generator.enchantment.loyalty',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:impaling',
+        labelKey: 'app.lab.command-generator.enchantment.impaling',
+        maxLevel: 5,
+    },
+    {
+        id: 'minecraft:riptide',
+        labelKey: 'app.lab.command-generator.enchantment.riptide',
+        maxLevel: 3,
+    },
+    {
+        id: 'minecraft:channeling',
+        labelKey: 'app.lab.command-generator.enchantment.channeling',
+        maxLevel: 1,
+    },
+    {
+        id: 'minecraft:luck_of_the_sea',
+        labelKey: 'app.lab.command-generator.enchantment.luck-of-the-sea',
+        maxLevel: 3,
+    },
     { id: 'minecraft:lure', labelKey: 'app.lab.command-generator.enchantment.lure', maxLevel: 3 },
 ]
 
@@ -189,9 +325,7 @@ const useDataComponents = computed(() => {
     const v = parseVersion(props.version ?? '1.21')
 
     const isAtLeast1205 =
-        v[0] > 1 ||
-        (v[0] === 1 && v[1] > 20) ||
-        (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5)
+        v[0] > 1 || (v[0] === 1 && v[1] > 20) || (v[0] === 1 && v[1] === 20 && (v[2] ?? 0) >= 5)
     if (isAtLeast1205) return true
 
     const is120Family = v[0] === 1 && v[1] === 20
@@ -237,9 +371,7 @@ function serializeLegacy(): string {
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
-        const loreItems = cleanLore
-            .map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`)
-            .join(',')
+        const loreItems = cleanLore.map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`).join(',')
         displayParts.push(`Lore:[${loreItems}]`)
     }
     if (displayParts.length) {
@@ -248,9 +380,7 @@ function serializeLegacy(): string {
 
     if (enchantments.value.length) {
         // 旧版附魔 lvl 是 short 类型，必须加 s 后缀
-        const items = enchantments.value
-            .map((e) => `{id:"${e.id}",lvl:${e.level}s}`)
-            .join(',')
+        const items = enchantments.value.map((e) => `{id:"${e.id}",lvl:${e.level}s}`).join(',')
         parts.push(`Enchantments:[${items}]`)
     }
 
@@ -273,17 +403,13 @@ function serializeDataComponents(): string {
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
-        const loreItems = cleanLore
-            .map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`)
-            .join(',')
+        const loreItems = cleanLore.map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`).join(',')
         parts.push(`lore=[${loreItems}]`)
     }
 
     if (enchantments.value.length) {
         // 新版附魔是键值对映射
-        const enchMap = enchantments.value
-            .map((e) => `"${e.id}":${e.level}`)
-            .join(',')
+        const enchMap = enchantments.value.map((e) => `"${e.id}":${e.level}`).join(',')
         parts.push(`enchantments={${enchMap}}`)
     }
 
@@ -365,7 +491,9 @@ function parseLegacy(snbtStr: string): void {
             if (parsed && typeof parsed.text === 'string') {
                 name.value = parsed.text
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }
 
     const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
@@ -377,7 +505,9 @@ function parseLegacy(snbtStr: string): void {
                 try {
                     const parsed = JSON.parse(content)
                     return typeof parsed?.text === 'string' ? parsed.text : ''
-                } catch { return '' }
+                } catch {
+                    return ''
+                }
             })
             .filter((s) => s.length > 0)
     }
@@ -412,7 +542,9 @@ function parseDataComponents(snbtStr: string): void {
             if (parsed && typeof parsed.text === 'string') {
                 name.value = parsed.text
             }
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
     }
 
     const loreMatch = snbtStr.match(/lore=\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
@@ -424,7 +556,9 @@ function parseDataComponents(snbtStr: string): void {
                 try {
                     const parsed = JSON.parse(content)
                     return typeof parsed?.text === 'string' ? parsed.text : ''
-                } catch { return '' }
+                } catch {
+                    return ''
+                }
             })
             .filter((s) => s.length > 0)
     }
