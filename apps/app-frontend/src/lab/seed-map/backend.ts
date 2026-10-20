@@ -37,7 +37,6 @@ export type SeedMapTileRequest = {
     elevation?: number
     terrain: boolean
     contours: boolean
-    underground?: number
     highlightBiomes?: number[]
 }
 
@@ -142,6 +141,19 @@ export const SEED_MAP_FALLBACK_VERSIONS: readonly string[] = [
 
 export const SEED_MAP_DEFAULT_VERSION = SEED_MAP_FALLBACK_VERSIONS[0]
 
+/** Numeric game versions descend ahead of beta releases; aliases remain selectable. */
+export function compareSeedMapVersions(left: string, right: string): number {
+    const beta = (version: string) => version.startsWith('b')
+    if (beta(left) !== beta(right)) return beta(left) ? 1 : -1
+    const a = left.replace(/^b/, '').split('.').map(Number)
+    const b = right.replace(/^b/, '').split('.').map(Number)
+    for (let index = 0; index < Math.max(a.length, b.length); index++) {
+        const difference = (b[index] ?? 0) - (a[index] ?? 0)
+        if (difference) return difference
+    }
+    return left.localeCompare(right, 'en', { numeric: true })
+}
+
 export function fallbackSeedMapProfiles(): SeedMapVersionProfile[] {
     const profiles: SeedMapVersionProfile[] = []
     for (const edition of ['java', 'java-large-biomes'] as const) {
@@ -202,12 +214,9 @@ export async function renderSeedMapTile(request: SeedMapTileRequest): Promise<Se
         contours: request.contours,
         highlightBiomes: request.highlightBiomes ?? null,
     }
-    const pixels =
-        request.underground === undefined
-            ? await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', { request: tile })
-            : await invoke<ArrayBuffer>('plugin:seed-map|seed_map_underground_tile', {
-                  request: { tile, layers: request.underground },
-              })
+    const pixels = await invoke<ArrayBuffer>('plugin:seed-map|seed_map_render_tile', {
+        request: tile,
+    })
     const expectedLength = request.width * request.height * 4
     if (pixels.byteLength !== expectedLength) {
         throw new Error('The seed map backend returned an unexpected tile size.')

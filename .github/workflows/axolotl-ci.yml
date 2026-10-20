@@ -58,6 +58,7 @@ jobs:
           node scripts/axolotl/check-migrations.mjs --base "${MIGRATION_BASE_REF:-HEAD^}"
           node scripts/axolotl/check-migrations.mjs --release
       - run: node scripts/axolotl/brand-guard.mjs
+      - run: node scripts/axolotl/check-agents.mjs
       - run: node scripts/axolotl/i18n-check.mjs
       - run: node scripts/axolotl/check-css-vars.mjs
       - run: node scripts/axolotl/check-orphan-components.mjs
@@ -76,6 +77,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          submodules: recursive
       - uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6.0.9
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:

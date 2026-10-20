@@ -78,10 +78,17 @@ export const END_CITY_TEMPLATE_NAMES = [
     'tower_top',
 ] as const
 
+export function seedMapStructureResourceVersion(version: string): string {
+    return (
+        (catalog.versions as Record<string, { resourceVersion?: string }>)[version]
+            ?.resourceVersion ?? version
+    )
+}
+
 export function supportsStructureBlocks(version: string, kind: string) {
     return (
         (catalog.versions as Record<string, { structures: string[] }>)[
-            version
+            seedMapStructureResourceVersion(version)
         ]?.structures.includes(kind) ?? false
     )
 }
@@ -101,7 +108,9 @@ export function seedMapTemplatePieces(
     kind: string,
 ): SeedMapStructurePiece[] {
     if (!details?.supported || !supportsStructureBlocks(query.version, kind)) return []
-    const templates = (catalog.versions as TemplateCatalog)[query.version].templates
+    const templates = (catalog.versions as TemplateCatalog)[
+        seedMapStructureResourceVersion(query.version)
+    ].templates
     const variant = details.variant
     const pieces: SeedMapStructurePiece[] = []
     const append = (

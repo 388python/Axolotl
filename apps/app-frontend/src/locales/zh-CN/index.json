@@ -1,4 +1,214 @@
 {
+  "app.content-favorites.browse-resources": {
+    "message": "浏览资源"
+  },
+  "app.content-favorites.clear-filters": {
+    "message": "清除搜索和筛选"
+  },
+  "app.downloads.file-details": {
+    "message": "文件详情"
+  },
+  "app.downloads.open-file-details": {
+    "message": "查看 {name} 的详情"
+  },
+  "app.downloads.copy-file-details": {
+    "message": "复制文件详情"
+  },
+  "app.downloads.job-id": {
+    "message": "任务 ID"
+  },
+  "app.downloads.instance-id": {
+    "message": "实例 ID"
+  },
+  "app.downloads.project-id": {
+    "message": "项目 ID"
+  },
+  "app.downloads.version-id": {
+    "message": "版本 ID"
+  },
+  "app.downloads.request-url": {
+    "message": "请求地址"
+  },
+  "instance.settings.general.name-required": {
+    "message": "请输入不超过 80 个字符的名称。"
+  },
+  "instance.settings.general.name-save-failed": {
+    "message": "名称未能保存。"
+  },
+  "app.servers.load-failed": {
+    "message": "无法读取服务器"
+  },
+  "app.content-favorites.load-failed": {
+    "message": "无法读取收藏"
+  },
+  "app.settings.logs.export.modal.network-connections": {
+    "message": "网络连接"
+  },
+  "app.settings.logs.export.modal.network-connections-hint": {
+    "message": "导出时使用启动器网络设置重新测试所有服务，包含短时下载采样。"
+  },
+  "app.settings.logs.export.modal.exporting": {
+    "message": "正在导出…"
+  },
+  "app.settings.network.title": {
+    "message": "连接测试"
+  },
+  "app.settings.network.mode": {
+    "message": "连接方式"
+  },
+  "app.settings.network.launcher": {
+    "message": "使用启动器代理设置"
+  },
+  "app.settings.network.direct": {
+    "message": "直接连接"
+  },
+  "app.settings.network.run-all": {
+    "message": "测试全部服务"
+  },
+  "app.settings.network.stop": {
+    "message": "停止测试"
+  },
+  "app.settings.network.run": {
+    "message": "测试"
+  },
+  "app.settings.network.run-target": {
+    "message": "测试 {name}"
+  },
+  "app.settings.network.copy": {
+    "message": "复制诊断报告"
+  },
+  "app.settings.network.copied": {
+    "message": "已复制报告"
+  },
+  "app.settings.network.copy-failed": {
+    "message": "无法复制报告，请重试。"
+  },
+  "app.settings.network.idle": {
+    "message": "尚未测试"
+  },
+  "app.settings.network.queued": {
+    "message": "等待测试"
+  },
+  "app.settings.network.running": {
+    "message": "正在测试…"
+  },
+  "app.settings.network.cancelled": {
+    "message": "已停止"
+  },
+  "app.settings.network.failed": {
+    "message": "连接失败"
+  },
+  "app.settings.network.success": {
+    "message": "响应正常"
+  },
+  "app.settings.network.restricted": {
+    "message": "访问受限"
+  },
+  "app.settings.network.http-error": {
+    "message": "HTTP 错误"
+  },
+  "app.settings.network.response": {
+    "message": "响应耗时"
+  },
+  "app.settings.network.peer": {
+    "message": "实际连接 IP"
+  },
+  "app.settings.network.sample": {
+    "message": "短时下载采样"
+  },
+  "app.settings.network.details": {
+    "message": "连接详情"
+  },
+  "app.settings.network.resolved": {
+    "message": "DNS 解析地址"
+  },
+  "app.settings.network.dns-time": {
+    "message": "DNS 解析耗时"
+  },
+  "app.settings.network.dns-mode": {
+    "message": "DNS 解析方式"
+  },
+  "app.settings.network.system-dns": {
+    "message": "系统 DNS"
+  },
+  "app.settings.network.doh": {
+    "message": "DNS over HTTPS"
+  },
+  "app.settings.network.proxy": {
+    "message": "代理设置"
+  },
+  "app.settings.network.system-proxy": {
+    "message": "系统代理"
+  },
+  "app.settings.network.custom-proxy": {
+    "message": "自定义代理"
+  },
+  "app.settings.network.proxy-help": {
+    "message": "使用代理或 VPN 时，实际连接 IP 可能属于代理服务器。DNS 地址由启动器解析，可能与代理实际访问的目标不同。"
+  },
+  "app.settings.network.dns-failed": {
+    "message": "DNS 解析失败"
+  },
+  "app.settings.network.request-failed": {
+    "message": "测试未能启动，请重试此服务。"
+  },
+  "app.settings.network.restricted-help": {
+    "message": "服务器拒绝了请求。"
+  },
+  "app.settings.network.error.timeout": {
+    "message": "连接超时。"
+  },
+  "app.settings.network.error.connection": {
+    "message": "无法建立连接，请检查 DNS、代理或 TLS 连接。"
+  },
+  "app.settings.network.error.body": {
+    "message": "无法读取响应内容。"
+  },
+  "app.settings.network.error.request": {
+    "message": "请求失败。"
+  },
+  "app.settings.network.error.empty-body": {
+    "message": "未收到下载数据。"
+  },
+  "app.settings.network.status": {
+    "message": "HTTP 状态"
+  },
+  "app.settings.network.protocol": {
+    "message": "HTTP 协议"
+  },
+  "app.settings.network.tested": {
+    "message": "测试时间"
+  },
+  "app.settings.network.url": {
+    "message": "请求地址"
+  },
+  "app.settings.network.tls": {
+    "message": "TLS 证书验证"
+  },
+  "app.settings.network.tls-on": {
+    "message": "已开启"
+  },
+  "app.settings.network.tls-off": {
+    "message": "已在启动器设置中关闭"
+  },
+  "app.settings.network.stale": {
+    "message": "上次测试结果"
+  },
+  "app.settings.network.launcher-version": {
+    "message": "启动器版本"
+  },
+  "app.settings.network.platform": {
+    "message": "运行平台"
+  },
+  "app.settings.tabs.network-connection": {
+    "message": "网络测试"
+  },
+  "app.settings.network.search": {
+    "message": "DNS IP 延迟 速度 网络 连通性 诊断 CurseForge CF Modrinth MR CDN Mojang API 代理"
+  },
+  "app.files.error.in-use": {
+    "message": "文件正被占用，请关闭游戏或其他占用该文件的程序后重试。"
+  },
   "app.content-install.retained-instance.title": {
     "message": "已保留创建的实例"
   },
@@ -1481,9 +1691,6 @@
   "app.downloads.local": {
     "message": "本地"
   },
-  "app.downloads.manual-download-project-file": {
-    "message": "项目 {projectId} · 文件 {fileId}"
-  },
   "app.downloads.manual-download-required": {
     "message": "CurseForge 要求手动下载此文件。"
   },
@@ -1579,9 +1786,6 @@
   },
   "app.downloads.missing-required-content": {
     "message": "已完成 {completed} / {total} 个必需文件，还有 {missing} 个文件需要补全。点击 补全缺失文件 按钮可以选择下载或让启动器自动从监听文件夹中导入。"
-  },
-  "app.downloads.more-active-requests": {
-    "message": "另有 {count} 个进行中的请求"
   },
   "app.downloads.new-download": {
     "message": "新建下载"
@@ -5420,23 +5624,14 @@
   "app.lab.seed-map.ore-layers": {
     "message": "矿物图层"
   },
-  "app.lab.seed-map.ore-likely": {
-    "message": "可能存在"
-  },
   "app.lab.seed-map.ore-max-y": {
     "message": "最高 Y"
   },
   "app.lab.seed-map.ore-min-y": {
     "message": "最低 Y"
   },
-  "app.lab.seed-map.ore-precision": {
-    "message": "精度 {precision}%"
-  },
   "app.lab.seed-map.ore-scan-failed": {
     "message": "矿物扫描失败，请刷新地图后重试。"
-  },
-  "app.lab.seed-map.ore-verified": {
-    "message": "已验证"
   },
   "app.lab.seed-map.ore-y-range": {
     "message": "Y 范围"
@@ -6567,7 +6762,7 @@
     "message": "主操作台"
   },
   "app.onboarding.instance-tabs.description": {
-    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。重复资源默认折叠；展开可查看每个实际文件，组级更新会处理全部可更新副本。Mod 更新和版本切换直接入队，不解析依赖。新增安装使用依赖预览，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可从内容工具栏打开“旧文件与备份”，搜索、选择并预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。"
+    "message": "在这些标签页管理内容、文件、截图、存档和日志。内容可按安装平台或归属筛选。重复资源默认折叠；展开可查看每个实际文件，组级更新会处理全部可更新副本。安装、Mod 更新和版本切换都会显示依赖预览。继续前请检查缺失或冲突的依赖，使用 + 添加可选依赖。兼容例外仅适用于所选发布和维度。可从已核验的历史备份恢复更新，也可从内容工具栏打开“旧文件与备份”，搜索、选择并预览手动清理。内容下载设置可控制中文命名和本地前后缀保留。"
   },
   "app.onboarding.instance-tabs.title": {
     "message": "剩下的工作台"
@@ -9204,7 +9399,7 @@
     "message": "崩溃分析（检测到崩溃时）"
   },
   "app.settings.logs.export.modal.description": {
-    "message": "选择要包含的详细程度。导出的日志会把访问令牌、Minecraft 令牌与 IP 地址替换为占位符。"
+    "message": "选择要包含的详细程度。账户凭据会替换为占位符；日志中的 IP 地址会隐藏，网络连接报告中的 IP 地址会完整保留。"
   },
   "app.settings.logs.export.modal.extras": {
     "message": "附加信息"
@@ -14588,14 +14783,50 @@
   "app.lab.seed-map.underground-mode": {
     "message": "地下"
   },
-  "app.lab.seed-map.underground-density": {
-    "message": "地形密度"
+  "app.lab.seed-map.underground-3d.back": {
+    "message": "返回地图"
   },
-  "app.lab.seed-map.underground-caves": {
-    "message": "洞穴雕刻层"
+  "app.lab.seed-map.underground-3d.context-lost": {
+    "message": "3D 图形上下文已丢失，请返回地图后重新打开此视图。"
   },
-  "app.lab.seed-map.underground-canyons": {
-    "message": "峡谷雕刻层"
+  "app.lab.seed-map.underground-3d.controls": {
+    "message": "鼠标转向 · WASD 移动 · 空格 / Shift 上升 / 下降 · 滚轮调整速度 · Esc 释放鼠标。自由飞行，不检测碰撞。"
+  },
+  "app.lab.seed-map.underground-3d.failed": {
+    "message": "无法生成此区域，已保留上一次的视图。可重试或返回地图。"
+  },
+  "app.lab.seed-map.underground-3d.lava": {
+    "message": "岩浆（估算）"
+  },
+  "app.lab.seed-map.underground-3d.limits": {
+    "message": "仅绘制紧贴空腔的岩层，其余实心岩层隐藏。石头、深板岩和下界岩为代表性洞壁材质；地表使用石头或下界岩表示，不模拟群系地表规则和装饰。基岩层厚度为估算值，与原版随机分布不完全一致。水仅估算地形表面以上、Y=63 以下的部分，不模拟地下含水层。岩浆填充 Y={lava} 以下的空腔。流体使用静态原版贴图。矿物替换、空气暴露规则、装饰和玩家改动尚未完整模拟。"
+  },
+  "app.lab.seed-map.underground-3d.no-air": {
+    "message": "此位置附近未找到开放洞穴。可以穿过岩层飞行，或生成其他区域。"
+  },
+  "app.lab.seed-map.underground-3d.ores": {
+    "message": "矿物候选"
+  },
+  "app.lab.seed-map.underground-3d.paused": {
+    "message": "点击画面开始探索"
+  },
+  "app.lab.seed-map.underground-3d.position": {
+    "message": "X {x} · Y {y} · Z {z} · {speed} 方块/秒"
+  },
+  "app.lab.seed-map.underground-3d.retry": {
+    "message": "重试此区域"
+  },
+  "app.lab.seed-map.underground-3d.terrain": {
+    "message": "洞穴边界"
+  },
+  "app.lab.seed-map.underground-3d.title": {
+    "message": "3D 地下 · X-Ray"
+  },
+  "app.lab.seed-map.underground-3d.truncated": {
+    "message": "矿物候选达到数量上限，部分矿床未显示。"
+  },
+  "app.lab.seed-map.underground-3d.water": {
+    "message": "水（估算）"
   },
   "app.lab.seed-map.advanced-tour": {
     "message": "地图探索指南"
@@ -14616,7 +14847,7 @@
     "message": "查看地表之下"
   },
   "app.onboarding.seed-map-underground.description": {
-    "message": "地下模式显示指定高度的切片。放大地图、选择 Y 高度，并独立开关地形密度、洞穴和峡谷雕刻层。预测不模拟水、含水层和后续世界变化。"
+    "message": "点击“地下”直接进入 3D X-Ray 视图。点击画面转向，WASD 移动，空格 / Shift 上升或下降，Esc 释放鼠标。计算空闲时预生成水平半径最多 12 区块，每个 16 × 16 区块覆盖完整高度。地表和基岩图层可独立开关。左上角显示当前位置和目标方块坐标，右上角显示已加载区块数及生成状态。流体和基岩厚度为估算，矿物位置为候选结果。"
   },
   "app.onboarding.brewing.title": {
     "message": "创建酿造配方"
@@ -14692,9 +14923,6 @@
   },
   "app.lab.seed-map.details.positions-unavailable": {
     "message": "引擎提供了容器位置，但未提供此结构的结构块位置。"
-  },
-  "app.lab.seed-map.underground-limit": {
-    "message": "放大地图后查看地下切片。预测不模拟水、含水层和方块替换。"
   },
   "app.lab.seed-map.copyright.view-license": {
     "message": "查看 MIT 许可证"
@@ -15208,5 +15436,137 @@
   },
   "app.lab.seed-map.preview.estimated-loot": {
     "message": "战利品随机种子为估算值，物品可能与游戏内结果不同。"
+  },
+  "app.lab.seed-map.underground-3d.surface": {
+    "message": "地表层"
+  },
+  "app.lab.seed-map.underground-3d.target": {
+    "message": "目标方块：X {x} · Y {y} · Z {z}"
+  },
+  "app.lab.seed-map.underground-3d.no-target": {
+    "message": "目标方块：256 格内未命中方块"
+  },
+  "app.lab.seed-map.underground-3d.memory": {
+    "message": "预览内存预算已满，移动时会释放远处区块。"
+  },
+  "app.lab.seed-map.underground-3d.bedrock": {
+    "message": "基岩"
+  },
+  "app.lab.seed-map.underground-3d.chunks": {
+    "message": "{count} 区块"
+  },
+  "app.lab.seed-map.underground-3d.generating-status": {
+    "message": "正在生成 · 已加载 {count} 区块"
+  },
+  "app.lab.seed-map.underground-3d.complete-status": {
+    "message": "已就绪 · 已加载 {count} 区块"
+  },
+  "app.lab.seed-map.area.title": {
+    "message": "区域分析"
+  },
+  "app.lab.seed-map.area.close": {
+    "message": "关闭区域分析"
+  },
+  "app.lab.seed-map.area.ores": {
+    "message": "矿物统计"
+  },
+  "app.lab.seed-map.area.loot": {
+    "message": "搜索战利品"
+  },
+  "app.lab.seed-map.area.height": {
+    "message": "高度范围"
+  },
+  "app.lab.seed-map.area.min-y": {
+    "message": "最低 Y"
+  },
+  "app.lab.seed-map.area.max-y": {
+    "message": "最高 Y"
+  },
+  "app.lab.seed-map.area.analyze": {
+    "message": "统计矿石方块"
+  },
+  "app.lab.seed-map.area.search": {
+    "message": "搜索箱子战利品"
+  },
+  "app.lab.seed-map.area.query": {
+    "message": "物品名称或 minecraft:物品ID"
+  },
+  "app.lab.seed-map.area.cancel": {
+    "message": "取消"
+  },
+  "app.lab.seed-map.area.progress": {
+    "message": "正在分析 {done} / {total}"
+  },
+  "app.lab.seed-map.area.discover": {
+    "message": "正在查找结构 {done} / {total}"
+  },
+  "app.lab.seed-map.area.ore-limit": {
+    "message": "仅统计预测矿石候选方块，尚未验证地形替换。普通矿石与深板岩矿石合并，普通矿床和大型矿脉的重叠位置只统计一次。数量不代表保证可挖掘的产量。"
+  },
+  "app.lab.seed-map.area.loot-limit": {
+    "message": "搜索此 X/Z 区域内所有高度的受支持箱子，也会检查起点位于区域外 512 方块内的结构。起点更远的结构及不受支持的战利品表不在搜索范围内。"
+  },
+  "app.lab.seed-map.area.too-large": {
+    "message": "请将区域缩小至不超过 {max} 区块。"
+  },
+  "app.lab.seed-map.area.unavailable": {
+    "message": "此版本或维度不支持矿物预测。"
+  },
+  "app.lab.seed-map.area.invalid-y": {
+    "message": "请输入 {min} 至 {max} 之间有效的高度范围。"
+  },
+  "app.lab.seed-map.area.partial": {
+    "message": "结果不完整：部分预测未实现、部分查询失败，或已达到结果数量上限。"
+  },
+  "app.lab.seed-map.area.canceled": {
+    "message": "已取消，可重新分析选定区域。"
+  },
+  "app.lab.seed-map.area.failed": {
+    "message": "分析失败，可在此区域重试。"
+  },
+  "app.lab.seed-map.area.no-ores": {
+    "message": "该区域及高度范围内未找到矿物候选。"
+  },
+  "app.lab.seed-map.area.no-loot": {
+    "message": "已搜索的箱子中未找到匹配的战利品。"
+  },
+  "app.lab.seed-map.area.checked": {
+    "message": "已搜索 {count} 个箱子 · {unsupported} 项不支持 · {failed} 项失败"
+  },
+  "app.lab.seed-map.area.missing": {
+    "message": "部分战利品子表缺失，搜索结果不完整。"
+  },
+  "app.lab.seed-map.area.estimated": {
+    "message": "战利品为估算结果"
+  },
+  "app.lab.seed-map.area.position-estimated": {
+    "message": "箱子坐标及其是否位于该区域内为估算结果。"
+  },
+  "app.lab.seed-map.area.locate": {
+    "message": "定位箱子"
+  },
+  "app.lab.seed-map.area.snapshot": {
+    "message": "“{query}”的搜索结果"
+  },
+  "app.lab.seed-map.area.mineral": {
+    "message": "矿物"
+  },
+  "app.lab.seed-map.area.blocks": {
+    "message": "候选方块数"
+  },
+  "app.lab.seed-map.area.container": {
+    "message": "箱子 {number}"
+  },
+  "app.lab.seed-map.area.chunks": {
+    "message": "{count} 区块 · {width} × {depth} 方块"
+  },
+  "app.onboarding.seed-map-area.title": {
+    "message": "分析选定区域"
+  },
+  "app.onboarding.seed-map-area.description": {
+    "message": "在二维地图上按住鼠标右键拖动即可框选区域。可以按高度范围统计矿石候选方块，也能按物品名称或 ID 搜索受支持箱子的战利品。分析支持取消，并会说明预测限制。右键单击仍可添加标记。"
+  },
+  "app.resources.error.incomplete-versions": {
+    "message": "内容来源未能返回全部版本，请打开项目的“版本”标签页选择文件。"
   }
 }

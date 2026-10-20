@@ -730,9 +730,10 @@ static const int ore_groups[][7] = {
         {BlackstoneOre, -1}, {MagmaOre, -1}, {SoulSandOre, -1},
     };
 
-size_t axolotl_seed_map_scan_ores(
+static size_t scan_ores_cancellable(
     uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
-    int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity
+    int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity,
+    uint64_t request_id, int32_t (*canceled)(uint64_t)
 ) {
     if (!xyz || capacity == 0 || mc < MC_1_13) return 0;
     Generator g;
@@ -745,6 +746,7 @@ size_t axolotl_seed_map_scan_ores(
         if (!initOreVeinNoise(&noise, seed, mc)) return 0;
         const int copper = kind == 4;
         for (int y = copper ? 0 : -60; y <= (copper ? 50 : -8); y++) {
+            if (canceled && canceled(request_id)) return count;
             for (int x = cx * 16; x < cx * 16 + 16; x++) {
                 for (int z = cz * 16; z < cz * 16 + 16; z++) {
                     const int block = getOreVeinBlockAt(x, y, z, &noise);
@@ -762,9 +764,28 @@ size_t axolotl_seed_map_scan_ores(
     initSurfaceNoise(&sn, dimension, seed);
     int biome = getBiomeForOreGen(&g, cx, cz, 64);
     for (int index = 0; index < 7 && ore_groups[kind][index] >= 0; index++) {
+        if (canceled && canceled(request_id)) return count;
         OreConfig config;
         if (!getOreConfig(ore_groups[kind][index], mc, biome, &config) || config.dim != dimension) continue;
-        Pos3List positions = generateOres(&g, &sn, config, cx, cz);
+        Pos3List positions;
+        if (!canceled) positions = generateOres(&g, &sn, config, cx, cz);
+        else {
+            uint64_t population_seed = getPopulationSeed(mc, seed, cx * 16, cz * 16);
+            RandomSource random = {.type = mc <= MC_1_17 ? JAVA_RANDOM : XOROSHIRO_J};
+            absSetSeed(&random, population_seed + config.index + 10000 * config.step);
+            int repeats = config.repeatCount;
+            if (config.oreType == LargeDiamondOre || config.oreType == UpperAndesiteOre ||
+                config.oreType == UpperDioriteOre || config.oreType == UpperGraniteOre)
+                repeats = absNextFloat(&random) < 1.0F / config.repeatCount;
+            createPos3List(&positions, 1024);
+            for (int repeat = 0; repeat < repeats; repeat++) {
+                if (canceled(request_id)) { freePos3List(&positions); return count; }
+                Pos3 base = generateBaseOrePosition(mc, config, cx, cz, &random);
+                int ore_biome = getBiomeAt(&g, 1, base.x, base.y, base.z);
+                if (isViableOreBiome(mc, config.oreType, ore_biome))
+                    generateOrePositions(&g, &sn, config, base, &random, &positions);
+            }
+        }
         for (int i = 0; i < positions.size && count < capacity; i++) {
             xyz[count * 3] = positions.pos3s[i].x;
             xyz[count * 3 + 1] = positions.pos3s[i].y;
@@ -775,6 +796,17 @@ size_t axolotl_seed_map_scan_ores(
         if (count == capacity) break;
     }
     return count;
+}
+
+size_t axolotl_seed_map_scan_ores(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
+    int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity) {
+    return scan_ores_cancellable(seed, mc, flags, dimension, cx, cz, kind, xyz, capacity, 0, NULL);
+}
+
+size_t axolotl_seed_map_scan_ores_cancellable(uint64_t seed, int32_t mc, int32_t flags, int32_t dimension,
+    int32_t cx, int32_t cz, int32_t kind, int32_t *xyz, size_t capacity,
+    uint64_t request_id, int32_t (*canceled)(uint64_t)) {
+    return scan_ores_cancellable(seed, mc, flags, dimension, cx, cz, kind, xyz, capacity, request_id, canceled);
 }
 
 int axolotl_seed_map_surface_heights(

@@ -19,7 +19,7 @@ const colors = { X: 'var(--color-red)', Y: 'var(--color-green)', Z: 'var(--color
 <template>
     <svg
         viewBox="-48 -48 96 96"
-        class="pointer-events-none absolute bottom-2 right-2 size-24 rounded-lg bg-surface-2/80"
+        class="pointer-events-none absolute bottom-2 right-2 size-24 rounded-lg bg-[color-mix(in_srgb,var(--surface-2)_var(--opacity-ratio-keep-80),transparent)]"
         role="img"
         :aria-label="formatMessage(messages.axes)"
         data-testid="seed-map-axis-indicator"

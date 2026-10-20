@@ -40,6 +40,7 @@ pub use self::backup::{
     list_operations as list_backup_operations,
     list_snapshots as list_backup_snapshots,
     maintain_repository as maintain_backup_repository,
+    recover_repository as recover_backup_repository,
     repository_status as get_backup_repository_status, restore_snapshot,
     start_repository_move as move_backup_repository,
     start_restore_preview as get_backup_restore_preview,
@@ -151,9 +152,10 @@ pub use self::synced_servers::{
     list_synced_servers, remove_synced_server, update_synced_server,
 };
 pub use self::upgrade::{
-    dismiss_instance_post_upgrade_notice, execute_instance_upgrade,
-    get_instance_post_upgrade_notice, get_instance_upgrade_plan,
-    plan_instance_upgrade, reset_instance_upgrade_resolution,
+    discard_instance_upgrade_plan, dismiss_instance_post_upgrade_notice,
+    execute_instance_upgrade, get_instance_post_upgrade_notice,
+    get_instance_upgrade_plan, plan_instance_upgrade,
+    reset_instance_upgrade_resolution,
     resolve_custom_instance_upgrade_solution, select_instance_upgrade_solution,
     update_instance_upgrade_resolution, update_instance_upgrade_resolutions,
 };
@@ -167,3 +169,5 @@ pub use self::groups::{
     rename_group, set_group_memberships, set_group_order,
     update_group_memberships,
 };
+
+mod upgrade_plan_registry;

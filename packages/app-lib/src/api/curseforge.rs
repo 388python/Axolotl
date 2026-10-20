@@ -9913,7 +9913,7 @@ impl From<CurseForgeProject> for UnifiedSearchHit {
     }
 }
 
-fn api_key() -> Option<String> {
+pub(crate) fn api_key() -> Option<String> {
     api_key_with_source().0
 }
 

@@ -57,6 +57,21 @@ pub(crate) async fn sync_content_files(
     instance_id: &str,
     state: &State,
 ) -> crate::Result<Vec<InstanceFile>> {
+    sync_content_files_with_verification(instance_id, state, false).await
+}
+
+pub(crate) async fn sync_content_files_for_operation(
+    instance_id: &str,
+    state: &State,
+) -> crate::Result<Vec<InstanceFile>> {
+    sync_content_files_with_verification(instance_id, state, true).await
+}
+
+async fn sync_content_files_with_verification(
+    instance_id: &str,
+    state: &State,
+    verify_all: bool,
+) -> crate::Result<Vec<InstanceFile>> {
     let instance =
         sqlite::instance_rows::get_instance_by_id(instance_id, &state.pool)
             .await?
@@ -64,12 +79,21 @@ pub(crate) async fn sync_content_files(
                 crate::ErrorKind::InputError("Unknown instance".to_string())
             })?;
 
-    sync_instance_content_files(&instance, state).await
+    sync_instance_content_files_with_verification(&instance, state, verify_all)
+        .await
 }
 
 pub(crate) async fn sync_instance_content_files(
     instance: &Instance,
     state: &State,
+) -> crate::Result<Vec<InstanceFile>> {
+    sync_instance_content_files_with_verification(instance, state, false).await
+}
+
+async fn sync_instance_content_files_with_verification(
+    instance: &Instance,
+    state: &State,
+    verify_all: bool,
 ) -> crate::Result<Vec<InstanceFile>> {
     let watch_snapshot = state
         .file_watcher
@@ -93,11 +117,7 @@ pub(crate) async fn sync_instance_content_files(
             .as_deref()
             .map(str::trim)
             .is_some_and(|linked| !linked.is_empty());
-    let instance_files_root = if is_direct_linked {
-        content_root.clone()
-    } else {
-        state.directories.instances_dir().join(&instance.path)
-    };
+    let instance_files_root = content_root.clone();
     let cache_key_path = if is_direct_linked {
         content_root.to_string_lossy().into_owned()
     } else {
@@ -109,30 +129,6 @@ pub(crate) async fn sync_instance_content_files(
         .iter()
         .map(|file| file.relative_path.clone())
         .collect::<HashSet<_>>();
-    let cache_keys = scanned
-        .iter()
-        .map(|file| file.hash_cache_key.as_str())
-        .collect::<Vec<_>>();
-    let hashes = CachedEntry::get_file_hash_many(
-        &cache_keys,
-        None,
-        &state.pool,
-        &state.api_semaphore,
-    )
-    .await?;
-    let hashes_by_key = hashes
-        .into_iter()
-        .map(|hash| {
-            (
-                format!(
-                    "{}-{}",
-                    hash.size,
-                    hash.path.trim_end_matches(".disabled")
-                ),
-                hash,
-            )
-        })
-        .collect::<HashMap<_, _>>();
     let existing_files =
         sqlite::content_rows::get_instance_files(&instance.id, &state.pool)
             .await?;
@@ -146,6 +142,37 @@ pub(crate) async fn sync_instance_content_files(
             .push(file.clone());
         existing_files_by_path.insert(file.relative_path.clone(), file);
     }
+    // A cache miss computes a hash. Only ask for new paths here; existing
+    // rows are reused or rehashed below according to the watcher snapshot.
+    let cache_keys: Vec<_> = scanned
+        .iter()
+        .filter(|file| {
+            !verify_all
+                && !existing_files_by_path.contains_key(&file.relative_path)
+                && !content_path_is_dirty(&file.relative_path, &dirty_paths)
+        })
+        .map(|file| file.hash_cache_key.as_str())
+        .collect();
+    let hashes = CachedEntry::get_file_hash_many(
+        &cache_keys,
+        Some(CacheBehaviour::CacheOnly),
+        &state.pool,
+        &state.api_semaphore,
+    )
+    .await?;
+    let hashes_by_key: HashMap<_, _> = hashes
+        .into_iter()
+        .map(|hash| {
+            (
+                format!(
+                    "{}-{}",
+                    hash.size,
+                    hash.path.trim_end_matches(".disabled")
+                ),
+                hash,
+            )
+        })
+        .collect();
     let content_set = sqlite::content_rows::get_applied_content_set(
         &instance.id,
         &state.pool,
@@ -176,6 +203,8 @@ pub(crate) async fn sync_instance_content_files(
         let existing_file = existing_files_by_path.get(&file.relative_path);
         let (scanned_sha1, scanned_size) = if let Some(existing_file) =
             existing_file
+            && !verify_all
+            && !existing_file.missing
             && existing_file.size == file.size
             && !content_path_is_dirty(&file.relative_path, &dirty_paths)
         {
@@ -186,7 +215,7 @@ pub(crate) async fn sync_instance_content_files(
             let (_, sha1) = fetch::sha1_file_async(&path).await?;
             (sha1, file.size)
         } else {
-            match hashes_by_key.get(hash_key) {
+            match hashes_by_key.get(hash_key).filter(|_| !verify_all) {
                 Some(hash) => (hash.hash.clone(), hash.size),
                 None => {
                     let path = join_content_path(
@@ -1030,6 +1059,60 @@ mod tests {
             "expected the override-root mod to be scanned"
         );
         assert!(files[0].relative_path.ends_with("mods/my-mod.jar"));
+        crate::resources::installed::refresh_snapshot(
+            &state,
+            &instance.id,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+        let entries =
+            crate::resources::plans::installed(&state.pool, &instance.id)
+                .await
+                .unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].relative_path, "mods/my-mod.jar");
+        assert_eq!(
+            entries[0].ownership,
+            crate::resources::ResourceOwnership::UserAdded
+        );
+        assert!(entries[0].artifact.is_none());
+        crate::resources::installed::refresh_snapshot(
+            &state,
+            &instance.id,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            crate::resources::plans::installed(&state.pool, &instance.id)
+                .await
+                .unwrap()[0]
+                .entry_id,
+            entries[0].entry_id
+        );
+        fs::write(mods_dir.join("my-mod.jar"), "updated mod bytes").unwrap();
+        let updated = sync_instance_content_files(&instance, &state)
+            .await
+            .unwrap();
+        assert_eq!(updated.len(), 1);
+        assert_eq!(updated[0].size, 17);
+        assert_ne!(updated[0].sha1, files[0].sha1);
+        assert_eq!(updated[0].id, files[0].id);
+        fs::write(mods_dir.join("my-mod.jar"), "changed mod bytes").unwrap();
+        crate::resources::installed::refresh_snapshot(
+            &state,
+            &instance.id,
+            &tokio_util::sync::CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+        let refreshed =
+            crate::resources::plans::installed(&state.pool, &instance.id)
+                .await
+                .unwrap();
+        assert_eq!(refreshed[0].integrity.size, Some(updated[0].size));
+        assert_ne!(refreshed[0].integrity.hashes[0].value, updated[0].sha1);
     }
 
     #[test]

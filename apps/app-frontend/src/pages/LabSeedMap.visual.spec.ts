@@ -6,9 +6,15 @@ import { page, userEvent } from 'vitest/browser'
 import { defineComponent, h, Suspense, Transition, type VNode } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
 
-import type { SeedMapStructureDetails, SeedMapStructurePiece } from '@/lab/seed-map/advanced'
-import type { SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
+import type {
+    SeedMapLoot,
+    SeedMapStructureDetails,
+    SeedMapStructurePiece,
+} from '@/lab/seed-map/advanced'
+import type { SeedMapArea } from '@/lab/seed-map/area-analysis'
+import type { SeedMapOreScanChunk, SeedMapTile, SeedMapTileRequest } from '@/lab/seed-map/backend'
 import type { SeedMapFeature } from '@/lab/seed-map/features'
+import { layoutSeedMapMarkers } from '@/lab/seed-map/marker-rendering'
 import { createDefaultSeedMapWorkspace, type SeedMapWorkspace } from '@/lab/seed-map/workspace'
 
 import LabSeedMap from './LabSeedMap.vue'
@@ -19,14 +25,25 @@ const backend = vi.hoisted(() => ({
         seed: string
         resolve: (spawn: { x: number; z: number; approximate: boolean }) => void
     }[],
-    features: vi.fn(async () => []),
-    ores: vi.fn(async () => []),
+    features: vi.fn(async (): Promise<SeedMapFeature[]> => []),
+    loot: vi.fn(async (): Promise<SeedMapLoot> => ({
+        supported: true,
+        truncated: false,
+        items: [],
+        limits: [],
+    })),
+    ores: vi.fn(
+        async (_request: {
+            ores: string[]
+            chunks: number[]
+        }): Promise<SeedMapOreScanChunk[]> => [],
+    ),
     details: vi.fn(),
 }))
 
 vi.mock('@/lab/seed-map/advanced', () => ({
     getSeedMapStructureDetails: backend.details,
-    getSeedMapContainerLoot: vi.fn(),
+    getSeedMapContainerLoot: backend.loot,
 }))
 
 vi.mock('vue-router', async (importOriginal) => ({
@@ -45,6 +62,18 @@ vi.mock('@/components/lab/seed-map/SeedMapCopyrightModal.vue', () => ({
 vi.mock('@/components/lab/seed-map/SeedMapWorldImportModal.vue', () => ({
     default: { render: () => null },
 }))
+vi.mock('@/components/lab/seed-map/SeedMapUndergroundPreview.vue', () => ({
+    default: {
+        props: ['query'],
+        emits: ['close'],
+        setup:
+            (_, { emit }) =>
+            () =>
+                h('div', { 'data-testid': 'direct-underground' }, [
+                    h('button', { onClick: () => emit('close') }, 'Back to map'),
+                ]),
+    },
+}))
 vi.mock('@/lab/seed-map/backend.ts', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@/lab/seed-map/backend')>()),
     getSeedMapProfiles: async () => [
@@ -54,6 +83,7 @@ vi.mock('@/lab/seed-map/backend.ts', async (importOriginal) => ({
             available: true,
             dimensions: ['overworld', 'nether', 'end'],
             ores: true,
+            undergroundMasks: [7, 3, 1],
         },
     ],
     renderSeedMapTile: (request: SeedMapTileRequest) =>
@@ -112,17 +142,357 @@ type MapVm = {
     focusedPiece: SeedMapStructurePiece | null
     selectAt: (x: number, y: number) => void
     worldToScreen: (x: number, z: number) => { x: number; y: number }
+    addMarker: () => void
+    markerName: string
+    dimensionMarkers: SeedMapWorkspace['markers']
+    selectedArea: SeedMapArea | null
+    markerDraftOpen: boolean
 }
 let wrapper: VueWrapper | undefined
 let closed: ReturnType<typeof vi.spyOn>[] = []
+
+it('validates numeric and cleared heights and cancels a pending batch when area analysis closes', async () => {
+    const { vm } = await openMap()
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    const panel = wrapper!.getComponent({ name: 'SeedMapAreaAnalysis' })
+    const state = panel.vm as unknown as { minY: number | undefined }
+    state.minY = undefined
+    await flushPromises()
+    expect(
+        panel
+            .findAll('button')
+            .find((button) => button.text() === 'Count mineral blocks')!
+            .attributes('disabled'),
+    ).toBeDefined()
+    state.minY = -64
+    await flushPromises()
+    let finish: ((value: SeedMapOreScanChunk[]) => void) | undefined
+    backend.ores.mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve
+            }),
+    )
+    await userEvent.click(page.getByRole('button', { name: 'Count mineral blocks', exact: true }))
+    await vi.waitFor(() => expect(panel.find('progress').exists()).toBe(true))
+    expect(Number(panel.get('progress').attributes('max'))).toBeGreaterThan(0)
+    const calls = backend.ores.mock.calls.length
+    await userEvent.click(page.getByRole('button', { name: 'Close area analysis', exact: true }))
+    finish!([])
+    await flushPromises()
+    expect(backend.ores.mock.calls).toHaveLength(calls)
+    expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(false)
+})
+
+it('searches supported loot outside visible layers and locates a chest while retaining area results', async () => {
+    const { vm } = await openMap()
+    backend.features.mockResolvedValue([{ kind: 'outpost', x: 100, z: 100, approximate: false }])
+    backend.details.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        pieces: [],
+        containers: [{ id: 0, piece: 0, x: 5, z: 7 }],
+        limits: ['container_positions_approximate'],
+    })
+    backend.loot.mockResolvedValue({
+        supported: true,
+        truncated: false,
+        items: [{ id: 'minecraft:diamond', count: 3, enchantments: [] }],
+        limits: [],
+    })
+    vm.workspace.visibleFeatures = []
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    await userEvent.click(page.getByRole('tab', { name: 'Find loot', exact: true }))
+    const panel = wrapper!.get('[data-testid="seed-map-area-analysis"]')
+    await panel.get('input').setValue('diamond')
+    await userEvent.click(page.getByRole('button', { name: 'Search container loot', exact: true }))
+    await vi.waitFor(() => expect(panel.text()).toContain('Diamond ×3'))
+    expect(panel.text()).toContain('Chest coordinates and inclusion in this area are approximate')
+    await userEvent.click(page.getByRole('button', { name: 'Locate chest', exact: true }))
+    expect(vm.workspace.center).toEqual({ x: 5, z: 7 })
+    expect(vm.selectedArea).not.toBeNull()
+    expect(panel.text()).toContain('Diamond ×3')
+})
+
+it('draws a live deep-purple right-drag rectangle without panning or opening a native context menu', async () => {
+    const { vm, canvas } = await openMap()
+    const capture = vi.spyOn(canvas, 'setPointerCapture').mockImplementation(() => {})
+    const release = vi.spyOn(canvas, 'releasePointerCapture').mockImplementation(() => {})
+    try {
+        const center = { ...vm.workspace.center }
+        const rect = canvas.getBoundingClientRect()
+        const pointer = (type: string, x: number, y: number) =>
+            canvas.dispatchEvent(
+                new PointerEvent(type, {
+                    button: 2,
+                    buttons: type === 'pointerup' ? 0 : 2,
+                    pointerId: 22,
+                    clientX: rect.left + x,
+                    clientY: rect.top + y,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            )
+        pointer('pointerdown', 120, 80)
+        pointer('pointermove', 180, 140)
+        await flushPromises()
+        const box = () => wrapper!.get('[data-testid="seed-map-area-selection"]')
+        expect(box().classes()).toContain('border-purple-800')
+        expect(getComputedStyle(box().element).borderTopWidth).toBe('2px')
+        const width = (box().element as HTMLElement).style.width
+        pointer('pointermove', 240, 180)
+        await flushPromises()
+        expect((box().element as HTMLElement).style.width).not.toBe(width)
+        expect(vm.workspace.center).toEqual(center)
+        pointer('pointerup', 240, 180)
+        await flushPromises()
+        expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(true)
+        const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        wrapper!.get('[data-testid="seed-map-area-analysis"]').element.dispatchEvent(menu)
+        expect(menu.defaultPrevented).toBe(true)
+        expect(vm.markerDraftOpen).toBe(false)
+        expect(vm.selectedArea).not.toBeNull()
+        const inputMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        wrapper!
+            .get('[data-testid="seed-map-area-analysis"] input')
+            .element.dispatchEvent(inputMenu)
+        expect(inputMenu.defaultPrevented).toBe(false)
+        pointer('pointerdown', 100, 100)
+        pointer('pointerup', 100, 100)
+        const markerMenu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        canvas.dispatchEvent(markerMenu)
+        expect(markerMenu.defaultPrevented).toBe(true)
+        expect(vm.markerDraftOpen).toBe(true)
+        vm.workspace.dimension = 'nether'
+        await flushPromises()
+        expect(wrapper!.find('[data-testid="seed-map-area-selection"]').exists()).toBe(false)
+        expect(wrapper!.find('[data-testid="seed-map-area-analysis"]').exists()).toBe(false)
+    } finally {
+        capture.mockRestore()
+        release.mockRestore()
+    }
+})
+
+it('counts the entire selected area and omits zero mineral rows independently of map filters', async () => {
+    const { vm } = await openMap()
+    backend.ores.mockImplementation(async (request) => [
+        {
+            cx: 0,
+            cz: 0,
+            truncated: false,
+            hits:
+                request.ores[0] === 'diamond'
+                    ? [
+                          {
+                              ore: 'diamond',
+                              x: 0,
+                              y: -40,
+                              z: 0,
+                              yMin: -40,
+                              yMax: -40,
+                              status: 'terrain_unverified',
+                          },
+                          {
+                              ore: 'diamond',
+                              x: 0,
+                              y: 4,
+                              z: 0,
+                              yMin: 4,
+                              yMax: 4,
+                              status: 'terrain_unverified',
+                          },
+                      ]
+                    : [],
+        },
+    ])
+    vm.workspace.selectedOres = ['iron']
+    vm.selectedArea = { minX: 0, minZ: 0, maxX: 15, maxZ: 15 }
+    await flushPromises()
+    await userEvent.click(page.getByRole('button', { name: 'Count mineral blocks', exact: true }))
+    const panel = wrapper!.get('[data-testid="seed-map-area-analysis"]')
+    await vi.waitFor(() => expect(panel.attributes('aria-busy')).toBe('false'))
+    expect(panel.findAll('tbody tr')).toHaveLength(1)
+    expect(panel.get('tbody tr').text()).toContain('Diamond')
+    expect(panel.get('tbody tr').text()).toContain('2')
+    expect(backend.ores.mock.calls.some(([request]) => request.ores.includes('diamond'))).toBe(true)
+})
+
+it('anchors a plain location selection with a crosshair that follows the map and closes with its card', async () => {
+    const { vm } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.selectAt(180, 140)
+    await flushPromises()
+    const crosshair = () => wrapper!.find('[data-testid="seed-map-selection-point"]')
+    expect(crosshair().findAll('svg')).toHaveLength(2)
+    const position = vm.worldToScreen(vm.selection!.x, vm.selection!.z)
+    expect((crosshair().element as HTMLElement).style.left).toBe(`${position.x}px`)
+    const before = (crosshair().element as HTMLElement).style.left
+    vm.workspace.center.x += 64
+    await flushPromises()
+    expect((crosshair().element as HTMLElement).style.left).not.toBe(before)
+    vm.selection = null
+    await flushPromises()
+    expect(crosshair().exists()).toBe(false)
+})
+
+it('enlarges POI images and their hit targets only when closer than four blocks per pixel', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = ['village']
+    vm.features = [{ kind: 'village', x: 0, z: 0, approximate: true }]
+    const drawImage = vi.spyOn(canvas.getContext('2d')!, 'drawImage')
+    try {
+        for (const [zoom, expectedSize, hit] of [
+            [1, 28, false],
+            [0.5, 42, true],
+            [1.5, 28, false],
+        ] as const) {
+            vm.selection = null
+            vm.workspace.zoom = zoom
+            await flushPromises()
+            await vi.waitFor(() => {
+                drawImage.mockClear()
+                vm.drawMap()
+                expect(
+                    drawImage.mock.calls.some(
+                        (call) =>
+                            call[0] instanceof HTMLImageElement &&
+                            call[3] === expectedSize &&
+                            call[4] === expectedSize,
+                    ),
+                ).toBe(true)
+            })
+            const point = vm.worldToScreen(0, 0)
+            vm.selectAt(point.x + 18, point.y)
+            expect(!!vm.selection?.feature).toBe(hit)
+        }
+    } finally {
+        drawImage.mockRestore()
+    }
+})
+
+it('isolates saved marker rendering and selection by dimension and preserves their creation dimension', async () => {
+    const { vm } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.selectAt(180, 140)
+    vm.markerName = 'Overworld camp'
+    vm.addMarker()
+    const overworld = vm.workspace.markers[0]
+    expect(overworld.dimension).toBe('overworld')
+    vm.workspace.dimension = 'nether'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([])
+    const point = vm.worldToScreen(overworld.x, overworld.z)
+    vm.selectAt(point.x, point.y)
+    expect(vm.selection).not.toHaveProperty('markerId')
+    vm.markerName = 'Nether camp'
+    vm.addMarker()
+    expect(vm.workspace.markers[1].dimension).toBe('nether')
+    expect(vm.dimensionMarkers.map((marker) => marker.name)).toEqual(['Nether camp'])
+    vm.workspace.dimension = 'end'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([])
+    vm.workspace.dimension = 'overworld'
+    await flushPromises()
+    expect(vm.dimensionMarkers).toEqual([overworld])
+    vm.selectAt(point.x, point.y)
+    expect(vm.selection).toHaveProperty('markerId', overworld.id)
+})
+
+it('draws saved marker names above the pins by default and selects their visible names at both icon scales', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = []
+    const context = canvas.getContext('2d')!
+    const text = vi.spyOn(context, 'fillText')
+    const curve = vi.spyOn(context, 'bezierCurveTo')
+    vm.workspace.markers = [
+        { id: 'home', name: '基地 Home', x: 0, z: 0, color: '#22C55E', dimension: 'overworld' },
+    ]
+    try {
+        for (const zoom of [1, 0.5]) {
+            vm.workspace.zoom = zoom
+            vm.selection = null
+            await flushPromises()
+            text.mockClear()
+            curve.mockClear()
+            vm.drawMap()
+            const point = vm.worldToScreen(0, 0)
+            const name = text.mock.calls.find(([value]) => value === '基地 Home')
+            expect(name).toBeDefined()
+            expect(name![1]).toBe(point.x)
+            expect(name![2]).toBeLessThan(point.y - 30 * (zoom === 1 ? 1 : 1.5))
+            expect(curve.mock.calls.length).toBe(4)
+            vm.selectAt(name![1], name![2])
+            expect(vm.selection).toHaveProperty('markerId', 'home')
+            vm.selection = null
+            vm.selectAt(point.x, point.y - 25 * (zoom === 1 ? 1 : 1.5))
+            expect(vm.selection).toHaveProperty('markerId', 'home')
+        }
+        vm.workspace.dimension = 'nether'
+        await flushPromises()
+        text.mockClear()
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value === '基地 Home')).toBe(false)
+    } finally {
+        text.mockRestore()
+        curve.mockRestore()
+    }
+})
+
+it('keeps selected marker names above overlapping markers and clips long names without changing saved data', async () => {
+    const { vm, canvas } = await openMap()
+    vm.workspace.showSpawn = false
+    vm.workspace.visibleFeatures = []
+    vm.workspace.zoom = 1
+    vm.workspace.markers = [
+        { id: 'home', name: '基地 Home', x: 0, z: 0, color: '#22C55E', dimension: 'overworld' },
+        { id: 'mine', name: '矿场 Mine', x: 0, z: 0, color: '#EF4444', dimension: 'overworld' },
+    ]
+    vm.selection = { x: 0, z: 0, markerId: 'home' }
+    await flushPromises()
+    const context = canvas.getContext('2d')!
+    const text = vi.spyOn(context, 'fillText')
+    try {
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value === '基地 Home')).toBe(true)
+        expect(text.mock.calls.some(([value]) => value === '矿场 Mine')).toBe(false)
+        const point = vm.worldToScreen(0, 0)
+        vm.selectAt(point.x, point.y - 15)
+        expect(vm.selection).toHaveProperty('markerId', 'home')
+        const longName = '基地😀'.repeat(40)
+        vm.workspace.markers = [{ ...vm.workspace.markers[0], name: longName }]
+        await flushPromises()
+        text.mockClear()
+        vm.drawMap()
+        expect(text.mock.calls.some(([value]) => value.endsWith('…'))).toBe(true)
+        expect(vm.workspace.markers[0].name).toBe(longName)
+        const placements = layoutSeedMapMarkers(
+            context,
+            vm.dimensionMarkers,
+            vm.worldToScreen,
+            { width: 512, height: 256 },
+            1,
+            'home',
+        )
+        expect(placements[0].label!.width).toBeLessThanOrEqual(168)
+    } finally {
+        text.mockRestore()
+    }
+})
 
 beforeEach(() => {
     localStorage.removeItem('axolotl.lab.seed-map.v1')
     localStorage.removeItem('axolotl.lab.seed-map.history.v1')
     backend.tiles = []
     backend.spawns = []
-    backend.features.mockClear()
-    backend.ores.mockClear()
+    backend.features.mockReset().mockResolvedValue([])
+    backend.loot
+        .mockReset()
+        .mockResolvedValue({ supported: true, truncated: false, items: [], limits: [] })
+    backend.ores.mockReset().mockResolvedValue([])
     backend.details.mockReset().mockResolvedValue({
         supported: false,
         truncated: false,
@@ -510,6 +880,56 @@ async function openMap() {
     return { vm, canvas }
 }
 
+it('opens 3D directly from Underground and suspends 2D tile generation until returning to the map', async () => {
+    const { canvas } = await openMap()
+    await userEvent.click(page.getByRole('button', { name: 'Underground', exact: true }))
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    expect(wrapper!.find('[data-onboarding-id=seed-map-underground-layers]').exists()).toBe(false)
+    expect(wrapper!.text()).not.toContain('Explore in 3D')
+    const count = backend.tiles.length
+    await new Promise((resolve) => setTimeout(resolve, 250))
+    expect(backend.tiles.length).toBe(count)
+    expect(canvas.width).toBe(1)
+    await userEvent.click(page.getByRole('button', { name: 'Back to map', exact: true }))
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(false)
+    expect(canvas.width).toBeGreaterThan(1)
+    wrapper!.unmount()
+    wrapper = undefined
+    expect(canvas.width).toBe(1)
+    expect(canvas.height).toBe(1)
+})
+
+it('leaves underground mode when the selected dimension no longer supports 3D generation', async () => {
+    const { vm } = await openMap()
+    vm.workspace.displayMode = 'underground'
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    vm.workspace.dimension = 'end'
+    await flushPromises()
+    expect(vm.workspace.displayMode).toBe('structures')
+    expect(wrapper!.find('[data-testid=direct-underground]').exists()).toBe(false)
+    vm.workspace.displayMode = 'underground'
+    await flushPromises()
+    expect(vm.workspace.displayMode).toBe('structures')
+})
+
+it('restores a saved underground workspace directly into 3D after profiles load without generating 2D tiles', async () => {
+    localStorage.setItem(
+        'axolotl.lab.seed-map.v1',
+        JSON.stringify({ ...createDefaultSeedMapWorkspace(), displayMode: 'underground' }),
+    )
+    wrapper = mount(LabSeedMap, {
+        attachTo: document.body,
+        global: {
+            directives: { tooltip: () => {} },
+            provide: { replayOnboarding: async () => {} },
+        },
+    })
+    await expect.poll(() => wrapper?.find('[data-testid=direct-underground]').exists()).toBe(true)
+    expect((wrapper.vm as unknown as MapVm).workspace.displayMode).toBe('underground')
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    expect(backend.tiles.length).toBe(0)
+})
+
 async function complete(job: (typeof backend.tiles)[number], color: string) {
     const source = new OffscreenCanvas(job.request.width, job.request.height)
     const context = source.getContext('2d')!
@@ -576,25 +996,24 @@ it('keeps real canvas pixels across LoD changes and progressively paints new det
     vm.drawMap()
     expect(sample()).toEqual([255, 0, 0, 255])
     expect(closed.every((spy) => spy.mock.calls.length === 0)).toBe(true)
-    for (
-        let batch = 0;
-        batch < 8 &&
-        !backend.tiles.some((job) => job.request.scale === 1 && job.request.width === 256);
-        batch++
-    ) {
-        for (const job of backend.tiles.splice(0)) await complete(job, '#ff0000')
-        await new Promise((resolve) => setTimeout(resolve, 20))
-    }
-    const fine = backend.tiles.find(
-        (job) =>
-            job.request.scale === 1 &&
-            job.request.width === 256 &&
-            job.request.x === 0 &&
-            job.request.z === 0,
-    )
-    expect(fine).toBeDefined()
-    backend.tiles.splice(backend.tiles.indexOf(fine!), 1)
-    await complete(fine!, '#00ff00')
+    const isTarget = (job: (typeof backend.tiles)[number]) =>
+        job.request.scale === 1 &&
+        job.request.width === 256 &&
+        job.request.x === 0 &&
+        job.request.z === 0
+    await expect
+        .poll(async () => {
+            for (const job of [...backend.tiles]) {
+                if (isTarget(job)) continue
+                backend.tiles.splice(backend.tiles.indexOf(job), 1)
+                await complete(job, '#ff0000')
+            }
+            return backend.tiles.find(isTarget)
+        })
+        .toBeDefined()
+    const fine = backend.tiles.find(isTarget)!
+    backend.tiles.splice(backend.tiles.indexOf(fine), 1)
+    await complete(fine, '#00ff00')
     vm.drawMap()
     expect(sample()).toEqual([0, 255, 0, 255])
     expect(closed.every((spy) => spy.mock.calls.length === 0)).toBe(true)

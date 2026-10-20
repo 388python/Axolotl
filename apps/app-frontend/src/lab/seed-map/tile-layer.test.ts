@@ -86,15 +86,29 @@ function harness() {
     return { layer, jobs, bitmaps, coverage, errors, complete, drain, loading: () => loading }
 }
 
-test('LoD bounds surface sampling to two samples per screen pixel and keeps supported underground scales', () => {
+test('LoD bounds surface sampling to two samples per screen pixel', () => {
     for (const blocksPerPixel of [0.25, 1, 2, 2.1, 4, 8, 8.1, 16, 32, 64, 128, 256]) {
         const level = seedMapTileLevel(blocksPerPixel)
         assert.ok([1, 4, 16, 64, 256].includes(level.scale))
         assert.ok(blocksPerPixel / level.scale <= 2)
         assert.equal(level.pixels, 256)
     }
-    assert.deepEqual(seedMapTileLevel(3, true), { scale: 4, pixels: 16 })
-    assert.equal(seedMapPreviewLevel(seedMapTileLevel(3, true)), undefined)
+})
+
+test('clearing the 2D map frees cached and late bitmaps while allowing the map to reopen', async () => {
+    const state = harness()
+    state.layer.refresh(view())
+    const first = await state.complete()
+    state.layer.clear()
+    assert.equal(first.closed, true)
+    await state.drain()
+    assert.ok(state.bitmaps.every((bitmap) => bitmap.closed))
+    assert.equal(state.layer.drawable(view()).length, 0)
+    state.layer.refresh(view({ epoch: 2 }))
+    const reopened = await state.complete()
+    assert.equal(reopened.closed, false)
+    state.layer.dispose()
+    await state.drain()
 })
 
 test('preview covers the same world area using sixteen times fewer pixels', () => {
@@ -118,7 +132,6 @@ test('query identity excludes view changes and includes every generation input',
         { elevation: -32 },
         { terrain: false },
         { contours: true },
-        { underground: 0 },
         { highlightBiomes: [1] },
     ] as Partial<typeof context>[]) {
         assert.notEqual(seedMapTileContextKey({ ...context, ...change }), key)

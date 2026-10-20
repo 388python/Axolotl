@@ -252,7 +252,7 @@ char *axolotl_seed_map_ancient_city_layout(
     uint64_t seed, int32_t mc, int32_t x, int32_t z,
     const char *layout_json, size_t layout_len
 ) {
-    if (!layout_json || !layout_len || mc < MC_1_19) return NULL;
+    if (!layout_json || !layout_len || mc < MC_1_19_2) return NULL;
     char *copy = malloc(layout_len + 1);
     if (!copy) return NULL;
     memcpy(copy, layout_json, layout_len);

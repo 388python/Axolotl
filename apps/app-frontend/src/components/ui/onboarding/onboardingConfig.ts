@@ -27,6 +27,15 @@ export type OnboardingStep = {
 }
 
 export const onboardingMessages = defineMessages({
+    mapAreaTitle: {
+        id: 'app.onboarding.seed-map-area.title',
+        defaultMessage: 'Analyze a selected area',
+    },
+    mapAreaDescription: {
+        id: 'app.onboarding.seed-map-area.description',
+        defaultMessage:
+            'Hold the right mouse button and drag on the 2D map to select an area. Count mineral candidate blocks at a chosen height range, or search supported container loot by item name or ID. Results include prediction limits and can be canceled. A right-click without dragging still adds a marker.',
+    },
     mapAdvancedTitle: {
         id: 'app.onboarding.seed-map.title',
         defaultMessage: 'Explore structure details',
@@ -43,7 +52,7 @@ export const onboardingMessages = defineMessages({
     mapUndergroundDescription: {
         id: 'app.onboarding.seed-map-underground.description',
         defaultMessage:
-            'Underground mode shows a height slice. Zoom in, choose a Y level and independently switch terrain density, cave carvers and canyon carvers. These predictions do not simulate water, aquifers or later world changes.',
+            'Underground opens the 3D X-Ray view directly. Click to look around, move with WASD, use Space / Shift to rise or descend, and press Esc to release the mouse. Idle computation preloads full-height 16 × 16 chunks up to a horizontal radius of 12 chunks. Surface and bedrock layers can be switched independently. The upper-left overlay shows your position and the targeted block; the upper-right status shows the loaded chunk count and whether generation is running. Fluids and bedrock thickness are estimates; mineral positions are candidates.',
     },
     brewingTitle: { id: 'app.onboarding.brewing.title', defaultMessage: 'Create a brewing recipe' },
     brewingDescription: {
@@ -382,7 +391,7 @@ export const onboardingMessages = defineMessages({
     instanceTabsDescription: {
         id: 'app.onboarding.instance-tabs.description',
         defaultMessage:
-            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Mod updates and version switches queue directly without resolving dependencies. New installations use a dependency preview; use + for optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
+            'Use these tabs for content, files, screenshots, worlds, and logs. Filter content by installation platform or ownership. Duplicate resources start collapsed; expand a group to inspect each file or update every updatable copy together. Installations, Mod updates, and version switches use a dependency preview. Review missing or conflicting dependencies before continuing; use + to add optional dependencies. Compatibility exceptions apply only to the selected release and dimension. Restore recorded updates from verified history backups, or open Old files and backups in the content toolbar to search, select, and review manual cleanup. Content download settings control Chinese filenames and preserved local prefixes and suffixes.',
     },
     labTitle: {
         id: 'app.onboarding.lab.title',
@@ -530,6 +539,12 @@ const settingsTourSteps: Array<{
 
 export const onboardingTours: Record<OnboardingMode, OnboardingStep[]> = {
     'seed-map': [
+        inspect(
+            'seed-map-area',
+            'seed-map-canvas',
+            onboardingMessages.mapAreaTitle,
+            onboardingMessages.mapAreaDescription,
+        ),
         inspect(
             'seed-map-advanced',
             'seed-map-advanced-guide',

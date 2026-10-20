@@ -15,6 +15,8 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             seed_map_structure_details,
             seed_map_container_loot,
             seed_map_underground_tile,
+            seed_map_underground_volume,
+            seed_map_cancel_underground,
         ])
         .build()
 }
@@ -132,4 +134,22 @@ pub async fn seed_map_underground_tile(
     .await
     .map_err(std::io::Error::other)??;
     Ok(tauri::ipc::Response::new(pixels))
+}
+
+#[tauri::command]
+pub async fn seed_map_underground_volume(
+    request: seed_map::underground::VolumeRequest,
+) -> Result<tauri::ipc::Response> {
+    seed_map::underground::begin(request.id);
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        seed_map::underground::generate_volume(request)
+    })
+    .await
+    .map_err(std::io::Error::other)??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+pub fn seed_map_cancel_underground(id: u64) {
+    seed_map::underground::cancel(id);
 }
