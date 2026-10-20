@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import {
+    type ResourceCachePolicy,
     resourceGet,
     resourceLocate,
     resourceProjectDocuments,
@@ -46,7 +47,11 @@ export async function resolveContentFavorite(favorite: ContentFavorite, signal?:
     return metadata
 }
 
-export async function prefetchContentFavorites(favorites: ContentFavorite[], signal?: AbortSignal) {
+export async function prefetchContentFavorites(
+    favorites: ContentFavorite[],
+    signal?: AbortSignal,
+    cachePolicy: ResourceCachePolicy = 'useFresh',
+) {
     const metadata = new Map<string, SourceProjectMetadata>()
     const projects = favorites.flatMap(
         (favorite) =>
@@ -55,7 +60,12 @@ export async function prefetchContentFavorites(favorites: ContentFavorite[], sig
     const sources = [...new Set(projects.map((project) => project.source))]
     await Promise.allSettled(
         sources
-            .filter((source) => source === 'modrinth' || source === 'curseforge')
+            .filter(
+                (source) =>
+                    cachePolicy === 'onlyCached' ||
+                    source === 'modrinth' ||
+                    source === 'curseforge',
+            )
             .map(async (source) => {
                 const ids = [
                     ...new Set(
@@ -66,10 +76,27 @@ export async function prefetchContentFavorites(favorites: ContentFavorite[], sig
                 ]
                 let documents
                 try {
-                    documents = await resourceProjectDocuments(source, ids, signal)
+                    documents = await resourceProjectDocuments(source, ids, signal, cachePolicy)
                 } catch {
                     signal?.throwIfAborted()
-                    documents = await resourceProjectDocuments(source, ids, signal, 'onlyCached')
+                    if (cachePolicy === 'onlyCached') {
+                        if (ids.length === 1) return
+                        const cached = await Promise.allSettled(
+                            ids.map((id) =>
+                                resourceProjectDocuments(source, [id], signal, 'onlyCached'),
+                            ),
+                        )
+                        documents = cached.flatMap((result) =>
+                            result.status === 'fulfilled' ? result.value : [],
+                        )
+                    } else {
+                        documents = await resourceProjectDocuments(
+                            source,
+                            ids,
+                            signal,
+                            'onlyCached',
+                        )
+                    }
                 }
                 for (const document of documents)
                     metadata.set(

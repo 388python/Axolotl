@@ -23,12 +23,12 @@ import {
     getLatestMatchingInstallVersion,
     getTargetInstallPreferences,
     injectNotificationManager,
-    LoadingIndicator,
     NavTabs,
     Pagination,
     PopoutMenu,
     ProjectCard,
     ProjectCardList,
+    ProjectCardSkeleton,
     SelectedProjectsFloatingBar,
     StyledInput,
     useStickyObserver,
@@ -54,6 +54,7 @@ import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { createProjectDetailsQuery } from '@/helpers/project-links'
+import type { SourceProjectMetadata } from '@/helpers/resources'
 import {
     getLastBrowseContentDisplayMode,
     setLastBrowseContentDisplayMode,
@@ -112,6 +113,7 @@ const stickyChromeRef = ref<HTMLElement | null>(null)
 const { isStuck: isChromeStuck } = useStickyObserver(stickyChromeRef, 'FavoritesToolbarChrome')
 const projects = shallowRef<FavoriteProject[]>([])
 let projectsController: AbortController | null = null
+let disposed = false
 const loadingProjects = ref(false)
 const installingKeys = ref(new Set<string>())
 const displayMode = ref<FavoriteDisplayMode>(getLastBrowseContentDisplayMode())
@@ -390,7 +392,44 @@ function toUnavailable(favorite: ContentFavorite): FavoriteProject {
     }
 }
 
+function toProject(favorite: ContentFavorite, metadata: SourceProjectMetadata): FavoriteProject {
+    return {
+        favorite,
+        provider: metadata.project.source,
+        projectId: metadata.project.projectId,
+        title: metadata.title,
+        description: metadata.summary,
+        slug: metadata.slug ?? undefined,
+        iconUrl: metadata.iconUrl ?? undefined,
+        downloads: metadata.downloads ?? undefined,
+        categories: [typeLabel(favorite.content_type), ...metadata.categories],
+        dateCreated: metadata.createdAt ?? undefined,
+        dateModified: metadata.updatedAt ?? undefined,
+        banner: metadata.gallery[0],
+        unavailable: false,
+    }
+}
+
+function restoreCachedProjects() {
+    if (!contentFavorites.loaded.value) return
+    const cached = contentFavorites.favorites.value.flatMap((favorite) => {
+        const metadata = contentFavorites.getMetadata(favorite)
+        if (metadata) return [toProject(favorite, metadata)]
+        const previous = projects.value.find(
+            (project) => JSON.stringify(project.favorite) === JSON.stringify(favorite),
+        )
+        return previous ? [previous] : []
+    })
+    if (cached.length || contentFavorites.favorites.value.length === 0) {
+        projects.value = cached
+        hasProjectsSnapshot.value = true
+    }
+}
+
+if (!browseReturnSnapshot) restoreCachedProjects()
+
 async function refreshProjects() {
+    if (disposed) return
     const requestId = ++projectRequestId
     projectsController?.abort()
     projectsController = new AbortController()
@@ -399,8 +438,24 @@ async function refreshProjects() {
     projectsLoadFailed.value = false
     try {
         await contentFavorites.load(true)
+        if (requestId !== projectRequestId || signal.aborted) return
         const favorites = [...contentFavorites.favorites.value]
+        const local = await prefetchContentFavorites(favorites, signal, 'onlyCached')
+        if (requestId !== projectRequestId || signal.aborted) return
+        for (const favorite of favorites) {
+            const candidates = [
+                { source: favorite.provider, projectId: favorite.project_id },
+                ...(favorite.projects ?? []),
+            ]
+            const metadata = candidates
+                .map((project) => local.get(`${project.source}:${project.projectId}`))
+                .find(Boolean)
+            if (metadata && !contentFavorites.getMetadata(favorite))
+                contentFavorites.setMetadata(favorite, metadata)
+        }
+        restoreCachedProjects()
         const cached = await prefetchContentFavorites(favorites, signal)
+        if (requestId !== projectRequestId || signal.aborted) return
         const resolved = await Promise.all(
             favorites.map(async (favorite): Promise<FavoriteProject> => {
                 try {
@@ -412,23 +467,12 @@ async function refreshProjects() {
                         candidates
                             .map((project) => cached.get(`${project.source}:${project.projectId}`))
                             .find(Boolean) ?? (await resolveContentFavorite(favorite, signal))
-                    return {
-                        favorite,
-                        provider: metadata.project.source,
-                        projectId: metadata.project.projectId,
-                        title: metadata.title,
-                        description: metadata.summary,
-                        slug: metadata.slug ?? undefined,
-                        iconUrl: metadata.iconUrl ?? undefined,
-                        downloads: metadata.downloads ?? undefined,
-                        categories: [typeLabel(favorite.content_type), ...metadata.categories],
-                        dateCreated: metadata.createdAt ?? undefined,
-                        dateModified: metadata.updatedAt ?? undefined,
-                        banner: metadata.gallery[0],
-                        unavailable: false,
-                    }
+                    if (requestId === projectRequestId && !signal.aborted)
+                        contentFavorites.setMetadata(favorite, metadata)
+                    return toProject(favorite, metadata)
                 } catch {
-                    return toUnavailable(favorite)
+                    const metadata = contentFavorites.getMetadata(favorite)
+                    return metadata ? toProject(favorite, metadata) : toUnavailable(favorite)
                 }
             }),
         )
@@ -443,7 +487,10 @@ async function refreshProjects() {
     }
 }
 
-onBeforeUnmount(() => projectsController?.abort())
+onBeforeUnmount(() => {
+    disposed = true
+    projectsController?.abort()
+})
 
 const activeFavoriteKeys = computed(
     () =>
@@ -483,8 +530,8 @@ const pagedProjects = computed(() => {
     return filteredProjects.value.slice(offset, offset + PAGE_SIZE)
 })
 
-watch(pageCount, (count) => {
-    if (currentPage.value > count) currentPage.value = count
+watch([pageCount, loadingProjects], ([count, loading]) => {
+    if (!loading && currentPage.value > count) currentPage.value = count
 })
 
 const installContext = computed<BrowseInstallContext | null>(() => {
@@ -693,9 +740,11 @@ watch(
     () => void refreshProjects(),
 )
 
-onMounted(async () => {
+onMounted(() => {
     breadcrumbs.setName('FavoritesTitle', formatMessage(messages.title))
-    await contentSelection.refreshInstances(queryValue(route.query.i) || undefined)
+    void contentSelection
+        .refreshInstances(queryValue(route.query.i) || undefined)
+        .catch(handleError)
     if (browseReturnSnapshot) {
         void nextTick().then(
             () =>
@@ -850,10 +899,17 @@ onMounted(async () => {
             </template>
         </EmptyState>
         <section
-            v-else-if="!hasProjectsSnapshot && !projectsLoadFailed"
-            class="flex min-h-64 items-center justify-center"
+            v-else-if="
+                (!hasProjectsSnapshot && !projectsLoadFailed) ||
+                (loadingProjects &&
+                    filteredProjects.length === 0 &&
+                    contentFavorites.favorites.value.length > 0)
+            "
+            aria-busy="true"
         >
-            <LoadingIndicator />
+            <ProjectCardList :layout="displayMode">
+                <ProjectCardSkeleton v-for="index in 6" :key="index" :layout="displayMode" />
+            </ProjectCardList>
         </section>
         <EmptyState
             v-else-if="
@@ -881,7 +937,7 @@ onMounted(async () => {
                 }}</Button>
             </template>
         </EmptyState>
-        <ProjectCardList v-else :layout="displayMode">
+        <ProjectCardList v-else :layout="displayMode" :aria-busy="loadingProjects">
             <ProjectCard
                 v-for="project in pagedProjects"
                 :key="`${project.provider}:${project.projectId}`"
