@@ -1,109 +1,111 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import assert from 'node:assert/strict'
+import { before, describe, it } from 'node:test'
 
-import { getAllCommands, initializeRegistry } from './commands/registry'
-import { buildCommand, getDefaultValues, validateCommand } from './generator'
+import { getAllCommands, initializeRegistry } from './commands/registry.ts'
+import { buildCommand, getDefaultValues, validateCommand } from './generator.ts'
 
-// 修复：registry 是懒加载的，测试前必须先初始化
-beforeAll(() => {
+before(() => {
     initializeRegistry()
 })
 
 describe('buildCommand', () => {
-    it('生成基础 give 命令', () => {
-        expect(
+    it('generates a basic give command', () => {
+        assert.equal(
             buildCommand('give', {
                 target: '@s',
                 item: 'minecraft:diamond',
                 count: 64,
             }),
-        ).toBe('/give @s minecraft:diamond 64')
+            '/give @s minecraft:diamond 64',
+        )
     })
 
-    it('生成 summon 命令带 NBT', () => {
-        expect(
+    it('generates a summon command with NBT', () => {
+        assert.equal(
             buildCommand('summon', {
                 entity: 'minecraft:axolotl',
                 pos: '~ ~ ~',
                 nbt: '{Variant:0}',
             }),
-        ).toBe('/summon minecraft:axolotl ~ ~ ~ {Variant:0}')
+            '/summon minecraft:axolotl ~ ~ ~ {Variant:0}',
+        )
     })
 
-    it('生成无参数命令', () => {
-        expect(buildCommand('seed', {})).toBe('/seed')
-        expect(buildCommand('reload', {})).toBe('/reload')
+    it('generates a command with no arguments', () => {
+        assert.equal(buildCommand('seed', {}), '/seed')
+        assert.equal(buildCommand('reload', {}), '/reload')
     })
 
-    it('布尔参数仅在 true 时附加', () => {
-        expect(buildCommand('list', { uuids: true })).toBe('/list uuids')
-        expect(buildCommand('list', { uuids: false })).toBe('/list')
+    it('appends boolean arguments only when true', () => {
+        assert.equal(buildCommand('list', { uuids: true }), '/list uuids')
+        assert.equal(buildCommand('list', { uuids: false }), '/list')
     })
 
-    it('消息参数自动加引号', () => {
-        expect(buildCommand('say', { message: 'Hello World' })).toBe('/say "Hello World"')
+    it('automatically quotes message arguments', () => {
+        assert.equal(buildCommand('say', { message: 'Hello World' }), '/say "Hello World"')
     })
 
-    it('跳过空的可选参数', () => {
-        expect(buildCommand('gamemode', { mode: 'creative', target: '' })).toBe(
+    it('skips empty optional arguments', () => {
+        assert.equal(
+            buildCommand('gamemode', { mode: 'creative', target: '' }),
             '/gamemode creative',
         )
     })
 
-    it('必填参数缺失时抛出错误', () => {
-        expect(() => buildCommand('gamemode', {})).toThrow()
+    it('throws an error when a required argument is missing', () => {
+        assert.throws(() => buildCommand('gamemode', {}))
     })
 
-    it('未知指令抛出错误', () => {
-        expect(() => buildCommand('nonexistent', {})).toThrow('Unknown command')
+    it('throws an error for an unknown command', () => {
+        assert.throws(() => buildCommand('nonexistent', {}), /Unknown command/)
     })
 })
 
 describe('validateCommand', () => {
-    it('有效参数返回空错误数组', () => {
-        expect(validateCommand('gamemode', { mode: 'creative' })).toHaveLength(0)
+    it('returns an empty error array for valid arguments', () => {
+        assert.equal(validateCommand('gamemode', { mode: 'creative' }).length, 0)
     })
 
-    it('必填项缺失返回错误', () => {
-        expect(validateCommand('give', {}).length).toBeGreaterThan(0)
+    it('returns errors when required fields are missing', () => {
+        assert.ok(validateCommand('give', {}).length > 0)
     })
 
-    it('枚举值非法返回错误', () => {
-        expect(validateCommand('gamemode', { mode: 'invalid_mode' }).length).toBeGreaterThan(0)
+    it('returns errors for invalid enum values', () => {
+        assert.ok(validateCommand('gamemode', { mode: 'invalid_mode' }).length > 0)
     })
 
-    it('整数参数传入非整数返回错误', () => {
-        expect(
+    it('returns errors for non-integer values passed to integer arguments', () => {
+        assert.ok(
             validateCommand('give', {
                 target: '@s',
                 item: 'minecraft:stone',
                 count: 1.5,
-            }).length,
-        ).toBeGreaterThan(0)
+            }).length > 0,
+        )
     })
 })
 
 describe('getDefaultValues', () => {
-    it('返回预设默认值', () => {
-        expect(getDefaultValues('give').count).toBe(1)
+    it('returns preset default values', () => {
+        assert.equal(getDefaultValues('give').count, 1)
     })
 
-    it('未知指令返回空对象', () => {
-        expect(getDefaultValues('nonexistent')).toEqual({})
+    it('returns an empty object for an unknown command', () => {
+        assert.deepEqual(getDefaultValues('nonexistent'), {})
     })
 })
 
 describe('registry completeness', () => {
-    it('所有指令都有唯一的 id', () => {
+    it('all commands have unique ids', () => {
         const commands = getAllCommands()
         const ids = commands.map((c) => c.id)
-        expect(new Set(ids).size).toBe(ids.length)
+        assert.equal(new Set(ids).size, ids.length)
     })
 
-    it('所有指令都有描述和分类', () => {
-        // 修复：字段名是 descriptionKey 而不是 description
+    it('all commands have descriptions and categories', () => {
         for (const cmd of getAllCommands()) {
-            expect(cmd.descriptionKey).toBeTruthy()
-            expect(cmd.category).toBeTruthy()
+            assert.ok(cmd.descriptionKey)
+            assert.ok(cmd.category)
         }
     })
 })
