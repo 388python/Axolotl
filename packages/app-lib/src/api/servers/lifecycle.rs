@@ -18,6 +18,7 @@ use crate::state::{clear_log_buffer, get_log_buffer, push_log_line};
 use crate::util::io::IOError;
 use crate::{ErrorKind, Result};
 
+use super::files::safe_relative_join;
 use super::logs::{
     analyze_exit_reason, stream_server_output, stream_server_pty_output,
     tail_server_log_file,
@@ -131,7 +132,7 @@ async fn start_inner(
         forge_launch_args(&dir)?
     } else {
         let jar_name = resolve_jar_name(&manifest);
-        let jar_path = dir.join(&jar_name);
+        let jar_path = safe_relative_join(&dir, &jar_name)?;
         if !jar_path.exists() {
             return Err(ErrorKind::LauncherError(format!(
                 "Server jar not found: {jar_name}. Download the server files first."
@@ -279,9 +280,11 @@ async fn start_inner(
     // so these lines stop the console from looking frozen.
     let loader_first_run =
         matches!(manifest.server_type.as_str(), "fabric" | "quilt")
-            && !dir
-                .join(format!("{}-server-launch.jar", manifest.server_type))
-                .exists();
+            && !safe_relative_join(
+                &dir,
+                &format!("{}-server-launch.jar", manifest.server_type),
+            )?
+            .exists();
 
     log_server_step(
         server_id,

@@ -1130,6 +1130,12 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         num_files,
         content_total_bytes,
     };
+    for file in &pack.files {
+        io::join_within_root(
+            &content_context.instance_full_path,
+            &content_context.resolve_install_path(file),
+        )?;
+    }
     let skipped_missing_content_paths = Arc::new(
         reporter
             .current_state()
@@ -1524,8 +1530,14 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                 let project_size = project.file_size as u64;
                 let project_path =
                     content_context.resolve_install_path(&project);
-                let target_path =
-                    content_context.instance_full_path.join(&project_path);
+                let target_path = io::join_within_root(
+                    &content_context.instance_full_path,
+                    &project_path,
+                ).map_err(|error| RequiredFileFailure {
+                    manifest_index,
+                    path: project_path.clone(),
+                    reason: error.to_string(),
+                })?;
                 let download_path =
                     mrpack_staged_download_path(&target_path);
                 let context =
@@ -1825,7 +1837,10 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                     entry_name: filename.to_string(),
                     crc32: file.crc32(),
                     uncompressed_size: file.uncompressed_size(),
-                    target_path: instance_full_path.join(&relative_path),
+                    target_path: io::safe_relative_join(
+                        &instance_full_path,
+                        &relative_path,
+                    )?,
                     relative_path,
                 })
             })
@@ -2225,6 +2240,7 @@ fn override_relative_path(
                 "Invalid modpack override path: {relative}"
             ))
         })?;
+    io::safe_relative_join(Path::new(""), relative.as_str())?;
     Ok(relative.as_str().to_string())
 }
 
@@ -2424,6 +2440,35 @@ mod tests {
     use async_zip::tokio::write::ZipFileWriter;
     use async_zip::{Compression, ZipEntryBuilder};
     use std::sync::Mutex as StdMutex;
+
+    #[test]
+    fn override_paths_reject_portable_traversal_and_windows_aliases() {
+        for prefix in ["overrides/", "client-overrides/"] {
+            assert_eq!(
+                override_relative_path(
+                    &format!("{prefix}config/example.toml"),
+                    ""
+                )
+                .unwrap(),
+                "config/example.toml"
+            );
+            for relative in [
+                "../outside",
+                "config/.. /outside",
+                "config/file:stream",
+                "C:/outside",
+                "C:outside",
+                "config/NUL",
+                "config/file.",
+            ] {
+                assert!(
+                    override_relative_path(&format!("{prefix}{relative}"), "")
+                        .is_err(),
+                    "{prefix}{relative}"
+                );
+            }
+        }
+    }
 
     fn override_spec(index: usize, target: &str) -> OverrideExtractionSpec {
         OverrideExtractionSpec {

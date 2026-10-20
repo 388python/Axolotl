@@ -1,7 +1,7 @@
 //! Shared helpers for extracting content from local modpack archives.
 
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use super::detect::decode_zip_entry_name;
 use crate::util::io;
@@ -12,23 +12,6 @@ pub(crate) const EXTRACTION_SIZE_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 fn archive_error(error: zip::result::ZipError) -> crate::Error {
     crate::ErrorKind::InputError(format!("Modpack archive is invalid: {error}"))
         .into()
-}
-
-pub(crate) fn safe_relative_path(value: &str) -> crate::Result<String> {
-    let normalized = value.replace('\\', "/");
-    let path = Path::new(&normalized);
-    if normalized.is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        return Err(crate::ErrorKind::InputError(
-            "Modpack archive contains an invalid file path".to_string(),
-        )
-        .into());
-    }
-    Ok(normalized)
 }
 
 /// Extracts every file under `prefix` in the archive into `target_dir`,
@@ -220,7 +203,8 @@ fn extract_archive_subdir_entries_sync(
             )
             .into());
         }
-        let target = target_dir.join(safe_relative_path(relative)?);
+        let target =
+            io::safe_relative_join(target_dir, &relative.replace('\\', "/"))?;
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|error| io::IOError::with_path(error, parent))?;
@@ -724,6 +708,86 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::io::Write;
+
+    #[test]
+    fn unsafe_override_paths_fail_without_writing_outside_target() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let target_dir = root.path().join("server");
+        std::fs::create_dir(&target_dir).unwrap();
+        let outside = root.path().join("outside.txt");
+        std::fs::write(&outside, b"unchanged").unwrap();
+        for prefix in ["overrides/", "server/overrides/"] {
+            for relative in [
+                "../outside.txt",
+                r"..\outside.txt",
+                "config/../../outside.txt",
+                "/outside.txt",
+                "C:/outside.txt",
+                "C:outside.txt",
+                r"\\server\share\outside.txt",
+                "config/.. /outside.txt",
+                "config/mod.jar:payload",
+                "config/NUL",
+                "config/secret.",
+            ] {
+                let mut archive = zip::ZipWriter::new(
+                    std::fs::File::create(&archive_path).unwrap(),
+                );
+                archive
+                    .start_file(
+                        format!("{prefix}{relative}"),
+                        zip::write::SimpleFileOptions::default(),
+                    )
+                    .unwrap();
+                archive.write_all(b"malicious").unwrap();
+                archive.finish().unwrap();
+                assert!(
+                    extract_archive_subdir_sync(
+                        &archive_path,
+                        prefix,
+                        &target_dir,
+                        None,
+                    )
+                    .is_err(),
+                    "{prefix}{relative}"
+                );
+                assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+                assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn override_paths_with_backslashes_are_normalized() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let target_dir = root.path().join("server");
+        let mut archive =
+            zip::ZipWriter::new(std::fs::File::create(&archive_path).unwrap());
+        archive
+            .start_file(
+                r"overrides/config\example.toml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        archive.write_all(b"valid").unwrap();
+        archive.finish().unwrap();
+        assert_eq!(
+            extract_archive_subdir_sync(
+                &archive_path,
+                "overrides/",
+                &target_dir,
+                None,
+            )
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            std::fs::read(target_dir.join("config/example.toml")).unwrap(),
+            b"valid"
+        );
+    }
 
     struct CancelOnRead {
         cancellation: CancellationToken,

@@ -48,7 +48,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          node scripts/axolotl/check-migrations.mjs --release
+          if [[ "$GITHUB_REF_NAME" == 'v1.9.9' ]]; then
+            # This maintenance release must preserve v1.9.8's schema, without 1.10 beta migrations.
+            git merge-base --is-ancestor 'v1.9.8^{commit}' HEAD
+            node scripts/axolotl/check-migrations.mjs --base v1.9.8
+            git diff --exit-code v1.9.8 HEAD -- packages/app-lib/migrations
+          else
+            node scripts/axolotl/check-migrations.mjs --release
+          fi
           node scripts/axolotl/brand-guard.mjs
           node scripts/axolotl/i18n-check.mjs
           cargo fmt --all --check
@@ -340,7 +347,7 @@ jobs:
         env:
           UPDATE_SERVER_URL: ${{ secrets.UPDATE_SERVER_URL }}
           UPDATE_SERVER_WEBHOOK_SECRET: ${{ secrets.UPDATE_SERVER_WEBHOOK_SECRET }}
-          UPDATE_SERVER_FORCE_UPDATE: 'false'
+          UPDATE_SERVER_FORCE_UPDATE: ${{ github.ref_name == 'v1.9.9' && 'true' || 'false' }}
         run: |
           node scripts/axolotl/publish-update-server.mjs \
             release-check/update-server-catalog.json \

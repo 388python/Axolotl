@@ -60,6 +60,34 @@ pub(crate) fn io_error_with_lock_info(
     io_error_with_lock_info_for_paths(source, path, &[path])
 }
 
+/// Joins an untrusted Unix-style relative file path, rejecting traversal and
+/// Windows aliases on every platform. This is a lexical check, not a symlink
+/// sandbox.
+pub(crate) fn safe_relative_join(
+    root: &Path,
+    relative: &str,
+) -> crate::Result<PathBuf> {
+    path_util::SafeRelativeUtf8UnixPathBuf::try_from(relative.to_string())
+        .map_err(|error| {
+            crate::ErrorKind::InputError(format!(
+                "Invalid file path {relative}: {error}"
+            ))
+        })?;
+    if relative.split('/').any(|segment| {
+        segment.is_empty()
+            || segment == "."
+            || segment.ends_with(['.', ' '])
+            || segment.contains(':')
+            || segment.chars().any(char::is_control)
+    }) {
+        return Err(crate::ErrorKind::InputError(format!(
+            "Invalid file path: {relative}"
+        ))
+        .into());
+    }
+    Ok(root.join(relative))
+}
+
 /// Join a user-provided relative path onto `root`, rejecting traversal.
 pub(crate) fn join_within_root(
     root: &Path,
@@ -95,7 +123,7 @@ pub(crate) fn join_within_root(
         )
         .into());
     }
-    Ok(root.join(safe))
+    safe_relative_join(root, &safe.to_string_lossy().replace('\\', "/"))
 }
 
 pub(crate) fn io_error_with_lock_info_for_paths(
@@ -896,6 +924,39 @@ mod windows_sharing_violation_tests {
 
         assert_eq!(error.raw_os_error(), Some(32));
         assert_eq!(attempts.load(Ordering::SeqCst), 3);
+    }
+}
+
+#[cfg(test)]
+mod path_join_tests {
+    use super::*;
+
+    #[test]
+    fn join_within_root_uses_portable_path_validation() {
+        let root = Path::new("root");
+        assert_eq!(
+            join_within_root(root, r"config\example.toml").unwrap(),
+            root.join("config/example.toml")
+        );
+        assert_eq!(
+            join_within_root(root, "./config/./example.toml").unwrap(),
+            root.join("config/example.toml")
+        );
+        for relative in [
+            "../outside",
+            r"..\outside",
+            "/outside",
+            "C:/outside",
+            "C:outside",
+            r"\\server\share",
+            "config/.. /outside",
+            "config/file:stream",
+            "config/NUL",
+            "config/file.",
+            "config/file\0",
+        ] {
+            assert!(join_within_root(root, relative).is_err(), "{relative:?}");
+        }
     }
 }
 
