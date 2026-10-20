@@ -2,6 +2,129 @@
   "updated_at": "2026-10-18T12:15:28.854Z",
   "announcements": [
     {
+      "id": "launcher-1.10.0-beta.3",
+      "version": "1.10.0-beta.3",
+      "publishedAt": "2026-10-20",
+      "title": {
+        "en-US": "Axolotl Launcher 1.10.0-beta.3",
+        "zh-CN": "Axolotl Launcher 1.10.0-beta.3"
+      },
+      "changes": {
+        "added": [
+          {
+            "en-US": "Added connection tests with proxy and direct modes, DNS details, response times, download samples, and copyable reports.",
+            "zh-CN": "新增网络连接测试，支持代理与直连模式、DNS 详情、响应时间、下载采样和报告复制。"
+          },
+          {
+            "en-US": "Added an option to include fresh network diagnostics when exporting log packages.",
+            "zh-CN": "新增导出日志包时附带即时网络诊断结果的选项。"
+          },
+          {
+            "en-US": "Added support for importing and launching MultiMC packs with custom components and bundled libraries, including GTNH packs.",
+            "zh-CN": "新增包含自定义组件和附带库文件的 MultiMC 整合包导入与启动支持，包括 GTNH 整合包。"
+          }
+        ],
+        "changed": [
+          {
+            "en-US": "Improved startup responsiveness by moving connectivity checks and backup housekeeping into the background and loading language dictionaries on demand.",
+            "zh-CN": "将连通性检查和备份维护移至后台，并按需加载语言字典，改善启动响应。"
+          },
+          {
+            "en-US": "Improved dependency analysis speed and reduced repeated resource metadata work.",
+            "zh-CN": "提升依赖分析速度，并减少重复的资源元数据处理。"
+          },
+          {
+            "en-US": "Improved instance-list loading by fetching metadata in batches and reusing icon thumbnails.",
+            "zh-CN": "通过批量读取元数据和复用图标缩略图，改善实例列表加载。"
+          },
+          {
+            "en-US": "Improved server console performance with incremental log updates and bounded history parsing.",
+            "zh-CN": "通过增量更新日志和限制历史日志解析量，改善服务器控制台性能。"
+          },
+          {
+            "en-US": "Reduced memory use by releasing unused resource caches, skin previews, and operation plans.",
+            "zh-CN": "通过释放未使用的资源缓存、皮肤预览和操作计划，减少内存占用。"
+          },
+          {
+            "en-US": "Improved schematic editing performance by reusing unchanged chunks.",
+            "zh-CN": "通过复用未修改的区块，改善投影编辑性能。"
+          },
+          {
+            "en-US": "Improved Seed Map favorite markers with clearer pins, collision-aware labels, and more accurate selection.",
+            "zh-CN": "改进种子地图收藏标记，提供更清晰的图钉、避让重叠的标签和更准确的选择。"
+          },
+          {
+            "en-US": "Aligned the Favorites page styling with Discover.",
+            "zh-CN": "统一收藏夹与发现页的样式。"
+          },
+          {
+            "en-US": "Improved download details with task identifiers and dedicated per-file information.",
+            "zh-CN": "改进下载详情，新增任务标识和独立的文件信息展示。"
+          }
+        ],
+        "fixed": [
+          {
+            "en-US": "Fixed resource updates bypassing dependency review and missing required dependency checks.",
+            "zh-CN": "修复资源更新跳过依赖审查，以及缺少必需依赖检查的问题。"
+          },
+          {
+            "en-US": "Fixed dependency graphs and cross-source project mappings failing to reflect confirmed resource relationships.",
+            "zh-CN": "修复依赖关系图和跨来源项目映射未正确反映已确认资源关系的问题。"
+          },
+          {
+            "en-US": "Fixed local content not being reconciled from the instance's actual game directory.",
+            "zh-CN": "修复本地内容未按实例实际游戏目录进行同步的问题。"
+          },
+          {
+            "en-US": "Fixed external instance lists not refreshing correctly on startup or when returning to the launcher.",
+            "zh-CN": "修复启动或返回启动器时外部实例列表未正确刷新的问题。"
+          },
+          {
+            "en-US": "Fixed incomplete CurseForge catalogs being accepted for installation.",
+            "zh-CN": "修复安装流程接受不完整 CurseForge 文件目录的问题。"
+          },
+          {
+            "en-US": "Fixed instance name edits being lost or overwritten when switching settings tabs.",
+            "zh-CN": "修复切换设置标签页时实例名称修改丢失或被覆盖的问题。"
+          },
+          {
+            "en-US": "Fixed Minecraft news failing to load after network connectivity recovered.",
+            "zh-CN": "修复网络恢复后 Minecraft 新闻仍无法加载的问题。"
+          },
+          {
+            "en-US": "Fixed Codex provider credentials not being stored correctly.",
+            "zh-CN": "修复 Codex 服务凭据未正确保存的问题。"
+          },
+          {
+            "en-US": "Fixed log exports replacing too much text with Minecraft token placeholders.",
+            "zh-CN": "修复日志导出中过多文本被替换为 Minecraft 令牌占位符的问题。"
+          },
+          {
+            "en-US": "Fixed launcher rendering workarounds and inherited Java options interfering with game and server launches.",
+            "zh-CN": "修复启动器渲染兼容变量和继承的 Java 选项干扰游戏与服务器启动的问题。"
+          },
+          {
+            "en-US": "Fixed process locks not being released correctly and unsafe GPU-selection fallbacks on Linux.",
+            "zh-CN": "修复进程锁未正确释放，以及 Linux 上不安全的显卡选择回退行为。"
+          },
+          {
+            "en-US": "Fixed event listeners and console polling continuing after leaving their pages.",
+            "zh-CN": "修复离开页面后事件监听和控制台轮询仍继续运行的问题。"
+          },
+          {
+            "en-US": "Fixed settings search failing to reveal targets that were still loading.",
+            "zh-CN": "修复设置搜索无法定位仍在加载中的目标设置项的问题。"
+          }
+        ],
+        "security": [
+          {
+            "en-US": "Fixed path traversal risks in server file operations and modpack extraction and installation.",
+            "zh-CN": "修复服务器文件操作及整合包解压、安装中的路径穿越风险。"
+          }
+        ]
+      }
+    },
+    {
       "id": "launcher-1.10.0-beta.2",
       "version": "1.10.0-beta.2",
       "publishedAt": "2026-10-18",
@@ -349,6 +472,23 @@
           {
             "en-US": "Hardened shared-file cleanup with reference and state checks before deletion, preserving files still needed or with unverified usage.",
             "zh-CN": "加固共享文件清理，在删除前重新检查引用和状态，保留仍需使用或无法确认用途的文件。"
+          }
+        ]
+      }
+    },
+    {
+      "id": "launcher-1.9.9",
+      "version": "1.9.9",
+      "publishedAt": "2026-10-20",
+      "title": {
+        "en-US": "Axolotl Launcher 1.9.9",
+        "zh-CN": "Axolotl Launcher 1.9.9"
+      },
+      "changes": {
+        "security": [
+          {
+            "en-US": "Fixed a path traversal vulnerability in mrpack installation paths, preventing attackers from writing arbitrary files to the user's system via maliciously crafted mrpacks.",
+            "zh-CN": "修复了整合包安装路径逃逸漏洞，防止攻击者通过恶意构造的整合包向用户系统写入任意文件。"
           }
         ]
       }
