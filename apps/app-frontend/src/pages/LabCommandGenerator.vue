@@ -4,9 +4,7 @@ import { Button, Combobox, type ComboboxOption, Toggle, useVIntl } from '@modrin
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
-import CommandGeneratorExecuteChain, {
-    type ExecuteChainState,
-} from '@/components/lab/command-generator/CommandGeneratorExecuteChain.vue'
+import CommandGeneratorExecuteChain from '@/components/lab/command-generator/CommandGeneratorExecuteChain.vue'
 import { findGuide } from '@/lab/command-generator/command-guides.ts'
 import {
     CATEGORY_KEYS,
@@ -28,7 +26,6 @@ import { loadManifest } from '@/lab/command-generator/loader.ts'
 import {
     applyPresetToValues,
     deleteUserPreset,
-    getPresetsForCommand,
     getUserPresets,
     saveUserPreset,
     type UserPreset,
