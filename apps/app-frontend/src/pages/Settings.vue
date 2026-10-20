@@ -54,6 +54,9 @@ const searchQuery = ref('')
 const selectedCategoryId = ref(route.hash.slice(1) || 'interface')
 const settingsContentPending = ref(false)
 const contentContainer = ref<HTMLElement | null>(null)
+const pendingSearchTarget = ref<{ categoryId: string; targetId: string; query: string } | null>(
+    null,
+)
 const searchHighlightTarget = ref<HTMLElement | null>(null)
 const expandedGroups = ref<Record<string, boolean>>({
     launcher: true,
@@ -78,6 +81,9 @@ const CATEGORY_SKELETON_MAX_MS = 4000
 const isContentLoading = computed(() => showContentSkeleton.value || settingsContentPending.value)
 
 watch(searchQuery, (value) => {
+    if (pendingSearchTarget.value && value !== pendingSearchTarget.value.query) {
+        pendingSearchTarget.value = null
+    }
     searchResultsPending.value = true
     if (searchDebounceTimer) window.clearTimeout(searchDebounceTimer)
     searchDebounceTimer = window.setTimeout(() => {
@@ -88,7 +94,8 @@ watch(searchQuery, (value) => {
     }, SEARCH_DEBOUNCE_MS)
 })
 
-watch(selectedCategoryId, () => {
+watch(selectedCategoryId, (categoryId) => {
+    if (pendingSearchTarget.value?.categoryId !== categoryId) pendingSearchTarget.value = null
     const token = ++categoryTransitionToken
     showContentSkeleton.value = true
     const startedAt = Date.now()
@@ -242,30 +249,42 @@ function toggleGroup(groupId: string) {
     expandedGroups.value[groupId] = !expandedGroups.value[groupId]
 }
 
+async function revealSearchTarget() {
+    await nextTick()
+    const pending = pendingSearchTarget.value
+    if (!pending || isContentLoading.value || activeCategory.value?.id !== pending.categoryId)
+        return
+    const target = contentContainer.value?.querySelector<HTMLElement>(`#${pending.targetId}`)
+    if (!target) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    flashSearchTarget(target)
+    pendingSearchTarget.value = null
+    if (searchQuery.value === pending.query) searchQuery.value = ''
+}
+
+watch(isContentLoading, () => void revealSearchTarget(), { flush: 'post' })
+
+function onSettingsContentResolved() {
+    settingsContentPending.value = false
+    void revealSearchTarget()
+}
+
 async function selectSearchResult(result: SettingsSearchResult) {
+    pendingSearchTarget.value = result.entry
+        ? {
+              categoryId: result.category.id,
+              targetId: getSettingsSearchTargetId(result.entry),
+              query: searchQuery.value,
+          }
+        : null
     selectedCategoryId.value = result.category.id
     expandedGroups.value[result.category.group] = true
-    searchQuery.value = ''
+    if (!result.entry) searchQuery.value = ''
     const { page: _page, ...query } = route.query
-    await router.replace({
-        query,
-        hash: `#${result.category.id}`,
-    })
+    await router.replace({ query, hash: `#${result.category.id}` })
+    if (selectedCategoryId.value !== result.category.id) return
     contentContainer.value?.scrollTo({ top: 0 })
-
-    if (!result.entry) return
-
-    const targetId = getSettingsSearchTargetId(result.entry)
-    for (let attempt = 0; attempt < 12; attempt++) {
-        await nextTick()
-        const target = contentContainer.value?.querySelector<HTMLElement>(`#${targetId}`)
-        if (target) {
-            target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-            flashSearchTarget(target)
-            return
-        }
-        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    }
+    await revealSearchTarget()
 }
 
 async function toggleDeveloperMode() {
@@ -591,7 +610,7 @@ const pageTitle: MessageDescriptor = settingsPageTitle
                         >
                             <Suspense
                                 @pending="settingsContentPending = true"
-                                @resolve="settingsContentPending = false"
+                                @resolve="onSettingsContentResolved"
                             >
                                 <component :is="activeCategory.content" :key="activeCategory.id" />
                                 <template #fallback>

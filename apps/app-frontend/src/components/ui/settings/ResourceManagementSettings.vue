@@ -657,21 +657,18 @@ watch(
     minecraftDirectories,
     (value) => {
         persistMinecraftDirectories(value)
-        void syncDirectLinkInstances(true)
+        void syncDirectLinkInstances()
     },
     { deep: true },
 )
 
-async function syncDirectLinkInstances(allowEmpty = false) {
-    if (!allowEmpty && minecraftDirectories.value.length === 0) return
+async function syncDirectLinkInstances() {
     try {
         await syncConfiguredDirectLinks(minecraftDirectories.value)
     } catch (error) {
         handleError(error)
     }
 }
-
-void syncDirectLinkInstances()
 
 watch(
     missingContentScannerSettings,

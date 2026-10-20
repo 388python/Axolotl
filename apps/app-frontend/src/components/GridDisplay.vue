@@ -192,10 +192,11 @@ const displayMode = ref(getLastLibraryDisplayMode())
 const runningInstanceIds = ref(new Set<string>())
 const startingInstanceIds = ref(new Set<string>())
 let unlistenProcesses: (() => void) | undefined
+let disposed = false
 
 async function refreshRunningInstances() {
     const processes = await get_all().catch(handleError)
-    if (processes)
+    if (processes && !disposed)
         runningInstanceIds.value = new Set(processes.map((process) => process.instance_id))
 }
 
@@ -208,14 +209,20 @@ function setInstanceRunning(instanceId: string, running: boolean) {
 
 onMounted(async () => {
     await refreshRunningInstances()
-    unlistenProcesses = await process_listener((event: { instance_id: string; event: string }) => {
-        if (event.event === 'launched' || event.event === 'finished') {
+    if (disposed) return
+    const unlisten = await process_listener((event: { instance_id: string; event: string }) => {
+        if (!disposed && (event.event === 'launched' || event.event === 'finished')) {
             runningInstanceIds.value = updateRunningInstanceIds(runningInstanceIds.value, event)
         }
     })
+    if (disposed) unlisten()
+    else unlistenProcesses = unlisten
 })
 
-onUnmounted(() => unlistenProcesses?.())
+onUnmounted(() => {
+    disposed = true
+    unlistenProcesses?.()
+})
 
 function removeGroup(groupKey: string) {
     if (groupKey === FAVORITES_GROUP_ID) return
@@ -530,7 +537,7 @@ const sortDirectionLabel = computed(() => {
 
 async function deleteInstance() {
     if (currentDeleteInstance.value) {
-        await remove(currentDeleteInstance.value.id).catch(handleError)
+        await remove(currentDeleteInstance.value.id)
     }
 }
 
@@ -839,7 +846,9 @@ function handleCheckboxClick(instanceId, event) {
 }
 
 const batchDeleteConfirmModal = ref(null)
-const batchDeleteTargets = ref<Pick<GameInstance, 'id' | 'name'>[]>([])
+const batchDeleteTargets = ref<
+    Pick<GameInstance, 'id' | 'name' | 'icon_path' | 'loader' | 'game_version' | 'path'>[]
+>([])
 
 function showBatchDeleteConfirmation() {
     if (busy.value) return
@@ -848,7 +857,14 @@ function showBatchDeleteConfirmation() {
         .filter(
             (instance) => selectedInstanceIds.value.has(instance.id) && visibleIds.has(instance.id),
         )
-        .map(({ id, name }) => ({ id, name }))
+        .map(({ id, name, icon_path, loader, game_version, path }) => ({
+            id,
+            name,
+            icon_path,
+            loader,
+            game_version,
+            path,
+        }))
     if (batchDeleteTargets.value.length > 0) batchDeleteConfirmModal.value?.show()
 }
 
@@ -857,15 +873,22 @@ async function batchDeleteInstances() {
     const targets = [...batchDeleteTargets.value]
     deletingInstances.value = true
     try {
-        for (const { id } of targets) {
+        const failed: typeof targets = []
+        const errors: unknown[] = []
+        for (const target of targets) {
             try {
-                await remove(id)
-                selectedInstanceIds.value.delete(id)
-            } catch (err) {
-                handleError(err)
+                await remove(target.id)
+                selectedInstanceIds.value.delete(target.id)
+            } catch (error) {
+                failed.push(target)
+                errors.push(error)
             }
         }
         if (selectedInstanceIds.value.size === 0) clearLibraryInstanceSelection()
+        if (errors.length) {
+            batchDeleteTargets.value = failed
+            throw new AggregateError(errors, 'Some instances could not be deleted')
+        }
     } finally {
         deletingInstances.value = false
     }
@@ -1013,6 +1036,7 @@ async function handleInstanceDragEnd(event: {
                 :section-key="pinnedSection.key"
                 :group-name="groupNameMap.get(pinnedSection.key) || pinnedSection.key"
                 :instances="pinnedSection.instances"
+                :running-instance-ids="runningInstanceIds"
                 :grouping="grouping"
                 :is-collapsed="isSectionCollapsed(pinnedSection.key)"
                 :display-mode="displayMode"
@@ -1068,6 +1092,7 @@ async function handleInstanceDragEnd(event: {
                                 groupNameMap.get(instanceSection.key) || instanceSection.key
                             "
                             :instances="instanceSection.instances"
+                            :running-instance-ids="runningInstanceIds"
                             :grouping="grouping"
                             :is-collapsed="isSectionCollapsed(instanceSection.key)"
                             :display-mode="displayMode"
@@ -1119,13 +1144,13 @@ async function handleInstanceDragEnd(event: {
             :instance-id="currentDeleteInstance?.id"
             :symlink-target="currentDeleteInstance?.symlink_target"
             :instances="currentDeleteInstance ? [currentDeleteInstance] : []"
-            @delete="deleteInstance"
+            :delete-action="deleteInstance"
         />
         <ConfirmDeleteInstanceModal
             ref="batchDeleteConfirmModal"
             :count="batchDeleteTargets.length"
             :instances="batchDeleteTargets"
-            @delete="batchDeleteInstances"
+            :delete-action="batchDeleteInstances"
         />
         <InstanceGroupModal
             ref="batchEditModal"

@@ -386,14 +386,11 @@ import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
     confirmedContentGroupKey,
     duplicateGroupUpdateEntries,
-    queueResourceEntryChanges,
     reviewResourceEntryChanges,
 } from '@/helpers/resource-update-selection'
 import {
     resourceCheckUpdates,
     resourceListHistory,
-    resourcePrepareEntryOperation,
-    resourceQueuePlan,
     resourceReleaseDocuments,
     resourceReleases,
     type SourceProjectRef,
@@ -2267,45 +2264,20 @@ async function getDeleteDependencyWarning(items: ContentItem[]) {
     return dependents.length > 0 ? { items, dependents } : null
 }
 
-const directEntryChanges = new Set<string>()
 async function reviewResourceChanges(entryIds: string[], release: SourceReleaseRef | null = null) {
-    const installedMods = new Set(
-        contentSnapshot.value?.items
-            .filter((item) => item.projectType === 'mod')
-            .map((item) => item.entryId) ?? [],
-    )
-    const modIds = entryIds.filter((id) => installedMods.has(id))
-    const reviewedIds = entryIds.filter((id) => !installedMods.has(id))
-    let queued = false
-    if (modIds.length) {
-        if (modIds.some((id) => directEntryChanges.has(id))) return false
-        for (const id of modIds) directEntryChanges.add(id)
-        try {
-            queued = await queueResourceEntryChanges(
-                { instanceId: props.instance.id, entryIds: modIds, release },
-                resourcePrepareEntryOperation,
-                resourceQueuePlan,
-                (job) => downloadManager.trackJob(job),
-            )
-        } finally {
-            for (const id of modIds) directEntryChanges.delete(id)
-        }
-    }
-    if (!reviewedIds.length) return queued
     const preview = resourceOperationPreview.value
-    if (!preview) return queued
-    const reviewed = await reviewResourceEntryChanges(
+    if (!preview) return false
+    return reviewResourceEntryChanges(
         {
             instanceId: props.instance.id,
             instanceName: props.instance.name,
-            entryIds: reviewedIds,
+            entryIds,
             release,
             installDependencies: themeStore.getFeatureFlag('auto_install_dependencies'),
         },
         (input) => preview.show(input),
         (job) => downloadManager.trackJob(job),
     )
-    return queued || reviewed
 }
 
 async function bulkUpdateAllProjects() {

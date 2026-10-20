@@ -84,6 +84,10 @@ if (sha256(binary) !== initialHash) throw new Error('Packaging changed the compi
 const portable = path.join(root, 'target', `portable-${profile}`, 'Axolotl')
 fs.mkdirSync(path.join(portable, '.Axolotl'), { recursive: true })
 fs.copyFileSync(binary, path.join(portable, 'Axolotl Launcher.exe'))
+requireFile(path.join(app, 'resources/seed-map/axolotl-cubiomes.dll'))
+fs.cpSync(path.join(app, 'resources/seed-map'), path.join(portable, 'resources/seed-map'), {
+    recursive: true,
+})
 fs.cpSync(
     path.join(app, 'resources/blockbench-skin'),
     path.join(portable, 'resources/blockbench-skin'),
