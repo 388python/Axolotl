@@ -5,13 +5,13 @@ import type {
     PatchDataFile,
     VersionManifest,
 } from './commands/types.ts'
-import manifestData from './data/manifest.json'
-import v116Data from './data/v1.16.json'
-import v117Data from './data/v1.17.json'
-import v118Data from './data/v1.18.json'
-import v119Data from './data/v1.19.json'
-import v120Data from './data/v1.20.json'
-import v121Data from './data/v1.21.json'
+import manifestData from './data/manifest.json' with { type: 'json' }
+import v116Data from './data/v1.16.json' with { type: 'json' }
+import v117Data from './data/v1.17.json' with { type: 'json' }
+import v118Data from './data/v1.18.json' with { type: 'json' }
+import v119Data from './data/v1.19.json' with { type: 'json' }
+import v120Data from './data/v1.20.json' with { type: 'json' }
+import v121Data from './data/v1.21.json' with { type: 'json' }
 
 const dataMap: Record<string, CommandDataFile> = {
     'v1.16.json': v116Data as unknown as CommandDataFile,
