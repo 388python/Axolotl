@@ -6,6 +6,7 @@
 
 pub(crate) mod authority_scheduler;
 pub(crate) mod diagnostics;
+pub(crate) mod endpoint_selection;
 pub mod h2_download;
 pub mod h2_pool;
 pub(crate) mod h2_range;
