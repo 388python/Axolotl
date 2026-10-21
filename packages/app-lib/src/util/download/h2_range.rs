@@ -746,6 +746,7 @@ async fn recover_range(
                     break;
                 }
             };
+            request.transfer_counters.received(chunk.len() as u64);
             if chunk.len() as u64 > range.end - offset {
                 failure = Some(H2DownloadFailure::Protocol);
                 break;
@@ -776,11 +777,17 @@ async fn recover_range(
                     .checkpoint(index, offset - range.start, &hash)
                     .await
                     .map_err(|_| H2DownloadFailure::Io)?;
+                request
+                    .transfer_counters
+                    .commit(range.start + range.written, offset);
                 last_checkpoint = offset;
             }
         }
         drop(body);
         writer.flush().await.map_err(|_| H2DownloadFailure::Io)?;
+        request
+            .transfer_counters
+            .commit(range.start + range.written, offset);
         journal
             .checkpoint(index, offset - range.start, &hash)
             .await

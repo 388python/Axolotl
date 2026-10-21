@@ -536,7 +536,10 @@ async fn single_stream(
     }
 
     let mut hashers = fetch::IntegrityHashers::new_integrity_hashers(integrity);
-    let mut file = tokio::fs::File::create(part_path).await?;
+    let mut file = super::stream_output::StreamOutput::new(
+        tokio::fs::File::create(part_path).await?,
+        part_path,
+    );
     let mut downloaded = 0_u64;
     let activity = super::h2_receive::H2TransferActivity::begin();
     let mut progress_gate = super::h2_receive::H2ProgressGate::new(total_size);
@@ -558,8 +561,9 @@ async fn single_stream(
                 }
             } => return Err(crate::ErrorKind::OtherError("download canceled".into()).into()),
             _ = timer.tick(), if policy.abort_if_slow => {
-                if progress_gate.should_report(downloaded, total_size) {
-                    record_install_progress(request, downloaded, total_size).await;
+                let persisted = downloaded.saturating_sub(file.pending_bytes());
+                if progress_gate.should_report(persisted, total_size) {
+                    record_install_progress(request, persisted, total_size).await;
                 }
                 let decision = slow_policy.observe_with_pressure(
                     downloaded,
@@ -574,7 +578,8 @@ async fn single_stream(
                         connection.remote_addr, last_endpoint_speed, total_size.saturating_sub(downloaded)).is_some()
                 {
                     drop(stream);
-                    super::local_resources::write(part_path, 0, file.flush()).await?;
+                    file.flush().await?;
+                    request.transfer_counters.commit(0, downloaded);
                     return Err(crate::ErrorKind::DownloadEndpointChanged.into());
                 }
                 if matches!(decision, super::native_slow::SlowDecision::Probe { .. })
@@ -597,6 +602,9 @@ async fn single_stream(
                         reason = ?decision,
                         "Native HTTP/2 download stayed slow; falling back to HTTP/1.1"
                     );
+                    drop(stream);
+                    file.flush().await?;
+                    request.transfer_counters.commit(0, downloaded);
                     return Err(crate::ErrorKind::NetworkError(
                         "HTTP/2 single stream stayed below expectation".into(),
                     ).into());
@@ -607,21 +615,24 @@ async fn single_stream(
         let Some(chunk) = chunk else {
             break;
         };
-        super::local_resources::write(part_path, chunk.len() as u64, async {
-            file.write_all(&chunk).await?;
-            file.flush().await
-        })
-        .await?;
+        request.transfer_counters.received(chunk.len() as u64);
+        file.write_chunk(&chunk).await?;
         hashers.update(&chunk);
         downloaded += chunk.len() as u64;
+        request
+            .transfer_counters
+            .commit(0, downloaded.saturating_sub(file.pending_bytes()));
         connection.record_bytes(chunk.len());
         activity.record_bytes(chunk.len());
         super::h2_receive::release_capacity(&mut stream, chunk.len())?;
-        if progress_gate.should_report(downloaded, total_size) {
-            record_install_progress(request, downloaded, total_size).await;
+        let persisted = downloaded.saturating_sub(file.pending_bytes());
+        if progress_gate.should_report(persisted, total_size) {
+            record_install_progress(request, persisted, total_size).await;
         }
     }
-    super::local_resources::write(part_path, 0, file.flush()).await?;
+    file.flush().await?;
+    request.transfer_counters.commit(0, downloaded);
+    record_install_progress(request, downloaded, total_size).await;
     drop(file);
     drop(permit);
     drop(connection_activity);

@@ -4,6 +4,7 @@ mod candidates;
 mod clients;
 mod coordinator;
 mod fastly_rules;
+pub(crate) mod metrics;
 mod model;
 mod policy;
 mod probe;

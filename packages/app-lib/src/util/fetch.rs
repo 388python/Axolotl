@@ -273,6 +273,8 @@ pub struct DownloadRequest {
     pub(crate) cancellation: Option<tokio_util::sync::CancellationToken>,
     pub(crate) install_tracking: Option<DownloadInstallTracking>,
     pub(crate) endpoint_migrations: Arc<std::sync::atomic::AtomicU8>,
+    pub(crate) transfer_counters:
+        Arc<super::download::endpoint_selection::metrics::TransferCounters>,
 }
 
 #[derive(Clone, Debug)]
@@ -297,6 +299,7 @@ impl DownloadRequest {
             cancellation: None,
             install_tracking: None,
             endpoint_migrations: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+            transfer_counters: Arc::default(),
         }
     }
 
@@ -4385,6 +4388,7 @@ async fn download_segment(
     semaphore: &FetchSemaphore,
     hedge_count: &AtomicUsize,
     hedge_active: &AtomicBool,
+    counters: &super::download::endpoint_selection::metrics::TransferCounters,
 ) -> Result<SegmentDownloadCompletion, SegmentDownloadError> {
     let _activity = crate::State::get_if_initialized()
         .map(|state| state.begin_download_connection());
@@ -4672,6 +4676,7 @@ async fn download_segment(
                     break;
                 }
             };
+            counters.received(chunk.len() as u64);
             let (accepted, completed) = range.accept_chunk(chunk.len());
             writer
                 .write_next(&chunk[..accepted])
@@ -4694,6 +4699,10 @@ async fn download_segment(
                 .flush()
                 .await
                 .map_err(|error| SegmentDownloadError::Fatal(error.into()))?;
+            counters.commit(
+                requested_start,
+                range.start + range.state.lock().downloaded,
+            );
             break;
         }
         if attempt < SEGMENT_RETRY_ATTEMPTS {
@@ -4701,6 +4710,10 @@ async fn download_segment(
                 .flush()
                 .await
                 .map_err(|error| SegmentDownloadError::Fatal(error.into()))?;
+            counters.commit(
+                requested_start,
+                range.start + range.state.lock().downloaded,
+            );
             let downloaded_after_attempt = {
                 let state = range.state.lock();
                 state.downloaded
@@ -4961,6 +4974,7 @@ async fn try_segmented_download(
             semaphore,
             &hedge_count,
             &hedge_active,
+            &request.transfer_counters,
         ));
     }
     tracing::debug!(
@@ -5187,6 +5201,7 @@ async fn try_segmented_download(
                             semaphore,
                             &hedge_count,
                             &hedge_active,
+                            &request.transfer_counters,
                         ));
                         ranges.push(new_range);
                         expansion_baseline = Some(snapshot.recent_average);
@@ -5355,6 +5370,7 @@ pub async fn download_to_path(
 ) -> crate::Result<DownloadResult> {
     let tracking = request.install_tracking.clone();
     let request_url = request.url.clone();
+    let request_counters = request.transfer_counters.clone();
     let destination_path = destination.as_ref();
     let integrity = request.integrity.clone();
     let result = async {
@@ -5393,6 +5409,7 @@ pub async fn download_to_path(
         .await
     }
     .await;
+    tracing::debug!(url = %sanitize_url_for_log(&request_url), counters = ?request_counters.snapshot(), "Download payload accounting");
     if let Err(error) = &result {
         if let Some(state) = crate::State::get_if_initialized() {
             state.record_download_error();
@@ -6844,7 +6861,7 @@ async fn run_native_route_attempts(
         }
 
         let starting_size = resume_offset;
-        let mut file = if starting_size > 0 {
+        let file = if starting_size > 0 {
             match open_download_file_for_append(part_path).await {
                 Ok(file) => file,
                 Err(error) => {
@@ -6869,6 +6886,8 @@ async fn run_native_route_attempts(
         } else {
             create_download_file(part_path).await?
         };
+        let mut file =
+            super::download::stream_output::StreamOutput::new(file, part_path);
         let response_length = response.content_length().unwrap_or(0);
         let total_size = request
             .integrity
@@ -6922,29 +6941,33 @@ async fn run_native_route_attempts(
                             break;
                         }
                     };
-                    super::download::local_resources::write(part_path, chunk.len() as u64, async { file.write_all(&chunk).await?; file.flush().await }).await.map_err(|error| {
+                    request.transfer_counters.received(chunk.len() as u64);
+                    file.write_chunk(&chunk).await.map_err(|error| {
                         IOError::with_path(error, part_path)
                     })?;
                     hashers.update(&chunk);
                     downloaded += chunk.len() as u64;
+                    request.transfer_counters.commit(starting_size, downloaded.saturating_sub(file.pending_bytes()));
                     if let Some(state) = crate::State::get_if_initialized() {
                         state.record_download_bytes(chunk.len() as u64);
                     }
-                    if progress_gate.should_report(downloaded, total_size) {
+                    let persisted = downloaded.saturating_sub(file.pending_bytes());
+                    if progress_gate.should_report(persisted, total_size) {
                         record_install_download_progress(
-                            request, downloaded, total_size,
+                            request, persisted, total_size,
                         )
                         .await;
                     }
                     if let Some(progress) = progress.as_mut()
-                        && let Err(error) = progress(downloaded, total_size).await
+                        && let Err(error) = progress(persisted, total_size).await
                     {
                         tracing::warn!(%error, "Download progress callback failed");
                     }
                 }
                 _ = throughput_timer.tick() => {
-                    if progress_gate.should_report(downloaded, total_size) {
-                        record_install_download_progress(request, downloaded, total_size).await;
+                    let persisted = downloaded.saturating_sub(file.pending_bytes());
+                    if progress_gate.should_report(persisted, total_size) {
+                        record_install_download_progress(request, persisted, total_size).await;
                     }
                     let slow_decision = slow_policy.observe_with_pressure(
                         downloaded,
@@ -7090,10 +7113,11 @@ async fn run_native_route_attempts(
         }
         drop(alternate_probe);
         drop(stream);
-        record_install_download_progress(request, downloaded, total_size).await;
-        super::download::local_resources::write(part_path, 0, file.flush())
+        file.flush()
             .await
             .map_err(|error| IOError::with_path(error, part_path))?;
+        request.transfer_counters.commit(starting_size, downloaded);
+        record_install_download_progress(request, downloaded, total_size).await;
         if transfer_error.is_some() {
             // Best-effort durability for data a later resume builds
             // on; a power loss could otherwise leave a zero-filled
@@ -10156,6 +10180,7 @@ mod tests {
             &semaphore,
             &AtomicUsize::new(0),
             &AtomicBool::new(false),
+            &super::super::download::endpoint_selection::metrics::TransferCounters::default(),
         )
         .await;
         assert!(matches!(

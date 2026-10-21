@@ -490,6 +490,9 @@ async fn same_url_http1_download_resumes_on_new_ip_and_verifies_final_hash() {
     assert_eq!(slow.requests.load(Ordering::SeqCst), 1);
     assert_eq!(fast.requests.load(Ordering::SeqCst), 1);
     assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
+    let counters = request.transfer_counters.snapshot();
+    assert_eq!(counters.committed_unique_bytes, bytes.len() as u64);
+    assert_eq!(counters.received_payload_bytes, bytes.len() as u64);
 }
 
 #[tokio::test]

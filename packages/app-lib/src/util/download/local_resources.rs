@@ -41,6 +41,18 @@ struct WriteSample {
     updated: Option<Instant>,
 }
 
+impl WriteSample {
+    fn observe(&mut self, queue_ms: f64, write_ms: f64) {
+        let pressure_ms = queue_ms + write_ms;
+        self.latency_ms = if self.updated.is_some() {
+            self.latency_ms * 0.75 + pressure_ms * 0.25
+        } else {
+            pressure_ms
+        };
+        self.updated = Some(Instant::now());
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Pressure {
     pub(crate) cpu_percent: u32,
@@ -167,12 +179,7 @@ where
         });
     }
     let sample = samples.entry(volume(path)).or_default();
-    sample.latency_ms = if sample.updated.is_some() {
-        sample.latency_ms * 0.75 + elapsed_ms * 0.25
-    } else {
-        elapsed_ms
-    };
-    sample.updated = Some(Instant::now());
+    sample.observe(queue_ms, elapsed_ms);
     drop(samples);
     tracing::trace!(path = %path.display(), bytes, queue_ms, write_ms = elapsed_ms, "Download disk operation");
     result
@@ -182,6 +189,28 @@ where
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn queue_wait_alone_can_block_network_expansion() {
+        let mut sample = WriteSample::default();
+        sample.observe(80.0, 0.1);
+        assert!(
+            Pressure {
+                cpu_percent: 0,
+                write_latency_ms: sample.latency_ms
+            }
+            .blocks_expansion()
+        );
+        let mut sample = WriteSample::default();
+        sample.observe(0.1, 1.0);
+        assert!(
+            !Pressure {
+                cpu_percent: 0,
+                write_latency_ms: sample.latency_ms
+            }
+            .blocks_expansion()
+        );
+    }
 
     #[test]
     fn pressure_keys_use_the_longest_matching_mount() {
