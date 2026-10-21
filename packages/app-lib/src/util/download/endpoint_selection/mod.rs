@@ -17,3 +17,11 @@ pub(crate) use probe::invalid_certificate;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/fixtures.rs"]
+mod fixtures;
+
+#[cfg(test)]
+#[path = "tests/benchmark.rs"]
+mod benchmark;
