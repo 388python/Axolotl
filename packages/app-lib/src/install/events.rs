@@ -39,6 +39,13 @@ pub struct InstallProgressReporter {
     /// cannot overwrite the job-level aggregate, while download events and
     /// request progress continue to use the shared state.
     phase_updates_enabled: bool,
+    pipeline: Option<Arc<InstallPipelineState>>,
+}
+
+#[derive(Debug)]
+struct InstallPipelineState {
+    cancellation: CancellationToken,
+    failure: std::sync::Mutex<Option<crate::Error>>,
 }
 
 #[derive(Debug)]
@@ -99,6 +106,9 @@ impl InstallProgressReporter {
     }
 
     pub(crate) fn cancellation_token(&self) -> CancellationToken {
+        if let Some(pipeline) = &self.pipeline {
+            return pipeline.cancellation.clone();
+        }
         crate::State::get_if_initialized()
             .and_then(|state| {
                 state
@@ -107,6 +117,37 @@ impl InstallProgressReporter {
                     .map(|entry| entry.value().clone())
             })
             .unwrap_or_default()
+    }
+
+    /// A failed worker stops its peers without marking the user's job canceled.
+    pub(crate) fn with_pipeline_cancellation(mut self) -> Self {
+        self.pipeline = Some(Arc::new(InstallPipelineState {
+            cancellation: self.cancellation_token().child_token(),
+            failure: std::sync::Mutex::new(None),
+        }));
+        self
+    }
+
+    pub(crate) fn fail_pipeline(&self, error: &crate::Error) {
+        if let Some(pipeline) = &self.pipeline {
+            let mut first =
+                pipeline.failure.lock().expect("pipeline failure lock");
+            if first.is_none() {
+                *first =
+                    Some(crate::Error::from_shared_kind(error.raw.clone()));
+            }
+            pipeline.cancellation.cancel();
+        }
+    }
+
+    pub(crate) fn pipeline_failure(&self) -> Option<crate::Error> {
+        self.pipeline.as_ref().and_then(|pipeline| {
+            pipeline
+                .failure
+                .lock()
+                .expect("pipeline failure lock")
+                .take()
+        })
     }
 
     pub(crate) fn job_id(&self) -> Uuid {
@@ -188,6 +229,7 @@ impl InstallProgressReporter {
             state: shared_state,
             parallel_output: false,
             phase_updates_enabled: true,
+            pipeline: None,
         }
     }
 
@@ -1204,6 +1246,66 @@ mod tests {
         InstallPhaseId, MissingModpackContentState,
     };
     use crate::state::{InstanceLink, ModLoader};
+
+    fn pipeline_reporter() -> InstallProgressReporter {
+        InstallProgressReporter::new(
+            Uuid::new_v4(),
+            InstallJobState::new(InstallRequest::DownloadJava {
+                vendor: "test".into(),
+                version: 21,
+            }),
+        )
+    }
+
+    #[test]
+    fn pipeline_failure_cancels_peers_without_canceling_the_job_and_preserves_the_first_error()
+     {
+        let mut parent = pipeline_reporter();
+        let token = CancellationToken::new();
+        parent.pipeline = Some(Arc::new(InstallPipelineState {
+            cancellation: token.clone(),
+            failure: std::sync::Mutex::new(None),
+        }));
+        let worker = parent.clone().with_pipeline_cancellation();
+        let peer = worker.clone();
+        worker.fail_pipeline(
+            &crate::ErrorKind::InputError("original failure".into()).into(),
+        );
+        peer.fail_pipeline(
+            &crate::ErrorKind::OtherError("peer canceled".into()).into(),
+        );
+        assert!(peer.cancellation_token().is_cancelled());
+        assert!(!token.is_cancelled());
+        assert!(parent.pipeline_failure().is_none());
+        assert!(
+            worker
+                .pipeline_failure()
+                .unwrap()
+                .to_string()
+                .contains("original failure")
+        );
+    }
+
+    #[test]
+    fn user_cancellation_reaches_all_child_pipelines_and_retries_get_a_fresh_token()
+     {
+        let mut parent = pipeline_reporter();
+        let token = CancellationToken::new();
+        parent.pipeline = Some(Arc::new(InstallPipelineState {
+            cancellation: token.clone(),
+            failure: std::sync::Mutex::new(None),
+        }));
+        let first = parent.clone().with_pipeline_cancellation();
+        first.fail_pipeline(
+            &crate::ErrorKind::OtherError("worker failed".into()).into(),
+        );
+        let retry = parent.clone().with_pipeline_cancellation();
+        assert!(!retry.cancellation_token().is_cancelled());
+        assert!(retry.pipeline_failure().is_none());
+        token.cancel();
+        assert!(retry.cancellation_token().is_cancelled());
+        assert!(first.cancellation_token().is_cancelled());
+    }
 
     #[cfg(not(feature = "tauri"))]
     fn minecraft_details() -> InstallPhaseDetails {

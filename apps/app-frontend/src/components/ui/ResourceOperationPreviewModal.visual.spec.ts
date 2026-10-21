@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { config, flushPromises, mount } from '@vue/test-utils'
 import { IntlMessageFormat } from 'intl-messageformat'
 import { expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
@@ -17,6 +17,7 @@ import { get_instance_worlds } from '@/helpers/worlds'
 import ResourceOperationPreviewModal from './ResourceOperationPreviewModal.vue'
 
 const closeTransition = vi.fn().mockResolvedValue(undefined)
+config.global.directives.tooltip = {}
 
 vi.mock('@/helpers/resources', () => ({
     resourceGet: vi.fn(),
@@ -186,6 +187,104 @@ function ready() {
             }) as Awaited<ReturnType<typeof resourceGet>>,
     )
 }
+
+it('queues an install with dependency analysis warnings and shows the warning on the install button', async () => {
+    ready()
+    const reviewed = {
+        ...plan(),
+        intent: 'install',
+        issues: [
+            {
+                code: 'dependencyAnalysisFailed',
+                selectionId: 'root',
+                blocking: false,
+                message: 'source offline',
+            },
+        ],
+    } as ResourceOperationPlan
+    vi.mocked(resourcePrepareOperation).mockResolvedValue(reviewed)
+    vi.mocked(resourceQueuePlan).mockResolvedValue({ job_id: 'queued' } as never)
+    const wrapper = mount(ResourceOperationPreviewModal, {
+        global: {
+            directives: {
+                tooltip: {
+                    mounted: (element, binding) => {
+                        element.dataset.tooltip = binding.value ?? ''
+                    },
+                    updated: (element, binding) => {
+                        element.dataset.tooltip = binding.value ?? ''
+                    },
+                },
+            },
+        },
+    })
+    const result = wrapper.vm.showInstall({
+        instanceId: 'instance',
+        instanceName: 'Instance',
+        selections: [],
+        installDependencies: true,
+    })
+    try {
+        await flushPromises()
+        const button = wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+        expect(button.attributes('disabled')).toBeUndefined()
+        expect(button.attributes('data-tooltip')).toBe(
+            'Dependency analysis failed. The instance may not work correctly.',
+        )
+        await button.trigger('click')
+        await flushPromises()
+        expect(resourceQueuePlan).toHaveBeenCalledExactlyOnceWith(reviewed.id, reviewed.revision)
+        expect((await result)?.job_id).toBe('queued')
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('does not bypass blocking file validation when dependency analysis also failed', async () => {
+    ready()
+    vi.mocked(resourcePrepareOperation).mockResolvedValue({
+        ...plan(),
+        intent: 'install',
+        issues: [
+            {
+                code: 'dependencyAnalysisFailed',
+                selectionId: 'root',
+                blocking: false,
+                message: 'source offline',
+            },
+            {
+                code: 'invalidPath',
+                selectionId: 'root',
+                blocking: true,
+                message: 'invalid filename',
+            },
+        ],
+    } as ResourceOperationPlan)
+    const wrapper = mount(ResourceOperationPreviewModal, {
+        global: { directives: { tooltip: {} } },
+    })
+    const result = wrapper.vm.showInstall({
+        instanceId: 'instance',
+        instanceName: 'Instance',
+        selections: [],
+        installDependencies: true,
+    })
+    try {
+        await flushPromises()
+        const button = wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Queue changes')!
+        expect(button.attributes('disabled')).toBeDefined()
+        await button.trigger('click')
+        expect(resourceQueuePlan).not.toHaveBeenCalled()
+        await wrapper.vm.cancel()
+        expect(await result).toBeNull()
+    } finally {
+        wrapper.unmount()
+    }
+})
 
 it('keeps submission and reopening locked through the closing animation', async () => {
     ready()

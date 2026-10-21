@@ -188,6 +188,7 @@ pub enum ResourceIssueCode {
     ArtifactMismatch,
     InvalidPath,
     MissingDependency,
+    DependencyAnalysisFailed,
     StaleRevision,
     ManualDownloadRequired,
 }

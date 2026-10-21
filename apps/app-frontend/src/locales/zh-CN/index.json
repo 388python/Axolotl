@@ -9827,6 +9827,9 @@
   "app.navigation.edit-world": {
     "message": "编辑存档"
   },
+  "app.navigation.forward": {
+    "message": "前进"
+  },
   "app.navigation.home": {
     "message": "主页"
   },
@@ -16913,6 +16916,9 @@
   "app.resources.operation.unresolved-optional": {
     "message": "部分可选依赖无法解析，已跳过。"
   },
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "依赖分析失败，可能会导致实例工作不正常"
+  },
   "app.resources.operation.missing-dependency": {
     "message": "无法解析所需的依赖。"
   },
@@ -17215,9 +17221,6 @@
   },
   "app.settings.resources.preserve-names-description": {
     "message": "更新和切换版本时只替换已知的原工件文件名。无法准确匹配的自定义名称会完整保留。"
-  },
-  "app.instance.mods.unconfirmed-unlink-history": {
-    "message": "没有明确的解除记录，因此保留了包成员。本地导入包可以没有在线链接；请使用“解除关联”明确取消包归属。"
   },
   "app.resources.changelog.empty": {
     "message": "此发布没有提供更新日志。"

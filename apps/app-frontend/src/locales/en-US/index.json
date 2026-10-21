@@ -3617,9 +3617,6 @@
   "app.instance.mods.toggle-dependencies.will-enable": {
     "message": "The following content will be enabled:"
   },
-  "app.instance.mods.unconfirmed-unlink-history": {
-    "message": "Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly."
-  },
   "app.instance.mods.update-added-content": {
     "message": "Update added content"
   },
@@ -11012,6 +11009,9 @@
   "app.navigation.edit-world": {
     "message": "Edit world"
   },
+  "app.navigation.forward": {
+    "message": "Forward"
+  },
   "app.navigation.home": {
     "message": "Home"
   },
@@ -11866,6 +11866,9 @@
   },
   "app.resources.operation.manual-download": {
     "message": "{name} requires a manual download and cannot be installed automatically."
+  },
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "Dependency analysis failed. The instance may not work correctly."
   },
   "app.resources.operation.missing-dependency": {
     "message": "A required dependency could not be resolved."

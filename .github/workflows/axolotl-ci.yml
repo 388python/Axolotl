@@ -55,6 +55,8 @@ jobs:
           MIGRATION_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          node --test scripts/axolotl/release-policy.test.mjs
+          node --test scripts/axolotl/set-version.test.mjs
           node scripts/axolotl/check-migrations.mjs --base "${MIGRATION_BASE_REF:-HEAD^}"
           node scripts/axolotl/check-migrations.mjs --release
       - run: node scripts/axolotl/brand-guard.mjs
@@ -65,6 +67,7 @@ jobs:
       - run: node scripts/axolotl/check-scoped-styles.mjs
       - run: node scripts/axolotl/check-retired-ui.mjs
       - run: node scripts/axolotl/downgrade-app-db.test.mjs
+      - run: node --test scripts/axolotl/create-release-notes.test.mjs
       - run: rustup component add rustfmt
       - run: cargo fmt --all --check
 

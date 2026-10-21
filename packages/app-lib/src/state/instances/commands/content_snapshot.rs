@@ -212,9 +212,6 @@ async fn get_content_snapshot_inner(
         content_rows::get_content_entries(&content_set.id, &state.pool).await?;
     let members =
         content_rows::get_pack_members(&content_set.id, &state.pool).await?;
-    if matches!(link, InstanceLink::Unmanaged) && !members.is_empty() {
-        warnings.push(InstanceContentWarning { code: "pack_unlink_history_unconfirmed".into(), message: "Pack membership was preserved because this instance has no explicit unlink record. Local imported packs may legitimately have no online link.".into(), provider: None });
-    }
     let pending_manual_downloads =
         content_rows::get_pending_manual_downloads(instance_id, &state.pool)
             .await?;

@@ -167,16 +167,6 @@
                         )
                     }}
                 </p>
-                <p
-                    v-if="
-                        localWarnings.some(
-                            (warning) => warning.code === 'pack_unlink_history_unconfirmed',
-                        )
-                    "
-                    class="mb-0"
-                >
-                    {{ formatMessage(messages.unconfirmedUnlinkHistory) }}
-                </p>
             </div>
         </CollapsibleAdmonition>
         <CollapsibleAdmonition
@@ -196,6 +186,13 @@
         <ContentPageLayout @visible-items="handleVisibleItems">
             <template #toolbar-actions>
                 <Button
+                    v-if="hasPackAssociation"
+                    type="outlined"
+                    :disabled="isPackUnlinkDisabled"
+                    @click="packUnlinkModal?.show()"
+                    >{{ formatMessage(commonMessages.unlinkModpackButton) }}</Button
+                >
+                <Button
                     v-if="
                         !instance.linked_dot_minecraft &&
                         !instance.symlink_target &&
@@ -208,6 +205,11 @@
                 >
             </template>
             <template #modals>
+                <ConfirmUnlinkModal
+                    ref="packUnlinkModal"
+                    :action="unpairInstance"
+                    :action-disabled="isPackUnlinkDisabled"
+                />
                 <ContentToggleDependenciesModal ref="toggleDependenciesModal" />
                 <DependencyGraphModal
                     ref="dependencyGraphModal"
@@ -304,6 +306,7 @@ import {
     CollapsibleAdmonition,
     commonMessages,
     ConfirmModpackUpdateModal,
+    ConfirmUnlinkModal,
     ContentCardLayout as ContentPageLayout,
     type ContentItem,
     type ContentModpackCardCategory,
@@ -408,11 +411,6 @@ const messages = defineMessages({
         id: 'app.instance.content.versions-failed',
         defaultMessage:
             'The release list could not be loaded. Reopen the version selector and try again.',
-    },
-    unconfirmedUnlinkHistory: {
-        id: 'app.instance.mods.unconfirmed-unlink-history',
-        defaultMessage:
-            'Pack membership was preserved because no explicit unlink record exists. A local imported pack can have no online link; use Unlink to detach it explicitly.',
     },
     manageBackups: {
         id: 'app.instance.mods.manage-backups',
@@ -675,11 +673,16 @@ const onlineWarnings = computed(() =>
     ),
 )
 const localWarnings = computed(() =>
-    contentWarnings.value.filter((warning) =>
-        ['pack_unlink_history_unconfirmed', 'resource_history_unavailable'].includes(warning.code),
-    ),
+    contentWarnings.value.filter((warning) => warning.code === 'resource_history_unavailable'),
 )
 const contentWarningExpanded = ref(true)
+const packUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
+const hasPackAssociation = computed(
+    () =>
+        !!contentSnapshot.value?.pack ||
+        (contentSnapshot.value?.items.some((item) => item.ownershipKind === 'pack_managed') ??
+            false),
+)
 
 // 从持久化缓存恢复整合包元数据
 const linkedModpackProject = ref<ContentModpackCardProject | null>(null)
@@ -1124,6 +1127,12 @@ const pendingContentChanges = computed(() =>
 )
 const isBulkOperating = localBulkOperating
 const isInstanceBusy = computed(() => props.instance?.install_stage !== 'installed')
+const isPackUnlinkDisabled = computed(
+    () =>
+        isInstanceBusy.value ||
+        activeContentChangeJobs.value.length > 0 ||
+        pendingContentChanges.value.length > 0,
+)
 let contentEnrichmentController: AbortController | undefined
 let contentRequestGeneration = 0
 let activeBypassRefresh: Promise<void> | null = null

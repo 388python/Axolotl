@@ -2186,6 +2186,139 @@ async fn unlink_task_conflict_and_sql_failure_leave_pack_metadata_intact() {
 }
 
 #[tokio::test]
+async fn explicit_unlink_repairs_legacy_residue_and_deleted_content_does_not_reappear()
+ {
+    let (_temp, state, original, _, root) = fixture().await;
+    pack_fixture(&state, &original).await;
+    let before = crate::state::instances::commands::get_local_content_snapshot(
+        "instance", &state,
+    )
+    .await
+    .unwrap();
+    assert!(before.warnings.is_empty());
+    assert!(before.pack.is_some());
+    assert_eq!(before.items.len(), 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM resource_pack_unlinks"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    crate::state::edit_instance(
+        "instance",
+        crate::state::EditInstance {
+            link: Some(crate::state::InstanceLink::Unmanaged),
+            ..Default::default()
+        },
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    let after = crate::state::instances::commands::get_local_content_snapshot(
+        "instance", &state,
+    )
+    .await
+    .unwrap();
+    assert!(after.warnings.is_empty());
+    assert!(after.pack.is_none());
+    assert_eq!(after.items.len(), 1);
+    assert_eq!(
+        after.items[0].ownership_kind,
+        crate::state::ContentOwnershipKind::UserAdded
+    );
+    assert!(after.items[0].member_id.is_none());
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    assert_eq!(
+        plans::installed(&state.pool, "instance").await.unwrap()[0].artifact,
+        original.artifact
+    );
+
+    crate::state::instances::commands::remove_project(
+        "instance",
+        &original.relative_path,
+        &state,
+    )
+    .await
+    .unwrap();
+    let deleted =
+        crate::state::instances::commands::get_local_content_snapshot(
+            "instance", &state,
+        )
+        .await
+        .unwrap();
+    assert!(deleted.items.is_empty());
+    assert!(!root.join(&original.relative_path).exists());
+    assert!(
+        sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn local_pack_without_unlink_history_stays_managed_without_a_warning() {
+    let (_temp, state, original, _, root) = fixture().await;
+    pack_fixture(&state, &original).await;
+    for link in [
+        crate::state::InstanceLink::Unmanaged,
+        crate::state::InstanceLink::ImportedModpack {
+            project_id: None,
+            version_id: None,
+            name: Some("Local pack".into()),
+            version_number: None,
+            filename: None,
+        },
+    ] {
+        let mut tx = state.pool.begin().await.unwrap();
+        crate::state::instances::adapters::sqlite::instance_rows::upsert_instance_link("instance", &link, &mut tx).await.unwrap();
+        tx.commit().await.unwrap();
+        for _ in 0..2 {
+            let snapshot =
+                crate::state::instances::commands::get_local_content_snapshot(
+                    "instance", &state,
+                )
+                .await
+                .unwrap();
+            assert!(snapshot.warnings.is_empty());
+            assert!(snapshot.pack.is_some());
+            assert_eq!(snapshot.items.len(), 2);
+            assert!(snapshot.items.iter().all(|item| item.ownership_kind
+                == crate::state::ContentOwnershipKind::PackManaged));
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM instance_pack_members"
+                )
+                .fetch_one(&state.pool)
+                .await
+                .unwrap(),
+                2
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM resource_pack_unlinks"
+                )
+                .fetch_one(&state.pool)
+                .await
+                .unwrap(),
+                0
+            );
+            assert!(root.join(&original.relative_path).exists());
+        }
+    }
+    state.pool.close().await;
+}
+
+#[tokio::test]
 async fn cleanup_sql_failure_recovers_backups_and_external_roots_are_refused() {
     let (temp, state, original, _, root) = fixture().await;
     std::fs::write(root.join("new.zip"), b"new bytes").unwrap();

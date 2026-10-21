@@ -1,4 +1,7 @@
 {
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "依賴分析失敗，可能會導致實例運作不正常"
+  },
   "app.account.signed-in-as": {
     "message": "登入身分："
   },

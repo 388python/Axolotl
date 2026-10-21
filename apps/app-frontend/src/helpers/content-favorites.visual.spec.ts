@@ -74,6 +74,60 @@ it('uses the available confirmed source while preserving the saved favorite iden
     expect(favorite.provider).toBe('modrinth')
 })
 
+it('reads local metadata for every favorite source without falling back to a network request', async () => {
+    vi.clearAllMocks()
+    vi.mocked(resourceProjectDocuments).mockRejectedValue(new Error('not cached'))
+    const sources = ['modrinth', 'curseforge', 'mcarchive', 'planet_minecraft'] as const
+    await expect(
+        prefetchContentFavorites(
+            sources.map((provider) => ({
+                provider,
+                project_id: 'one',
+                content_type: 'mod',
+                saved_at: 1,
+            })),
+            undefined,
+            'onlyCached',
+        ),
+    ).resolves.toEqual(new Map())
+    expect(resourceProjectDocuments).toHaveBeenCalledTimes(4)
+    for (const source of sources) {
+        expect(resourceProjectDocuments).toHaveBeenCalledWith(
+            source,
+            ['one'],
+            undefined,
+            'onlyCached',
+        )
+    }
+    expect(resourceLocate).not.toHaveBeenCalled()
+    expect(resourceGet).not.toHaveBeenCalled()
+})
+
+it('keeps a cached project when another item in the same batch has no local metadata', async () => {
+    vi.clearAllMocks()
+    const metadata = { project: { source: 'modrinth', projectId: 'one' }, title: 'Saved' }
+    vi.mocked(resourceProjectDocuments).mockImplementation(async (_, ids) => {
+        if (ids.includes('two')) throw new Error('cache miss')
+        return [{ metadata }] as Awaited<ReturnType<typeof resourceProjectDocuments>>
+    })
+    const cached = await prefetchContentFavorites(
+        ['one', 'two'].map((project_id) => ({
+            provider: 'modrinth',
+            project_id,
+            content_type: 'mod',
+            saved_at: 1,
+        })),
+        undefined,
+        'onlyCached',
+    )
+    expect(cached.get('modrinth:one')).toEqual(metadata)
+    expect(cached.has('modrinth:two')).toBe(false)
+    expect(resourceProjectDocuments).toHaveBeenCalledTimes(3)
+    expect(
+        vi.mocked(resourceProjectDocuments).mock.calls.every((call) => call[3] === 'onlyCached'),
+    ).toBe(true)
+})
+
 it('retains a source-only historical locator and reports failure when the resource has no presentation', async () => {
     vi.clearAllMocks()
     const metadata = {
