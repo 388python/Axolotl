@@ -535,9 +535,8 @@ fn platform_root_certs() -> rustls::RootCertStore {
     for cert in certs.certs {
         let _ = store.add(cert);
     }
-    if certs.errors.is_empty() {
-        return store;
-    }
+    // Match reqwest's native + WebPKI trust sources even when the platform
+    // store loads successfully but lacks a public root (common on Windows).
     store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
     store
 }

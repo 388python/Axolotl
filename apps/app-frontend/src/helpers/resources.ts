@@ -275,7 +275,7 @@ export function resourceSetPreferredSource(source: SourceId) {
 }
 
 export type ResourceCachePolicy =
-    'useFresh' | 'forceRefresh' | 'onlyCached' | 'staleWhileRevalidate'
+    'useFresh' | 'revalidate' | 'forceRefresh' | 'onlyCached' | 'staleWhileRevalidate'
 
 export type ResourceOperationIntent = 'install' | 'update' | 'switchVersion'
 export type ResourceSelection = {
@@ -519,6 +519,7 @@ export function resourceExecuteHistoryCleanup(cleanupPlanId: string, revision: n
     )
 }
 export function resourceCachePolicy(behavior?: string): ResourceCachePolicy {
+    if (behavior === 'revalidate') return 'revalidate'
     return behavior === 'bypass'
         ? 'forceRefresh'
         : behavior === 'cache_only'

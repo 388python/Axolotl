@@ -194,6 +194,70 @@ async fn presentation_keeps_incomplete_protocol_cache_when_offline_without_retry
     }
 }
 
+#[tokio::test]
+async fn revalidation_refreshes_fresh_project_indexes_and_keeps_offline_cache()
+{
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, None);
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let query = project_query("abcdefgh");
+    let saved = project_value(SourceId::modrinth(), "abcdefgh", "Saved");
+    let key =
+        CacheKey::new("mock-v1".into(), SourceId::modrinth(), &query).unwrap();
+    cache
+        .put(
+            &key,
+            &saved,
+            1800,
+            cache.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
+        .await;
+    let cancel = CancellationToken::new();
+    let current = service
+        .presentation_many_with_policy(
+            &SourceId::modrinth(),
+            vec![query.clone()],
+            &cancel,
+            CachePolicy::Revalidate,
+        )
+        .await
+        .remove(0)
+        .unwrap();
+    assert!(!current.from_cache);
+    assert_ne!(current.value, saved);
+    assert_eq!(provider.calls(), 1);
+    provider.fail.store(true, Ordering::Relaxed);
+    let offline = service
+        .presentation_many_with_policy(
+            &SourceId::modrinth(),
+            vec![query.clone()],
+            &cancel,
+            CachePolicy::Revalidate,
+        )
+        .await
+        .remove(0)
+        .unwrap();
+    assert!(offline.from_cache);
+    assert_eq!(offline.value, current.value);
+    assert_eq!(provider.calls(), 2);
+    provider.fail.store(false, Ordering::Relaxed);
+    provider.missing.store(true, Ordering::Relaxed);
+    let missing = service
+        .presentation_many_with_policy(
+            &SourceId::modrinth(),
+            vec![query],
+            &cancel,
+            CachePolicy::Revalidate,
+        )
+        .await
+        .remove(0)
+        .unwrap();
+    assert_eq!(missing.value, ProviderValue::NotFound);
+    cache.close().await;
+}
+
 #[path = "plans_tests.rs"]
 mod plans_tests;
 #[path = "protocol_tests.rs"]

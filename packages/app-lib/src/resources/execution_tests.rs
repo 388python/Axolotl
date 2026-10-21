@@ -4,6 +4,88 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::sync::Arc;
 
 #[tokio::test]
+async fn pack_overrides_keep_membership_across_reconciliation() {
+    use crate::api::curseforge::{
+        CurseForgePackExpectedContent, CurseForgePackExpectedOverride,
+    };
+    use crate::state::instances::commands::reconcile_curseforge_members;
+
+    let (_temp, state, original, _, _) = fixture().await;
+    let expected = CurseForgePackExpectedContent {
+        members: vec![],
+        overrides: vec![CurseForgePackExpectedOverride {
+            project_type: crate::state::ProjectType::ResourcePack,
+            expected_relative_path: original
+                .relative_path
+                .trim_end_matches(".disabled")
+                .to_owned(),
+        }],
+    };
+    reconcile_curseforge_members("instance", "set", &expected, &state)
+        .await
+        .unwrap();
+    let entries = plans::installed(&state.pool, "instance").await.unwrap();
+    let ResourceOwnership::PackManaged { pack_member_id } =
+        &entries[0].ownership
+    else {
+        panic!("pack override lost its ownership");
+    };
+    sqlx::query("UPDATE instance_pack_members SET override_kind = 'disabled', required = 0 WHERE id = ?")
+        .bind(pack_member_id).execute(&state.pool).await.unwrap();
+    reconcile_curseforge_members("instance", "set", &expected, &state)
+        .await
+        .unwrap();
+    let member: (String, String, i64) = sqlx::query_as(
+        "SELECT id, override_kind, required FROM instance_pack_members",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(member, (pack_member_id.clone(), "disabled".into(), 0));
+    plans::installed(&state.pool, "instance").await.unwrap();
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn content_operation_repairs_legacy_pack_entries_without_members() {
+    let (_temp, state, original, _, _) = fixture().await;
+    sqlx::query("UPDATE instance_content_entries SET ownership_kind = 'pack_managed' WHERE id = ?")
+        .bind(original.entry_id.as_str()).execute(&state.pool).await.unwrap();
+    assert!(plans::installed(&state.pool, "instance").await.is_err());
+    let cancel = CancellationToken::new();
+    super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+        .await
+        .unwrap();
+    let entries = plans::installed(&state.pool, "instance").await.unwrap();
+    assert!(matches!(
+        entries[0].ownership,
+        ResourceOwnership::PackManaged { .. }
+    ));
+    let revision = plans::instance_revision(&state.pool, "instance")
+        .await
+        .unwrap();
+    super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+        .await
+        .unwrap();
+    assert_eq!(
+        plans::instance_revision(&state.pool, "instance")
+            .await
+            .unwrap(),
+        revision
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM instance_pack_members"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        1
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
 async fn install_snapshot_reuses_hashes_and_only_rehashes_changed_files() {
     use crate::util::download::verified_file::track_scans;
     let (_temp, state, original, _, root) = fixture().await;

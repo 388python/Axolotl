@@ -103,6 +103,11 @@ vi.mock('@/providers/server-install', async () => {
 })
 vi.mock('@/providers/setup/server-install-content', () => ({
     createServerInstallContent: () => ({
+        serverContextServerData: { value: null },
+        isServerContext: { value: false },
+        queuedServerInstallProjectIds: { value: new Set() },
+        serverContentProjectIds: { value: new Set() },
+        isInstallingQueuedServerInstalls: { value: false },
         watchServerContextChanges: vi.fn(),
         initServerContext: async () => {},
         getProjectInstallContext: () => null,
@@ -142,8 +147,16 @@ vi.mock('@modrinth/ui', async () => {
         commonMessages: {
             retryButton: { defaultMessage: 'Retry' },
             backButton: { defaultMessage: 'Back' },
+            installButton: { defaultMessage: 'Install' },
+            followButton: { defaultMessage: 'Follow' },
+            reportButton: { defaultMessage: 'Report' },
+            changelogLabel: { defaultMessage: 'Changelog' },
         },
-        commonProjectSettingsMessages: {},
+        commonProjectSettingsMessages: {
+            description: { defaultMessage: 'Description' },
+            versions: { defaultMessage: 'Versions' },
+            gallery: { defaultMessage: 'Gallery' },
+        },
         defineMessage: (value: unknown) => value,
         defineMessages: (value: unknown) => value,
         formatDependencyProjectFilterOption: vi.fn(),
@@ -174,6 +187,7 @@ vi.mock('@modrinth/ui', async () => {
 })
 
 it('retains an actionable error page and browse context across failed retries', async () => {
+    api.project.mockClear()
     api.project.mockRejectedValue(new Error('offline'))
     const wrapper = mount(Project, {
         global: {
@@ -198,5 +212,39 @@ it('retains an actionable error page and browse context across failed retries', 
         expect(api.query.i).toBe('target-instance')
     } finally {
         wrapper.unmount()
+    }
+})
+
+it('loads releases from the revalidated project index on each visit', async () => {
+    api.project.mockReset().mockResolvedValue({
+        id: 'one',
+        slug: 'one',
+        title: 'Pack',
+        project_type: 'modpack',
+        versions: ['new-release', 'old-release'],
+        team: 'team',
+        categories: [],
+        game_versions: [],
+        loaders: [],
+        gallery: [],
+    })
+    api.versions.mockClear()
+    for (let visit = 0; visit < 2; visit++) {
+        const wrapper = mount(Project, {
+            global: {
+                stubs: { Teleport: true, RouterView: true },
+                directives: { tooltip: {} },
+            },
+        })
+        try {
+            await vi.waitFor(() => expect(api.versions).toHaveBeenCalledTimes(visit + 1))
+            expect(api.project).toHaveBeenLastCalledWith('one', 'revalidate')
+            expect(api.versions).toHaveBeenLastCalledWith(
+                ['new-release', 'old-release'],
+                'must_revalidate',
+            )
+        } finally {
+            wrapper.unmount()
+        }
     }
 })

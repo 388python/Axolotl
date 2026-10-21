@@ -885,6 +885,15 @@ pub(crate) async fn reconcile_curseforge_members(
         .await?;
     }
 
+    for expected_override in &expected.overrides {
+        let expected_path =
+            normalized_content_path(&expected_override.expected_relative_path);
+        existing_members.retain(|key, _| {
+            key.strip_prefix("path:").is_none_or(|path| {
+                normalized_content_path(path) != expected_path
+            })
+        });
+    }
     for (_, (member_id, _, _)) in existing_members {
         sqlx::query("DELETE FROM instance_pack_members WHERE id = ?")
             .bind(member_id)
@@ -898,6 +907,8 @@ pub(crate) async fn reconcile_curseforge_members(
         &mut tx,
     )
     .await?;
+    content_rows::repair_pack_members_in_transaction(content_set_id, &mut tx)
+        .await?;
     content_rows::bump_content_set_revision_in_transaction(
         content_set_id,
         &mut tx,

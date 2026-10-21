@@ -29,6 +29,8 @@ use super::{
 #[serde(rename_all = "camelCase")]
 pub enum CachePolicy {
     UseFresh,
+    /// Fetch current data, allowing presentation callers to retain offline cache.
+    Revalidate,
     StaleWhileRevalidate,
     OnlyCached,
     /// Ignore positive, negative, and expired cache entries. A source error
@@ -361,7 +363,10 @@ impl ResourceService {
                     continue;
                 }
             };
-            if policy != CachePolicy::ForceRefresh {
+            if !matches!(
+                policy,
+                CachePolicy::ForceRefresh | CachePolicy::Revalidate
+            ) {
                 let (value, expired) =
                     if policy == CachePolicy::StaleWhileRevalidate {
                         self.cache

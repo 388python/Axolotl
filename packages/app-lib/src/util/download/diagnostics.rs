@@ -176,7 +176,24 @@ pub(crate) fn download_error_category(error: &crate::Error) -> &'static str {
 pub(crate) fn download_error_detail(error: &crate::Error) -> String {
     match error.raw.as_ref() {
         ErrorKind::FetchError(source) => source.status().map_or_else(
-            || format!("{} failure", download_error_category(error)),
+            || {
+                let mut detail =
+                    format!("{} failure", download_error_category(error));
+                let mut cause = std::error::Error::source(source);
+                while let Some(error) = cause {
+                    if let Some(io) = error.downcast_ref::<std::io::Error>() {
+                        // Error messages can contain proxy credentials or URLs.
+                        // Keep only structured, non-sensitive OS diagnostics.
+                        detail.push_str(&format!("; io={:?}", io.kind()));
+                        if let Some(code) = io.raw_os_error() {
+                            detail.push_str(&format!("; os={code}"));
+                        }
+                        break;
+                    }
+                    cause = error.source();
+                }
+                detail
+            },
             |status| format!("HTTP {}", status.as_u16()),
         ),
         ErrorKind::LabrinthError(error) => error.status.map_or_else(
@@ -292,4 +309,30 @@ pub(crate) fn attach_download_attempt_history(
         context.push_str(&line);
     }
     error.with_context(context)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn connection_details_keep_os_errors_without_request_secrets() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let error = reqwest::Client::builder()
+            .no_proxy()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .unwrap()
+            .get(format!("http://{address}/?token=private-test-token"))
+            .send()
+            .await
+            .unwrap_err();
+        let detail = download_error_detail(&error.into());
+        assert!(detail.contains("io=ConnectionRefused"), "{detail}");
+        assert!(detail.contains("os="), "{detail}");
+        assert!(!detail.contains("private-test-token"));
+        assert!(!detail.contains("127.0.0.1"));
+    }
 }

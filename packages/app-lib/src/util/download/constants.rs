@@ -256,6 +256,8 @@ pub(crate) const DNS_SUCCESSFUL_ADDRESS_CACHE_TTL: Duration =
 pub(crate) const DNS_TIMEOUT_GRACE: Duration = Duration::from_millis(250);
 pub(crate) const DOH_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) const DOH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+// Reserve part of the DNS lookup deadline for system DNS when DoH is unavailable.
+pub(crate) const DOH_FALLBACK_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) const DOWNLOAD_DNS_PREWARM_CONCURRENCY: usize = 8;
 pub(crate) const MAX_DNS_MESSAGE_BYTES: usize = 65535;
 pub(crate) const MAX_METADATA_HOSTS: usize = 128;

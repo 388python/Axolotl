@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(disk_range_limit(sysinfo::DiskKind::SSD), 8);
         assert!(
             Pressure {
-                cpu_percent: 90,
+                cpu_percent: LOCAL_CPU_PRESSURE_PERCENT,
                 write_latency_ms: 0.0
             }
             .blocks_expansion()
@@ -279,6 +279,13 @@ mod tests {
             .blocks_expansion()
         );
         assert!(!Pressure::default().blocks_expansion());
+        assert!(
+            !Pressure {
+                cpu_percent: LOCAL_CPU_PRESSURE_PERCENT - 1,
+                write_latency_ms: 0.0
+            }
+            .blocks_expansion()
+        );
     }
 
     #[tokio::test]

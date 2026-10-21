@@ -39,7 +39,8 @@ use crate::util::download::constants::{
     DNS_FAILURE_CACHE_TTL as FAILURE_CACHE_TTL,
     DNS_FAMILY_COLLECTION_GRACE as FAMILY_COLLECTION_GRACE, DNS_LOOKUP_TIMEOUT,
     DNS_SUCCESSFUL_ADDRESS_CACHE_TTL as SUCCESSFUL_ADDRESS_CACHE_TTL,
-    DOH_REQUEST_TIMEOUT, MAX_DNS_MESSAGE_BYTES, MAX_METADATA_HOSTS,
+    DOH_FALLBACK_TIMEOUT, DOH_REQUEST_TIMEOUT, MAX_DNS_MESSAGE_BYTES,
+    MAX_METADATA_HOSTS,
 };
 
 fn make_metadata_room<T>(
@@ -399,7 +400,14 @@ impl DownloadDnsResolver {
             }
         }
         if self.doh_enabled {
-            return self.lookup_doh(resolution_host).await;
+            match self.lookup_doh(resolution_host).await {
+                Ok(addresses) => return Ok(addresses),
+                Err(error) => tracing::warn!(
+                    host = resolution_host,
+                    error = ?error,
+                    "DoH lookup failed; falling back to system DNS"
+                ),
+            }
         }
         tokio::net::lookup_host((resolution_host, 0))
             .await
@@ -1069,7 +1077,7 @@ async fn resolve_families(
     let mut families = FuturesUnordered::new();
     families.push(futures::future::Either::Left(ipv4));
     families.push(futures::future::Either::Right(ipv6));
-    let mut deadline = tokio::time::Instant::now() + DOH_REQUEST_TIMEOUT;
+    let mut deadline = tokio::time::Instant::now() + DOH_FALLBACK_TIMEOUT;
     let mut addresses = Vec::new();
     let mut last_error = None;
     loop {
@@ -1151,6 +1159,83 @@ mod tests {
     fn disabled_doh_accepts_an_invalid_draft_endpoint() {
         let resolver = DownloadDnsResolver::with_doh(false).unwrap();
         assert!(!resolver.doh_enabled());
+    }
+
+    #[tokio::test]
+    async fn unavailable_doh_falls_back_to_system_dns_and_caches_addresses() {
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        drop(listener);
+        let mut resolver = DownloadDnsResolver::with_doh(true).unwrap();
+        resolver.doh_endpoints =
+            Arc::new(vec![Arc::from(format!("http://{address}/dns-query"))]);
+        resolver.doh_clients = Arc::new(vec![
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        ]);
+        let addresses = tokio::time::timeout(
+            DNS_LOOKUP_TIMEOUT,
+            resolver.resolve_host("localhost"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!addresses.is_empty());
+        assert!(addresses.iter().all(|address| address.is_loopback()));
+        assert_eq!(resolver.resolved_addresses("localhost"), addresses);
+    }
+
+    #[tokio::test]
+    async fn http_requests_recover_when_doh_is_unavailable() {
+        let dead_listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = dead_listener.local_addr().unwrap();
+        drop(dead_listener);
+        let mut resolver = DownloadDnsResolver::with_doh(true).unwrap();
+        resolver.doh_endpoints =
+            Arc::new(vec![Arc::from(format!("http://{address}/dns-query"))]);
+        resolver.doh_clients = Arc::new(vec![
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        ]);
+        let (port, server) = spawn_ipv4_server().await;
+        let response = reqwest::Client::builder()
+            .no_proxy()
+            .connect_timeout(DNS_LOOKUP_TIMEOUT)
+            .dns_resolver(Arc::new(resolver))
+            .build()
+            .unwrap()
+            .get(format!("http://localhost:{port}/"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        assert_eq!(response, "ok");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn stalled_doh_leaves_time_for_system_dns_fallback() {
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut resolver = DownloadDnsResolver::with_doh(true).unwrap();
+        resolver.doh_endpoints = Arc::new(vec![Arc::from(format!(
+            "http://{}/dns-query",
+            listener.local_addr().unwrap()
+        ))]);
+        resolver.doh_clients = Arc::new(vec![
+            reqwest::Client::builder().no_proxy().build().unwrap(),
+        ]);
+        let addresses = tokio::time::timeout(
+            DNS_LOOKUP_TIMEOUT,
+            resolver.resolve_host("localhost"),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(!addresses.is_empty());
+        assert!(addresses.iter().all(|address| address.is_loopback()));
     }
 
     #[test]

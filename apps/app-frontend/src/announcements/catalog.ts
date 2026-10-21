@@ -30,6 +30,39 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-1.10.0-beta.5',
+        version: '1.10.0-beta.5',
+        publishedAt: '2026-10-21',
+        title: {
+            'en-US': 'Axolotl Launcher 1.10.0-beta.5',
+            'zh-CN': 'Axolotl Launcher 1.10.0-beta.5',
+        },
+        changes: {
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed content operations failing for some installed modpacks and repeatedly asking to refresh.',
+                    'zh-CN': '修复部分已安装整合包的内容操作失败、反复提示刷新重试的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed unavailable DNS-over-HTTPS services blocking requests by falling back to system DNS.',
+                    'zh-CN': '修复 DNS-over-HTTPS 服务不可用时请求失败的问题，现会回退到系统 DNS。',
+                },
+                {
+                    'en-US':
+                        'Fixed HTTP/2 downloads rejecting valid CDN certificates when the system certificate store lacked a public root.',
+                    'zh-CN': '修复系统缺少公共根证书时，HTTP/2 下载错误拒绝 CDN 有效证书的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed Modrinth project pages missing newly published versions until the cache was manually cleared.',
+                    'zh-CN': '修复 Modrinth 项目页需要手动清除缓存才能显示新发布版本的问题。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-1.10.0-beta.4',
         version: '1.10.0-beta.4',
         publishedAt: '2026-10-20',
