@@ -1167,6 +1167,17 @@ impl DownloadClients {
             let builder = file_reqwest_client_builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .danger_accept_invalid_certs(ignore_ssl_errors);
+            // Reqwest does not expose a socket-lifetime admission hook. In
+            // automatic mode its idle sockets would outlive request permits
+            // and accumulate alongside probes and new endpoint generations.
+            // Native H2 retains its separately budgeted multiplexed pool.
+            let builder = if super::download::endpoint_selection::SelectionMode::configured()
+                == super::download::endpoint_selection::SelectionMode::Auto
+            {
+                builder.pool_max_idle_per_host(0)
+            } else {
+                builder
+            };
             let builder = builder.dns_resolver(if direct {
                 Arc::clone(&direct_dns)
             } else {

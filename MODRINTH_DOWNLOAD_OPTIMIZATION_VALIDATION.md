@@ -128,6 +128,16 @@ HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序�
 
 本任务启动的两项旧二进制长时基准（slow-fast/all-slow）在首个完整慢基线完成前停止，以便 Windows 链接修复后的同名测试程序。保留的进度日志不是完整验收数据，完整三模式慢网络对照仍未完成。未停止用户进程，未改 target/profile。
 
+## reqwest 空闲连接预算阶段
+
+尾段修复后 200 文件首轮 expanded 已能完成一次选址和 15 个文件迁移，总耗时 28530ms（同轮 off 94042ms），但连接峰值 38，仍未通过。根因审计确认：普通 reqwest 最多保留 64 个空闲连接，pin 客户端也保留一个；请求结束释放许可，池中 socket 仍存活，旧/新代次及探测叠加会超出物理预算。记录 `%TEMP%/axolotl-many-files-region-comparison.log`，不把提速当作豁免上限的理由。
+
+自动模式现在关闭 reqwest 文件客户端空闲连接保留，所有 pinned 客户端也关闭空闲池；原生 H2 保留按实际 socket 持有许可的连接池。off/observe 原客户端策略保留。reqwest 库内部竞速、异步关闭仍需审计，不能据此声称已经精确跟踪所有 socket。新增两波各 32 个真实 HTTP/1 文件、两代不同 IP 的测试，要求每波结束服务端实际 active socket 归零、峰值不超过 32。`%TEMP%/axolotl-idle-budget-tests.log`：51 项通过、5 项显式基准跳过。
+
+完整 64MiB 健康对照再次跑完：冷 off/DNS/expanded 中位数 2658/2729/2716ms，p95 2724/2835/2832ms；暖中位数 2673/2812/2716ms，p95 2741/2925/2750ms。各组 5 次，均无探测、迁移或重复生产字节，峰值 1。expanded 冷/暖分别比 off 增加 2.18%/1.61%，测试通过其既定门槛。DNS-only 暖中位数增加 5.20%，现有测试仅对 expanded 强制门槛，故保留该未通过的子项，不称全部模式达标。本轮与批量实验并行，存在本机资源竞争；需要隔离复查该小幅超限。日志 `%TEMP%/axolotl-idle-budget-healthy.log`，原始数据已存 JSON。
+
+关闭空闲池会增加 HTTP/1 握手成本；目前实际健康文件测量有界，但不能外推到高延迟公网或所有批量场景。完整 200 文件五轮复测尚在进行，不提前声明预算问题彻底解决。
+
 ## 尚待完成的要求
 
 普通 DoH 家族等待修复：原 `resolve_families` 用 join 等待两个家族完整超时，即使 A 已成功也可能等待 AAAA 五秒。现在首个非空成功后仅收集最多 500ms 的另一家族，仍保留 400ms 到达的双栈结果；空答案或失败不取消尚可能成功的家族。候选汇总继续使用原独立整体 deadline。`%TEMP%/axolotl-dns-family-tests.log`：36 项通过，含 IPv4/IPv6 任一成功另一方永久停滞、晚到双栈和空答案回退。`cargo check -p theseus --tests` 已通过（`%TEMP%/axolotl-dns-family-check.log`），沿用 target/profile。

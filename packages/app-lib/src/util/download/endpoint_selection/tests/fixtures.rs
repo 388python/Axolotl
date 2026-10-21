@@ -241,9 +241,14 @@ pub(super) fn clients(
         .http1_only()
         .read_timeout(Duration::from_secs(60))
         .add_root_certificate(first.root.clone())
-        .resolve("cdn.modrinth.com", first.address)
-        .build()
-        .unwrap();
+        .resolve("cdn.modrinth.com", first.address);
+    let base = if mode == SelectionMode::Auto {
+        base.pool_max_idle_per_host(0)
+    } else {
+        base
+    }
+    .build()
+    .unwrap();
     clients.system = base.clone();
     clients.direct = base.clone();
     clients.http1_system = base.clone();

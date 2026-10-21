@@ -40,7 +40,7 @@ impl PinnedClients {
             .https_only(true)
             .no_proxy()
             .danger_accept_invalid_certs(false)
-            .pool_max_idle_per_host(1)
+            .pool_max_idle_per_host(0)
             .resolve(super::super::modrinth_cdn::HOST, lease.pool.endpoint);
         #[cfg(test)]
         let builder =

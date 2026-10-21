@@ -42,7 +42,7 @@ impl SelectionMode {
         }
     }
 
-    fn configured() -> Self {
+    pub(crate) fn configured() -> Self {
         static MODE: LazyLock<SelectionMode> = LazyLock::new(|| {
             let value = std::env::var("AXOLOTL_MODRINTH_IP_SELECTION").ok();
             if value

@@ -330,6 +330,68 @@ async fn automatic_official_download_does_not_launch_a_duplicate_url_route_probe
 }
 
 #[tokio::test]
+async fn automatic_http1_generations_do_not_retain_unbudgeted_idle_sockets() {
+    let stats = Arc::new(SocketStats::default());
+    let first = EndpointFixture::start(
+        Ipv4Addr::LOCALHOST,
+        Profile::rate(30 * 1024 * 1024),
+        stats.clone(),
+    )
+    .await;
+    let second = EndpointFixture::start(
+        Ipv4Addr::new(127, 0, 0, 2),
+        Profile::rate(30 * 1024 * 1024),
+        stats.clone(),
+    )
+    .await;
+    let clients = fixtures::clients(SelectionMode::Auto, &first, &second, true);
+    let selector = clients.endpoints.clone();
+    let directory = tempfile::tempdir().unwrap();
+    let semaphore = FetchSemaphore(tokio::sync::Semaphore::new(32));
+    for wave in 0..2 {
+        if wave == 1 {
+            selector
+                .install_test_selection(second.address, super::Protocol::Http1);
+        }
+        let transfers = futures::stream::iter(0..32)
+            .map(|id| {
+                let request = fixtures::request(128 * 1024, id + wave * 32);
+                let destination =
+                    directory.path().join(format!("{wave}-{id}.bin"));
+                let clients = clients.clone();
+                let semaphore = &semaphore;
+                async move {
+                    proxy_context::with_snapshot(
+                        clients,
+                        fetch::download_benchmark_fixture(
+                            request,
+                            &destination,
+                            semaphore,
+                        ),
+                    )
+                    .await
+                    .unwrap();
+                }
+            })
+            .buffer_unordered(32);
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            transfers.collect::<Vec<_>>(),
+        )
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while stats.active.load(Ordering::SeqCst) != 0 {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.expect("completed HTTP/1 requests must close pooled sockets before next generation");
+    }
+    assert!(stats.peak.load(Ordering::SeqCst) <= 32);
+    assert_eq!(first.stats.requests.load(Ordering::Relaxed), 64);
+    selector.close();
+}
+
+#[tokio::test]
 #[ignore = "explicit 200-file shared-selection comparison, five interleaved rounds"]
 async fn modrinth_download_benchmark_many_files() {
     for iteration in 0..5 {
