@@ -44,6 +44,66 @@ fn mode_defaults_and_unknown_values_are_passive() {
     }
 }
 
+#[test]
+fn disk_pressure_or_cpu_pressure_does_not_start_a_host_trial_or_consume_budget()
+{
+    let clients = DownloadClients::build(
+        &crate::util::proxy::ProxyConfig {
+            mode: ProxyMode::None,
+            ..Default::default()
+        },
+        false,
+        false,
+    )
+    .unwrap();
+    let mut selector =
+        EndpointSelector::with_mode("pressure-admission", SelectionMode::Auto);
+    Arc::get_mut(&mut selector).unwrap().trials = Arc::default();
+    let request = DownloadRequest::new(
+        "https://cdn.modrinth.com/data/project/file.jar",
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1("hash").with_size(1_048_576),
+    );
+    let _registration = selector.register_download(&request).unwrap();
+    let route = DownloadRoute {
+        url: request.url.clone(),
+        source: crate::util::fetch::DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::System,
+    };
+    for pressure in [
+        super::super::super::local_resources::Pressure {
+            cpu_percent: 0,
+            write_latency_ms: 75.0,
+        },
+        super::super::super::local_resources::Pressure {
+            cpu_percent: 90,
+            write_latency_ms: 0.0,
+        },
+    ] {
+        let revision = selector.trials.snapshot(Instant::now()).0;
+        selector.on_slow_region(
+            &request,
+            &route,
+            &clients,
+            Protocol::Http1,
+            Some("151.101.1.242".parse().unwrap()),
+            0..1_048_576,
+            Some(45 * 1024),
+            pressure,
+        );
+        let state = selector.state.lock();
+        assert!(state.round.is_none());
+        assert!(state.hourly_reservations.is_empty());
+        assert_eq!(state.next_round, 0);
+        assert_eq!(selector.trials.snapshot(Instant::now()).0, revision);
+    }
+}
+
 #[tokio::test]
 async fn metered_network_never_reaches_candidate_dns_or_body_probe() {
     let mut clients = DownloadClients::build(

@@ -363,6 +363,61 @@ async fn automatic_official_download_does_not_launch_a_duplicate_url_route_probe
 }
 
 #[tokio::test]
+async fn http1_multi_range_measures_new_peer_and_resumes_each_unfinished_range()
+{
+    let stats = Arc::new(SocketStats::default());
+    let slow = EndpointFixture::start(
+        Ipv4Addr::LOCALHOST,
+        Profile::rate(45 * 1024),
+        stats.clone(),
+    )
+    .await;
+    let fast = EndpointFixture::start(
+        Ipv4Addr::new(127, 0, 0, 2),
+        Profile::rate(5 * 1024 * 1024),
+        stats.clone(),
+    )
+    .await;
+    let clients = fixtures::clients(SelectionMode::Auto, &slow, &fast, true);
+    let selector = clients.endpoints.clone();
+    let request =
+        fixtures::request(8 * 1024 * 1024, 0).with_segmented_download(true);
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("http1-ranges.bin");
+    let semaphore = FetchSemaphore(tokio::sync::Semaphore::new(8));
+    let result = tokio::time::timeout(
+        Duration::from_secs(40),
+        proxy_context::with_snapshot(
+            clients,
+            fetch::download_benchmark_fixture(
+                request.clone(),
+                &destination,
+                &semaphore,
+            ),
+        ),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("{error}; {}", selector.trial_diagnostic()))
+    .unwrap();
+    assert_eq!(result.size, 8 * 1024 * 1024);
+    assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
+    let counters = request.transfer_counters.snapshot();
+    assert_eq!(counters.received_payload_bytes, result.size);
+    assert_eq!(counters.committed_unique_bytes, result.size);
+    assert_eq!(selector.benchmark_counters().2, 1);
+    assert!(
+        stats.requests.load(Ordering::Relaxed) >= 5,
+        "production splits and resumes ranges in addition to probes"
+    );
+    assert!(stats.peak.load(Ordering::Relaxed) <= 8);
+    assert_eq!(
+        tokio::fs::metadata(&destination).await.unwrap().len(),
+        result.size
+    );
+    selector.close();
+}
+
+#[tokio::test]
 async fn automatic_http1_generations_do_not_retain_unbudgeted_idle_sockets() {
     let stats = Arc::new(SocketStats::default());
     let first = EndpointFixture::start(

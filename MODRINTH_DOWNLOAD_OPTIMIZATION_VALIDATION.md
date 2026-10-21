@@ -33,6 +33,8 @@
 
 该状态全量下载过滤回归 `%TEMP%/axolotl-recent-aggregate-final-regression.log`：315 项通过、5 项显式基准跳过，包含真实 socket 收益实验与 H2 TLS 恢复，fmt/diff 检查通过。
 
+新增 HTTP/1 多 Range 真实选址续传测试：8MiB 文件、慢入口45KiB/s、备选5MiB/s，生产观察时间，最终一次主机探测和一次 generation 迁移；received=unique=8388608、最终哈希正确、峰值≤8，`%TEMP%/axolotl-http1-range-peer-proof.log` 1 项通过。磁盘写入75ms或CPU90%的 selector admission 测试要求不启动 round、不消耗小时预算、不改变调节 revision，`%TEMP%/axolotl-selector-pressure-tests.log` 1 项通过。
+
 ## 确定性检查
 
 以下结果分别对应其运行时的文件状态；后续修改须重跑受影响检查。
