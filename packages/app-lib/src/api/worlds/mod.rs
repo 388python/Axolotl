@@ -1398,7 +1398,72 @@ mod tests {
                 .collect();
             assert_eq!(pinned.len(), 1, "favorite worlds for {instance_id}");
             assert_eq!(pinned[0].world.world_id(), "home-world");
+            assert_eq!(pinned[0].world.name, "Home world");
         }
+
+        assert!(recent.windows(2).all(|pair| {
+            pair[0].world.last_played >= pair[1].world.last_played
+        }));
+        for limit in [0, 1, 8] {
+            let limited = get_recent_worlds(
+                limit,
+                enumset::enum_set!(
+                    DisplayStatus::Normal | DisplayStatus::Favorite
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(limited.len(), limit.min(recent.len()));
+            assert_eq!(
+                limited
+                    .iter()
+                    .map(|world| world.world.last_played)
+                    .collect::<Vec<_>>(),
+                recent
+                    .iter()
+                    .take(limit)
+                    .map(|world| world.world.last_played)
+                    .collect::<Vec<_>>()
+            );
+        }
+        assert!(
+            get_recent_worlds(8, EnumSet::empty())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+
+        let hidden_id = &expected_ids[1];
+        set_world_display_status(
+            hidden_id,
+            WorldType::Server,
+            "localhost:25565",
+            DisplayStatus::Hidden,
+        )
+        .await
+        .unwrap();
+        let visible = get_recent_worlds(
+            usize::MAX,
+            enumset::enum_set!(DisplayStatus::Normal | DisplayStatus::Favorite),
+        )
+        .await
+        .unwrap();
+        assert!(!visible.iter().any(|world| {
+            &world.instance_id == hidden_id
+                && world.world.world_type() == WorldType::Server
+        }));
+        set_world_display_status(
+            hidden_id,
+            WorldType::Server,
+            "localhost:25565",
+            DisplayStatus::Favorite,
+        )
+        .await
+        .unwrap();
+        assert!(get_favorite_worlds().await.unwrap().iter().any(|world| {
+            &world.instance_id == hidden_id
+                && world.world.world_id() == "localhost:25565"
+        }));
 
         // A disconnected installation must not hide worlds from valid ones.
         // Point the record at a missing root instead of moving watched folders.
