@@ -47,14 +47,14 @@ fn make_metadata_room<T>(
     host: &str,
     fetched_at: impl Fn(&T) -> Instant,
 ) {
-    if !cache.contains_key(host) && cache.len() >= MAX_METADATA_HOSTS {
-        if let Some(oldest) = cache
+    if !cache.contains_key(host)
+        && cache.len() >= MAX_METADATA_HOSTS
+        && let Some(oldest) = cache
             .iter()
             .min_by_key(|(_, value)| fetched_at(value))
             .map(|(host, _)| host.clone())
-        {
-            cache.remove(&oldest);
-        }
+    {
+        cache.remove(&oldest);
     }
 }
 

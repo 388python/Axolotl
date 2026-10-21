@@ -8579,6 +8579,9 @@
   "app.resources.operation.compatibility": {
     "message": "{state, select, compatible {Compatible} incompatible {Incompatible} other {Unknown}}"
   },
+  "app.resources.operation.dependency-analysis-failed": {
+    "message": "Dependency analysis failed. The instance may not work correctly."
+  },
   "app.resources.operation.disabled-dependency": {
     "message": "This installed dependency is disabled. Enable it or review its version before continuing."
   },
@@ -8602,9 +8605,6 @@
   },
   "app.resources.operation.manual-download": {
     "message": "{name} requires a manual download and cannot be installed automatically."
-  },
-  "app.resources.operation.dependency-analysis-failed": {
-    "message": "Dependency analysis failed. The instance may not work correctly."
   },
   "app.resources.operation.missing-dependency": {
     "message": "A required dependency could not be resolved."

@@ -132,7 +132,8 @@ pub(crate) const DOWNLOAD_BUFFER_BYTES: usize = 256 * 1024;
 pub(crate) const DOWNLOAD_FAILURE_DIAGNOSTIC_ATTEMPTS: usize = 2;
 pub(crate) const DOWNLOAD_INITIAL_SPEED_FLOOR: u64 = 256 * 1024;
 pub(crate) const DOWNLOAD_PERCENT_BASE: u64 = 100;
-pub(crate) const DOWNLOAD_PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
+pub(crate) const DOWNLOAD_PROGRESS_INTERVAL: Duration =
+    Duration::from_millis(500);
 pub(crate) const DOWNLOAD_PROGRESS_LOG_INTERVAL: u64 = 16 * 1024 * 1024;
 pub(crate) const DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 pub(crate) const DOWNLOAD_SCAN_CACHE_TTL: Duration =

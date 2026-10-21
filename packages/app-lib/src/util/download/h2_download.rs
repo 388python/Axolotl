@@ -319,11 +319,8 @@ pub(crate) async fn try_download_via_h2(
             ) {
                 connection.record_stream_failure();
             }
-            match failure {
-                H2DownloadFailure::Protocol => {
-                    connection.retire();
-                }
-                _ => {}
+            if failure == H2DownloadFailure::Protocol {
+                connection.retire();
             }
             tracing::debug!(
                 url = %fetch::sanitize_url_for_log(&request.url),

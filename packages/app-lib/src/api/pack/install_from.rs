@@ -548,50 +548,6 @@ fn modpack_cache_path(
     Ok(path)
 }
 
-#[cfg(test)]
-mod cache_path_tests {
-    use super::modpack_cache_path;
-    use std::path::Path;
-
-    #[test]
-    fn cache_components_cannot_escape_their_directories() {
-        let root = Path::new("modpacks");
-        assert_eq!(
-            modpack_cache_path(root, "project", "version", "pack.mrpack")
-                .unwrap(),
-            root.join("project/version/pack.mrpack")
-        );
-        for malicious in [
-            "../outside",
-            "nested/name",
-            r"..\outside",
-            "C:/outside",
-            "C:outside",
-            r"\\server\share",
-            ".",
-            "",
-            "NUL",
-            "pack.mrpack:stream",
-            ".. ",
-        ] {
-            for position in 0..3 {
-                let mut components = ["project", "version", "pack.mrpack"];
-                components[position] = malicious;
-                assert!(
-                    modpack_cache_path(
-                        root,
-                        components[0],
-                        components[1],
-                        components[2]
-                    )
-                    .is_err(),
-                    "{position}: {malicious:?}"
-                );
-            }
-        }
-    }
-}
-
 #[tracing::instrument]
 pub async fn generate_pack_from_file(
     path: PathBuf,
@@ -850,4 +806,48 @@ async fn resolve_pack_loader_version(
         ))
         .into()
     })
+}
+
+#[cfg(test)]
+mod cache_path_tests {
+    use super::modpack_cache_path;
+    use std::path::Path;
+
+    #[test]
+    fn cache_components_cannot_escape_their_directories() {
+        let root = Path::new("modpacks");
+        assert_eq!(
+            modpack_cache_path(root, "project", "version", "pack.mrpack")
+                .unwrap(),
+            root.join("project/version/pack.mrpack")
+        );
+        for malicious in [
+            "../outside",
+            "nested/name",
+            r"..\outside",
+            "C:/outside",
+            "C:outside",
+            r"\\server\share",
+            ".",
+            "",
+            "NUL",
+            "pack.mrpack:stream",
+            ".. ",
+        ] {
+            for position in 0..3 {
+                let mut components = ["project", "version", "pack.mrpack"];
+                components[position] = malicious;
+                assert!(
+                    modpack_cache_path(
+                        root,
+                        components[0],
+                        components[1],
+                        components[2]
+                    )
+                    .is_err(),
+                    "{position}: {malicious:?}"
+                );
+            }
+        }
+    }
 }

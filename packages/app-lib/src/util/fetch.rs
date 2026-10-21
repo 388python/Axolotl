@@ -3487,10 +3487,10 @@ fn route_segmented_concurrency_cap(
     available_permits: usize,
 ) -> usize {
     let fair_share = (available_permits / DOWNLOAD_FAIR_SHARE_DIVISOR).max(1);
-    let cap = segmented_concurrency_cap(available_permits)
+
+    segmented_concurrency_cap(available_permits)
         .min(fair_share)
-        .min(crate::util::download::native_budget::available(route));
-    cap
+        .min(crate::util::download::native_budget::available(route))
 }
 
 pub(crate) fn configured_semaphore_limit(semaphore: &FetchSemaphore) -> usize {
@@ -9781,10 +9781,9 @@ mod tests {
             !connection.is_dead(),
             "healthy stream must keep its driver alive"
         );
-        assert_eq!(
+        assert!(
             super::super::download::h2_pool::has_live_connection(&primary)
-                .await,
-            true
+                .await
         );
         assert!(scheduler.select_connection().is_some());
         connection.release_stream_reservation();
@@ -9810,13 +9809,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(connection.is_dead());
-        assert_eq!(
-            authority_uses_http1_fallback_for(
-                &url_authority(&url).unwrap(),
-                primary.proxy
-            ),
-            false
-        );
+        assert!(!authority_uses_http1_fallback_for(
+            &url_authority(&url).unwrap(),
+            primary.proxy
+        ));
         if resume {
             let len = tokio::fs::metadata(&part).await.unwrap().len();
             assert!(len > 0 && len < data.len() as u64);

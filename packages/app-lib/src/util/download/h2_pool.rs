@@ -1061,10 +1061,10 @@ async fn retire_obsolete_connections(current: &ConnectionPoolKey) {
     for slot in slots {
         // An old handshake may hold the slot; its captured lease is checked
         // before publication and cannot enter the current generation's pool.
-        if let Ok(mut cached) = slot.try_lock() {
-            if let Some(connection) = cached.take() {
-                connection.retire();
-            }
+        if let Ok(mut cached) = slot.try_lock()
+            && let Some(connection) = cached.take()
+        {
+            connection.retire();
         }
     }
     let pools = PARALLEL_CONNECTIONS

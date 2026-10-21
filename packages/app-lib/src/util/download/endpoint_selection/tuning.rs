@@ -23,7 +23,7 @@ struct State {
 pub(crate) struct TrialRegistry(Mutex<State>);
 
 pub(crate) static TRIALS: LazyLock<Arc<TrialRegistry>> =
-    LazyLock::new(|| Arc::default());
+    LazyLock::new(Arc::default);
 
 #[derive(Debug)]
 pub(crate) struct TrialLease {

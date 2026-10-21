@@ -1299,7 +1299,7 @@ mod tests {
         first.fail_pipeline(
             &crate::ErrorKind::OtherError("worker failed".into()).into(),
         );
-        let retry = parent.clone().with_pipeline_cancellation();
+        let retry = parent.with_pipeline_cancellation();
         assert!(!retry.cancellation_token().is_cancelled());
         assert!(retry.pipeline_failure().is_none());
         token.cancel();
