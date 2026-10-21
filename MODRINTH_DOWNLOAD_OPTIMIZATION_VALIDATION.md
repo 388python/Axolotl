@@ -8,6 +8,12 @@
 
 已实现 DoH 证据复用、有限 Fastly 候选规则、严格 TLS/Range 探测、共享协调器、真实 reqwest/H2 pinning、连接代次退休、同 URL 续传、连续低速 Range 恢复、扩容收益试验、缓冲输出、候选 hint 缓存及生产反馈回滚。代码和测试仍需按原计划逐项完成最终审计。
 
+## 探测与 Modrinth 服务端统计核实
+
+2026-10-21 阅读 [Modrinth 官方分析功能说明](https://modrinth.com/news/article/analytics-overhaul/)，该头提供下载原因、Minecraft 版本及 loader 等附加信息，没有声明省略它能禁用下载计数。公开服务端固定源码 [analytics model](https://github.com/modrinth/code/blob/7ac41ec5dc3a847c6ad0f9af69f3242588bef1b7/apps/labrinth/src/models/v3/analytics.rs) 允许附加字段为空；[AnalyticsQueue](https://github.com/modrinth/code/blob/7ac41ec5dc3a847c6ad0f9af69f3242588bef1b7/apps/labrinth/src/queue/analytics/mod.rs) 对收到的下载事件按截断 IP 与 project 合并，并在 Redis 层设有限重复计数，但不能据此推断 CDN 的 206/部分正文进入事件的具体规则。
+
+因此只能确认本实现探测不携带下载附加分析头、Authorization、自定义敏感头及 query；不能保证额外 Range GET 绝不影响服务端下载统计。公开资料未提供明确的探测免计数契约，未联系第三方或上传用户网络数据。默认仍 off；这项服务端统计边界是默认发布前需要维护者确认的外部未验证项，不能用本地 TLS fixture 证明。
+
 ## 本轮审计修正
 
 - 接收超时使用明确的流停滞错误，不增加 H2 协议故障评分。
@@ -20,6 +26,12 @@
 - 跨域跳转测试验证实际 peer 变化、普通客户端重选及 Authorization 移除。
 - 显式网络上下文中的元数据请求复用该上下文，JSON 单元测试不再等待真实应用初始化。
 - macOS 的系统代理模式在本优化中按路径未知处理；显式无代理和既有 Direct 路径可以参与。系统代理的原传输行为仍需跨平台验证。
+
+后续 H2 审计统一使用最近 3 秒聚合接收窗口，替换 Range 的“连接建立以来平均值”，并用于单流同 socket 兄弟流健康保护。当前单流慢但聚合≥256KiB/s 时不触发主机换址；聚合窗口未成熟时也不作带宽结论。H2 单流及普通单流在已有选址发布后仍再次检查本地 pressure，不能拿历史慢窗口在当前磁盘忙时迁移。`%TEMP%/axolotl-recent-aggregate-tests.log` 为 314 项通过、5 项基准跳过。
+
+主机扩容新增真实 TCP/H2 两场景实验，保留生产 3 秒窗口、两个 trial 窗口及 10% 收益门槛。两个基线 socket 各有两个活动流；第三个 socket 建立后，独立每连接 128KiB/s pacing 场景接受 target3，公共总带宽 128KiB/s 场景回退 target2、退休第三连接。实测日志 `%TEMP%/axolotl-socket-expansion-tests-fixed.log`：前者 baseline259197 B/s、12202ms 窗口内共收3977216字节，后者129926 B/s、12302ms共收1611776字节，测试通过。此实验验证真实正文计数送入调度器的反馈，不是公网 TCP 丢包或完整安装负载结论；它使用明文回环 H2，严格 TLS 另有独立恢复测试。
+
+该状态全量下载过滤回归 `%TEMP%/axolotl-recent-aggregate-final-regression.log`：315 项通过、5 项显式基准跳过，包含真实 socket 收益实验与 H2 TLS 恢复，fmt/diff 检查通过。
 
 ## 确定性检查
 
@@ -44,6 +56,14 @@ Cargo 检查沿用配置的 target 和 profile，仅对命令进程临时设置 
 基准使用生产的首字节/读取超时，而非普通单元测试缩短后的超时。服务端显式 flush TLS 缓冲，使用应用层 pacing；这不是真实 TCP 丢包仿真。缓存状态仅模拟同一对象首次/后续访问，没有真实 CDN 回源成本。
 
 `DnsOnly` 和 `Expanded` 在本地 fixture 中表示注入一组或扩展一组候选；生产 Fastly catalog 的前提与地址过滤由独立规则测试验证。这不能证明本地 IP 与真实 Fastly PoP 的对应关系。
+
+### 完整慢网络分片运行信息
+
+2026-10-21 15:54 左右启动 slow_fast/all_slow 各 10 个独立进程 shard；每片使用固定 64MiB、生产时序、原顺序三模式。冻结源码 `4bd746d1d`，测试二进制 SHA-256 `83FA9CC9BDEE67D56F730AC0D4DCB739D60D453FAA3E218FA8C491D11E35FC33`。日志和 PID 清单位于 `%TEMP%/axolotl-full-matrix-manifest-run2.json`，输出为 `axolotl-full-{slow_fast|all_slow}-shard-{0..9}-run2.log`，错误单独 `.err`。全部片完成并核对覆盖后方可写通过结果。
+
+首次启动把空字符串模式环境参数显式传入，20 个进程在任何传输前因非法模式退出；保留无 run2 的日志。移除该变量后第二次正常启动，没有用失败启动数据替代性能样本。运行中同名二进制在原 target/debug/deps 内重命名为 `axolotl-download-matrix-4bd746d1d.exe`，以便后续 H2 测试重新链接，冻结文件校验值未变，原进程继续运行。最终应在进程退出后删除该临时可执行文件；未使用替代构建目录或 profile。
+
+冻结版本下载过滤回归 313 项通过、5 项显式基准跳过（`%TEMP%/axolotl-frozen-download-regression.log`），auto_concurrency 5 项通过，生产 check 通过（`%TEMP%/axolotl-frozen-production-check.log`）。后续只对 H2 最近聚合窗口、本地压力和实测扩容继续审计，分片数据必须保留对应版本。
 
 ## 健康网络测量：保留的失败记录
 

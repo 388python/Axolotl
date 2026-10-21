@@ -593,6 +593,10 @@ async fn single_stream(
         policy.expected_speed,
     );
     let transfer_started = Instant::now();
+    let mut aggregate_window = super::h2_receive::ConnectionRateWindow::new(
+        connection.bytes_transferred_for_scheduler(),
+        transfer_started,
+    );
     let mut timer = tokio::time::interval(Duration::from_millis(250));
     let mut last_endpoint_speed = 0;
     timer.tick().await;
@@ -610,15 +614,33 @@ async fn single_stream(
                 if progress_gate.should_report(persisted, total_size) {
                     record_install_progress(request, persisted, total_size).await;
                 }
-                let decision = slow_policy.observe_with_pressure(
+                let aggregate = aggregate_window.observe(connection.bytes_transferred_for_scheduler(), Instant::now());
+                let pressure = super::local_resources::pressure(part_path);
+                let mut decision = slow_policy.observe_with_pressure(
                     downloaded,
                     total_size.saturating_sub(downloaded),
-                    super::local_resources::pressure(part_path),
+                    pressure,
                 );
+                if connection.active_streams() > 1 {
+                    if let Some(speed) = super::h2_receive::endpoint_speed(last_endpoint_speed,
+                        connection.active_streams(), aggregate) {
+                        if let super::native_slow::SlowDecision::Probe { .. } = decision {
+                            decision = super::native_slow::SlowDecision::Probe { bytes_per_second: speed };
+                        }
+                    } else {
+                        last_endpoint_speed = 0;
+                        // One slow object is not evidence to change the host
+                        // while the same socket serves healthy sibling streams.
+                        if !matches!(decision, super::native_slow::SlowDecision::Idle { .. }) {
+                            decision = super::native_slow::SlowDecision::Continue;
+                        }
+                    }
+                }
                 if let super::native_slow::SlowDecision::Probe { bytes_per_second } = decision {
                     last_endpoint_speed = bytes_per_second;
                 }
-                if let Some(clients) = super::proxy_context::clients()
+                if !pressure.blocks_expansion()
+                    && let Some(clients) = super::proxy_context::clients()
                     && clients.endpoints.recovery_lease(request, route, super::endpoint_selection::Protocol::H2,
                         connection.remote_addr, last_endpoint_speed, total_size.saturating_sub(downloaded)).is_some()
                 {

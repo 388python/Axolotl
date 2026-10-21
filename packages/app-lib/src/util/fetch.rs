@@ -7162,7 +7162,8 @@ async fn run_native_route_attempts(
                     if let super::download::native_slow::SlowDecision::Probe { bytes_per_second } = slow_decision {
                         last_endpoint_speed = bytes_per_second;
                     }
-                    if let Some(clients) = super::download::proxy_context::clients() {
+                    if !super::download::local_resources::pressure(part_path).blocks_expansion()
+                        && let Some(clients) = super::download::proxy_context::clients() {
                         let protocol = if http_version == reqwest::Version::HTTP_2 {
                             super::download::endpoint_selection::Protocol::H2
                         } else { super::download::endpoint_selection::Protocol::Http1 };

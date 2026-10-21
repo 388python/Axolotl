@@ -7,6 +7,56 @@ const STREAM_RECV_TIMEOUT: Duration = Duration::from_secs(30);
 const MIN_PROGRESS_BYTES: u64 = 256 * 1024;
 const MAX_PROGRESS_WAIT: Duration = Duration::from_secs(1);
 
+/// Recent aggregate socket rate, independent of one multiplexed stream.
+/// Reset every window so a fast prefix cannot hide a later slow tail.
+pub(crate) struct ConnectionRateWindow {
+    started_at: Instant,
+    start_bytes: usize,
+    rate: Option<u64>,
+}
+
+impl ConnectionRateWindow {
+    pub(crate) fn new(bytes: usize, now: Instant) -> Self {
+        Self {
+            started_at: now,
+            start_bytes: bytes,
+            rate: None,
+        }
+    }
+
+    pub(crate) fn observe(
+        &mut self,
+        bytes: usize,
+        now: Instant,
+    ) -> Option<u64> {
+        if now < self.started_at || bytes < self.start_bytes {
+            *self = Self::new(bytes, now);
+            return None;
+        }
+        let elapsed = now.duration_since(self.started_at);
+        if elapsed >= Duration::from_secs(3) {
+            self.rate = Some(
+                ((bytes - self.start_bytes) as f64 / elapsed.as_secs_f64())
+                    as u64,
+            );
+            self.started_at = now;
+            self.start_bytes = bytes;
+        }
+        self.rate
+    }
+}
+
+pub(crate) fn endpoint_speed(
+    stream_speed: u64,
+    active_streams: usize,
+    aggregate: Option<u64>,
+) -> Option<u64> {
+    if active_streams <= 1 {
+        return Some(stream_speed);
+    }
+    aggregate.filter(|speed| *speed < 256 * 1024)
+}
+
 /// Tracks one active H2 stream in the native automatic-concurrency metrics.
 pub(crate) struct H2TransferActivity {
     _activity: Option<crate::state::DownloadConnectionActivity>,
@@ -104,6 +154,26 @@ mod tests {
     use super::*;
     use futures::future::poll_fn;
     use http::{Request, Response};
+
+    #[test]
+    fn aggregate_windows_expire_fast_prefix_and_protect_healthy_siblings() {
+        let now = Instant::now();
+        let mut window = ConnectionRateWindow::new(0, now);
+        assert_eq!(
+            window.observe(30 * 1024 * 1024, now + Duration::from_secs(3)),
+            Some(10 * 1024 * 1024)
+        );
+        assert_eq!(endpoint_speed(45 * 1024, 2, window.rate), None);
+        assert_eq!(endpoint_speed(45 * 1024, 2, None), None);
+        assert_eq!(endpoint_speed(45 * 1024, 1, window.rate), Some(45 * 1024));
+        let slow = window.observe(
+            30 * 1024 * 1024 + 3 * 90 * 1024,
+            now + Duration::from_secs(6),
+        );
+        assert_eq!(slow, Some(90 * 1024));
+        assert_eq!(endpoint_speed(45 * 1024, 2, slow), slow);
+        assert_eq!(window.observe(1, now + Duration::from_secs(7)), None);
+    }
 
     #[test]
     fn progress_gate_throttles_intermediate_updates_and_reports_completion() {

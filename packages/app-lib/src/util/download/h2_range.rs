@@ -73,7 +73,7 @@ struct RangeIdentity {
     h2: bool,
     peer: Option<std::net::SocketAddr>,
     connection: Option<Arc<SharedH2Connection>>,
-    aggregate_baseline: Option<(usize, std::time::Instant)>,
+    aggregate_window: Option<Mutex<super::h2_receive::ConnectionRateWindow>>,
 }
 
 struct RangeResponse<'a> {
@@ -93,7 +93,7 @@ impl<'a> RangeResponse<'a> {
                 h2,
                 peer: None,
                 connection: None,
-                aggregate_baseline: None,
+                aggregate_window: None,
             },
         }
     }
@@ -223,9 +223,11 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 identity: RangeIdentity {
                     h2: true,
                     peer: connection.remote_addr,
-                    aggregate_baseline: Some((
-                        connection.bytes_transferred_for_scheduler(),
-                        std::time::Instant::now(),
+                    aggregate_window: Some(Mutex::new(
+                        super::h2_receive::ConnectionRateWindow::new(
+                            connection.bytes_transferred_for_scheduler(),
+                            std::time::Instant::now(),
+                        ),
                     )),
                     connection: Some(connection),
                 },
@@ -312,7 +314,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 h2: false,
                 peer,
                 connection: None,
-                aggregate_baseline: None,
+                aggregate_window: None,
             },
         })
     }
@@ -347,29 +349,25 @@ impl RangeTransport for NativeRangeTransport<'_> {
         } else {
             super::endpoint_selection::Protocol::Http1
         };
-        let speed = if identity
+        let aggregate = identity
             .connection
             .as_ref()
-            .is_some_and(|connection| connection.active_streams() > 1)
-        {
-            let connection = identity.connection.as_ref().unwrap();
-            let Some((bytes, at)) = identity.aggregate_baseline else {
-                return false;
-            };
-            let elapsed = at.elapsed().as_secs_f64();
-            if elapsed <= 0.0 {
-                return false;
-            }
-            let aggregate = (connection
-                .bytes_transferred_for_scheduler()
-                .saturating_sub(bytes) as f64
-                / elapsed) as u64;
-            if aggregate >= 256 * 1024 {
-                return false;
-            }
-            aggregate
-        } else {
-            speed
+            .zip(identity.aggregate_window.as_ref())
+            .and_then(|(connection, window)| {
+                window.lock().observe(
+                    connection.bytes_transferred_for_scheduler(),
+                    std::time::Instant::now(),
+                )
+            });
+        let Some(speed) = super::h2_receive::endpoint_speed(
+            speed,
+            identity
+                .connection
+                .as_ref()
+                .map_or(1, |connection| connection.active_streams()),
+            aggregate,
+        ) else {
+            return false;
         };
         clients.endpoints.on_slow_region(
             self.request,
@@ -756,6 +754,9 @@ async fn recover_range(
                     failure = Some(H2DownloadFailure::Slow); break;
                 }
                 _ = timer.tick() => {
+                    if let Some((connection, window)) = identity.connection.as_ref().zip(identity.aggregate_window.as_ref()) {
+                        window.lock().observe(connection.bytes_transferred_for_scheduler(), std::time::Instant::now());
+                    }
                     let pressure = super::local_resources::pressure(part);
                     match slow.observe_with_pressure(offset, range.end - offset, pressure) {
                         super::native_slow::SlowDecision::Probe { bytes_per_second } => {
