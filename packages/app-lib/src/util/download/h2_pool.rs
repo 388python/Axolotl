@@ -334,9 +334,12 @@ impl SharedH2Connection {
     pub async fn open(
         &self,
         request: http::Request<()>,
-    ) -> Result<http::Response<h2::RecvStream>, h2::Error> {
+    ) -> crate::Result<http::Response<h2::RecvStream>> {
         let result = self.open_inner(request).await;
-        if result.is_err() {
+        if result.as_ref().err().is_some_and(|error| {
+            matches!(error.raw.as_ref(),
+            crate::ErrorKind::DownloadH2Error(error) if !error.is_reset())
+        }) {
             self.record_stream_failure();
         }
         result
@@ -345,7 +348,7 @@ impl SharedH2Connection {
     async fn open_inner(
         &self,
         request: http::Request<()>,
-    ) -> Result<http::Response<h2::RecvStream>, h2::Error> {
+    ) -> crate::Result<http::Response<h2::RecvStream>> {
         let ready_started = std::time::Instant::now();
         let sender = self
             .sender
@@ -360,9 +363,10 @@ impl SharedH2Connection {
         let mut sender =
             tokio::time::timeout(STREAM_READY_TIMEOUT, sender.ready())
                 .await
-                .map_err(|_| {
-                    h2::Error::from(h2::Reason::ENHANCE_YOUR_CALM)
-                })??;
+                .map_err(|_| crate::ErrorKind::DownloadStreamStalled {
+                    context: H2_POOL_ADMISSION.into(),
+                })?
+                .map_err(crate::ErrorKind::DownloadH2Error)?;
         let ready_wait = ready_started.elapsed();
         if ready_wait >= H2_ADMISSION_LOG_THRESHOLD {
             tracing::debug!(
@@ -375,13 +379,21 @@ impl SharedH2Connection {
             let _admission =
                 self.sender.lock().unwrap_or_else(|p| p.into_inner());
             if self.is_retiring() || self.is_dead() {
-                return Err(h2::Reason::REFUSED_STREAM.into());
+                return Err(crate::ErrorKind::DownloadH2Error(
+                    h2::Reason::REFUSED_STREAM.into(),
+                )
+                .into());
             }
-            sender.send_request(request, true)?
+            sender
+                .send_request(request, true)
+                .map_err(crate::ErrorKind::DownloadH2Error)?
         };
         let response = tokio::time::timeout(STREAM_READY_TIMEOUT, response)
             .await
-            .map_err(|_| h2::Error::from(h2::Reason::ENHANCE_YOUR_CALM))??;
+            .map_err(|_| crate::ErrorKind::DownloadStreamStalled {
+                context: H2_POOL_HEADERS.into(),
+            })?
+            .map_err(crate::ErrorKind::DownloadH2Error)?;
         if response.status().is_success() {
             self.successful_responses.fetch_add(1, Ordering::AcqRel);
         }

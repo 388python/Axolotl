@@ -74,6 +74,28 @@ impl SelectionMode {
     }
 }
 
+fn catalog_expansion(value: Option<&str>) -> bool {
+    match value {
+        None | Some(CATALOG_MODE_ON) => true,
+        Some(_) => false,
+    }
+}
+
+fn configured_catalog_expansion() -> bool {
+    static EXPAND: LazyLock<bool> = LazyLock::new(|| {
+        let value = std::env::var(ENDPOINT_CATALOG_ENV).ok();
+        if value.as_deref().is_some_and(|value| {
+            !matches!(value, CATALOG_MODE_ON | SELECTION_MODE_OFF)
+        }) {
+            tracing::warn!(
+                "Invalid Modrinth candidate catalog mode; using DNS candidates only"
+            );
+        }
+        catalog_expansion(value.as_deref())
+    });
+    *EXPAND
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RoundStatus {
     Running,
@@ -933,11 +955,12 @@ impl EndpointSelector {
                 .unwrap_or_default()
         };
         let history = super::store::load().await;
+        let expand = configured_catalog_expansion();
         let candidates = collect_candidates(
             &answers,
             &verified,
             &history,
-            true,
+            expand,
             Instant::now(),
             SystemTime::now(),
         );

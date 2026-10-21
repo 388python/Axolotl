@@ -546,10 +546,7 @@ pub(crate) async fn open_stream(
         .body(())
         .unwrap();
     *request.headers_mut() = headers;
-    let response = connection
-        .open(request)
-        .await
-        .map_err(crate::ErrorKind::DownloadH2Error)?;
+    let response = connection.open(request).await?;
     let (parts, body) = response.into_parts();
     let response = http::Response::from_parts(parts, ());
     Ok((response, body))

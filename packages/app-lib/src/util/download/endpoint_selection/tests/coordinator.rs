@@ -22,6 +22,11 @@ fn selection(ip: &str, now: Instant) -> Selection {
 
 #[test]
 fn mode_defaults_and_unknown_values_are_passive() {
+    assert!(catalog_expansion(None));
+    assert!(catalog_expansion(Some("on")));
+    assert!(!catalog_expansion(Some("off")));
+    assert!(!catalog_expansion(Some("OFF")));
+    assert!(!catalog_expansion(Some("151.101.1.242")));
     assert_eq!(SelectionMode::parse(None), SelectionMode::Off);
     assert_eq!(SelectionMode::parse(Some("AUTO")), SelectionMode::Off);
     assert_eq!(

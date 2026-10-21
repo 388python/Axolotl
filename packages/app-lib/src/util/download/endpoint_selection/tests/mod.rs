@@ -191,6 +191,31 @@ fn candidates_are_deduplicated_bounded_and_preserve_address_families() {
 }
 
 #[test]
+fn dns_only_catalog_mode_does_not_reintroduce_seed_ips_from_history() {
+    let now = Instant::now();
+    let history = EndpointCandidate {
+        ip: "146.75.113.242".parse().unwrap(),
+        source: CandidateSource::History,
+        expires_at: now + Duration::from_secs(60),
+    };
+    let candidates = collect_candidates(
+        &[pool_answer(now, 242)],
+        &[],
+        &[history],
+        false,
+        now,
+        reviewed_time(),
+    );
+    assert_eq!(candidates.len(), 4);
+    assert!(
+        candidates.iter().all(|candidate| matches!(
+            candidate.source,
+            CandidateSource::Dns(_)
+        ))
+    );
+}
+
+#[test]
 fn expired_nonpublic_and_mapped_addresses_are_rejected() {
     for ip in [
         "0.0.0.0",

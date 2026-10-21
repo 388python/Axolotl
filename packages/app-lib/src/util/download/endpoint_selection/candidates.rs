@@ -1,6 +1,7 @@
 use super::fastly_rules;
 use super::model::{CandidateSource, EndpointCandidate};
 use super::policy::MAX_CANDIDATES;
+use crate::util::download::constants::MODRINTH_DATA_PREFIX;
 use crate::util::download::modrinth_cdn;
 use crate::util::download_dns::DnsAnswer;
 use crate::util::fetch::Integrity;
@@ -11,7 +12,7 @@ use url::Url;
 
 pub(super) fn eligible_target(url: &Url, integrity: &Integrity) -> bool {
     modrinth_cdn::is_current_url(url)
-        && url.path().starts_with("/data/")
+        && url.path().starts_with(MODRINTH_DATA_PREFIX)
         && url.query().is_none()
         && integrity.supports_resume()
         && integrity.size.is_some_and(|size| size > 0)
@@ -27,6 +28,7 @@ pub(super) fn collect_candidates(
     now: Instant,
     wall_time: SystemTime,
 ) -> Vec<EndpointCandidate> {
+    let history = if expand_catalog { history } else { &[] };
     if answers.iter().any(|answer| {
         matches!(answer.source, crate::util::download_dns::DnsSource::System)
             && answer

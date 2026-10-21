@@ -1,3 +1,6 @@
+use crate::util::download::constants::{
+    DIAGNOSTICS_DNS, MODEL_FASTLY_RULE, MODEL_HISTORY, MODEL_VERIFIED,
+};
 use crate::util::download_dns::DnsSource;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -9,6 +12,17 @@ pub(super) enum CandidateSource {
     Verified,
     History,
     FastlyRule(u32),
+}
+
+impl CandidateSource {
+    pub(super) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dns(_) => DIAGNOSTICS_DNS,
+            Self::Verified => MODEL_VERIFIED,
+            Self::History => MODEL_HISTORY,
+            Self::FastlyRule(_) => MODEL_FASTLY_RULE,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

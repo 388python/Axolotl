@@ -10,11 +10,11 @@ pub(crate) const AUTO_DOWNLOAD_CONCURRENCY_INITIAL: usize = 64;
 pub(crate) const AUTO_DOWNLOAD_CONCURRENCY_MAX: usize = 128;
 pub(crate) const AUTO_DOWNLOAD_CONCURRENCY_MIN: usize = 32;
 pub(crate) const AUTO_DOWNLOAD_CONCURRENCY_STEP: usize = 8;
-pub(crate) const AUTO_DOWNLOAD_EXPANSION_ERROR_RATE: f64 = 0.02;
-pub(crate) const AUTO_DOWNLOAD_MIN_GAIN_PERCENT: u64 = 105;
+pub(crate) const AUTO_DOWNLOAD_EXPANSION_ERROR_RATE: f64 = 0.1;
+pub(crate) const AUTO_DOWNLOAD_MIN_GAIN_PERCENT: u64 = 101;
 pub(crate) const AUTO_DOWNLOAD_PERCENT_BASE: u64 = 100;
 pub(crate) const AUTO_DOWNLOAD_PRESSURE_ERROR_RATE: f64 = 0.05;
-pub(crate) const AUTO_DOWNLOAD_PRESSURE_WINDOWS: usize = 2;
+pub(crate) const AUTO_DOWNLOAD_PRESSURE_WINDOWS: usize = 8;
 pub(crate) const AUTO_DOWNLOAD_PROBE_COOLDOWN: Duration =
     Duration::from_secs(30);
 pub(crate) const AUTO_DOWNLOAD_SAMPLE_INTERVAL: Duration =
@@ -53,8 +53,8 @@ pub(crate) const TAIL_SPLIT_PERCENT: u64 = 40;
 
 /// Shared authority and physical connection admission.
 pub(crate) const ADAPTIVE_CONNECTION_COOLDOWN: Duration =
-    Duration::from_secs(30);
-pub(crate) const ADAPTIVE_CONNECTION_GAIN_PERCENT: u128 = 110;
+    Duration::from_secs(5);
+pub(crate) const ADAPTIVE_CONNECTION_GAIN_PERCENT: u128 = 101;
 pub(crate) const ADAPTIVE_CONNECTION_INITIAL_TARGET: usize = 2;
 pub(crate) const ADAPTIVE_CONNECTION_MAX_TARGET: usize = 31;
 pub(crate) const ADAPTIVE_CONNECTION_PERCENT_BASE: u128 = 100;
@@ -70,15 +70,15 @@ pub(crate) const CONNECTION_STABILITY_WINDOW: Duration =
 pub(crate) const INITIAL_CONNECTION_TARGET: usize = 4;
 pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 24;
 pub(crate) const MAX_CONNECTIONS_PER_AUTHORITY: usize = 32;
-pub(crate) const MAX_CONNECTION_TARGET: usize = 32;
+pub(crate) const MAX_CONNECTION_TARGET: usize = 64;
 pub(crate) const MAX_H2_STREAMS_PER_AUTHORITY: usize = 256;
 pub(crate) const MAX_PHYSICAL_DOWNLOAD_CONNECTIONS: usize = 256;
 
 /// HTTP/2 transport, receive flow control and asset batches.
-pub(crate) const ASSET_BATCH_CONCURRENCY: usize = 64;
-pub(crate) const ASSET_BATCH_RETRY_PASSES: usize = 2;
+pub(crate) const ASSET_BATCH_CONCURRENCY: usize = 128;
+pub(crate) const ASSET_BATCH_RETRY_PASSES: usize = 3;
 pub(crate) const ASSET_RESOURCE_WAIT_TIMEOUT: Duration =
-    Duration::from_secs(45);
+    Duration::from_secs(30);
 pub(crate) const H2_ADDITIONAL_CONNECTIONS_ENABLED: bool = true;
 pub(crate) const H2_ADMISSION_LOG_THRESHOLD: Duration =
     Duration::from_millis(25);
@@ -97,7 +97,7 @@ pub(crate) const H2_INITIAL_STREAM_WINDOW: u32 = 1024 * 1024;
 pub(crate) const H2_LARGE_FILE_LIMIT: u64 = 64 * 1024 * 1024;
 pub(crate) const H2_LARGE_MIN_SUCCESS_SAMPLES: u32 = 3;
 pub(crate) const H2_LARGE_PREFERRED_SPEED_RATIO: f64 = 1.25;
-pub(crate) const H2_MEDIUM_FILE_LIMIT: u64 = 16 * 1024 * 1024;
+pub(crate) const H2_MEDIUM_FILE_LIMIT: u64 = 4 * 1024 * 1024;
 pub(crate) const H2_MIN_SUCCESS_SAMPLES: u32 = 2;
 pub(crate) const H2_PREFERRED_SPEED_RATIO: f64 = 1.1;
 pub(crate) const H2_RANGE_FILE_THRESHOLD: u64 = 4 * 1024 * 1024;
@@ -113,7 +113,7 @@ pub(crate) const STREAM_RECV_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Disk admission, pressure sampling and output buffering.
 pub(crate) const HDD_RANGE_CONCURRENCY: usize = 1;
-pub(crate) const LOCAL_CPU_PRESSURE_PERCENT: u32 = 85;
+pub(crate) const LOCAL_CPU_PRESSURE_PERCENT: u32 = 95;
 pub(crate) const LOCAL_FALLBACK_WRITE_CONCURRENCY: usize = 4;
 pub(crate) const LOCAL_PRESSURE_SAMPLE_TTL: Duration = Duration::from_secs(10);
 pub(crate) const LOCAL_WRITE_EWMA_ALPHA: f64 = 0.25;
@@ -132,8 +132,8 @@ pub(crate) const DOWNLOAD_BUFFER_BYTES: usize = 256 * 1024;
 pub(crate) const DOWNLOAD_FAILURE_DIAGNOSTIC_ATTEMPTS: usize = 2;
 pub(crate) const DOWNLOAD_INITIAL_SPEED_FLOOR: u64 = 256 * 1024;
 pub(crate) const DOWNLOAD_PERCENT_BASE: u64 = 100;
-pub(crate) const DOWNLOAD_PROGRESS_INTERVAL: Duration = Duration::from_secs(1);
-pub(crate) const DOWNLOAD_PROGRESS_LOG_INTERVAL: u64 = 8 * 1024 * 1024;
+pub(crate) const DOWNLOAD_PROGRESS_INTERVAL: Duration = Duration::from_millis(500);
+pub(crate) const DOWNLOAD_PROGRESS_LOG_INTERVAL: u64 = 16 * 1024 * 1024;
 pub(crate) const DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 pub(crate) const DOWNLOAD_SCAN_CACHE_TTL: Duration =
     Duration::from_secs(30 * 60);
@@ -174,7 +174,7 @@ pub(crate) const MAX_DOWNLOAD_ATTEMPT_HISTORY: usize = 12;
 pub(crate) const MAX_DOWNLOAD_DIAGNOSTIC_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_DOWNLOAD_REDIRECTS: usize = 5;
 pub(crate) const MAX_FAILURE_COOLDOWN: Duration = Duration::from_secs(1);
-pub(crate) const MAX_H2_RANGES_PER_FILE: usize = 4;
+pub(crate) const MAX_H2_RANGES_PER_FILE: usize = 16;
 pub(crate) const MAX_REDIRECT_LOCATION_BYTES: usize = 8 * 1024;
 pub(crate) const MAX_TASK_PROBE_STATES: usize = 64;
 pub(crate) const METADATA_ATTEMPT_BUDGET: usize = 4;

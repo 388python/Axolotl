@@ -37,6 +37,8 @@ struct Hint {
     ip: IpAddr,
     validated_at: u64,
     rule_version: Option<u32>,
+    #[serde(default)]
+    source: Option<String>,
 }
 
 fn now_seconds(now: SystemTime) -> Option<u64> {
@@ -148,6 +150,7 @@ async fn save_path(
             host: HOST.into(),
             ip: candidate.ip,
             validated_at: seconds,
+            source: Some(candidate.source.as_str().to_string()),
             rule_version: match candidate.source {
                 CandidateSource::FastlyRule(version) => Some(version),
                 _ => None,
@@ -197,6 +200,7 @@ mod tests {
                 ip: "151.101.1.242".parse().unwrap(),
                 validated_at: seconds,
                 rule_version: Some(1),
+                source: Some("fastly_rule".into()),
             }],
         }
     }
