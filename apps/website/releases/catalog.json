@@ -2,6 +2,81 @@
   "updated_at": "2026-10-20T04:02:41.460Z",
   "announcements": [
     {
+      "id": "launcher-1.10.0-beta.4",
+      "version": "1.10.0-beta.4",
+      "publishedAt": "2026-10-20",
+      "title": {
+        "en-US": "Axolotl Launcher 1.10.0-beta.4",
+        "zh-CN": "Axolotl Launcher 1.10.0-beta.4"
+      },
+      "changes": {
+        "changed": [
+          {
+            "en-US": "Allowed installation to continue after dependency analysis fails, with a warning that the instance may not work correctly.",
+            "zh-CN": "允许在依赖分析失败后继续安装，并提示实例可能无法正常运行。"
+          },
+          {
+            "en-US": "Improved Favorites loading by displaying cached projects before refreshing their information.",
+            "zh-CN": "改进收藏夹加载，先显示缓存项目，再刷新项目信息。"
+          },
+          {
+            "en-US": "Updated the available AI model list.",
+            "zh-CN": "更新可用 AI 模型列表。"
+          }
+        ],
+        "fixed": [
+          {
+            "en-US": "Fixed CurseForge modpacks containing world downloads failing to install.",
+            "zh-CN": "修复包含世界存档下载的 CurseForge 整合包无法安装的问题。"
+          },
+          {
+            "en-US": "Fixed modpack retries and version changes potentially replacing existing player saves.",
+            "zh-CN": "修复重试整合包安装或切换版本时可能替换已有玩家存档的问题。"
+          },
+          {
+            "en-US": "Fixed CurseForge and mrpack installation failures being reported as cancellations instead of displaying the original error.",
+            "zh-CN": "修复 CurseForge 和 mrpack 安装失败被误报为取消、未显示原始错误的问题。"
+          },
+          {
+            "en-US": "Fixed retried installation tasks retaining progress from the previous attempt.",
+            "zh-CN": "修复重试安装任务时保留上次尝试进度的问题。"
+          },
+          {
+            "en-US": "Fixed title-bar navigation and instance controls becoming inaccessible in narrow windows or with long instance names.",
+            "zh-CN": "修复窄窗口或实例名称过长时，标题栏导航和实例操作按钮被挤出的问题。"
+          },
+          {
+            "en-US": "Fixed Discover tabs, search fields, and toolbar controls overflowing in narrow windows.",
+            "zh-CN": "修复窄窗口中发现页标签、搜索框和工具栏控件溢出的问题。"
+          },
+          {
+            "en-US": "Fixed local imported modpacks being treated as unlinked solely because they had no online project association.",
+            "zh-CN": "修复本地导入整合包仅因没有在线项目关联而被误判为已解除关联的问题。"
+          },
+          {
+            "en-US": "Fixed the missing Unlink Modpack action for instances that still contained pack-managed content.",
+            "zh-CN": "修复仍包含整合包管理内容的实例缺少“解除整合包关联”操作的问题。"
+          },
+          {
+            "en-US": "Fixed log searches disrupting syntax highlighting, including matches spanning highlighted text.",
+            "zh-CN": "修复日志搜索破坏语法高亮的问题，包括搜索结果跨越不同高亮文本的情况。"
+          },
+          {
+            "en-US": "Fixed long crash diagnostics overflowing the console and becoming impossible to scroll.",
+            "zh-CN": "修复过长的崩溃诊断内容超出控制台且无法滚动查看的问题。"
+          },
+          {
+            "en-US": "Fixed Favorites showing unavailable projects or changing pages prematurely while refreshing.",
+            "zh-CN": "修复收藏夹刷新期间错误显示项目不可用或提前切换页码的问题。"
+          },
+          {
+            "en-US": "Fixed multiplayer tunnel connections remaining active after their listeners closed.",
+            "zh-CN": "修复多人联机隧道监听关闭后，相关连接仍未释放的问题。"
+          }
+        ]
+      }
+    },
+    {
       "id": "launcher-1.10.0-beta.3",
       "version": "1.10.0-beta.3",
       "publishedAt": "2026-10-20",
