@@ -25,6 +25,9 @@ const SUCCESSFUL_ADDRESS_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const CONNECTION_FAILURES_BEFORE_REFRESH: u8 = 2;
 const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(6);
 const DOH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+// Preserve near-simultaneous dual-stack answers without making a usable
+// family wait for the other family's full provider timeout.
+const FAMILY_COLLECTION_GRACE: Duration = Duration::from_millis(500);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(2);
 const MAX_DNS_MESSAGE_BYTES: usize = 65535;
 const CANDIDATE_CACHE_TTL: Duration = Duration::from_secs(30);
@@ -986,28 +989,36 @@ async fn resolve_families(
     ipv4: impl std::future::Future<Output = std::io::Result<Vec<SocketAddr>>>,
     ipv6: impl std::future::Future<Output = std::io::Result<Vec<SocketAddr>>>,
 ) -> std::io::Result<Vec<SocketAddr>> {
-    let (ipv4, ipv6) = tokio::join!(
-        tokio::time::timeout(DOH_REQUEST_TIMEOUT, ipv4),
-        tokio::time::timeout(DOH_REQUEST_TIMEOUT, ipv6)
-    );
-    let flatten = |result: Result<
-        std::io::Result<Vec<SocketAddr>>,
-        tokio::time::error::Elapsed,
-    >| {
-        result.unwrap_or_else(|_| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "DoH address family timed out",
-            ))
-        })
-    };
-    match (flatten(ipv4), flatten(ipv6)) {
-        (Ok(mut addresses), Ok(other)) => {
-            addresses.extend(other);
-            Ok(addresses)
+    let mut families = FuturesUnordered::new();
+    families.push(futures::future::Either::Left(ipv4));
+    families.push(futures::future::Either::Right(ipv6));
+    let mut deadline = tokio::time::Instant::now() + DOH_REQUEST_TIMEOUT;
+    let mut addresses = Vec::new();
+    let mut last_error = None;
+    loop {
+        match tokio::time::timeout_at(deadline, families.next()).await {
+            Ok(Some(Ok(found))) if !found.is_empty() => {
+                if addresses.is_empty() {
+                    deadline = deadline.min(
+                        tokio::time::Instant::now() + FAMILY_COLLECTION_GRACE,
+                    );
+                }
+                addresses.extend(found);
+            }
+            Ok(Some(Err(error))) => last_error = Some(error),
+            Ok(Some(Ok(_))) => {}
+            Ok(None) | Err(_) => break,
         }
-        (Ok(addresses), _) | (Err(_), Ok(addresses)) => Ok(addresses),
-        (Err(error), _) => Err(error),
+    }
+    if !addresses.is_empty() {
+        Ok(addresses)
+    } else {
+        Err(last_error.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "No usable DoH address family before deadline",
+            )
+        }))
     }
 }
 
@@ -1124,11 +1135,38 @@ mod tests {
             vec![address]
         );
         let addresses = tokio::time::timeout(
-            DOH_REQUEST_TIMEOUT + Duration::from_secs(1),
+            FAMILY_COLLECTION_GRACE + Duration::from_secs(1),
             resolve_families(
                 async { Ok(vec![address]) },
                 std::future::pending(),
             ),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(addresses, vec![address]);
+    }
+
+    #[tokio::test]
+    async fn empty_fast_family_does_not_cancel_slower_usable_family() {
+        let address = SocketAddr::from((Ipv4Addr::new(192, 0, 2, 1), 0));
+        let addresses = resolve_families(async { Ok(Vec::new()) }, async {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            Ok(vec![address])
+        })
+        .await
+        .unwrap();
+        assert_eq!(addresses, vec![address]);
+    }
+
+    #[tokio::test]
+    async fn usable_ipv6_does_not_wait_for_stalled_ipv4() {
+        let address = SocketAddr::from((Ipv6Addr::LOCALHOST, 0));
+        let addresses = tokio::time::timeout(
+            FAMILY_COLLECTION_GRACE + Duration::from_secs(1),
+            resolve_families(std::future::pending(), async {
+                Ok(vec![address])
+            }),
         )
         .await
         .unwrap()

@@ -130,6 +130,8 @@ HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序�
 
 ## 尚待完成的要求
 
+普通 DoH 家族等待修复：原 `resolve_families` 用 join 等待两个家族完整超时，即使 A 已成功也可能等待 AAAA 五秒。现在首个非空成功后仅收集最多 500ms 的另一家族，仍保留 400ms 到达的双栈结果；空答案或失败不取消尚可能成功的家族。候选汇总继续使用原独立整体 deadline。`%TEMP%/axolotl-dns-family-tests.log`：36 项通过，含 IPv4/IPv6 任一成功另一方永久停滞、晚到双栈和空答案回退。`cargo check -p theseus --tests` 已通过（`%TEMP%/axolotl-dns-family-check.log`），沿用 target/profile。
+
 - 健康网络本地回归已在隔离 fixture 后通过；最终代码变化如影响该路径，仍须按范围复查。
 - 执行慢入口/快备选、全部慢入口、慢尾部及 200 文件对照矩阵；缩小规模不能替代完整规模的收益结论。
 - 继续审核 H2 单流、H2 Range、HTTP/1 Range、内存下载、重定向和失败恢复的全部实际路径与计数覆盖。
