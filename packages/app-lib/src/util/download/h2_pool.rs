@@ -413,34 +413,38 @@ async fn connect_addresses(
     host: &str,
     port: u16,
     addresses: &[IpAddr],
-    resolver: &crate::util::download_dns::DownloadDnsResolver,
 ) -> std::io::Result<TcpStream> {
-    let attempts = addresses.iter().copied().take(2).enumerate().map(
-        |(index, address)| async move {
-            if index > 0 {
-                let delay = if address.is_ipv4() {
-                    HAPPY_EYEBALLS_IPV4_DELAY
-                } else {
-                    HAPPY_EYEBALLS_IPV6_DELAY
-                };
-                tokio::time::sleep(delay).await;
-            }
-            TcpStream::connect((address, port)).await
-        },
-    );
     tokio::time::timeout(CONNECT_TIMEOUT, async {
-        let mut pending = attempts.collect::<FuturesUnordered<_>>();
+        let mut remaining = addresses.iter().copied();
+        let attempt = |address: IpAddr, delay: Duration| async move {
+            tokio::time::sleep(delay).await;
+            TcpStream::connect((address, port)).await
+        };
+        let mut pending = FuturesUnordered::new();
+        if let Some(first) = remaining.next() {
+            pending.push(attempt(first, Duration::ZERO));
+        }
+        if let Some(second) = remaining.next() {
+            let delay = if second.is_ipv4() {
+                HAPPY_EYEBALLS_IPV4_DELAY
+            } else {
+                HAPPY_EYEBALLS_IPV6_DELAY
+            };
+            pending.push(attempt(second, delay));
+        }
         let mut last_error = None;
         while let Some(result) = pending.next().await {
             match result {
                 Ok(stream) => {
                     stream.set_nodelay(true).ok();
-                    if let Ok(address) = stream.peer_addr() {
-                        resolver.record_host_success(host, address.ip());
-                    }
                     return Ok(stream);
                 }
-                Err(error) => last_error = Some(error),
+                Err(error) => {
+                    last_error = Some(error);
+                    if let Some(next) = remaining.next() {
+                        pending.push(attempt(next, Duration::ZERO));
+                    }
+                }
             }
         }
         Err(last_error.unwrap_or_else(|| {
@@ -463,16 +467,33 @@ async fn connect_addresses(
 mod address_tests {
     use super::*;
 
-    #[test]
-    fn happy_eyeballs_uses_the_two_ordered_candidates() {
-        let ordered: [IpAddr; 4] = [
-            "2001:db8::1".parse().unwrap(),
-            "2001:db8::2".parse().unwrap(),
-            "192.0.2.1".parse().unwrap(),
-            "192.0.2.2".parse().unwrap(),
+    #[tokio::test]
+    async fn progresses_to_third_address_after_two_connection_failures() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let addresses = [
+            "127.0.0.2".parse().unwrap(),
+            "127.0.0.3".parse().unwrap(),
+            "127.0.0.1".parse().unwrap(),
         ];
-        assert_eq!(ordered[0].to_string(), "2001:db8::1");
-        assert_eq!(ordered.iter().copied().take(2).count(), 2);
+        let stream = tokio::time::timeout(
+            Duration::from_secs(5),
+            connect_addresses("three-addresses.invalid", port, &addresses),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(stream.peer_addr().unwrap(), listener.local_addr().unwrap());
+    }
+
+    #[tokio::test]
+    async fn empty_address_list_returns_not_found() {
+        let error = connect_addresses("empty.invalid", 443, &[])
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
     }
 }
 
@@ -485,22 +506,22 @@ async fn connect_tcp(
     // (IPv4/IPv6 preference and per-IP reliability), falling back to the
     // system resolver when no list is cached yet.
     let resolver = super::proxy_context::resolver(proxy);
-    if resolver.resolved_addresses(host).is_empty() {
-        resolver.resolve_host(host).await?;
+    let mut addresses = resolver.resolved_addresses(host);
+    if addresses.is_empty() {
+        // TTL-zero answers are usable for this attempt without entering the
+        // cache. Do not discard them by rereading the cache after resolution.
+        addresses = resolver.resolve_host(host).await?;
     }
-    let addresses = resolver.resolved_addresses(host);
     let mut last_error = None;
     if !addresses.is_empty() {
-        match connect_addresses(host, port, &addresses, &resolver).await {
+        match connect_addresses(host, port, &addresses).await {
             Ok(stream) => return Ok(stream),
             Err(error) => last_error = Some(error),
         }
         if resolver.record_connection_failure(host) {
-            resolver.resolve_host(host).await?;
-            let refreshed = resolver.resolved_addresses(host);
+            let refreshed = resolver.resolve_host(host).await?;
             if !refreshed.is_empty() && refreshed != addresses {
-                match connect_addresses(host, port, &refreshed, &resolver).await
-                {
+                match connect_addresses(host, port, &refreshed).await {
                     Ok(stream) => return Ok(stream),
                     Err(error) => last_error = Some(error),
                 }
@@ -620,6 +641,11 @@ async fn establish(
                 format!("HTTP/2 handshake with {authority} failed: {error}"),
             )
         })?;
+
+    if let Some(address) = remote_addr {
+        super::proxy_context::resolver(route.proxy)
+            .record_host_success(host, address.ip());
+    }
 
     // Tune flow-control windows for high-stream multiplexing (e.g. hundreds
     // of concurrent asset downloads over one connection). With the default

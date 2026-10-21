@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio_util::sync::CancellationToken;
 
 pub const BUILTIN_DOH_SERVERS: [&str; 3] = [
     "https://doh.pub/dns-query",
@@ -26,6 +27,45 @@ const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(6);
 const DOH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(2);
 const MAX_DNS_MESSAGE_BYTES: usize = 65535;
+const CANDIDATE_CACHE_TTL: Duration = Duration::from_secs(30);
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum DnsSource {
+    System,
+    Doh(Arc<str>),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DnsAddress {
+    pub(crate) ip: IpAddr,
+    /// Effective expiry includes every CNAME on the path to this address.
+    pub(crate) expires_at: Instant,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DnsAnswer {
+    pub(crate) queried_host: String,
+    /// One provider's ordered chain; never joined with another response.
+    pub(crate) cname_chain: Vec<String>,
+    pub(crate) addresses: Vec<DnsAddress>,
+    pub(crate) fetched_at: Instant,
+    pub(crate) source: DnsSource,
+}
+
+impl DnsAnswer {
+    fn socket_addresses(&self) -> Vec<SocketAddr> {
+        self.addresses
+            .iter()
+            .map(|address| SocketAddr::new(address.ip, 0))
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+struct CandidateSnapshot {
+    answers: Vec<DnsAnswer>,
+    fetched_at: Instant,
+}
 
 #[derive(Clone)]
 struct CachedFailure {
@@ -38,12 +78,13 @@ struct CachedFailure {
 struct CachedAddresses {
     addresses: Vec<IpAddr>,
     resolved_at: Instant,
+    ttl: Duration,
     consecutive_connection_failures: u8,
 }
 
 impl CachedAddresses {
     fn is_fresh(&self) -> bool {
-        self.resolved_at.elapsed() < CACHE_TTL
+        self.resolved_at.elapsed() < self.ttl
     }
 }
 
@@ -61,6 +102,9 @@ pub struct DownloadDnsResolver {
     doh_endpoints: Arc<Vec<Arc<str>>>,
     doh_clients: Arc<Vec<reqwest::Client>>,
     doh_provider_weights: Arc<Mutex<HashMap<String, u8>>>,
+    dns_answers: Arc<Mutex<HashMap<String, Vec<DnsAnswer>>>>,
+    candidate_snapshots: Arc<Mutex<HashMap<String, CandidateSnapshot>>>,
+    candidate_hosts: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     #[cfg(test)]
     test_addresses: Arc<Mutex<HashMap<String, Vec<SocketAddr>>>>,
     #[cfg(test)]
@@ -93,6 +137,9 @@ impl Default for DownloadDnsResolver {
                     ),
             ]),
             doh_provider_weights: Arc::default(),
+            dns_answers: Arc::default(),
+            candidate_snapshots: Arc::default(),
+            candidate_hosts: Arc::default(),
             #[cfg(test)]
             test_addresses: Arc::default(),
             #[cfg(test)]
@@ -170,6 +217,7 @@ impl DownloadDnsResolver {
         drop(overrides);
         self.last_resolved.lock().remove(&host);
         self.last_failed.lock().remove(&host);
+        self.candidate_snapshots.lock().remove(&host);
         Ok(())
     }
 
@@ -179,6 +227,7 @@ impl DownloadDnsResolver {
         self.host_overrides.lock().remove(&host);
         self.last_resolved.lock().remove(&host);
         self.last_failed.lock().remove(&host);
+        self.candidate_snapshots.lock().remove(&host);
         Ok(())
     }
 
@@ -247,6 +296,27 @@ impl DownloadDnsResolver {
     }
 
     fn cache_addresses(&self, host: String, addresses: Vec<SocketAddr>) {
+        let now = Instant::now();
+        let resolution_host = self.resolution_host(&host);
+        let ttl = if self.doh_enabled {
+            self.dns_answers
+                .lock()
+                .get(&resolution_host)
+                .into_iter()
+                .flatten()
+                .flat_map(|answer| &answer.addresses)
+                .filter(|address| {
+                    addresses.iter().any(|socket| socket.ip() == address.ip)
+                })
+                .map(|address| {
+                    address.expires_at.saturating_duration_since(now)
+                })
+                .min()
+                .unwrap_or(CACHE_TTL)
+                .min(CACHE_TTL)
+        } else {
+            CACHE_TTL
+        };
         self.last_resolved.lock().insert(
             host,
             CachedAddresses {
@@ -254,7 +324,8 @@ impl DownloadDnsResolver {
                     .iter()
                     .map(|address| address.ip())
                     .collect(),
-                resolved_at: Instant::now(),
+                resolved_at: now,
+                ttl,
                 consecutive_connection_failures: 0,
             },
         );
@@ -366,8 +437,10 @@ impl DownloadDnsResolver {
         let mut last_error = None;
         while let Some((endpoint, result)) = requests.next().await {
             match result {
-                Ok(addresses) => {
+                Ok(answer) => {
                     self.record_doh_provider_success(&endpoint);
+                    let addresses = answer.socket_addresses();
+                    self.remember_answer(host, answer);
                     return Ok(addresses);
                 }
                 Err(error) => last_error = Some(error),
@@ -382,7 +455,7 @@ impl DownloadDnsResolver {
         client: &reqwest::Client,
         endpoint: &str,
         query: &Message,
-    ) -> std::io::Result<Vec<SocketAddr>> {
+    ) -> std::io::Result<DnsAnswer> {
         let body = query.to_vec().map_err(std::io::Error::other)?;
         let mut response = client
             .post(endpoint)
@@ -403,7 +476,200 @@ impl DownloadDnsResolver {
             }
             bytes.extend_from_slice(&chunk);
         }
-        parse_doh_response(&bytes, query)
+        parse_doh_metadata(&bytes, query, DnsSource::Doh(Arc::from(endpoint)))
+    }
+
+    fn remember_answer(&self, host: &str, answer: DnsAnswer) {
+        let now = Instant::now();
+        let mut cache = self.dns_answers.lock();
+        let answers = cache.entry(host.to_string()).or_default();
+        answers.retain(|old| {
+            old.addresses.iter().any(|address| address.expires_at > now)
+                && !(old.source == answer.source
+                    && old.addresses.first().map(|a| a.ip.is_ipv4())
+                        == answer.addresses.first().map(|a| a.ip.is_ipv4()))
+        });
+        // Retain the just-fetched TTL-zero answer for ordinary cache expiry;
+        // candidate readers filter expired addresses before using metadata.
+        answers.push(answer);
+        if answers.len() > BUILTIN_DOH_SERVERS.len() * 2 {
+            answers.remove(0);
+        }
+    }
+
+    fn cached_candidates(&self, host: &str) -> Option<Vec<DnsAnswer>> {
+        let now = Instant::now();
+        let cache = self.candidate_snapshots.lock();
+        let snapshot = cache.get(host)?;
+        if now.saturating_duration_since(snapshot.fetched_at)
+            >= CANDIDATE_CACHE_TTL
+        {
+            return None;
+        }
+        let mut answers = snapshot.answers.clone();
+        for answer in &mut answers {
+            answer.addresses.retain(|address| address.expires_at > now);
+        }
+        answers.retain(|answer| !answer.addresses.is_empty());
+        (!answers.is_empty()).then_some(answers)
+    }
+
+    /// Collects independent provider answers within the caller's overall
+    /// deadline. Ordinary resolution still returns the first usable provider
+    /// in each family and never waits on this candidate-query lock.
+    pub(crate) async fn candidate_snapshot(
+        &self,
+        host: &str,
+        cancellation: &CancellationToken,
+        deadline: Instant,
+    ) -> std::io::Result<Vec<DnsAnswer>> {
+        let host = normalize_host(host).map_err(std::io::Error::other)?;
+        let operation = async {
+            if let Some(answers) = self.cached_candidates(&host) {
+                return Ok(answers);
+            }
+            let host_lock = self
+                .candidate_hosts
+                .lock()
+                .entry(host.clone())
+                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                .clone();
+            let _guard =
+                tokio::time::timeout_at(deadline.into(), host_lock.lock())
+                    .await
+                    .map_err(|_| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "Candidate DNS lock wait timed out",
+                        )
+                    })?;
+            if let Some(answers) = self.cached_candidates(&host) {
+                return Ok(answers);
+            }
+            let resolution_host = self.resolution_host(&host);
+            if !self.doh_enabled {
+                let addresses = tokio::time::timeout_at(
+                    deadline.into(),
+                    self.resolve_host(&host),
+                )
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "System candidate DNS lookup timed out",
+                    )
+                })??;
+                let now = Instant::now();
+                // System lookup has no authoritative TTL. Reuse the age of
+                // the existing cache rather than refreshing it on every call.
+                let expires_at = self
+                    .last_resolved
+                    .lock()
+                    .get(&host)
+                    .map(|entry| entry.resolved_at + CACHE_TTL)
+                    .unwrap_or(now);
+                let answer = DnsAnswer {
+                    queried_host: resolution_host,
+                    cname_chain: Vec::new(),
+                    addresses: addresses
+                        .into_iter()
+                        .map(|ip| DnsAddress { ip, expires_at })
+                        .collect(),
+                    fetched_at: now,
+                    source: DnsSource::System,
+                };
+                self.candidate_snapshots.lock().insert(
+                    host.clone(),
+                    CandidateSnapshot {
+                        answers: vec![answer.clone()],
+                        fetched_at: now,
+                    },
+                );
+                return Ok(vec![answer]);
+            }
+
+            let mut answers = self
+                .dns_answers
+                .lock()
+                .get(&resolution_host)
+                .cloned()
+                .unwrap_or_default();
+            let now = Instant::now();
+            for answer in &mut answers {
+                answer.addresses.retain(|address| address.expires_at > now);
+            }
+            answers.retain(|answer| !answer.addresses.is_empty());
+            let mut requests = FuturesUnordered::new();
+            for (endpoint, client) in self
+                .doh_provider_candidates()
+                .into_iter()
+                .take(BUILTIN_DOH_SERVERS.len())
+            {
+                for record_type in [RecordType::A, RecordType::AAAA] {
+                    let query = doh_query(&resolution_host, record_type)?;
+                    let endpoint = endpoint.clone();
+                    let client = client.clone();
+                    requests.push(async move {
+                        Self::lookup_doh_provider(&client, &endpoint, &query)
+                            .await
+                    });
+                }
+            }
+            let mut last_error = None;
+            loop {
+                let result = tokio::select! {
+                    _ = tokio::time::sleep_until(deadline.into()) => break,
+                    result = requests.next() => result,
+                };
+                match result {
+                    Some(Ok(answer)) => {
+                        self.remember_answer(&resolution_host, answer.clone());
+                        answers.retain(|old| {
+                            !(old.source == answer.source
+                                && old
+                                    .addresses
+                                    .first()
+                                    .map(|a| a.ip.is_ipv4())
+                                    == answer
+                                        .addresses
+                                        .first()
+                                        .map(|a| a.ip.is_ipv4()))
+                        });
+                        answers.push(answer);
+                    }
+                    Some(Err(error)) => last_error = Some(error),
+                    None => break,
+                }
+            }
+            let now = Instant::now();
+            for answer in &mut answers {
+                answer.addresses.retain(|address| address.expires_at > now);
+            }
+            answers.retain(|answer| !answer.addresses.is_empty());
+            if answers.is_empty() {
+                return Err(last_error.unwrap_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "No candidate DNS answers before deadline",
+                    )
+                }));
+            }
+            self.candidate_snapshots.lock().insert(
+                host.clone(),
+                CandidateSnapshot {
+                    answers: answers.clone(),
+                    fetched_at: Instant::now(),
+                },
+            );
+            Ok(answers)
+        };
+        tokio::select! {
+            biased;
+            _ = cancellation.cancelled() => Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted, "Candidate DNS lookup cancelled",
+            )),
+            result = operation => result,
+        }
     }
 
     fn cached_failure(&self, host: &str) -> Option<std::io::Error> {
@@ -601,10 +867,23 @@ fn doh_query(host: &str, record_type: RecordType) -> std::io::Result<Message> {
     Ok(message)
 }
 
+#[cfg(test)]
 fn parse_doh_response(
     bytes: &[u8],
     query: &Message,
 ) -> std::io::Result<Vec<SocketAddr>> {
+    parse_doh_metadata(bytes, query, DnsSource::Doh(Arc::from("test")))
+        .map(|answer| answer.socket_addresses())
+}
+
+fn parse_doh_metadata(
+    bytes: &[u8],
+    query: &Message,
+    source: DnsSource,
+) -> std::io::Result<DnsAnswer> {
+    if bytes.len() > MAX_DNS_MESSAGE_BYTES {
+        return Err(std::io::Error::other("DoH response is too large"));
+    }
     let response = Message::from_vec(bytes).map_err(std::io::Error::other)?;
     if response.id() != query.id()
         || response.message_type() != MessageType::Response
@@ -619,44 +898,84 @@ fn parse_doh_response(
     let question = query
         .query()
         .ok_or_else(|| std::io::Error::other("Missing DNS question"))?;
-    let mut names = std::collections::HashSet::from([question.name().clone()]);
-    for _ in 0..response.answers().len() {
-        let mut changed = false;
-        for answer in response.answers() {
-            if names.contains(answer.name())
-                && let RData::CNAME(alias) = answer.data()
-            {
-                changed |= names.insert(alias.0.clone());
+    let now = Instant::now();
+    let mut name = question.name().clone();
+    let mut visited = std::collections::HashSet::new();
+    let mut chain = Vec::new();
+    let mut chain_ttl = u32::MAX;
+    loop {
+        if !visited.insert(name.clone()) {
+            return Err(std::io::Error::other("Cyclic DoH CNAME chain"));
+        }
+        let mut next = None;
+        for answer in response.answers().iter().filter(|answer| {
+            answer.name() == &name
+                && answer.dns_class() == question.query_class()
+        }) {
+            if let RData::CNAME(alias) = answer.data() {
+                if next.as_ref().is_some_and(|target| target != &alias.0) {
+                    return Err(std::io::Error::other(
+                        "Conflicting DoH CNAME answers",
+                    ));
+                }
+                next = Some(alias.0.clone());
+                chain_ttl = chain_ttl.min(answer.ttl());
             }
         }
-        if !changed {
+        let Some(next) = next else {
             break;
+        };
+        if response.answers().iter().any(|record| {
+            record.name() == &name
+                && record.dns_class() == question.query_class()
+                && matches!(record.data(), RData::A(_) | RData::AAAA(_))
+        }) {
+            return Err(std::io::Error::other(
+                "DoH CNAME owner also contains address records",
+            ));
         }
+        chain.push(next.to_utf8().trim_end_matches('.').to_ascii_lowercase());
+        name = next;
     }
-    let addresses = response
+    let mut addresses = response
         .answers()
         .iter()
         .filter(|record| {
-            names.contains(record.name())
+            record.name() == &name
                 && record.record_type() == question.query_type()
                 && record.dns_class() == question.query_class()
         })
-        .filter_map(|record| match record.data() {
-            RData::A(address) => {
-                Some(SocketAddr::new(IpAddr::V4(address.0), 0))
-            }
-            RData::AAAA(address) => {
-                Some(SocketAddr::new(IpAddr::V6(address.0), 0))
-            }
-            _ => None,
+        .filter_map(|record| {
+            let ip = match record.data() {
+                RData::A(address) => IpAddr::V4(address.0),
+                RData::AAAA(address) => IpAddr::V6(address.0),
+                _ => return None,
+            };
+            Some(DnsAddress {
+                ip,
+                expires_at: now
+                    + Duration::from_secs(record.ttl().min(chain_ttl) as u64),
+            })
         })
         .collect::<Vec<_>>();
+    addresses.sort_by_key(|address| (address.ip, address.expires_at));
+    addresses.dedup_by_key(|address| address.ip);
     if addresses.is_empty() {
         return Err(std::io::Error::other(
             "DoH response contained no addresses",
         ));
     }
-    Ok(addresses)
+    Ok(DnsAnswer {
+        queried_host: question
+            .name()
+            .to_utf8()
+            .trim_end_matches('.')
+            .to_ascii_lowercase(),
+        cname_chain: chain,
+        addresses,
+        fetched_at: now,
+        source,
+    })
 }
 
 async fn resolve_families(
@@ -715,6 +1034,10 @@ impl Resolve for DownloadDnsResolver {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "download_dns/tests.rs"]
+mod metadata_tests;
 
 #[cfg(test)]
 mod tests {
