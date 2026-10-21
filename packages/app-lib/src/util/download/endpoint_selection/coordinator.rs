@@ -134,6 +134,7 @@ impl Drop for DownloadRegistration {
 /// Created before spawning: even an unpolled or panicking worker clears its
 /// slot and leaves a retained terminal result for every watch subscriber.
 struct RoundGuard {
+    trial: Option<super::tuning::TrialLease>,
     selector: Weak<EndpointSelector>,
     id: u64,
     status: watch::Sender<RoundStatus>,
@@ -471,6 +472,7 @@ impl EndpointSelector {
         });
         Some(RoundStart {
             guard: RoundGuard {
+                trial: None,
                 selector: Arc::downgrade(self),
                 id,
                 status,
@@ -504,9 +506,17 @@ impl EndpointSelector {
         {
             return;
         }
-        let Some(start) = self.begin(Instant::now()) else {
+        let Some(trial) = super::tuning::TRIALS.acquire(
+            super::tuning::TrialKind::Endpoint,
+            Instant::now(),
+            policy::ROUND_TIMEOUT + Duration::from_secs(1),
+        ) else {
             return;
         };
+        let Some(mut start) = self.begin(Instant::now()) else {
+            return;
+        };
+        start.guard.trial = Some(trial);
         let selector = self.clone();
         let route = route.clone();
         let clients = clients.clone();

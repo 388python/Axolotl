@@ -496,6 +496,13 @@ async fn shrink_semaphore(
 }
 
 impl AutoConcurrencyController {
+    fn discard_contaminated_sample(&mut self, current: usize) -> usize {
+        self.high_utilization_windows = 0;
+        self.probe
+            .take()
+            .map_or(current, |probe| probe.previous_target)
+    }
+
     fn next_target(
         &mut self,
         now: Instant,
@@ -856,11 +863,17 @@ impl State {
         let mut interval = tokio::time::interval(AUTO_DOWNLOAD_SAMPLE_INTERVAL);
         interval.tick().await;
         let mut controller = AutoConcurrencyController::default();
+        let mut trial_lease = None;
+        let mut trial_revision =
+            crate::util::download::endpoint_selection::tuning::TRIALS
+                .snapshot(Instant::now())
+                .0;
         loop {
             interval.tick().await;
             crate::util::download::local_resources::sample_cpu().await;
             if !self.auto_concurrent_downloads.load(Ordering::Acquire) {
                 controller = AutoConcurrencyController::default();
+                trial_lease = None;
                 self.download_sample_bytes.swap(0, Ordering::AcqRel);
                 self.download_sample_requests.swap(0, Ordering::AcqRel);
                 self.download_sample_errors.swap(0, Ordering::AcqRel);
@@ -886,12 +899,42 @@ impl State {
                     AUTO_DOWNLOAD_CONCURRENCY_MIN,
                     AUTO_DOWNLOAD_CONCURRENCY_MAX,
                 );
-            let target = controller.next_target(
+            use crate::util::download::endpoint_selection::tuning::{
+                TRIALS, TrialKind,
+            };
+            let now = Instant::now();
+            let (revision, owner) = TRIALS.snapshot(now);
+            if trial_lease.as_ref().is_some_and(|lease: &crate::util::download::endpoint_selection::tuning::TrialLease| !lease.valid(now))
+                || owner.is_some_and(|owner| owner != TrialKind::Files)
+                || (trial_lease.is_none() && revision != trial_revision)
+            {
+                trial_lease = None;
+                let previous = controller.discard_contaminated_sample(current);
+                if previous != current { self.resize_download_concurrency(previous); }
+                trial_revision = TRIALS.snapshot(now).0;
+                continue;
+            }
+            let mut target = controller.next_target(
                 Instant::now(),
                 current,
                 ceiling,
                 sample,
             );
+            if target > current && trial_lease.is_none() {
+                trial_lease = TRIALS.acquire(
+                    TrialKind::Files,
+                    now,
+                    Duration::from_secs(15),
+                );
+                if trial_lease.is_none() {
+                    controller.probe = None;
+                    target = current;
+                }
+            }
+            if controller.probe.is_none() {
+                trial_lease = None;
+            }
+            trial_revision = TRIALS.snapshot(now).0;
             if target != current {
                 tracing::info!(
                     current,
@@ -1216,6 +1259,17 @@ mod auto_concurrency_tests {
             errors: 0,
             throttles: 0,
         }
+    }
+
+    #[test]
+    fn contaminated_trial_restores_previous_target_and_requires_new_baseline() {
+        let now = Instant::now();
+        let mut controller = AutoConcurrencyController::default();
+        controller.next_target(now, 64, 128, healthy(64, 100));
+        assert_eq!(controller.next_target(now, 64, 128, healthy(64, 100)), 72);
+        assert_eq!(controller.discard_contaminated_sample(72), 64);
+        assert!(controller.probe.is_none());
+        assert_eq!(controller.next_target(now, 64, 128, healthy(64, 100)), 64);
     }
 
     #[test]

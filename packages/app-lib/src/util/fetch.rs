@@ -4992,6 +4992,9 @@ async fn try_segmented_download(
     scheduler.tick().await;
     let mut last_expansion = Instant::now();
     let mut expansion_baseline = None;
+    let mut expansion_trial: Option<
+        super::download::endpoint_selection::tuning::TrialLease,
+    > = None;
     let mut expansion_exhausted = false;
     let mut last_block_reason = None;
     let mut downloaded = 0_u64;
@@ -5110,6 +5113,15 @@ async fn try_segmented_download(
                     continue;
                 }
                 let snapshot = speed.speed_snapshot();
+                use super::download::endpoint_selection::tuning::{TRIALS, TrialKind};
+                if expansion_trial.as_ref().is_some_and(|lease| !lease.valid(Instant::now())) {
+                    expansion_trial = None;
+                    expansion_baseline = None;
+                }
+                if expansion_trial.is_none() && TRIALS.snapshot(Instant::now()).1.is_some() { continue; }
+                if expansion_baseline.is_some() && last_expansion.elapsed() >= SEGMENT_EXPANSION_INTERVAL {
+                    expansion_trial = None;
+                }
                 let active_ranges = downloads.len();
                 let remaining_bytes = ranges
                     .iter()
@@ -5163,6 +5175,7 @@ async fn try_segmented_download(
                     .max_by_key(|range| range.remaining())
                     .cloned();
                 if let Some(range) = range
+                    && let Some(trial) = TRIALS.acquire(TrialKind::Ranges, Instant::now(), SEGMENT_EXPANSION_INTERVAL + time::Duration::from_secs(1))
                     && let Some(permit) =
                         try_acquire_native_connection(route, semaphore)
                     && let Some(new_range) =
@@ -5205,6 +5218,7 @@ async fn try_segmented_download(
                         ));
                         ranges.push(new_range);
                         expansion_baseline = Some(snapshot.recent_average);
+                        expansion_trial = Some(trial);
                         last_expansion = Instant::now();
                         last_block_reason = None;
                     }

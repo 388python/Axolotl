@@ -1089,7 +1089,9 @@ pub(crate) async fn shared_connection(
     select_parallel_connection(
         &pool,
         primary,
-        allow_cold_connection,
+        allow_cold_connection
+            && !super::native_breaker::is_open(&route)
+            && !super::local_resources::network_pressure().blocks_expansion(),
         move || async move {
             let establish = async {
                 let sibling =
@@ -1130,8 +1132,19 @@ where
         + 'static,
 {
     let mut state = pool.lock().await;
+    if primary.authority == "cdn.modrinth.com:443"
+        && super::proxy_context::clients().is_some_and(|clients| {
+            clients.endpoints.mode()
+                == super::endpoint_selection::SelectionMode::Auto
+        })
+    {
+        state.enable_adaptive(std::time::Instant::now());
+    }
     state.prune();
     state.add_connection(Arc::clone(&primary));
+    if !allow_expansion {
+        state.suspend_adaptive(std::time::Instant::now());
+    }
     state.observe(std::time::Instant::now());
     let selected = state.select_connection().ok_or_else(|| {
         H2ConnectError::new(

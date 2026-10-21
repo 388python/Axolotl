@@ -100,6 +100,22 @@ pub(crate) fn pressure(path: &Path) -> Pressure {
     }
 }
 
+pub(crate) fn network_pressure() -> Pressure {
+    Pressure {
+        cpu_percent: CPU_PERCENT.load(std::sync::atomic::Ordering::Relaxed),
+        write_latency_ms: WRITE_SAMPLES
+            .lock()
+            .values()
+            .filter(|sample| {
+                sample
+                    .updated
+                    .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+            })
+            .map(|sample| sample.latency_ms)
+            .fold(0.0, f64::max),
+    }
+}
+
 pub(crate) async fn sample_cpu() {
     let _ = tokio::task::spawn_blocking(|| {
         static SYSTEM: LazyLock<Mutex<sysinfo::System>> =
