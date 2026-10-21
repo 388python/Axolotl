@@ -176,6 +176,11 @@ pub(crate) async fn try_download_via_h2(
 
         let status = response.status();
         let headers = response.headers();
+        super::native_breaker::record_response_status_failure(
+            route,
+            status.as_u16(),
+            fetch::retry_after_headers(headers),
+        );
         let total_size = parse_content_range_total(headers)
             .or_else(|| parse_content_length(headers));
         // Drain the probe body so the stream slot is released.
@@ -395,6 +400,19 @@ pub(crate) fn classify_download_error(
         return H2DownloadFailure::Integrity;
     }
     match error.raw.as_ref() {
+        crate::ErrorKind::FetchError(source) => {
+            if source.status().is_some() {
+                H2DownloadFailure::Http
+            } else if source.is_timeout() && !source.is_connect() {
+                H2DownloadFailure::Slow
+            } else if source.is_connect()
+                && super::endpoint_selection::invalid_certificate(source)
+            {
+                H2DownloadFailure::Tls
+            } else {
+                H2DownloadFailure::Connect
+            }
+        }
         crate::ErrorKind::DownloadH2Error(error) => {
             if error.is_reset() {
                 H2DownloadFailure::StreamReset
@@ -548,6 +566,11 @@ async fn single_stream(
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
 
     let (response, mut stream) = open_stream(connection, uri, headers).await?;
+    super::native_breaker::record_response_status_failure(
+        route,
+        response.status().as_u16(),
+        fetch::retry_after_headers(response.headers()),
+    );
     if !response.status().is_success() {
         return Err(crate::ErrorKind::HttpError {
             status: response.status().as_u16(),
@@ -873,6 +896,49 @@ mod tests {
         );
         assert!(H2DownloadFailure::Protocol.should_cooldown_authority());
         assert!(!H2DownloadFailure::Http.should_cooldown_authority());
+    }
+
+    #[tokio::test]
+    async fn reqwest_range_body_timeout_does_not_become_an_h2_protocol_failure()
+    {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0; 4096];
+            stream.read(&mut request).await.unwrap();
+            stream.write_all(b"HTTP/1.1 206 Partial Content\r\nContent-Length: 65536\r\nContent-Range: bytes 0-65535/65536\r\n\r\nx").await.unwrap();
+            std::future::pending::<()>().await;
+        });
+        let result = tokio::time::timeout(Duration::from_secs(2), async {
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .read_timeout(Duration::from_millis(100))
+                .build()
+                .unwrap();
+            let mut response = client
+                .get(format!("http://{address}/file"))
+                .send()
+                .await
+                .unwrap();
+            let error = loop {
+                match response.chunk().await {
+                    Err(error) => break error,
+                    Ok(Some(_)) => {}
+                    Ok(None) => {
+                        panic!("truncated test body unexpectedly completed")
+                    }
+                }
+            };
+            let failure = classify_download_error(&error.into());
+            assert_eq!(failure, H2DownloadFailure::Slow);
+            assert!(!failure.should_cooldown_authority());
+        })
+        .await;
+        server.abort();
+        result.unwrap();
     }
 
     #[tokio::test]
@@ -1283,6 +1349,11 @@ async fn download_asset_item(
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
 
     let (response, mut stream) = open_stream(&connection, uri, headers).await?;
+    super::native_breaker::record_response_status_failure(
+        route,
+        response.status().as_u16(),
+        fetch::retry_after_headers(response.headers()),
+    );
     if !response.status().is_success() {
         // 301/302/303/307/308 are redirect responses that must be interpreted
         // by the redirect-handling layer, not treated as line-level transfer

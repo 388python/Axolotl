@@ -131,6 +131,13 @@ impl TlsFixture {
                                     assert_eq!(request.uri().host(), Some("cdn.modrinth.com"));
                                     assert!(request.headers().get(header::AUTHORIZATION).is_none());
                                     assert!(request.headers().get(crate::util::fetch::DOWNLOAD_META_HEADER).is_none());
+                                    if matches!(kind, ResponseKind::RateLimited) {
+                                        let response = http::Response::builder().status(429)
+                                            .header(header::RETRY_AFTER, "30").header(header::CONTENT_LENGTH, 0)
+                                            .body(()).unwrap();
+                                        respond.send_response(response, true).unwrap();
+                                        continue;
+                                    }
                                     let size = if matches!(kind, ResponseKind::LargeSlowFile | ResponseKind::LargeFile) { 64 * 1024 * 1024 } else { 1_048_576 };
                                     let range = request.headers().get(header::RANGE);
                                     let (start, end) = range.map(|range| {
@@ -151,6 +158,7 @@ impl TlsFixture {
                                     // flow-control credit from the client.
                                     transfers.spawn(async move {
                                         let mut remaining = length;
+                                        let started = tokio::time::Instant::now();
                                         while remaining > 0 {
                                             let slow = matches!(kind, ResponseKind::SlowFile | ResponseKind::LargeSlowFile);
                                             let wanted = remaining.min(if slow { 1024 } else { 16 * 1024 });
@@ -160,6 +168,9 @@ impl TlsFixture {
                                             remaining -= sent;
                                             if stream.send_data(bytes::Bytes::from(vec![42; sent]), remaining == 0).is_err() { return; }
                                             if slow { tokio::time::sleep(Duration::from_millis(25)).await; }
+                                            else if matches!(kind, ResponseKind::File | ResponseKind::LargeFile) {
+                                                tokio::time::sleep_until(started + Duration::from_secs_f64((length - remaining) as f64 / (32 * 1024 * 1024) as f64)).await;
+                                            }
                                         }
                                     });
                                 }
@@ -194,11 +205,15 @@ impl TlsFixture {
                                 };
                                 if stream.write_all(headers.as_bytes()).await.is_err() { return; }
                                 let mut remaining = length;
+                                let started = tokio::time::Instant::now();
                                 while remaining > 0 {
                                     let chunk = remaining.min(if matches!(kind, ResponseKind::SlowFile) { 1024 } else { 64 * 1024 });
                                     if stream.write_all(&vec![42; chunk]).await.is_err() { return; }
                                     remaining -= chunk;
                                     if matches!(kind, ResponseKind::SlowFile) { tokio::time::sleep(Duration::from_millis(25)).await; }
+                                    else {
+                                        tokio::time::sleep_until(started + Duration::from_secs_f64((length - remaining) as f64 / (32 * 1024 * 1024) as f64)).await;
+                                    }
                                 }
                                 let _ = stream.shutdown().await;
                                 return;
@@ -874,6 +889,92 @@ async fn native_h2_single_stream_measures_new_peer_and_resumes_verified_file() {
 #[tokio::test]
 async fn native_h2_ranges_measure_new_peer_and_resume_verified_file() {
     automatic_native_h2_recovery(Some(2)).await;
+}
+
+#[tokio::test]
+async fn native_h2_status_preserves_authority_retry_after_before_endpoint_recovery()
+ {
+    use crate::util::download::{
+        h2_download, h2_pool, native, native_breaker, proxy_context,
+    };
+    let fixture = TlsFixture::start_protocol(
+        "cdn.modrinth.com",
+        ResponseKind::RateLimited,
+        Protocol::H2,
+    )
+    .await;
+    let clients = production_clients(&fixture);
+    let selector = clients.endpoints.clone();
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(fixture.rustls_root.clone()).unwrap();
+    let mut config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec()];
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("rate-limited.jar");
+    let part = directory.path().join("rate-limited.part");
+    let semaphore =
+        crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(4));
+    let mut route = fixture_route();
+    route.proxy = ProxyPolicy::System;
+    let request = crate::util::fetch::DownloadRequest::new(
+        route.url.clone(),
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1("hash").with_size(1_048_576),
+    );
+    proxy_context::with_snapshot(
+        clients,
+        h2_pool::with_test_tls_config(Arc::new(config), async {
+            for _ in 0..3 {
+                let outcome = h2_download::try_download_via_h2(
+                    &request,
+                    &route,
+                    &destination,
+                    &part,
+                    native::NativeH2Policy {
+                        allow_cold_connection: true,
+                        abort_if_slow: true,
+                        expected_speed: None,
+                    },
+                    &semaphore,
+                )
+                .await;
+                assert!(matches!(
+                    outcome,
+                    h2_download::H2DownloadOutcome::Fallback {
+                        failure: h2_download::H2DownloadFailure::Http,
+                        ..
+                    }
+                ));
+            }
+            assert!(native_breaker::is_open(&route));
+            assert!(
+                selector
+                    .recovery_lease(
+                        &request,
+                        &route,
+                        Protocol::H2,
+                        Some("127.0.0.2:443".parse().unwrap()),
+                        1,
+                        1_048_576
+                    )
+                    .is_none()
+            );
+            let connection =
+                h2_pool::shared_connection(&route, true, true, false)
+                    .await
+                    .unwrap();
+            assert!(!connection.is_retiring());
+            connection.retire();
+        }),
+    )
+    .await;
+    assert_eq!(fixture.requests.load(Ordering::Relaxed), 3);
+    assert!(!destination.exists());
+    selector.close();
 }
 
 #[tokio::test]

@@ -1354,7 +1354,13 @@ fn fetch_retry_delay(attempt: usize) -> time::Duration {
 pub(crate) fn retry_after(
     response: &reqwest::Response,
 ) -> Option<time::Duration> {
-    let value = response.headers().get(header::RETRY_AFTER)?.to_str().ok()?;
+    retry_after_headers(response.headers())
+}
+
+pub(crate) fn retry_after_headers(
+    headers: &header::HeaderMap,
+) -> Option<time::Duration> {
+    let value = headers.get(header::RETRY_AFTER)?.to_str().ok()?;
     if let Ok(seconds) = value.parse::<u64>() {
         return Some(clamp_failure_cooldown(time::Duration::from_secs(
             seconds,

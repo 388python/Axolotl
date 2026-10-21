@@ -168,6 +168,11 @@ impl RangeTransport for NativeRangeTransport<'_> {
                     return Err(failure);
                 }
             };
+            super::native_breaker::record_response_status_failure(
+                self.route,
+                response.status().as_u16(),
+                fetch::retry_after_headers(response.headers()),
+            );
             if response.status() != StatusCode::PARTIAL_CONTENT
                 || !content_range_matches(
                     response.headers(),
@@ -254,8 +259,15 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 None,
             )
             .await
-            .map_err(|_| H2DownloadFailure::Connect)?;
+            .map_err(|error| {
+                super::h2_download::classify_download_error(&error)
+            })?;
         let expected = format!("bytes {start}-{end}/{}", self.total_size);
+        super::native_breaker::record_response_status_failure(
+            self.route,
+            response.status().as_u16(),
+            fetch::retry_after(&response),
+        );
         if response.status() != reqwest::StatusCode::PARTIAL_CONTENT
             || response
                 .headers()
@@ -285,8 +297,10 @@ impl RangeTransport for NativeRangeTransport<'_> {
                         Some((Ok(chunk), (Some(response), permit, feedback)))
                     }
                     Ok(None) => None,
-                    Err(_) => Some((
-                        Err(H2DownloadFailure::Protocol),
+                    Err(error) => Some((
+                        Err(super::h2_download::classify_download_error(
+                            &error.into(),
+                        )),
                         (None, permit, feedback),
                     )),
                 }
