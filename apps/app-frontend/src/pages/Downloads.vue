@@ -405,8 +405,8 @@
                         class="max-h-80 overflow-y-auto"
                     >
                         <template #cell-name="{ row }">
-                            <div class="min-w-0 py-0.5">
-                                <div class="flex min-w-0 items-center gap-2">
+                            <div class="flex min-w-0 items-center gap-2 py-0.5">
+                                <div class="flex min-w-0 flex-1 items-center gap-2">
                                     <span
                                         class="min-w-0 flex-1 truncate font-medium text-[var(--color-text-primary)]"
                                         >{{ row.name }}</span
@@ -424,23 +424,21 @@
                                         @click.stop="showFileDetails(job, row)"
                                         ><InfoIcon
                                     /></Button>
-                                    <div
+                                    <span
                                         v-if="row.source"
                                         class="max-w-24 shrink-0 truncate text-xs text-[var(--color-text-tertiary)]"
                                     >
                                         {{ downloadSourceLabel(row.source) }}
-                                    </div>
+                                    </span>
                                 </div>
-                                <div v-if="row.manual_url" class="flex">
-                                    <Button
-                                        type="quiet"
-                                        size="2xs"
-                                        @click.stop="openManualDownload(row)"
-                                        ><ExternalIcon />{{
-                                            formatMessage(messages.manualDownload)
-                                        }}
-                                    </Button>
-                                </div>
+                                <Button
+                                    v-if="row.manual_url"
+                                    type="quiet"
+                                    size="2xs"
+                                    class="shrink-0"
+                                    @click.stop="openManualDownload(row)"
+                                    ><ExternalIcon />{{ formatMessage(messages.manualDownload) }}
+                                </Button>
                             </div>
                         </template>
                         <template #cell-status="{ row }">
