@@ -3,6 +3,7 @@ use super::*;
 
 fn selection(ip: &str, now: Instant) -> Selection {
     Selection {
+        reconnect_overhead: Duration::from_millis(600),
         protocol: Protocol::H2,
         preferred: EndpointCandidate {
             ip: ip.parse().unwrap(),
@@ -40,6 +41,118 @@ fn mode_defaults_and_unknown_values_are_passive() {
                 .is_none()
         );
         assert_eq!(selector.probe_bytes.load(Ordering::Relaxed), 0);
+    }
+}
+
+#[tokio::test]
+async fn metered_network_never_reaches_candidate_dns_or_body_probe() {
+    let mut clients = DownloadClients::build(
+        &crate::util::proxy::ProxyConfig {
+            mode: ProxyMode::None,
+            ..Default::default()
+        },
+        false,
+        false,
+    )
+    .unwrap();
+    let mut selector =
+        EndpointSelector::with_mode("metered-fixture", SelectionMode::Auto);
+    Arc::get_mut(&mut selector).unwrap().trials = Arc::default();
+    clients.endpoints = selector.clone();
+    *selector.probe_fixture.lock() = Some(ProbeFixture {
+        metered: true,
+        candidates: Vec::new(),
+    });
+    let request = DownloadRequest::new(
+        "https://cdn.modrinth.com/data/project/file.jar",
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1("hash").with_size(1024 * 1024),
+    );
+    let _registration = selector.register_download(&request).unwrap();
+    let route = DownloadRoute {
+        url: request.url.clone(),
+        source: crate::util::fetch::DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::System,
+    };
+    selector.on_slow(
+        &request,
+        &route,
+        &clients,
+        Protocol::Http1,
+        Some("151.101.1.242".parse().unwrap()),
+        1024 * 1024,
+        super::super::super::local_resources::Pressure::default(),
+    );
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while selector.is_probing() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(selector.state.lock().last_round_status, RoundStatus::NoGain);
+    assert_eq!(selector.state.lock().next_round, 1);
+    assert_eq!(selector.probe_bytes.load(Ordering::Relaxed), 0);
+    assert!(
+        clients
+            .system_dns
+            .resolved_addresses(modrinth_cdn::HOST)
+            .is_empty()
+    );
+}
+
+#[test]
+fn passive_modes_and_cooldown_leave_shared_trial_revision_unchanged() {
+    let clients = DownloadClients::build(
+        &crate::util::proxy::ProxyConfig {
+            mode: ProxyMode::None,
+            ..Default::default()
+        },
+        false,
+        false,
+    )
+    .unwrap();
+    let request = DownloadRequest::new(
+        "https://cdn.modrinth.com/data/project/file.jar",
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1("hash").with_size(1024 * 1024),
+    );
+    let route = DownloadRoute {
+        url: request.url.clone(),
+        source: crate::util::fetch::DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::System,
+    };
+    for mode in [
+        SelectionMode::Off,
+        SelectionMode::Observe,
+        SelectionMode::Auto,
+    ] {
+        let mut selector = EndpointSelector::with_mode("passive-fixture", mode);
+        Arc::get_mut(&mut selector).unwrap().trials = Arc::default();
+        selector.state.lock().cooldown_until =
+            Some(Instant::now() + policy::COOLDOWN);
+        let before = selector.trials.snapshot(Instant::now()).0;
+        selector.on_slow(
+            &request,
+            &route,
+            &clients,
+            Protocol::Http1,
+            None,
+            1024 * 1024,
+            super::super::super::local_resources::Pressure::default(),
+        );
+        assert_eq!(selector.trials.snapshot(Instant::now()).0, before);
+        assert_eq!(selector.state.lock().next_round, 0);
     }
 }
 

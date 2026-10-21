@@ -505,6 +505,7 @@ async fn connect_addresses(
     host: &str,
     port: u16,
     addresses: &[IpAddr],
+    parallel: bool,
 ) -> std::io::Result<TcpStream> {
     tokio::time::timeout(CONNECT_TIMEOUT, async {
         let mut remaining = addresses.iter().copied();
@@ -516,7 +517,7 @@ async fn connect_addresses(
         if let Some(first) = remaining.next() {
             pending.push(attempt(first, Duration::ZERO));
         }
-        if let Some(second) = remaining.next() {
+        if parallel && let Some(second) = remaining.next() {
             let delay = if second.is_ipv4() {
                 HAPPY_EYEBALLS_IPV4_DELAY
             } else {
@@ -572,7 +573,12 @@ mod address_tests {
         ];
         let stream = tokio::time::timeout(
             Duration::from_secs(5),
-            connect_addresses("three-addresses.invalid", port, &addresses),
+            connect_addresses(
+                "three-addresses.invalid",
+                port,
+                &addresses,
+                true,
+            ),
         )
         .await
         .unwrap()
@@ -582,22 +588,98 @@ mod address_tests {
 
     #[tokio::test]
     async fn empty_address_list_returns_not_found() {
-        let error = connect_addresses("empty.invalid", 443, &[])
+        let error = connect_addresses("empty.invalid", 443, &[], true)
             .await
             .unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[tokio::test]
+    async fn saturated_address_fallback_keeps_recovery_slot_and_temporary_race_admission_releases()
+     {
+        use crate::util::fetch::{
+            DownloadClients, DownloadRouteSource, ProxyPolicy,
+        };
+        use crate::util::proxy::{ProxyConfig, ProxyMode};
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut clients = DownloadClients::build(
+            &ProxyConfig {
+                mode: ProxyMode::None,
+                ..Default::default()
+            },
+            false,
+            false,
+        )
+        .unwrap();
+        clients.scope = format!("dns-race-budget-{port}");
+        clients.endpoints =
+            super::super::endpoint_selection::EndpointSelector::with_mode(
+                clients.scope.clone(),
+                super::super::endpoint_selection::SelectionMode::Auto,
+            );
+        clients.system_dns.set_test_addresses(
+            "cdn.modrinth.com",
+            ["127.0.0.2", "127.0.0.3", "127.0.0.1"]
+                .into_iter()
+                .map(|ip| std::net::SocketAddr::new(ip.parse().unwrap(), 0))
+                .collect(),
+        );
+        let route = DownloadRoute {
+            url: "https://cdn.modrinth.com/data/test/file.jar".into(),
+            source: DownloadRouteSource::Official,
+            is_mirror: false,
+            allow_sensitive_headers: true,
+            supports_range: true,
+            proxy: ProxyPolicy::System,
+        };
+        super::super::proxy_context::with_snapshot(clients, async {
+            // One of these normal permits is the caller's first socket.
+            let mut permits: Vec<_> = (0..31)
+                .map(|_| {
+                    super::super::native_budget::try_acquire(&route).unwrap()
+                })
+                .collect();
+            assert_eq!(super::super::native_budget::available(&route), 1);
+            assert!(address_race_budget(&route, true, 3).is_none());
+            let stream = tokio::time::timeout(
+                Duration::from_secs(6),
+                connect_tcp("cdn.modrinth.com", port, &route, true),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(
+                stream.peer_addr().unwrap(),
+                listener.local_addr().unwrap()
+            );
+            assert_eq!(super::super::native_budget::available(&route), 1);
+            drop(stream);
+            permits.pop();
+            let race = address_race_budget(&route, true, 3).unwrap();
+            assert_eq!(super::super::native_budget::available(&route), 1);
+            drop(race);
+            assert_eq!(super::super::native_budget::available(&route), 2);
+            assert!(address_race_budget(&route, true, 1).is_none());
+            drop(permits);
+            assert_eq!(super::super::native_budget::available(&route), 32);
+        })
+        .await;
     }
 }
 
 async fn connect_tcp(
     host: &str,
     port: u16,
-    proxy: crate::util::fetch::ProxyPolicy,
+    route: &DownloadRoute,
+    reserve_native_budget: bool,
 ) -> std::io::Result<TcpStream> {
     // Prefer the ordered address list from the shared download resolver
     // (IPv4/IPv6 preference and per-IP reliability), falling back to the
     // system resolver when no list is cached yet.
-    let resolver = super::proxy_context::resolver(proxy);
+    let resolver = super::proxy_context::resolver(route.proxy);
     let mut addresses = resolver.resolved_addresses(host);
     if addresses.is_empty() {
         // TTL-zero answers are usable for this attempt without entering the
@@ -605,15 +687,22 @@ async fn connect_tcp(
         addresses = resolver.resolve_host(host).await?;
     }
     let mut last_error = None;
+    // The caller holds one physical permit. Racing a second TCP socket
+    // requires another normal admission; it cannot consume the recovery slot.
+    // The loser is closed before this temporary permit is released.
+    let _race_budget =
+        address_race_budget(route, reserve_native_budget, addresses.len());
+    let parallel = _race_budget.is_some();
     if !addresses.is_empty() {
-        match connect_addresses(host, port, &addresses).await {
+        match connect_addresses(host, port, &addresses, parallel).await {
             Ok(stream) => return Ok(stream),
             Err(error) => last_error = Some(error),
         }
         if resolver.record_connection_failure(host) {
             let refreshed = resolver.resolve_host(host).await?;
             if !refreshed.is_empty() && refreshed != addresses {
-                match connect_addresses(host, port, &refreshed).await {
+                match connect_addresses(host, port, &refreshed, parallel).await
+                {
                     Ok(stream) => return Ok(stream),
                     Err(error) => last_error = Some(error),
                 }
@@ -651,6 +740,16 @@ async fn connect_tcp(
             format!("no resolved addresses available for {host}:{port}"),
         )
     }))
+}
+
+fn address_race_budget(
+    route: &DownloadRoute,
+    reserve_native_budget: bool,
+    address_count: usize,
+) -> Option<super::native_budget::NativeBudgetPermit> {
+    (reserve_native_budget && address_count > 1)
+        .then(|| super::native_budget::try_acquire(route).ok())
+        .flatten()
 }
 
 /// Connects a new shared HTTP/2 connection to `authority` (host[:port]).
@@ -700,7 +799,7 @@ async fn establish(
             ))
         })
     } else {
-        connect_tcp(host, port, route.proxy).await
+        connect_tcp(host, port, route, reserve_native_budget).await
     };
     let tcp = tcp_result.map_err(|error| {
 		H2ConnectError::new(
@@ -1014,6 +1113,15 @@ async fn shared_connection_single_attempt(
                 ),
             )
         })?;
+    if !connection_matches(route, lease.as_ref()) {
+        if let Some(connection) = cached.as_ref() {
+            connection.retire();
+        }
+        return Err(H2ConnectError::new(
+            H2ConnectFailureKind::Tcp,
+            "Endpoint changed while waiting for the H2 connection slot".into(),
+        ));
+    }
     if let Some(connection) = cached.as_ref().filter(|connection| {
         !connection.is_dead()
             && !connection.is_retiring()
@@ -1277,4 +1385,12 @@ pub(crate) async fn has_live_connection(route: &DownloadRoute) -> bool {
     slot.lock().await.as_ref().is_some_and(|connection| {
         !connection.is_dead() && !connection.is_retiring()
     })
+}
+
+#[cfg(test)]
+pub(crate) async fn hold_slot_for_test(
+    route: &DownloadRoute,
+) -> tokio::sync::OwnedMutexGuard<Option<Arc<SharedH2Connection>>> {
+    let (key, _) = connection_identity(route).unwrap();
+    connection_slot(&key).await.lock_owned().await
 }

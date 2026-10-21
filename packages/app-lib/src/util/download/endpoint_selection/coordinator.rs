@@ -69,6 +69,7 @@ pub(super) enum RoundStatus {
 
 #[derive(Clone)]
 struct Selection {
+    reconnect_overhead: Duration,
     protocol: Protocol,
     preferred: EndpointCandidate,
     backups: Vec<EndpointCandidate>,
@@ -85,6 +86,8 @@ struct ActiveRound {
 }
 
 struct State {
+    #[cfg(test)]
+    last_round_status: RoundStatus,
     active_feedback: HashMap<PoolKey, usize>,
     feedback: Option<FeedbackWindow>,
     #[cfg(test)]
@@ -112,6 +115,7 @@ struct FeedbackWindow {
 }
 
 pub(crate) struct EndpointSelector {
+    trials: Arc<super::tuning::TrialRegistry>,
     #[cfg(test)]
     pub(super) probe_fixture: Mutex<Option<ProbeFixture>>,
     mode: SelectionMode,
@@ -123,6 +127,7 @@ pub(crate) struct EndpointSelector {
 
 #[cfg(test)]
 pub(super) struct ProbeFixture {
+    pub(super) metered: bool,
     pub(super) candidates: Vec<(SocketAddr, reqwest::Certificate)>,
 }
 
@@ -173,6 +178,10 @@ impl RoundGuard {
                 .as_ref()
                 .is_some_and(|round| round.id == self.id)
             {
+                #[cfg(test)]
+                {
+                    state.last_round_status = *self.status.borrow();
+                }
                 state.round = None;
                 state.cooldown_until = Some(Instant::now() + policy::COOLDOWN);
             }
@@ -204,6 +213,18 @@ struct RoundStart {
 }
 
 impl EndpointSelector {
+    #[cfg(test)]
+    pub(super) fn trial_diagnostic(&self) -> String {
+        let state = self.state.lock();
+        format!(
+            "rounds={} active={} status={:?} generation={} probe_bytes={}",
+            state.next_round,
+            state.round.is_some(),
+            state.last_round_status,
+            state.generation,
+            self.probe_bytes.load(Ordering::Relaxed)
+        )
+    }
     #[cfg(test)]
     pub(super) fn benchmark_counters(&self) -> (u64, u64, u64) {
         let state = self.state.lock();
@@ -330,8 +351,19 @@ impl EndpointSelector {
         if current_peer == Some(lease.pool.endpoint) {
             return None;
         }
-        let speed = self.state.lock().selected.as_ref()?.speed;
-        if !policy::should_publish(current_speed, speed, remaining) {
+        let (speed, overhead) = self
+            .state
+            .lock()
+            .selected
+            .as_ref()
+            .map(|s| (s.speed, s.reconnect_overhead))?;
+        if !super::super::native_slow::should_switch_with_overhead(
+            current_speed,
+            speed,
+            remaining,
+            remaining,
+            overhead,
+        ) {
             return None;
         }
         let mut generations = request.endpoint_migration_generations.lock();
@@ -349,11 +381,12 @@ impl EndpointSelector {
         Self::with_mode(scope, SelectionMode::configured())
     }
 
-    pub(super) fn with_mode(
+    pub(crate) fn with_mode(
         scope: impl Into<Arc<str>>,
         mode: SelectionMode,
     ) -> Arc<Self> {
         Arc::new(Self {
+            trials: super::tuning::TRIALS.clone(),
             #[cfg(test)]
             probe_fixture: Mutex::new(None),
             pinned_clients: super::clients::PinnedClients::default(),
@@ -361,6 +394,8 @@ impl EndpointSelector {
             config_scope: scope.into(),
             probe_bytes: Arc::new(AtomicU64::new(0)),
             state: Mutex::new(State {
+                #[cfg(test)]
+                last_round_status: RoundStatus::NoGain,
                 active_feedback: HashMap::new(),
                 feedback: None,
                 #[cfg(test)]
@@ -633,6 +668,9 @@ impl EndpointSelector {
         remaining: u64,
         pressure: super::super::local_resources::Pressure,
     ) {
+        if self.mode != SelectionMode::Auto {
+            return;
+        }
         let Ok(url) = url::Url::parse(&route.url) else {
             return;
         };
@@ -644,7 +682,18 @@ impl EndpointSelector {
         {
             return;
         }
-        let Some(trial) = super::tuning::TRIALS.acquire(
+        {
+            let state = self.state.lock();
+            if state.closed
+                || state.round.is_some()
+                || state
+                    .cooldown_until
+                    .is_some_and(|until| until > Instant::now())
+            {
+                return;
+            }
+        }
+        let Some(trial) = self.trials.acquire(
             super::tuning::TrialKind::Endpoint,
             Instant::now(),
             policy::ROUND_TIMEOUT + Duration::from_secs(1),
@@ -677,15 +726,22 @@ impl EndpointSelector {
                     return RoundStatus::BudgetExhausted;
                 };
                 #[cfg(test)]
-                let fixture = selector.probe_fixture.lock().is_some();
+                let fixture_metered = selector
+                    .probe_fixture
+                    .lock()
+                    .as_ref()
+                    .map(|fixture| fixture.metered);
                 #[cfg(not(test))]
-                let fixture = false;
-                if !fixture
-                    && !matches!(
+                let fixture_metered: Option<bool> = None;
+                let unmetered = if let Some(metered) = fixture_metered {
+                    !metered
+                } else {
+                    matches!(
                         crate::util::network::is_network_metered().await,
                         Ok(false)
                     )
-                {
+                };
+                if !unmetered {
                     return RoundStatus::NoGain;
                 }
                 selector
@@ -834,11 +890,14 @@ impl EndpointSelector {
         while let Some(result) = pending.next().await {
             match result {
                 Ok(result) => validated.push(result),
-                Err(ProbeFailure::ServerCooldown) => {
+                Err(ProbeFailure::ServerCooldown {
+                    status,
+                    retry_after,
+                }) => {
                     native_breaker::record_response_status_failure(
                         route,
-                        429,
-                        Some(policy::COOLDOWN),
+                        status,
+                        Some(retry_after),
                     );
                     return RoundStatus::NoGain;
                 }
@@ -895,11 +954,14 @@ impl EndpointSelector {
                         Self::log_observation(&observation, epoch, generation);
                         samples.push(observation.sample);
                     }
-                    Err(ProbeFailure::ServerCooldown) => {
+                    Err(ProbeFailure::ServerCooldown {
+                        status,
+                        retry_after,
+                    }) => {
                         native_breaker::record_response_status_failure(
                             route,
-                            429,
-                            Some(policy::COOLDOWN),
+                            status,
+                            Some(retry_after),
                         );
                         return RoundStatus::NoGain;
                     }
@@ -923,8 +985,20 @@ impl EndpointSelector {
         else {
             return RoundStatus::NoGain;
         };
+        let overhead = validated
+            .iter()
+            .find(|(candidate, _)| candidate.ip == best)
+            .map(|(_, observation)| observation.ttfb)
+            .unwrap_or(Duration::from_millis(600))
+            .clamp(Duration::from_millis(100), Duration::from_secs(5));
         if best == incumbent
-            || !policy::should_publish(*current_speed, speed, remaining)
+            || !super::super::native_slow::should_switch_with_overhead(
+                *current_speed,
+                speed,
+                remaining,
+                remaining,
+                overhead,
+            )
         {
             return RoundStatus::NoGain;
         }
@@ -937,6 +1011,7 @@ impl EndpointSelector {
         };
         let previous = validated.iter().find(|(c, _)| c.ip == incumbent).map(
             |(candidate, _)| Selection {
+                reconnect_overhead: Duration::from_millis(600),
                 protocol: target.protocol,
                 preferred: candidate.clone(),
                 backups: Vec::new(),
@@ -952,6 +1027,7 @@ impl EndpointSelector {
             .filter(|c| c.ip != best)
             .collect();
         let selection = Selection {
+            reconnect_overhead: overhead,
             protocol: target.protocol,
             expires_at: preferred
                 .expires_at
@@ -1039,6 +1115,7 @@ impl EndpointSelector {
         let mut state = self.state.lock();
         state.endpoint_port = endpoint.port();
         state.selected = Some(Selection {
+            reconnect_overhead: Duration::from_millis(600),
             protocol,
             preferred: EndpointCandidate {
                 ip: endpoint.ip(),

@@ -64,7 +64,10 @@ pub(super) enum ProbeFailure {
     Transport,
     InvalidCertificate,
     Redirect,
-    ServerCooldown,
+    ServerCooldown {
+        status: u16,
+        retry_after: std::time::Duration,
+    },
     TargetMissing,
     HttpStatus,
     RangeUnsupported,

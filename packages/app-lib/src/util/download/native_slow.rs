@@ -203,6 +203,22 @@ pub(crate) fn should_switch(
     remaining_bytes: u64,
     restart_bytes: u64,
 ) -> bool {
+    should_switch_with_overhead(
+        current_speed,
+        candidate_speed,
+        remaining_bytes,
+        restart_bytes,
+        RECONNECT_OVERHEAD,
+    )
+}
+
+pub(crate) fn should_switch_with_overhead(
+    current_speed: u64,
+    candidate_speed: u64,
+    remaining_bytes: u64,
+    restart_bytes: u64,
+    reconnect_overhead: Duration,
+) -> bool {
     if current_speed == 0 || candidate_speed == 0 {
         return false;
     }
@@ -210,8 +226,9 @@ pub(crate) fn should_switch(
         return false;
     }
     let stay = estimated_duration(remaining_bytes, current_speed);
-    let switch =
-        RECONNECT_OVERHEAD + estimated_duration(restart_bytes, candidate_speed);
+    let switch = reconnect_overhead
+        .clamp(Duration::from_millis(100), Duration::from_secs(5))
+        + estimated_duration(restart_bytes, candidate_speed);
     let required_savings = MIN_SAVINGS.max(stay.mul_f64(0.15));
     switch.saturating_add(required_savings) < stay
 }
@@ -226,6 +243,24 @@ fn estimated_duration(bytes: u64, speed: u64) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn slow_cold_connection_cost_can_outweigh_tail_speed_gain() {
+        assert!(should_switch_with_overhead(
+            100_000,
+            500_000,
+            512_000,
+            512_000,
+            Duration::from_millis(100)
+        ));
+        assert!(!should_switch_with_overhead(
+            100_000,
+            500_000,
+            512_000,
+            512_000,
+            Duration::from_secs(3)
+        ));
+    }
 
     #[test]
     fn confirmed_slow_windows_do_not_wait_for_an_extra_window_when_minimum_age_matures()

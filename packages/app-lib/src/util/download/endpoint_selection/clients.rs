@@ -53,6 +53,13 @@ impl PinnedClients {
         }
         .build()?;
         let mut entries = self.entries.lock();
+        // Concurrent builders may finish together. Share the already cached
+        // handle instead of creating independent active pools for one key.
+        if let Some((_, existing)) =
+            entries.iter().find(|(key, _)| *key == lease.pool)
+        {
+            return Ok(existing.clone());
+        }
         entries.push_back((lease.pool.clone(), client.clone()));
         while entries.len() > 8 {
             entries.pop_front();

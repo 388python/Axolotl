@@ -181,7 +181,11 @@ impl ProbeSession {
                 }
                 StatusCode::TOO_MANY_REQUESTS
                 | StatusCode::SERVICE_UNAVAILABLE => {
-                    return Err(ProbeFailure::ServerCooldown);
+                    return Err(ProbeFailure::ServerCooldown {
+                        status: response.status().as_u16(),
+                        retry_after: crate::util::fetch::retry_after(&response)
+                            .unwrap_or(policy::COOLDOWN),
+                    });
                 }
                 status if status.is_redirection() => {
                     return Err(ProbeFailure::Redirect);

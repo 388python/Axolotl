@@ -430,6 +430,7 @@ async fn automatic_trial_measures_candidates_with_only_one_recovery_slot_and_res
         .trust_test_root(fast.root.clone());
     *clients.endpoints.probe_fixture.lock() =
         Some(super::super::coordinator::ProbeFixture {
+            metered: false,
             candidates: vec![
                 (slow.address, slow.root.clone()),
                 (fast.address, fast.root.clone()),
@@ -486,7 +487,13 @@ async fn automatic_trial_measures_candidates_with_only_one_recovery_slot_and_res
     });
     let result = tokio::time::timeout(Duration::from_secs(20), transfer)
         .await
-        .unwrap()
+        .unwrap_or_else(|error| {
+            panic!(
+                "{error}; {} counters={:?}",
+                selector.trial_diagnostic(),
+                request.transfer_counters.snapshot()
+            )
+        })
         .unwrap();
     assert_eq!(result.attempts, 2);
     assert_eq!(tokio::fs::read(&destination).await.unwrap(), data);
@@ -606,11 +613,14 @@ async fn native_h2_new_selection_retires_old_pool_and_preserves_authority_budget
                 .unwrap();
             assert_eq!(old.remote_addr, Some(first.address));
             let active = old.track_stream();
+            let held = h2_pool::hold_slot_for_test(&route).await;
+            let waiting = h2_pool::shared_connection(&route, true, true, false);
+            tokio::pin!(waiting);
+            assert!(futures::poll!(waiting.as_mut()).is_pending());
             selector.install_test_selection(second.address, Protocol::H2);
             assert!(!h2_pool::has_live_connection(&route).await);
-            let new = h2_pool::shared_connection(&route, true, true, false)
-                .await
-                .unwrap();
+            drop(held);
+            let new = waiting.await.unwrap();
             assert_eq!(new.remote_addr, Some(second.address));
             assert_ne!(old.connection_id, new.connection_id);
             assert!(old.is_retiring());
@@ -800,7 +810,13 @@ async fn invalid_ranges_encoding_redirect_status_and_ignored_range_never_validat
         (ResponseKind::Encoded, ProbeFailure::InvalidEncoding),
         (ResponseKind::IgnoreRange, ProbeFailure::RangeUnsupported),
         (ResponseKind::Redirect, ProbeFailure::Redirect),
-        (ResponseKind::RateLimited, ProbeFailure::ServerCooldown),
+        (
+            ResponseKind::RateLimited,
+            ProbeFailure::ServerCooldown {
+                status: 429,
+                retry_after: Duration::from_secs(30),
+            },
+        ),
         (ResponseKind::Missing, ProbeFailure::TargetMissing),
         (ResponseKind::Truncated, ProbeFailure::Truncated),
     ] {

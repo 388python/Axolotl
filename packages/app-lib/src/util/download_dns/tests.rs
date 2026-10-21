@@ -286,7 +286,12 @@ async fn first_usable_provider_does_not_wait_for_stalled_provider() {
     let slow =
         DohFixture::start(Duration::from_secs(10), Duration::from_secs(10))
             .await;
-    let resolver = fixture_resolver(&[&slow, &fast]);
+    // The third configured provider is still usable when the preferred two
+    // stall; the bounded pool must not silently discard it.
+    let other_slow =
+        DohFixture::start(Duration::from_secs(10), Duration::from_secs(10))
+            .await;
+    let resolver = fixture_resolver(&[&slow, &other_slow, &fast]);
     let addresses = tokio::time::timeout(
         Duration::from_secs(2),
         resolver.lookup_doh_family("cdn.example", RecordType::A),

@@ -403,7 +403,7 @@ impl DownloadDnsResolver {
         });
         indices
             .into_iter()
-            .take(2)
+            .take(BUILTIN_DOH_SERVERS.len())
             .map(|index| {
                 (
                     Arc::clone(&self.doh_endpoints[index]),
@@ -1032,7 +1032,6 @@ impl Resolve for DownloadDnsResolver {
                 .await?
                 .into_iter()
                 .map(|address| SocketAddr::new(address, 0))
-                .take(2)
                 .collect::<Vec<_>>();
             Ok(Box::new(addresses.into_iter()) as Addrs)
         })
@@ -1326,6 +1325,27 @@ mod tests {
 
         let body = request_with_resolver(resolver, "multi.test", port).await;
 
+        assert_eq!(body, "ok");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reqwest_uses_a_third_resolved_address_after_two_refusals() {
+        let resolver = DownloadDnsResolver::default();
+        resolver.set_test_addresses(
+            "third-address.test",
+            ["127.0.0.2", "127.0.0.3", "127.0.0.1"]
+                .into_iter()
+                .map(|ip| SocketAddr::new(ip.parse().unwrap(), 0))
+                .collect(),
+        );
+        let (port, server) = spawn_ipv4_server().await;
+        let body = tokio::time::timeout(
+            Duration::from_secs(6),
+            request_with_resolver(resolver, "third-address.test", port),
+        )
+        .await
+        .unwrap();
         assert_eq!(body, "ok");
         server.await.unwrap();
     }
