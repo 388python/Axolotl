@@ -110,6 +110,27 @@ impl NativeSlowPolicy {
         }
         let elapsed = self.window_started_at.elapsed();
         if elapsed < self.window {
+            // The minimum flow age can mature between full windows. Reuse
+            // the already-confirmed slow windows instead of delaying another
+            // three seconds while a slow tail still has recoverable work.
+            if !elapsed.is_zero()
+                && self.started_at.elapsed() >= self.min_flow
+                && self.slow_windows >= REQUIRED_SLOW_WINDOWS
+            {
+                let speed = (downloaded.saturating_sub(self.window_start_bytes)
+                    as f64
+                    / elapsed.as_secs_f64()) as u64;
+                if speed < self.speed_floor()
+                    && (remaining == 0
+                        || estimated_duration(remaining, speed)
+                            > RECONNECT_OVERHEAD + MIN_SAVINGS)
+                {
+                    self.slow_windows = 0;
+                    return SlowDecision::Probe {
+                        bytes_per_second: speed,
+                    };
+                }
+            }
             return SlowDecision::Continue;
         }
         let speed = (downloaded.saturating_sub(self.window_start_bytes) as f64
@@ -126,18 +147,7 @@ impl NativeSlowPolicy {
             self.slow_windows = 0;
             return SlowDecision::Continue;
         }
-        let expected_floor = self
-            .expected_speed
-            .map(|expected| expected.saturating_mul(40) / 100)
-            .unwrap_or(COLD_SPEED_FLOOR)
-            .max(ABSOLUTE_SPEED_FLOOR);
-        // A multiplexed stream shares bandwidth with other downloads, so a
-        // historical single-file peak alone must not trigger H2 retirement.
-        let expected_floor = if self.probe_small_transfers {
-            expected_floor.min(COLD_SPEED_FLOOR)
-        } else {
-            expected_floor
-        };
+        let expected_floor = self.speed_floor();
         if speed < expected_floor {
             self.slow_windows = self.slow_windows.saturating_add(1);
         } else {
@@ -152,6 +162,21 @@ impl NativeSlowPolicy {
             }
         } else {
             SlowDecision::Continue
+        }
+    }
+
+    fn speed_floor(&self) -> u64 {
+        let expected_floor = self
+            .expected_speed
+            .map(|expected| expected.saturating_mul(40) / 100)
+            .unwrap_or(COLD_SPEED_FLOOR)
+            .max(ABSOLUTE_SPEED_FLOOR);
+        // A multiplexed stream shares bandwidth with other downloads, so a
+        // historical single-file peak alone must not trigger H2 retirement.
+        if self.probe_small_transfers {
+            expected_floor.min(COLD_SPEED_FLOOR)
+        } else {
+            expected_floor
         }
     }
 
@@ -201,6 +226,20 @@ fn estimated_duration(bytes: u64, speed: u64) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confirmed_slow_windows_do_not_wait_for_an_extra_window_when_minimum_age_matures()
+     {
+        let mut policy = NativeSlowPolicy::new(0, None);
+        policy.started_at = Instant::now() - MIN_FLOW;
+        policy.window_started_at = Instant::now() - Duration::from_secs(1);
+        policy.slow_windows = REQUIRED_SLOW_WINDOWS;
+        assert!(matches!(
+            policy.observe(45 * 1024, 512 * 1024),
+            SlowDecision::Probe { .. }
+        ));
+        assert_eq!(policy.slow_windows, 0);
+    }
 
     #[test]
     fn ordinary_small_tail_probes_by_eta_and_keeps_monitoring_fast_tail() {

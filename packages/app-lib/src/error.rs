@@ -88,6 +88,9 @@ pub enum ErrorKind {
     #[error("download {context} stream receive timed out")]
     DownloadStreamStalled { context: String },
 
+    #[error("HTTP/2 transport error: {0}")]
+    DownloadH2Error(#[from] h2::Error),
+
     #[error("HTTP {status} for {method} {url}")]
     HttpError {
         status: u16,

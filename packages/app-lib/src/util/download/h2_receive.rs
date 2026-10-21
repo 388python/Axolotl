@@ -80,12 +80,7 @@ pub(crate) async fn receive_chunk(
             context: context.to_string(),
         })?
         .transpose()
-        .map_err(|error| {
-            crate::ErrorKind::NetworkError(format!(
-                "HTTP/2 {context} stream error: {error}"
-            ))
-            .into()
-        })
+        .map_err(|error| crate::ErrorKind::DownloadH2Error(error).into())
 }
 
 /// Returns receive-window capacity after the caller has consumed the frame.

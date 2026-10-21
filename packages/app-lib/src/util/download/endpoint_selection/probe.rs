@@ -40,8 +40,6 @@ impl ProbeSession {
         clients: &crate::util::fetch::DownloadClients,
         bytes_received: Arc<AtomicU64>,
     ) -> Result<Self, ProbeFailure> {
-        use crate::util::fetch::ProxyPolicy;
-        use crate::util::proxy::ProxyMode;
         #[cfg(test)]
         let fixture = clients.endpoints.probe_fixture.lock().as_ref().and_then(
             |fixture| {
@@ -57,17 +55,13 @@ impl ProbeSession {
             super::candidates::is_public_ip(candidate.ip) || fixture.is_some();
         #[cfg(not(test))]
         let public_candidate = super::candidates::is_public_ip(candidate.ip);
-        if clients.ignore_ssl_errors
+        if !super::EndpointSelector::eligible_network(clients, route.proxy)
             || !crate::util::download::modrinth_cdn::is_current_url(&target.url)
             || !target.url.path().starts_with("/data/")
             || target.url.query().is_some()
             || target.size == 0
             || candidate.expires_at <= Instant::now()
             || !public_candidate
-            || (route.proxy == ProxyPolicy::System
-                && (clients.proxy.mode == ProxyMode::Custom
-                    || clients.proxy.mode == ProxyMode::System
-                        && crate::util::download::native::system_proxy_configured()))
         {
             return Err(ProbeFailure::Ineligible);
         }

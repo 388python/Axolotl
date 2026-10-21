@@ -50,6 +50,7 @@ pub(crate) enum H2DownloadFailure {
     Tls,
     /// H2 transfer failure with unknown scope; never proves connection failure.
     Protocol,
+    StreamReset,
     Http,
     RangeUnsupported,
     Integrity,
@@ -65,7 +66,10 @@ impl H2DownloadFailure {
     }
 
     pub(crate) const fn is_transfer_failure(self) -> bool {
-        matches!(self, Self::Connect | Self::Tls | Self::Protocol)
+        matches!(
+            self,
+            Self::Connect | Self::Tls | Self::Protocol | Self::StreamReset
+        )
     }
 
     pub(crate) const fn integrity_failure(self) -> bool {
@@ -312,6 +316,8 @@ pub(crate) async fn try_download_via_h2(
                     && matches!(
                         failure,
                         H2DownloadFailure::Protocol
+                            | H2DownloadFailure::Connect
+                            | H2DownloadFailure::StreamReset
                             | H2DownloadFailure::Slow
                             | H2DownloadFailure::EndpointChanged
                     ),
@@ -382,11 +388,22 @@ async fn connect_authority(
     }
 }
 
-fn classify_download_error(error: &crate::Error) -> H2DownloadFailure {
+pub(crate) fn classify_download_error(
+    error: &crate::Error,
+) -> H2DownloadFailure {
     if fetch::is_integrity_error(error) {
         return H2DownloadFailure::Integrity;
     }
     match error.raw.as_ref() {
+        crate::ErrorKind::DownloadH2Error(error) => {
+            if error.is_reset() {
+                H2DownloadFailure::StreamReset
+            } else if error.is_io() {
+                H2DownloadFailure::Connect
+            } else {
+                H2DownloadFailure::Protocol
+            }
+        }
         crate::ErrorKind::DownloadEndpointChanged => {
             H2DownloadFailure::EndpointChanged
         }
@@ -490,9 +507,10 @@ pub(crate) async fn open_stream(
         .body(())
         .unwrap();
     *request.headers_mut() = headers;
-    let response = connection.open(request).await.map_err(|error| {
-        crate::ErrorKind::NetworkError(format!("HTTP/2 stream error: {error}"))
-    })?;
+    let response = connection
+        .open(request)
+        .await
+        .map_err(crate::ErrorKind::DownloadH2Error)?;
     let (parts, body) = response.into_parts();
     let response = http::Response::from_parts(parts, ());
     Ok((response, body))
@@ -835,6 +853,15 @@ mod tests {
                 &crate::ErrorKind::DownloadEndpointChanged.into()
             ),
             H2DownloadFailure::EndpointChanged
+        );
+        assert_eq!(
+            classify_download_error(
+                &crate::ErrorKind::DownloadH2Error(
+                    h2::Reason::PROTOCOL_ERROR.into()
+                )
+                .into()
+            ),
+            H2DownloadFailure::Protocol
         );
     }
 

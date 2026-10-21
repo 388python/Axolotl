@@ -36,6 +36,13 @@ pub(crate) fn download_error_category(error: &crate::Error) -> &'static str {
         ErrorKind::DownloadEndpointChanged => "endpoint_changed",
         ErrorKind::DownloadTransferSlow => "slow",
         ErrorKind::DownloadStreamStalled { .. } => "stall",
+        ErrorKind::DownloadH2Error(source) => {
+            if source.is_reset() {
+                "stream_reset"
+            } else {
+                "protocol"
+            }
+        }
         ErrorKind::FetchError(source) => {
             let detail = format!("{source:?}").to_ascii_lowercase();
             if source.status().is_some() {

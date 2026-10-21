@@ -107,6 +107,7 @@ impl TlsFixture {
         let root = reqwest::Certificate::from_der(ca.der()).unwrap();
         let requests = Arc::new(AtomicU64::new(0));
         let counted = requests.clone();
+        let expected_host = host.to_string();
         let server = tokio::spawn(async move {
             let mut handlers = tokio::task::JoinSet::new();
             loop {
@@ -115,9 +116,10 @@ impl TlsFixture {
                         let Ok((socket, _)) = incoming else { break };
                         let acceptor = acceptor.clone();
                         let counted = counted.clone();
+                        let expected_host = expected_host.clone();
                         handlers.spawn(async move {
                             let Ok(mut stream) = acceptor.accept(socket).await else { return };
-                            assert_eq!(stream.get_ref().1.server_name(), Some("cdn.modrinth.com"));
+                            assert_eq!(stream.get_ref().1.server_name(), Some(expected_host.as_str()));
                             if protocol == Protocol::H2 {
                                 let mut connection = h2::server::handshake(stream).await.unwrap();
                                 let mut transfers = tokio::task::JoinSet::new();
@@ -162,10 +164,12 @@ impl TlsFixture {
                             }
                             counted.fetch_add(1, Ordering::SeqCst);
                             let request = String::from_utf8(request).unwrap();
-                            assert!(request.lines().any(|line| line == "host: cdn.modrinth.com"
-                                || line.starts_with("host: cdn.modrinth.com:")));
-                            assert!(!request.contains("authorization:"));
-                            assert!(!request.contains(crate::util::fetch::DOWNLOAD_META_HEADER));
+                            assert!(request.lines().any(|line| line == format!("host: {expected_host}")
+                                || line.starts_with(&format!("host: {expected_host}:"))));
+                            if !matches!(kind, ResponseKind::Redirect) {
+                                assert!(!request.contains("authorization:"));
+                                assert!(!request.contains(crate::util::fetch::DOWNLOAD_META_HEADER));
+                            }
                             if matches!(kind, ResponseKind::SlowFile | ResponseKind::File) {
                                 let range = request.lines().find_map(|line| line.strip_prefix("range: bytes="));
                                 let start = range.map(|range| range.split_once('-').unwrap().0.parse::<usize>().unwrap()).unwrap_or(0);
@@ -304,6 +308,50 @@ fn fixture_route() -> DownloadRoute {
 }
 
 #[tokio::test]
+async fn pinned_redirect_uses_other_hosts_normal_client_and_removes_authorization()
+ {
+    let origin =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::Redirect).await;
+    let other = TlsFixture::start_on(
+        "different.invalid",
+        ResponseKind::Valid,
+        Protocol::Http1,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let mut clients = production_clients(&origin);
+    let fallback = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .http1_only()
+        .add_root_certificate(other.root.clone())
+        .resolve("different.invalid", other.address)
+        .build()
+        .unwrap();
+    clients.direct = fallback.clone();
+    clients.http1_direct = fallback;
+    let (response, _) =
+        crate::util::download::native_request::send_path_request_with_clients(
+            &fixture_route(),
+            Some(&("Authorization".into(), "secret-token".into())),
+            None,
+            None,
+            Some(0),
+            Some(65535),
+            &clients,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.remote_addr(), Some(other.address));
+    assert_eq!(response.url().host_str(), Some("different.invalid"));
+    assert_eq!(response.bytes().await.unwrap().len(), 65536);
+    assert_eq!(origin.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(other.requests.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn native_h2_tries_verified_backup_after_primary_tcp_accepts_but_tls_fails()
  {
     use crate::util::download::{h2_pool, proxy_context};
@@ -361,7 +409,7 @@ async fn native_h2_tries_verified_backup_after_primary_tcp_accepts_but_tls_fails
 }
 
 #[tokio::test]
-async fn automatic_trial_measures_candidates_publishes_and_resumes_real_https_file()
+async fn automatic_trial_measures_candidates_with_only_one_recovery_slot_and_resumes_real_https_file()
  {
     use crate::util::download::{native_slow, proxy_context};
     let slow =
@@ -405,6 +453,20 @@ async fn automatic_trial_measures_candidates_publishes_and_resumes_real_https_fi
     let semaphore =
         crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(4));
     let transfer = proxy_context::with_snapshot(clients, async {
+        let mut occupied_route = fixture_route();
+        occupied_route.proxy = ProxyPolicy::System;
+        let _occupied: Vec<_> = (0..30)
+            .map(|_| {
+                crate::util::download::native_budget::try_acquire(
+                    &occupied_route,
+                )
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(
+            crate::util::download::native_budget::available(&occupied_route),
+            2
+        );
         for proxy in [ProxyPolicy::System, ProxyPolicy::Direct] {
             crate::util::fetch::record_authority_h2_failure_for(
                 "cdn.modrinth.com:443",

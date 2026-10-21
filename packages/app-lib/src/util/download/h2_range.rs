@@ -158,9 +158,13 @@ impl RangeTransport for NativeRangeTransport<'_> {
             .await;
             let (response, body) = match opened {
                 Ok(opened) => opened,
-                Err(_) => {
-                    self.protocol_failed.store(true, Ordering::Relaxed);
-                    return Err(H2DownloadFailure::Protocol);
+                Err(error) => {
+                    let failure =
+                        super::h2_download::classify_download_error(&error);
+                    if failure == H2DownloadFailure::Protocol {
+                        self.protocol_failed.store(true, Ordering::Relaxed);
+                    }
+                    return Err(failure);
                 }
             };
             if response.status() != StatusCode::PARTIAL_CONTENT
@@ -200,16 +204,9 @@ impl RangeTransport for NativeRangeTransport<'_> {
                         }
                         Ok(None) => None,
                         Err(error) => Some((
-                            Err(
-                                if matches!(
-                                    error.raw.as_ref(),
-                                    crate::ErrorKind::DownloadStreamStalled { .. }
-                                ) {
-                                    H2DownloadFailure::Slow
-                                } else {
-                                    H2DownloadFailure::Protocol
-                                },
-                            ),
+                            Err(super::h2_download::classify_download_error(
+                                &error,
+                            )),
                             (None, permit, connection_for_metrics),
                         )),
                     }

@@ -55,11 +55,12 @@ async fn send_cdn_request_inner(
     for hop in 0..=5 {
         let next_request = request.try_clone();
         let pinned = selection.and_then(|(clients, proxy)| {
-            let fallback = url_authority(request.url().as_str()).is_some_and(
-                |authority| {
-                    authority_uses_http1_fallback_for(&authority, proxy)
-                },
-            );
+            let fallback = clients.force_http1
+                || url_authority(request.url().as_str()).is_some_and(
+                    |authority| {
+                        authority_uses_http1_fallback_for(&authority, proxy)
+                    },
+                );
             clients.endpoints.client_for(
                 request.url(),
                 proxy,

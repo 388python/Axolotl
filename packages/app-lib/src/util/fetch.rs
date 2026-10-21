@@ -1125,6 +1125,9 @@ pub fn build_proxied_client(
 }
 
 pub async fn configured_client() -> crate::Result<reqwest::Client> {
+    if let Some(clients) = super::download::proxy_context::explicit_clients() {
+        return Ok(clients.metadata);
+    }
     Ok(crate::State::get().await?.configured_http_client())
 }
 
@@ -3600,6 +3603,16 @@ fn native_first_byte_timeout(
     route: &DownloadRoute,
     has_alternate_route: bool,
 ) -> time::Duration {
+    #[cfg(test)]
+    if BENCHMARK_TIMING.try_with(|_| ()).is_ok() {
+        return time::Duration::from_secs(
+            if route.is_mirror && has_alternate_route {
+                5
+            } else {
+                20
+            },
+        );
+    }
     if route.is_mirror && has_alternate_route {
         REASSIGNABLE_FIRST_BYTE_TIMEOUT
     } else {
@@ -4043,6 +4056,14 @@ async fn run_task_probe(
             notify: notify.clone(),
             armed: true,
         };
+        use super::download::endpoint_selection::tuning::{TRIALS, TrialKind};
+        let Some(_trial) = TRIALS.acquire(
+            TrialKind::Endpoint,
+            Instant::now(),
+            TASK_PROBE_MAX_WAIT + time::Duration::from_secs(1),
+        ) else {
+            return false;
+        };
         let mut probes = futures::stream::FuturesUnordered::new();
         for route in &plan.candidates {
             probes.push(probe_route_throughput(
@@ -4060,10 +4081,11 @@ async fn run_task_probe(
         }
         while probes.next().await.is_some() {}
         guard.disarm();
+        true
     };
     let completed = tokio::time::timeout(TASK_PROBE_MAX_WAIT, probe)
         .await
-        .is_ok();
+        .unwrap_or(false);
     {
         let mut families = plan.state.families.lock();
         if let Some(entry) = families.get_mut(&plan.family) {
@@ -4088,6 +4110,18 @@ async fn ensure_task_routes_probed(
     system_client: &reqwest::Client,
     direct_client: &reqwest::Client,
 ) {
+    if super::download::proxy_context::clients().is_some_and(|clients| {
+        clients.endpoints.mode() == super::download::endpoint_selection::SelectionMode::Auto
+            && request.integrity.supports_resume() && request.header.is_none()
+            && Url::parse(&request.url).is_ok_and(|url| modrinth_cdn::is_current_url(&url) && url.path().starts_with("/data/") && url.query().is_none())
+            && !routes.is_empty() && routes.iter().all(|route| !route.is_mirror
+                && Url::parse(&route.url).is_ok_and(|url| modrinth_cdn::is_current_url(&url))
+                && super::download::endpoint_selection::EndpointSelector::eligible_network(&clients, route.proxy))
+    }) {
+        // One official authority has no alternate URL to rank. Its endpoint
+        // selector owns any needed throughput trial and shared body budget.
+        return;
+    }
     let Some(plan) = build_task_probe_plan(request, routes, semaphore) else {
         return;
     };
@@ -5958,6 +5992,23 @@ pub(crate) async fn download_endpoint_fixture(
     download_to_path_inner(request, destination, semaphore, None).await
 }
 
+#[cfg(test)]
+tokio::task_local! { static BENCHMARK_TIMING: (); }
+
+#[cfg(test)]
+pub(crate) async fn download_benchmark_fixture(
+    request: DownloadRequest,
+    destination: &Path,
+    semaphore: &FetchSemaphore,
+) -> crate::Result<DownloadResult> {
+    BENCHMARK_TIMING
+        .scope(
+            (),
+            download_to_path_inner(request, destination, semaphore, None),
+        )
+        .await
+}
+
 enum NativeSegmentedAttempt {
     RetryRoute,
     Completed(DownloadResult),
@@ -7274,15 +7325,6 @@ async fn run_native_route_attempts(
             // the short body is verified below instead, because a
             // broken CDN or manifest can under-report the size while
             // the received content is actually complete and correct.
-            if http_version == reqwest::Version::HTTP_2
-                && let Some(authority) = url_authority(&route.url)
-            {
-                tracing::warn!(
-                    authority,
-                    "Truncated HTTP/2 response; retrying over HTTP/1.1"
-                );
-                record_authority_h2_failure_for(&authority, route.proxy);
-            }
             record_route_failure(route, request.resource, None);
             preserve_or_remove_partial(
                 part_path,
@@ -7320,15 +7362,6 @@ async fn run_native_route_attempts(
             verify_computed_integrity(&request.integrity, &computed)
         {
             record_route_failure(route, request.resource, None);
-            if http_version == reqwest::Version::HTTP_2
-                && let Some(authority) = url_authority(&route.url)
-            {
-                tracing::warn!(
-                    authority,
-                    "Integrity failure on an HTTP/2 response; retrying over HTTP/1.1"
-                );
-                record_authority_h2_failure_for(&authority, route.proxy);
-            }
             // A short body is kept as a resumable partial; a body that
             // arrived in full is discarded so the retry restarts.
             if downloaded < expected_size.unwrap_or(0) {
@@ -7396,15 +7429,6 @@ async fn run_native_route_attempts(
             validate_file_content(part_path, request.integrity.content).await
         {
             record_route_failure(route, request.resource, None);
-            if http_version == reqwest::Version::HTTP_2
-                && let Some(authority) = url_authority(&route.url)
-            {
-                tracing::warn!(
-                    authority,
-                    "Content validation failed on an HTTP/2 response; retrying over HTTP/1.1"
-                );
-                record_authority_h2_failure_for(&authority, route.proxy);
-            }
             if downloaded < expected_size.unwrap_or(0) {
                 preserve_or_remove_partial(
                     part_path,
@@ -9655,8 +9679,7 @@ mod tests {
             .unwrap(),
             H2AttemptResult::Fallback { .. }
         ));
-        let protocol_failed = matches!(failure, H2FailureFixture::Reset);
-        assert_eq!(connection.is_retiring(), protocol_failed);
+        assert!(!connection.is_retiring());
         assert!(
             !connection.is_dead(),
             "healthy stream must keep its driver alive"
@@ -9664,16 +9687,13 @@ mod tests {
         assert_eq!(
             super::super::download::h2_pool::has_live_connection(&primary)
                 .await,
-            !protocol_failed
+            true
         );
-        assert_eq!(scheduler.select_connection().is_none(), protocol_failed);
+        assert!(scheduler.select_connection().is_some());
         connection.release_stream_reservation();
         scheduler.prune();
-        assert_eq!(scheduler.select_connection().is_none(), protocol_failed);
+        assert!(scheduler.select_connection().is_some());
         connection.release_stream_reservation();
-        if protocol_failed {
-            assert!(connection.open(http::Request::new(())).await.is_err());
-        }
         finish_healthy.notify_one();
         let healthy_bytes =
             tokio::time::timeout(Duration::from_secs(3), healthy_download)
@@ -9698,7 +9718,7 @@ mod tests {
                 &url_authority(&url).unwrap(),
                 primary.proxy
             ),
-            protocol_failed
+            false
         );
         if resume {
             let len = tokio::fs::metadata(&part).await.unwrap().len();
@@ -10694,70 +10714,97 @@ mod tests {
 
     #[tokio::test]
     async fn nonempty_json_fetch_rejects_empty_collections() {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .connect_lazy("sqlite::memory:")
-            .unwrap();
-        let semaphore = FetchSemaphore(Semaphore::new(4));
-
-        let (url, requests, server) = spawn_json_server("[]".to_string()).await;
-        let result = fetch_json_nonempty::<Vec<serde_json::Value>>(
-            Method::GET,
-            &url,
-            None,
-            None,
-            None,
-            &semaphore,
-            &pool,
+        let clients = DownloadClients::build(
+            &crate::util::proxy::ProxyConfig {
+                mode: crate::util::proxy::ProxyMode::None,
+                ..Default::default()
+            },
+            false,
+            false,
         )
-        .await;
-        assert!(
-            result.is_err(),
-            "an empty JSON array must be rejected as invalid data"
-        );
-        assert_eq!(requests.load(Ordering::Relaxed), 1);
-        server.abort();
+        .unwrap();
+        super::super::download::proxy_context::with_snapshot(clients, async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .connect_lazy("sqlite::memory:")
+                .unwrap();
+            let semaphore = FetchSemaphore(Semaphore::new(4));
 
-        let (url, requests, server) =
-            spawn_json_server("[1,2,3]".to_string()).await;
-        let result = fetch_json_nonempty::<Vec<serde_json::Value>>(
-            Method::GET,
-            &url,
-            None,
-            None,
-            None,
-            &semaphore,
-            &pool,
-        )
+            let (url, requests, server) =
+                spawn_json_server("[]".to_string()).await;
+            let result = fetch_json_nonempty::<Vec<serde_json::Value>>(
+                Method::GET,
+                &url,
+                None,
+                None,
+                None,
+                &semaphore,
+                &pool,
+            )
+            .await;
+            assert!(
+                result.is_err(),
+                "an empty JSON array must be rejected as invalid data"
+            );
+            assert_eq!(requests.load(Ordering::Relaxed), 1);
+            server.abort();
+
+            let (url, requests, server) =
+                spawn_json_server("[1,2,3]".to_string()).await;
+            let result = fetch_json_nonempty::<Vec<serde_json::Value>>(
+                Method::GET,
+                &url,
+                None,
+                None,
+                None,
+                &semaphore,
+                &pool,
+            )
+            .await;
+            let values =
+                result.expect("a non-empty JSON array should be accepted");
+            assert_eq!(values.len(), 3);
+            assert_eq!(requests.load(Ordering::Relaxed), 1);
+            server.abort();
+        })
         .await;
-        let values = result.expect("a non-empty JSON array should be accepted");
-        assert_eq!(values.len(), 3);
-        assert_eq!(requests.load(Ordering::Relaxed), 1);
-        server.abort();
     }
 
     #[tokio::test]
     async fn regular_json_fetch_still_accepts_empty_collections() {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .connect_lazy("sqlite::memory:")
-            .unwrap();
-        let semaphore = FetchSemaphore(Semaphore::new(4));
-
-        let (url, requests, server) = spawn_json_server("[]".to_string()).await;
-        let result = fetch_json::<Vec<serde_json::Value>>(
-            Method::GET,
-            &url,
-            None,
-            None,
-            None,
-            &semaphore,
-            &pool,
+        let clients = DownloadClients::build(
+            &crate::util::proxy::ProxyConfig {
+                mode: crate::util::proxy::ProxyMode::None,
+                ..Default::default()
+            },
+            false,
+            false,
         )
+        .unwrap();
+        super::super::download::proxy_context::with_snapshot(clients, async {
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .connect_lazy("sqlite::memory:")
+                .unwrap();
+            let semaphore = FetchSemaphore(Semaphore::new(4));
+
+            let (url, requests, server) =
+                spawn_json_server("[]".to_string()).await;
+            let result = fetch_json::<Vec<serde_json::Value>>(
+                Method::GET,
+                &url,
+                None,
+                None,
+                None,
+                &semaphore,
+                &pool,
+            )
+            .await;
+            let values = result
+                .expect("regular JSON fetches keep accepting empty arrays");
+            assert!(values.is_empty());
+            assert_eq!(requests.load(Ordering::Relaxed), 1);
+            server.abort();
+        })
         .await;
-        let values =
-            result.expect("regular JSON fetches keep accepting empty arrays");
-        assert!(values.is_empty());
-        assert_eq!(requests.load(Ordering::Relaxed), 1);
-        server.abort();
     }
 
     #[test]

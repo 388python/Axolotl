@@ -204,6 +204,15 @@ struct RoundStart {
 }
 
 impl EndpointSelector {
+    #[cfg(test)]
+    pub(super) fn benchmark_counters(&self) -> (u64, u64, u64) {
+        let state = self.state.lock();
+        (
+            self.probe_bytes.load(Ordering::Relaxed),
+            state.generation,
+            state.next_round,
+        )
+    }
     pub(crate) fn begin_feedback(&self, lease: &EndpointLease) {
         let mut state = self.state.lock();
         *state.active_feedback.entry(lease.pool.clone()).or_default() += 1;
@@ -385,6 +394,10 @@ impl EndpointSelector {
             && (proxy == ProxyPolicy::Direct
                 || clients.proxy.mode == ProxyMode::None
                 || clients.proxy.mode == ProxyMode::System
+                    // reqwest can discover macOS proxies outside the env
+                    // variables checked by the native transport. Until that
+                    // OS lookup is shared, an unknown path cannot be pinned.
+                    && !cfg!(target_os = "macos")
                     && !native::system_proxy_configured())
     }
 
@@ -810,7 +823,13 @@ impl EndpointSelector {
                     .await?;
                 Ok::<_, ProbeFailure>((candidate, observation))
             }))
-            .buffer_unordered(policy::VALIDATION_CONCURRENCY);
+            // A saturated authority may have only its reserved recovery
+            // slot. Validate sequentially in that case instead of rejecting
+            // every candidate while the first probe owns the only permit.
+            .buffer_unordered(
+                policy::VALIDATION_CONCURRENCY
+                    .min(super::super::native_budget::available(route).max(1)),
+            );
         let mut validated = Vec::new();
         while let Some(result) = pending.next().await {
             match result {
