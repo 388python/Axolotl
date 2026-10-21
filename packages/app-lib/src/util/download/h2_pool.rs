@@ -7,6 +7,29 @@
 //! connection paths remain available for later re-enablement, but are
 //! temporarily disabled while their failure behavior is stabilized.
 
+use crate::util::download::constants::H2_ADDITIONAL_CONNECTIONS_ENABLED as ADDITIONAL_H2_CONNECTIONS_ENABLED;
+use crate::util::download::constants::H2_CONNECTION_ATTEMPTS;
+use crate::util::download::constants::{
+    DOWNLOAD_SCHEDULING_GRACE, H2_ADMISSION_LOG_THRESHOLD,
+    H2_CONNECTION_WINDOW, H2_INITIAL_STREAM_WINDOW, H2_POOL_ADMISSION,
+    H2_POOL_ENDPOINT_CHANGED_BEFORE_H2_STREAM_ASSIGNMENT,
+    H2_POOL_ENDPOINT_CHANGED_WHILE_WAITING_FOR_THE_H2_CONNECTION_SLOT,
+    H2_POOL_ENDPOINT_DID_NOT_NEGOTIATE_H2,
+    H2_POOL_ENDPOINT_SELECTION_CHANGED_DURING_H2_EXPANSION,
+    H2_POOL_ENDPOINT_SELECTION_CHANGED_DURING_THE_H2_HANDSHAKE,
+    H2_POOL_H2_CONNECTION_DEADLINE_EXHAUSTED, H2_POOL_HEADERS,
+    H2_POOL_HTTP_2_POLICY_REQUIRES_AN_EXISTING_SHARED_CONNECTION,
+    H2_POOL_HTTP_2_POOL_HAS_NO_LIVE_CONNECTION,
+    H2_POOL_HTTP_2_ROUTE_HAS_NO_AUTHORITY,
+    H2_POOL_PINNED_TCP_CONNECTION_TIMED_OUT,
+    H2_POOL_SHARED_HTTP_2_CONNECTION_IS_NOT_COVERED_BY_THE, HTTPS_PORT,
+    MODRINTH_CDN_AUTHORITY,
+};
+#[cfg(test)]
+use crate::util::download::constants::{
+    H2_CONNECTION_PROBE_TIMEOUT, H2_DNS_REFRESH_TIMEOUT,
+    H2_POOL_TEST_INVALID_443,
+};
 use bytes::Bytes;
 use futures::stream::{FuturesUnordered, StreamExt};
 use h2::client::SendRequest;
@@ -25,18 +48,19 @@ use tokio_rustls::TlsConnector;
 use super::endpoint_selection::{EndpointLease, Protocol};
 use crate::util::fetch::DownloadRoute;
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-const HAPPY_EYEBALLS_IPV4_DELAY: Duration = Duration::from_millis(150);
-const HAPPY_EYEBALLS_IPV6_DELAY: Duration = Duration::from_millis(80);
-const STREAM_READY_TIMEOUT: Duration = Duration::from_secs(30);
-const IDLE_EVICTION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(15);
+use super::constants::{
+    H2_CONNECT_TIMEOUT as CONNECT_TIMEOUT,
+    H2_CONNECTION_WAIT_TIMEOUT as CONNECTION_WAIT_TIMEOUT,
+    H2_HAPPY_EYEBALLS_IPV4_DELAY as HAPPY_EYEBALLS_IPV4_DELAY,
+    H2_HAPPY_EYEBALLS_IPV6_DELAY as HAPPY_EYEBALLS_IPV6_DELAY,
+    H2_IDLE_EVICTION_TIMEOUT as IDLE_EVICTION_TIMEOUT,
+    H2_STREAM_READY_TIMEOUT as STREAM_READY_TIMEOUT,
+    H2_TLS_HANDSHAKE_TIMEOUT as TLS_HANDSHAKE_TIMEOUT,
+};
 // Temporarily keep one multiplexed H2 connection per authority while the
 // additional-connection path is being stabilized. Re-enable the adaptive
 // pool and asset sibling connection together after their failure behavior is
 // verified.
-const ADDITIONAL_H2_CONNECTIONS_ENABLED: bool = true;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub(crate) enum H2ConnectFailureKind {
@@ -146,7 +170,7 @@ impl SharedH2Connection {
 
     #[cfg(test)]
     pub(crate) fn for_test(sender: SendRequest<Bytes>) -> Self {
-        Self::new("test.invalid:443".to_string(), sender, None)
+        Self::new(H2_POOL_TEST_INVALID_443.to_string(), sender, None)
     }
 
     #[cfg(test)]
@@ -340,7 +364,7 @@ impl SharedH2Connection {
                     h2::Error::from(h2::Reason::ENHANCE_YOUR_CALM)
                 })??;
         let ready_wait = ready_started.elapsed();
-        if ready_wait >= Duration::from_millis(25) {
+        if ready_wait >= H2_ADMISSION_LOG_THRESHOLD {
             tracing::debug!(
                 authority = %self.authority,
                 ready_wait_ms = ready_wait.as_millis(),
@@ -386,7 +410,7 @@ fn connection_identity(
         crate::util::fetch::url_authority(&route.url).ok_or_else(|| {
             H2ConnectError::new(
                 H2ConnectFailureKind::Protocol,
-                "HTTP/2 route has no authority".into(),
+                H2_POOL_HTTP_2_ROUTE_HAS_NO_AUTHORITY.into(),
             )
         })?;
     let lease = super::proxy_context::clients().and_then(|clients| {
@@ -577,7 +601,7 @@ mod address_tests {
             "127.0.0.1".parse().unwrap(),
         ];
         let stream = tokio::time::timeout(
-            Duration::from_secs(5),
+            H2_CONNECTION_PROBE_TIMEOUT,
             connect_addresses(
                 "three-addresses.invalid",
                 port,
@@ -650,7 +674,7 @@ mod address_tests {
             assert_eq!(super::super::native_budget::available(&route), 1);
             assert!(address_race_budget(&route, true, 3).is_none());
             let stream = tokio::time::timeout(
-                Duration::from_secs(6),
+                H2_DNS_REFRESH_TIMEOUT,
                 connect_tcp("cdn.modrinth.com", port, &route, true),
             )
             .await
@@ -773,7 +797,7 @@ async fn establish(
         crate::util::fetch::url_authority(&route.url).ok_or_else(|| {
             H2ConnectError::new(
                 H2ConnectFailureKind::Protocol,
-                "HTTP/2 route has no authority".to_string(),
+                H2_POOL_HTTP_2_ROUTE_HAS_NO_AUTHORITY.to_string(),
             )
         })?;
     let physical_budget = if reserve_native_budget {
@@ -788,8 +812,8 @@ async fn establish(
     };
     let (host, port) = authority
         .rsplit_once(':')
-        .map(|(host, port)| (host, port.parse::<u16>().unwrap_or(443)))
-        .unwrap_or((&authority, 443));
+        .map(|(host, port)| (host, port.parse::<u16>().unwrap_or(HTTPS_PORT)))
+        .unwrap_or((&authority, HTTPS_PORT));
 
     let tcp_result = if let Some(lease) = &lease {
         tokio::time::timeout(
@@ -800,7 +824,7 @@ async fn establish(
         .unwrap_or_else(|_| {
             Err(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
-                "Pinned TCP connection timed out",
+                H2_POOL_PINNED_TCP_CONNECTION_TIMED_OUT,
             ))
         })
     } else {
@@ -844,14 +868,14 @@ async fn establish(
     if tls.get_ref().1.alpn_protocol() != Some(b"h2") {
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Protocol,
-            "Endpoint did not negotiate h2".into(),
+            H2_POOL_ENDPOINT_DID_NOT_NEGOTIATE_H2.into(),
         ));
     }
 
     let mut builder = h2::client::Builder::new();
     builder
-        .initial_window_size(1024 * 1024)
-        .initial_connection_window_size(64 * 1024 * 1024);
+        .initial_window_size(H2_INITIAL_STREAM_WINDOW)
+        .initial_connection_window_size(H2_CONNECTION_WINDOW);
     let (sender, mut connection) =
         builder.handshake(Box::pin(tls)).await.map_err(|error| {
             H2ConnectError::new(
@@ -872,7 +896,7 @@ async fn establish(
     // the peer send a whole small file without round trips.
     // Keep the adaptive connection target aligned with the initial connection
     // window configured before the handshake.
-    connection.set_target_window_size(64 * 1024 * 1024);
+    connection.set_target_window_size(H2_CONNECTION_WINDOW);
 
     let mut shared =
         SharedH2Connection::new(authority.clone(), sender, physical_budget);
@@ -939,7 +963,7 @@ async fn wait_for_idle(
                 return;
             };
             if connection.active_streams() > 0 {
-                timeout.min(Duration::from_secs(1))
+                timeout.min(DOWNLOAD_SCHEDULING_GRACE)
             } else {
                 timeout.saturating_sub(
                     connection
@@ -1068,7 +1092,7 @@ async fn shared_connection_single(
     allow_cold_connection: bool,
 ) -> Result<Arc<SharedH2Connection>, H2ConnectError> {
     let deadline = tokio::time::Instant::now() + CONNECTION_WAIT_TIMEOUT;
-    for attempt in 0..2 {
+    for attempt in 0..H2_CONNECTION_ATTEMPTS {
         let (_, lease) = connection_identity(route)?;
         let result = tokio::time::timeout_at(
             deadline,
@@ -1082,7 +1106,7 @@ async fn shared_connection_single(
         .map_err(|_| {
             H2ConnectError::new(
                 H2ConnectFailureKind::Tcp,
-                "H2 connection deadline exhausted".into(),
+                H2_POOL_H2_CONNECTION_DEADLINE_EXHAUSTED.into(),
             )
         })?;
         match result {
@@ -1121,7 +1145,7 @@ async fn shared_connection_single_attempt(
         crate::util::fetch::url_authority(&route.url).ok_or_else(|| {
             H2ConnectError::new(
                 H2ConnectFailureKind::Protocol,
-                "HTTP/2 route has no authority".to_string(),
+                H2_POOL_HTTP_2_ROUTE_HAS_NO_AUTHORITY.to_string(),
             )
         })?;
     let (key, lease) = connection_identity(route)?;
@@ -1144,7 +1168,8 @@ async fn shared_connection_single_attempt(
         }
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Tcp,
-            "Endpoint changed while waiting for the H2 connection slot".into(),
+            H2_POOL_ENDPOINT_CHANGED_WHILE_WAITING_FOR_THE_H2_CONNECTION_SLOT
+                .into(),
         ));
     }
     if let Some(connection) = cached.as_ref().filter(|connection| {
@@ -1158,8 +1183,7 @@ async fn shared_connection_single_attempt(
         }
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Protocol,
-            "shared HTTP/2 connection is not covered by the native connection budget"
-                .to_string(),
+            H2_POOL_SHARED_HTTP_2_CONNECTION_IS_NOT_COVERED_BY_THE.to_string(),
         ));
     }
     if cached.as_ref().is_some_and(|connection| {
@@ -1177,7 +1201,8 @@ async fn shared_connection_single_attempt(
     if !allow_cold_connection {
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Protocol,
-            "HTTP/2 policy requires an existing shared connection".to_string(),
+            H2_POOL_HTTP_2_POLICY_REQUIRES_AN_EXISTING_SHARED_CONNECTION
+                .to_string(),
         ));
     }
     tracing::debug!(authority, "Establishing cold shared HTTP/2 connection");
@@ -1196,7 +1221,7 @@ async fn shared_connection_single_attempt(
         connection.retire();
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Tcp,
-            "Endpoint selection changed during the H2 handshake".into(),
+            H2_POOL_ENDPOINT_SELECTION_CHANGED_DURING_THE_H2_HANDSHAKE.into(),
         ));
     }
     *cached = Some(Arc::clone(&connection));
@@ -1232,7 +1257,7 @@ pub(crate) async fn shared_connection(
         primary.retire();
         return Err(H2ConnectError::new(
             H2ConnectFailureKind::Tcp,
-            "Endpoint changed before H2 stream assignment".into(),
+            H2_POOL_ENDPOINT_CHANGED_BEFORE_H2_STREAM_ASSIGNMENT.into(),
         ));
     }
     let pool = parallel_connection_pool(&key).await;
@@ -1253,7 +1278,8 @@ pub(crate) async fn shared_connection(
                     sibling.retire();
                     return Err(H2ConnectError::new(
                         H2ConnectFailureKind::Tcp,
-                        "Endpoint selection changed during H2 expansion".into(),
+                        H2_POOL_ENDPOINT_SELECTION_CHANGED_DURING_H2_EXPANSION
+                            .into(),
                     ));
                 }
                 Ok(sibling)
@@ -1284,7 +1310,7 @@ where
         + 'static,
 {
     let mut state = pool.lock().await;
-    if primary.authority == "cdn.modrinth.com:443"
+    if primary.authority == MODRINTH_CDN_AUTHORITY
         && super::proxy_context::clients().is_some_and(|clients| {
             clients.endpoints.mode()
                 == super::endpoint_selection::SelectionMode::Auto
@@ -1301,7 +1327,7 @@ where
     let selected = state.select_connection().ok_or_else(|| {
         H2ConnectError::new(
             H2ConnectFailureKind::Protocol,
-            "HTTP/2 pool has no live connection".into(),
+            H2_POOL_HTTP_2_POOL_HAS_NO_LIVE_CONNECTION.into(),
         )
     })?;
     let connecting =

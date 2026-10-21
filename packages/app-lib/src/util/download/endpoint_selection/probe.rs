@@ -2,6 +2,11 @@ use super::model::{
     EndpointCandidate, ProbeFailure, ProbeTarget, Protocol, ThroughputSample,
 };
 use super::policy::{self, ProbeBudget};
+use crate::util::download::constants::MAX_CERTIFICATE_DIAGNOSTIC_CHARS;
+use crate::util::download::constants::{
+    DIAGNOSTICS_CERTIFICATE, IDENTITY_ENCODING, MODRINTH_DATA_PREFIX,
+    PROBE_CERTNOTVALIDFORNAME, PROBE_X_CACHE, PROBE_X_SERVED_BY,
+};
 use crate::util::download::native_budget::NativeBudgetPermit;
 use crate::util::fetch::DownloadRoute;
 use parking_lot::Mutex;
@@ -60,7 +65,7 @@ impl ProbeSession {
         let public_candidate = super::candidates::is_public_ip(candidate.ip);
         if !super::EndpointSelector::eligible_network(clients, route.proxy)
             || !crate::util::download::modrinth_cdn::is_current_url(&target.url)
-            || !target.url.path().starts_with("/data/")
+            || !target.url.path().starts_with(MODRINTH_DATA_PREFIX)
             || target.url.query().is_some()
             || target.size == 0
             || target.region.start >= target.region.end
@@ -187,7 +192,7 @@ impl ProbeSession {
                             self.target.region.start + length - 1
                         ),
                     )
-                    .header(header::ACCEPT_ENCODING, "identity")
+                    .header(header::ACCEPT_ENCODING, IDENTITY_ENCODING)
                     .send(),
             )
             .await
@@ -231,8 +236,10 @@ impl ProbeSession {
             if response.version() != expected {
                 return Err(ProbeFailure::WrongProtocol);
             }
-            let x_served_by = bounded_header(response.headers(), "x-served-by");
-            let cache_status = bounded_header(response.headers(), "x-cache");
+            let x_served_by =
+                bounded_header(response.headers(), PROBE_X_SERVED_BY);
+            let cache_status =
+                bounded_header(response.headers(), PROBE_X_CACHE);
             let body_started = Instant::now();
             let mut received = 0u64;
             let mut complete = false;
@@ -344,7 +351,8 @@ fn probe_client_builder(
 
 pub(crate) fn invalid_certificate(error: &reqwest::Error) -> bool {
     let detail = format!("{error:?}").to_ascii_lowercase();
-    detail.contains("certificate") || detail.contains("certnotvalidforname")
+    detail.contains(DIAGNOSTICS_CERTIFICATE)
+        || detail.contains(PROBE_CERTNOTVALIDFORNAME)
 }
 
 fn classify_transport(error: reqwest::Error) -> ProbeFailure {
@@ -368,7 +376,7 @@ fn validate_headers(
 ) -> Result<(), ProbeFailure> {
     if headers
         .get(header::CONTENT_ENCODING)
-        .is_some_and(|value| value != "identity")
+        .is_some_and(|value| value != IDENTITY_ENCODING)
     {
         return Err(ProbeFailure::InvalidEncoding);
     }
@@ -403,7 +411,7 @@ fn bounded_header(headers: &header::HeaderMap, name: &str) -> String {
         .unwrap_or_default()
         .chars()
         .filter(|ch| !ch.is_control())
-        .take(512)
+        .take(MAX_CERTIFICATE_DIAGNOSTIC_CHARS)
         .collect()
 }
 

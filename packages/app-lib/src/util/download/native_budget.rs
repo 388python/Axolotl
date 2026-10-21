@@ -1,15 +1,22 @@
 //! Per-authority physical connection admission; transfer weights use the shared download semaphore.
 
+use crate::util::download::constants::{
+    NATIVE_BUDGET_AUTHORITY_BATCH_CONTAINS_ENOUGH_PERMITS,
+    NATIVE_BUDGET_GLOBAL_BATCH_CONTAINS_ENOUGH_PERMITS,
+    NATIVE_BUDGET_REGULAR_BATCH_CONTAINS_ENOUGH_PERMITS,
+};
 use crate::util::fetch::{DownloadRoute, ProxyPolicy};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, TryAcquireError};
 
-const MAX_CONNECTIONS_PER_AUTHORITY: usize = 32;
-const MAX_PHYSICAL_CONNECTIONS: usize = 256;
-static PHYSICAL_CONNECTIONS: LazyLock<Arc<Semaphore>> =
-    LazyLock::new(|| Arc::new(Semaphore::new(MAX_PHYSICAL_CONNECTIONS)));
+use super::constants::{
+    MAX_CONNECTIONS_PER_AUTHORITY, MAX_PHYSICAL_DOWNLOAD_CONNECTIONS,
+};
+static PHYSICAL_CONNECTIONS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
+    Arc::new(Semaphore::new(MAX_PHYSICAL_DOWNLOAD_CONNECTIONS))
+});
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct AuthorityKey {
@@ -190,15 +197,15 @@ pub(crate) async fn acquire_many(
             _regular: regular.as_mut().map(|permit| {
                 permit
                     .split(1)
-                    .expect("regular batch contains enough permits")
+                    .expect(NATIVE_BUDGET_REGULAR_BATCH_CONTAINS_ENOUGH_PERMITS)
             }),
             _global: global
                 .split(1)
-                .expect("global batch contains enough permits"),
+                .expect(NATIVE_BUDGET_GLOBAL_BATCH_CONTAINS_ENOUGH_PERMITS),
             _authority: authority.as_mut().map(|permit| {
-                permit
-                    .split(1)
-                    .expect("authority batch contains enough permits")
+                permit.split(1).expect(
+                    NATIVE_BUDGET_AUTHORITY_BATCH_CONTAINS_ENOUGH_PERMITS,
+                )
             }),
         })
         .collect())

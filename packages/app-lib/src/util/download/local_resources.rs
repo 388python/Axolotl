@@ -1,15 +1,25 @@
 //! Disk admission and local pressure measurements for download scheduling.
 
+use crate::util::download::constants::{
+    LOCAL_CPU_PRESSURE_PERCENT, LOCAL_FALLBACK_WRITE_CONCURRENCY,
+    LOCAL_PRESSURE_SAMPLE_TTL, LOCAL_WRITE_EWMA_ALPHA, LOCAL_WRITE_PRESSURE_MS,
+};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::Semaphore;
 
-static FALLBACK_WRITES: LazyLock<Arc<Semaphore>> =
-    LazyLock::new(|| Arc::new(Semaphore::new(4)));
+use super::constants::{
+    HDD_RANGE_CONCURRENCY, PRESSURE_RANGE_CONCURRENCY, SSD_RANGE_CONCURRENCY,
+    UNKNOWN_DISK_RANGE_CONCURRENCY,
+};
+
+static FALLBACK_WRITES: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
+    Arc::new(Semaphore::new(LOCAL_FALLBACK_WRITE_CONCURRENCY))
+});
 static WRITE_SAMPLES: LazyLock<Mutex<HashMap<PathBuf, WriteSample>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static CPU_PERCENT: std::sync::atomic::AtomicU32 =
@@ -45,7 +55,8 @@ impl WriteSample {
     fn observe(&mut self, queue_ms: f64, write_ms: f64) {
         let pressure_ms = queue_ms + write_ms;
         self.latency_ms = if self.updated.is_some() {
-            self.latency_ms * 0.75 + pressure_ms * 0.25
+            self.latency_ms * (1.0 - LOCAL_WRITE_EWMA_ALPHA)
+                + pressure_ms * LOCAL_WRITE_EWMA_ALPHA
         } else {
             pressure_ms
         };
@@ -61,7 +72,8 @@ pub(crate) struct Pressure {
 
 impl Pressure {
     pub(crate) fn blocks_expansion(self) -> bool {
-        self.cpu_percent >= 85 || self.write_latency_ms >= 50.0
+        self.cpu_percent >= LOCAL_CPU_PRESSURE_PERCENT
+            || self.write_latency_ms >= LOCAL_WRITE_PRESSURE_MS
     }
 }
 
@@ -94,7 +106,7 @@ pub(crate) fn pressure(path: &Path) -> Pressure {
             .filter(|sample| {
                 sample
                     .updated
-                    .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+                    .is_some_and(|at| at.elapsed() < LOCAL_PRESSURE_SAMPLE_TTL)
             })
             .map_or(0.0, |sample| sample.latency_ms),
     }
@@ -109,7 +121,7 @@ pub(crate) fn network_pressure() -> Pressure {
             .filter(|sample| {
                 sample
                     .updated
-                    .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+                    .is_some_and(|at| at.elapsed() < LOCAL_PRESSURE_SAMPLE_TTL)
             })
             .map(|sample| sample.latency_ms)
             .fold(0.0, f64::max),
@@ -132,9 +144,9 @@ pub(crate) async fn sample_cpu() {
 
 pub(crate) fn disk_range_limit(kind: sysinfo::DiskKind) -> usize {
     match kind {
-        sysinfo::DiskKind::HDD => 1,
-        sysinfo::DiskKind::SSD => 8,
-        sysinfo::DiskKind::Unknown(_) => 4,
+        sysinfo::DiskKind::HDD => HDD_RANGE_CONCURRENCY,
+        sysinfo::DiskKind::SSD => SSD_RANGE_CONCURRENCY,
+        sysinfo::DiskKind::Unknown(_) => UNKNOWN_DISK_RANGE_CONCURRENCY,
     }
 }
 
@@ -146,9 +158,11 @@ pub(crate) async fn range_limit(path: &Path) -> usize {
         .iter()
         .filter(|(mount, _)| path.starts_with(mount))
         .max_by_key(|(mount, _)| mount.as_os_str().len())
-        .map_or(4, |(_, kind)| disk_range_limit(*kind));
+        .map_or(UNKNOWN_DISK_RANGE_CONCURRENCY, |(_, kind)| {
+            disk_range_limit(*kind)
+        });
     if pressure(path).blocks_expansion() {
-        limit.min(2)
+        limit.min(PRESSURE_RANGE_CONCURRENCY)
     } else {
         limit
     }
@@ -191,7 +205,7 @@ where
         samples.retain(|_, sample| {
             sample
                 .updated
-                .is_some_and(|at| at.elapsed() < Duration::from_secs(10))
+                .is_some_and(|at| at.elapsed() < LOCAL_PRESSURE_SAMPLE_TTL)
         });
     }
     let sample = samples.entry(volume(path)).or_default();

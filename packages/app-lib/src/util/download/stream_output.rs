@@ -1,11 +1,13 @@
 //! Bounded buffering for single-stream files; RangeWriter owns range output.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::io::{AsyncWrite, AsyncWriteExt, BufWriter};
 
-const CAPACITY: usize = 256 * 1024;
-const FLUSH_INTERVAL: Duration = Duration::from_secs(1);
+use super::constants::{
+    STREAM_OUTPUT_CAPACITY as CAPACITY,
+    STREAM_OUTPUT_FLUSH_INTERVAL as FLUSH_INTERVAL,
+};
 
 pub(crate) struct StreamOutput<W = tokio::fs::File> {
     writer: BufWriter<W>,

@@ -3,6 +3,12 @@
 use super::h2_download::{H2DownloadFailure, H2DownloadOutcome};
 use super::h2_pool::SharedH2Connection;
 use super::range_journal::{Checkpoint, RangeJournal};
+use crate::util::download::constants::{
+    DIAGNOSTICS_RANGE, DOWNLOAD_SCHEDULER_INTERVAL, H2_DOWNLOAD_INVALID_JAR,
+    H2_RANGE_INCORRECT_SIZE, H2_RANGE_INVALID_RANGE_RESUME_URL,
+    H2_RANGE_MAX_WORKERS, H2_RANGE_RETRY_ATTEMPTS, H2_RANGE_RETRY_DELAY_MS,
+    IDENTITY_ENCODING, RANGE_CHECKPOINT_BYTES, RESOURCE_WAIT_TIMEOUT,
+};
 use crate::util::fetch::{
     self, DownloadRequest, DownloadResult, DownloadRoute,
 };
@@ -131,7 +137,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 super::h2_pool::shared_batch_connection(self.route, true).await
         {
             let permit = tokio::time::timeout(
-                Duration::from_secs(45),
+                RESOURCE_WAIT_TIMEOUT,
                 super::h2_stream_budget::acquire_download(
                     self.route,
                     self.semaphore,
@@ -144,8 +150,10 @@ impl RangeTransport for NativeRangeTransport<'_> {
             let permit = (permit, connection.track_stream());
             let mut headers =
                 super::h2_download::request_headers(self.request, self.route);
-            headers
-                .insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+            headers.insert(
+                ACCEPT_ENCODING,
+                HeaderValue::from_static(IDENTITY_ENCODING),
+            );
             headers.insert(
                 RANGE,
                 HeaderValue::from_str(&format!("bytes={start}-{end}"))
@@ -187,8 +195,11 @@ impl RangeTransport for NativeRangeTransport<'_> {
                 (Some(body), permit, connection_for_metrics),
                 |(body, permit, connection_for_metrics)| async move {
                     let mut body = body?;
-                    match super::h2_receive::receive_chunk(&mut body, "range")
-                        .await
+                    match super::h2_receive::receive_chunk(
+                        &mut body,
+                        DIAGNOSTICS_RANGE,
+                    )
+                    .await
                     {
                         Ok(Some(chunk)) => {
                             connection_for_metrics.record_bytes(chunk.len());
@@ -236,7 +247,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
         self.used_http1.store(true, Ordering::Relaxed);
         let semaphore = self.semaphore.unwrap_or(&self.fallback_budget);
         let permit = tokio::time::timeout(
-            Duration::from_secs(45),
+            RESOURCE_WAIT_TIMEOUT,
             fetch::acquire_native_connection(self.route, semaphore),
         )
         .await
@@ -479,7 +490,9 @@ pub(crate) async fn resume_http1(
         .min(super::local_resources::range_limit(part).await.max(1));
     let transport = NativeRangeTransport {
         uri: route.url.parse().map_err(|_| {
-            crate::ErrorKind::InputError("invalid range resume URL".into())
+            crate::ErrorKind::InputError(
+                H2_RANGE_INVALID_RANGE_RESUME_URL.into(),
+            )
         })?,
         request,
         route,
@@ -601,7 +614,7 @@ async fn run_download(
     let downloaded =
         AtomicU64::new(ranges.iter().map(|range| range.written).sum());
     let reported = Mutex::new(super::h2_receive::H2ProgressGate::new(size));
-    let workers = concurrency.clamp(1, 8);
+    let workers = concurrency.clamp(1, H2_RANGE_MAX_WORKERS);
     let mut tasks = futures::stream::iter(ranges.into_iter().enumerate())
         .map(|(index, range)| {
             recover_range(
@@ -660,7 +673,7 @@ async fn run_download(
     if let Err(error) = result {
         let invalid = fetch::is_integrity_error(&error)
             || matches!(error.raw.as_ref(), crate::ErrorKind::JSONError(_))
-            || matches!(error.raw.as_ref(), crate::ErrorKind::OtherError(message) if message.starts_with("Invalid JAR") || message.starts_with("Incorrect size"));
+            || matches!(error.raw.as_ref(), crate::ErrorKind::OtherError(message) if message.starts_with(H2_DOWNLOAD_INVALID_JAR) || message.starts_with(H2_RANGE_INCORRECT_SIZE));
         if invalid && discard(part).await.is_err() {
             return H2DownloadOutcome::Fallback {
                 failure: H2DownloadFailure::Io,
@@ -725,7 +738,7 @@ async fn recover_range(
     let activity = super::h2_receive::H2TransferActivity::begin();
     let mut last_checkpoint = offset;
     let mut last_failure = H2DownloadFailure::Protocol;
-    for attempt in 0..4 {
+    for attempt in 0..H2_RANGE_RETRY_ATTEMPTS {
         let RangeResponse { mut body, identity } =
             match transport.open(offset, range.end - 1, attempt).await {
                 Ok(body) => body,
@@ -744,7 +757,7 @@ async fn recover_range(
         let mut failure = None;
         let mut slow =
             super::native_slow::NativeSlowPolicy::for_http2(offset, None);
-        let mut timer = tokio::time::interval(Duration::from_millis(250));
+        let mut timer = tokio::time::interval(DOWNLOAD_SCHEDULER_INTERVAL);
         let mut last_slow_speed = None;
         timer.tick().await;
         loop {
@@ -806,7 +819,7 @@ async fn recover_range(
                 )
                 .await;
             }
-            if offset - last_checkpoint >= 4 * 1024 * 1024 {
+            if offset - last_checkpoint >= RANGE_CHECKPOINT_BYTES {
                 writer.flush().await.map_err(|_| H2DownloadFailure::Io)?;
                 journal
                     .checkpoint(index, offset - range.start, &hash)
@@ -838,8 +851,10 @@ async fn recover_range(
             attempt = attempt + 1,
             "Retrying only unfinished range bytes"
         );
-        tokio::time::sleep(Duration::from_millis(100 * (attempt as u64 + 1)))
-            .await;
+        tokio::time::sleep(Duration::from_millis(
+            H2_RANGE_RETRY_DELAY_MS * (attempt as u64 + 1),
+        ))
+        .await;
     }
     Err(last_failure)
 }

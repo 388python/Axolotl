@@ -2,19 +2,26 @@
 
 use super::candidates::is_public_ip;
 use super::model::{CandidateSource, EndpointCandidate};
+use crate::util::download::constants::{
+    ENDPOINT_HINT_LIFETIME, ENDPOINT_STORE_FILE_NAME,
+    STORE_MISSING_HINTS_DIRECTORY,
+};
 use crate::util::download::modrinth_cdn::HOST;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Write;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::io::AsyncReadExt;
 
-const VERSION: u8 = 1;
-const MAX_BYTES: u64 = 64 * 1024;
-const MAX_ENTRIES: usize = 32;
-const MAX_AGE: u64 = 7 * 24 * 60 * 60;
+use crate::util::download::constants::{
+    ENDPOINT_STORE_MAX_AGE as MAX_AGE, ENDPOINT_STORE_MAX_BYTES as MAX_BYTES,
+    ENDPOINT_STORE_MAX_ENTRIES as MAX_ENTRIES,
+    ENDPOINT_STORE_VERSION as VERSION,
+};
 static WRITER: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[derive(Serialize, Deserialize)]
@@ -43,7 +50,7 @@ fn cache_path() -> Option<PathBuf> {
         state
             .directories
             .caches_dir()
-            .join("modrinth-endpoint-hints.json")
+            .join(ENDPOINT_STORE_FILE_NAME)
     })
 }
 
@@ -85,7 +92,7 @@ fn decode(
             source: CandidateSource::History,
             // This is a candidate lifetime, not the original DNS TTL or
             // permission to pin. Every restored IP must pass fresh probes.
-            expires_at: now + Duration::from_secs(5 * 60),
+            expires_at: now + ENDPOINT_HINT_LIFETIME,
         })
         .collect()
 }
@@ -156,9 +163,9 @@ async fn save_path(
         return Ok(());
     }
     tokio::task::spawn_blocking(move || {
-        let parent = path
-            .parent()
-            .ok_or_else(|| std::io::Error::other("Missing hints directory"))?;
+        let parent = path.parent().ok_or_else(|| {
+            std::io::Error::other(STORE_MISSING_HINTS_DIRECTORY)
+        })?;
         std::fs::create_dir_all(parent)?;
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         temporary.write_all(&bytes)?;

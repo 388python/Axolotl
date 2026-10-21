@@ -1,3 +1,24 @@
+#[cfg(test)]
+use crate::util::download::constants::DOWNLOAD_DNS_TEST_DNS_LOOKUP_FAILED;
+use crate::util::download::constants::{
+    DNS_TIMEOUT_GRACE, DOH_CONNECT_TIMEOUT,
+    DOWNLOAD_DNS_APPLICATION_DNS_MESSAGE,
+    DOWNLOAD_DNS_CANDIDATE_DNS_HOST_QUERY_CAPACITY_EXHAUSTED,
+    DOWNLOAD_DNS_CANDIDATE_DNS_LOCK_WAIT_TIMED_OUT,
+    DOWNLOAD_DNS_CONFLICTING_DOH_CNAME_ANSWERS,
+    DOWNLOAD_DNS_CYCLIC_DOH_CNAME_CHAIN,
+    DOWNLOAD_DNS_DNS_HOST_OVERRIDE_MUST_BE_A_HOSTNAME_WITHOUT_A,
+    DOWNLOAD_DNS_DNS_RESPONSE_CONTAINED_NO_ADDRESSES,
+    DOWNLOAD_DNS_DOH_CNAME_OWNER_ALSO_CONTAINS_ADDRESS_RECORDS,
+    DOWNLOAD_DNS_DOH_RESPONSE_CONTAINED_NO_ADDRESSES,
+    DOWNLOAD_DNS_DOH_RESPONSE_IS_TOO_LARGE,
+    DOWNLOAD_DNS_INVALID_OR_UNSUCCESSFUL_DOH_DNS_RESPONSE,
+    DOWNLOAD_DNS_MISSING_DNS_QUESTION,
+    DOWNLOAD_DNS_NO_CANDIDATE_DNS_ANSWERS_BEFORE_DEADLINE,
+    DOWNLOAD_DNS_NO_DOH_PROVIDERS_AVAILABLE,
+    DOWNLOAD_DNS_NO_USABLE_DOH_ADDRESS_FAMILY_BEFORE_DEADLINE,
+    DOWNLOAD_DNS_SYSTEM_CANDIDATE_DNS_LOOKUP_TIMED_OUT,
+};
 use futures::stream::{FuturesUnordered, StreamExt};
 use hickory_resolver::proto::{
     op::{Message, MessageType, Query, ResponseCode},
@@ -11,27 +32,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 
-pub const BUILTIN_DOH_SERVERS: [&str; 3] = [
-    "https://doh.pub/dns-query",
-    "https://doh.pysio.online/dns-query",
-    "https://cloudflare-dns.com/dns-query",
-];
-
-/// `lookup_host` does not expose the authoritative record TTL. Keep entries
-/// long enough to retain the connection-reuse benefit, but short enough that
-/// a changed CDN, VPN, or network is not pinned until the application exits.
-const CACHE_TTL: Duration = Duration::from_secs(5 * 60);
-const SUCCESSFUL_ADDRESS_CACHE_TTL: Duration = Duration::from_secs(10 * 60);
-const CONNECTION_FAILURES_BEFORE_REFRESH: u8 = 2;
-const DNS_LOOKUP_TIMEOUT: Duration = Duration::from_secs(6);
-const DOH_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-// Preserve near-simultaneous dual-stack answers without making a usable
-// family wait for the other family's full provider timeout.
-const FAMILY_COLLECTION_GRACE: Duration = Duration::from_millis(500);
-const FAILURE_CACHE_TTL: Duration = Duration::from_secs(2);
-const MAX_DNS_MESSAGE_BYTES: usize = 65535;
-const CANDIDATE_CACHE_TTL: Duration = Duration::from_secs(30);
-const MAX_METADATA_HOSTS: usize = 128;
+pub use crate::util::download::constants::BUILTIN_DOH_SERVERS;
+use crate::util::download::constants::{
+    DNS_CACHE_TTL as CACHE_TTL, DNS_CANDIDATE_CACHE_TTL as CANDIDATE_CACHE_TTL,
+    DNS_CONNECTION_FAILURES_BEFORE_REFRESH as CONNECTION_FAILURES_BEFORE_REFRESH,
+    DNS_FAILURE_CACHE_TTL as FAILURE_CACHE_TTL,
+    DNS_FAMILY_COLLECTION_GRACE as FAMILY_COLLECTION_GRACE, DNS_LOOKUP_TIMEOUT,
+    DNS_SUCCESSFUL_ADDRESS_CACHE_TTL as SUCCESSFUL_ADDRESS_CACHE_TTL,
+    DOH_REQUEST_TIMEOUT, MAX_DNS_MESSAGE_BYTES, MAX_METADATA_HOSTS,
+};
 
 fn make_metadata_room<T>(
     cache: &mut HashMap<String, T>,
@@ -150,7 +159,7 @@ impl Default for DownloadDnsResolver {
                 reqwest::Client::builder()
                     .no_proxy()
                     .timeout(DOH_REQUEST_TIMEOUT)
-                    .connect_timeout(Duration::from_secs(3))
+                    .connect_timeout(DOH_CONNECT_TIMEOUT)
                     .build()
                     .expect(
                         "DNS bootstrap client configuration should be valid",
@@ -198,7 +207,7 @@ impl DownloadDnsResolver {
             doh_clients.push(
                 builder
                     .timeout(DOH_REQUEST_TIMEOUT)
-                    .connect_timeout(Duration::from_secs(3))
+                    .connect_timeout(DOH_CONNECT_TIMEOUT)
                     .read_timeout(DOH_REQUEST_TIMEOUT)
                     .redirect(reqwest::redirect::Policy::none())
                     .build()
@@ -380,7 +389,7 @@ impl DownloadDnsResolver {
             {
                 return Err(std::io::Error::new(
                     kind,
-                    "test DNS lookup failed",
+                    DOWNLOAD_DNS_TEST_DNS_LOOKUP_FAILED,
                 ));
             }
             if let Some(addresses) =
@@ -467,7 +476,7 @@ impl DownloadDnsResolver {
             }
         }
         Err(last_error.unwrap_or_else(|| {
-            std::io::Error::other("No DoH providers available")
+            std::io::Error::other(DOWNLOAD_DNS_NO_DOH_PROVIDERS_AVAILABLE)
         }))
     }
 
@@ -479,8 +488,14 @@ impl DownloadDnsResolver {
         let body = query.to_vec().map_err(std::io::Error::other)?;
         let mut response = client
             .post(endpoint)
-            .header(reqwest::header::CONTENT_TYPE, "application/dns-message")
-            .header(reqwest::header::ACCEPT, "application/dns-message")
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                DOWNLOAD_DNS_APPLICATION_DNS_MESSAGE,
+            )
+            .header(
+                reqwest::header::ACCEPT,
+                DOWNLOAD_DNS_APPLICATION_DNS_MESSAGE,
+            )
             .body(body)
             .send()
             .await
@@ -492,7 +507,9 @@ impl DownloadDnsResolver {
             response.chunk().await.map_err(std::io::Error::other)?
         {
             if bytes.len() + chunk.len() > MAX_DNS_MESSAGE_BYTES {
-                return Err(std::io::Error::other("DoH response is too large"));
+                return Err(std::io::Error::other(
+                    DOWNLOAD_DNS_DOH_RESPONSE_IS_TOO_LARGE,
+                ));
             }
             bytes.extend_from_slice(&chunk);
         }
@@ -585,7 +602,7 @@ impl DownloadDnsResolver {
                 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::WouldBlock,
-                        "Candidate DNS host query capacity exhausted",
+                        DOWNLOAD_DNS_CANDIDATE_DNS_HOST_QUERY_CAPACITY_EXHAUSTED,
                     ));
                 }
                 hosts
@@ -599,7 +616,7 @@ impl DownloadDnsResolver {
                     .map_err(|_| {
                         std::io::Error::new(
                             std::io::ErrorKind::TimedOut,
-                            "Candidate DNS lock wait timed out",
+                            DOWNLOAD_DNS_CANDIDATE_DNS_LOCK_WAIT_TIMED_OUT,
                         )
                     })?;
             if let Some(answers) = self.cached_candidates(&host) {
@@ -615,7 +632,7 @@ impl DownloadDnsResolver {
                 .map_err(|_| {
                     std::io::Error::new(
                         std::io::ErrorKind::TimedOut,
-                        "System candidate DNS lookup timed out",
+                        DOWNLOAD_DNS_SYSTEM_CANDIDATE_DNS_LOOKUP_TIMED_OUT,
                     )
                 })??;
                 let now = Instant::now();
@@ -709,7 +726,7 @@ impl DownloadDnsResolver {
                 return Err(last_error.unwrap_or_else(|| {
                     std::io::Error::new(
                         std::io::ErrorKind::TimedOut,
-                        "No candidate DNS answers before deadline",
+                        DOWNLOAD_DNS_NO_CANDIDATE_DNS_ANSWERS_BEFORE_DEADLINE,
                     )
                 }));
             }
@@ -772,7 +789,7 @@ impl DownloadDnsResolver {
         }
         let resolution_host = self.resolution_host(&host);
         let lookup = tokio::time::timeout(
-            DOH_REQUEST_TIMEOUT + Duration::from_millis(250),
+            DOH_REQUEST_TIMEOUT + DNS_TIMEOUT_GRACE,
             self.lookup_addresses(&resolution_host),
         )
         .await
@@ -785,7 +802,7 @@ impl DownloadDnsResolver {
         .and_then(|addresses| {
             if addresses.is_empty() {
                 Err(std::io::Error::other(
-                    "DNS response contained no addresses",
+                    DOWNLOAD_DNS_DNS_RESPONSE_CONTAINED_NO_ADDRESSES,
                 ))
             } else {
                 Ok(addresses)
@@ -945,7 +962,9 @@ fn parse_doh_metadata(
     source: DnsSource,
 ) -> std::io::Result<DnsAnswer> {
     if bytes.len() > MAX_DNS_MESSAGE_BYTES {
-        return Err(std::io::Error::other("DoH response is too large"));
+        return Err(std::io::Error::other(
+            DOWNLOAD_DNS_DOH_RESPONSE_IS_TOO_LARGE,
+        ));
     }
     let response = Message::from_vec(bytes).map_err(std::io::Error::other)?;
     if response.id() != query.id()
@@ -955,12 +974,12 @@ fn parse_doh_metadata(
         || response.response_code() != ResponseCode::NoError
     {
         return Err(std::io::Error::other(
-            "Invalid or unsuccessful DoH DNS response",
+            DOWNLOAD_DNS_INVALID_OR_UNSUCCESSFUL_DOH_DNS_RESPONSE,
         ));
     }
-    let question = query
-        .query()
-        .ok_or_else(|| std::io::Error::other("Missing DNS question"))?;
+    let question = query.query().ok_or_else(|| {
+        std::io::Error::other(DOWNLOAD_DNS_MISSING_DNS_QUESTION)
+    })?;
     let now = Instant::now();
     let mut name = question.name().clone();
     let mut visited = std::collections::HashSet::new();
@@ -968,7 +987,9 @@ fn parse_doh_metadata(
     let mut chain_ttl = u32::MAX;
     loop {
         if !visited.insert(name.clone()) {
-            return Err(std::io::Error::other("Cyclic DoH CNAME chain"));
+            return Err(std::io::Error::other(
+                DOWNLOAD_DNS_CYCLIC_DOH_CNAME_CHAIN,
+            ));
         }
         let mut next = None;
         for answer in response.answers().iter().filter(|answer| {
@@ -978,7 +999,7 @@ fn parse_doh_metadata(
             if let RData::CNAME(alias) = answer.data() {
                 if next.as_ref().is_some_and(|target| target != &alias.0) {
                     return Err(std::io::Error::other(
-                        "Conflicting DoH CNAME answers",
+                        DOWNLOAD_DNS_CONFLICTING_DOH_CNAME_ANSWERS,
                     ));
                 }
                 next = Some(alias.0.clone());
@@ -994,7 +1015,7 @@ fn parse_doh_metadata(
                 && matches!(record.data(), RData::A(_) | RData::AAAA(_))
         }) {
             return Err(std::io::Error::other(
-                "DoH CNAME owner also contains address records",
+                DOWNLOAD_DNS_DOH_CNAME_OWNER_ALSO_CONTAINS_ADDRESS_RECORDS,
             ));
         }
         chain.push(next.to_utf8().trim_end_matches('.').to_ascii_lowercase());
@@ -1025,7 +1046,7 @@ fn parse_doh_metadata(
     addresses.dedup_by_key(|address| address.ip);
     if addresses.is_empty() {
         return Err(std::io::Error::other(
-            "DoH response contained no addresses",
+            DOWNLOAD_DNS_DOH_RESPONSE_CONTAINED_NO_ADDRESSES,
         ));
     }
     Ok(DnsAnswer {
@@ -1072,7 +1093,7 @@ async fn resolve_families(
         Err(last_error.unwrap_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::TimedOut,
-                "No usable DoH address family before deadline",
+                DOWNLOAD_DNS_NO_USABLE_DOH_ADDRESS_FAMILY_BEFORE_DEADLINE,
             )
         }))
     }
@@ -1084,7 +1105,9 @@ fn normalize_host(host: &str) -> Result<String, &'static str> {
         || host.contains(['/', ':', '@', '[', ']'])
         || host.split('.').any(str::is_empty)
     {
-        return Err("DNS host override must be a hostname without a port");
+        return Err(
+            DOWNLOAD_DNS_DNS_HOST_OVERRIDE_MUST_BE_A_HOSTNAME_WITHOUT_A,
+        );
     }
     Ok(host)
 }

@@ -1,9 +1,30 @@
 //! Download attempt diagnostics and bounded retry history.
 
 use crate::ErrorKind;
+use crate::util::download::constants::{
+    DIAGNOSTICS_API_RESPONSE_FAILURE, DIAGNOSTICS_BUDGET_EXHAUSTED,
+    DIAGNOSTICS_CANCELLED, DIAGNOSTICS_CERTIFICATE, DIAGNOSTICS_CHECKSUM,
+    DIAGNOSTICS_CONNECT, DIAGNOSTICS_CONTENT_RANGE, DIAGNOSTICS_DNS,
+    DIAGNOSTICS_DNS_ONLY, DIAGNOSTICS_ENDPOINT_CHANGED,
+    DIAGNOSTICS_HASH_MISMATCH, DIAGNOSTICS_I_O_FAILURE,
+    DIAGNOSTICS_INSUFFICIENT_SAMPLE, DIAGNOSTICS_INTEGRITY,
+    DIAGNOSTICS_INVALID_CERTIFICATE, DIAGNOSTICS_INVALID_ENCODING,
+    DIAGNOSTICS_INVALID_RANGE, DIAGNOSTICS_IO,
+    DIAGNOSTICS_JSON_VALIDATION_FAILED, DIAGNOSTICS_LOCAL_PRESSURE,
+    DIAGNOSTICS_LOOKUP, DIAGNOSTICS_MEASURING,
+    DIAGNOSTICS_N_OLDER_DIAGNOSTIC_DETAILS_OMITTED, DIAGNOSTICS_NETWORK,
+    DIAGNOSTICS_NO_GAIN, DIAGNOSTICS_NO_RESPONSE_RECEIVED, DIAGNOSTICS_OTHER,
+    DIAGNOSTICS_PROTOCOL, DIAGNOSTICS_PROXY_INELIGIBLE, DIAGNOSTICS_RANGE,
+    DIAGNOSTICS_RANGE_UNSUPPORTED, DIAGNOSTICS_RESOLVE, DIAGNOSTICS_ROLLBACK,
+    DIAGNOSTICS_RULE_INELIGIBLE, DIAGNOSTICS_SELECTED,
+    DIAGNOSTICS_SERVER_COOLDOWN, DIAGNOSTICS_SLOW, DIAGNOSTICS_SSL,
+    DIAGNOSTICS_STALE_EPOCH, DIAGNOSTICS_STALL, DIAGNOSTICS_STREAM_RESET,
+    DIAGNOSTICS_TIMEOUT, DIAGNOSTICS_TLS, DIAGNOSTICS_TRUNCATED,
+    DIAGNOSTICS_VALIDATION, HTTP_SCHEME, MAX_DOWNLOAD_ATTEMPT_HISTORY,
+    MAX_DOWNLOAD_DIAGNOSTIC_BYTES,
+};
 use crate::util::fetch::{
-    DownloadRoute, DownloadRouteSource, MAX_DOWNLOAD_ATTEMPT_HISTORY,
-    MAX_DOWNLOAD_DIAGNOSTIC_BYTES, ProxyPolicy, route_host,
+    DownloadRoute, DownloadRouteSource, ProxyPolicy, route_host,
     sanitize_url_for_log,
 };
 use reqwest::StatusCode;
@@ -36,24 +57,24 @@ pub(crate) enum EndpointReason {
 impl EndpointReason {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
-            Self::DnsOnly => "dns_only",
-            Self::RuleIneligible => "rule_ineligible",
-            Self::InvalidCertificate => "invalid_certificate",
-            Self::RangeUnsupported => "range_unsupported",
-            Self::InvalidRange => "invalid_range",
-            Self::InvalidEncoding => "invalid_encoding",
-            Self::Truncated => "truncated",
-            Self::InsufficientSample => "insufficient_sample",
-            Self::NoGain => "no_gain",
-            Self::Selected => "selected",
-            Self::Rollback => "rollback",
-            Self::ProxyIneligible => "proxy_ineligible",
-            Self::BudgetExhausted => "budget_exhausted",
-            Self::StaleEpoch => "stale_epoch",
-            Self::ServerCooldown => "server_cooldown",
-            Self::LocalPressure => "local_pressure",
-            Self::Cancelled => "cancelled",
-            Self::Measuring => "measuring",
+            Self::DnsOnly => DIAGNOSTICS_DNS_ONLY,
+            Self::RuleIneligible => DIAGNOSTICS_RULE_INELIGIBLE,
+            Self::InvalidCertificate => DIAGNOSTICS_INVALID_CERTIFICATE,
+            Self::RangeUnsupported => DIAGNOSTICS_RANGE_UNSUPPORTED,
+            Self::InvalidRange => DIAGNOSTICS_INVALID_RANGE,
+            Self::InvalidEncoding => DIAGNOSTICS_INVALID_ENCODING,
+            Self::Truncated => DIAGNOSTICS_TRUNCATED,
+            Self::InsufficientSample => DIAGNOSTICS_INSUFFICIENT_SAMPLE,
+            Self::NoGain => DIAGNOSTICS_NO_GAIN,
+            Self::Selected => DIAGNOSTICS_SELECTED,
+            Self::Rollback => DIAGNOSTICS_ROLLBACK,
+            Self::ProxyIneligible => DIAGNOSTICS_PROXY_INELIGIBLE,
+            Self::BudgetExhausted => DIAGNOSTICS_BUDGET_EXHAUSTED,
+            Self::StaleEpoch => DIAGNOSTICS_STALE_EPOCH,
+            Self::ServerCooldown => DIAGNOSTICS_SERVER_COOLDOWN,
+            Self::LocalPressure => DIAGNOSTICS_LOCAL_PRESSURE,
+            Self::Cancelled => DIAGNOSTICS_CANCELLED,
+            Self::Measuring => DIAGNOSTICS_MEASURING,
         }
     }
 }
@@ -82,69 +103,73 @@ pub(crate) fn bounded_diagnostic_text(
 
 pub(crate) fn download_error_category(error: &crate::Error) -> &'static str {
     match error.raw.as_ref() {
-        ErrorKind::DownloadEndpointChanged => "endpoint_changed",
-        ErrorKind::DownloadTransferSlow => "slow",
-        ErrorKind::DownloadStreamStalled { .. } => "stall",
+        ErrorKind::DownloadEndpointChanged => DIAGNOSTICS_ENDPOINT_CHANGED,
+        ErrorKind::DownloadTransferSlow => DIAGNOSTICS_SLOW,
+        ErrorKind::DownloadStreamStalled { .. } => DIAGNOSTICS_STALL,
         ErrorKind::DownloadH2Error(source) => {
             if source.is_reset() {
-                "stream_reset"
+                DIAGNOSTICS_STREAM_RESET
             } else {
-                "protocol"
+                DIAGNOSTICS_PROTOCOL
             }
         }
         ErrorKind::FetchError(source) => {
             let detail = format!("{source:?}").to_ascii_lowercase();
             if source.status().is_some() {
-                "http"
+                HTTP_SCHEME
             } else if source.is_timeout() && source.is_body() {
-                "stall"
+                DIAGNOSTICS_STALL
             } else if source.is_timeout() {
-                "timeout"
+                DIAGNOSTICS_TIMEOUT
             } else if source.is_connect()
-                && ["certificate", "tls", "ssl"]
+                && [DIAGNOSTICS_CERTIFICATE, DIAGNOSTICS_TLS, DIAGNOSTICS_SSL]
                     .iter()
                     .any(|needle| detail.contains(needle))
             {
-                "tls"
+                DIAGNOSTICS_TLS
             } else if source.is_connect()
-                && ["dns", "lookup", "resolve"]
+                && [DIAGNOSTICS_DNS, DIAGNOSTICS_LOOKUP, DIAGNOSTICS_RESOLVE]
                     .iter()
                     .any(|needle| detail.contains(needle))
             {
-                "dns"
+                DIAGNOSTICS_DNS
             } else if source.is_connect() {
-                "connect"
+                DIAGNOSTICS_CONNECT
             } else {
-                "network"
+                DIAGNOSTICS_NETWORK
             }
         }
         ErrorKind::NetworkError(message) => {
-            if message.contains("no response received") {
-                "timeout"
+            if message.contains(DIAGNOSTICS_NO_RESPONSE_RECEIVED) {
+                DIAGNOSTICS_TIMEOUT
             } else {
-                "network"
+                DIAGNOSTICS_NETWORK
             }
         }
-        ErrorKind::LabrinthError(_) | ErrorKind::HttpError { .. } => "http",
-        ErrorKind::HashError(_, _) => "integrity",
-        ErrorKind::JSONError(_) => "integrity",
-        ErrorKind::IOError(_) | ErrorKind::StdIOError(_) => "io",
+        ErrorKind::LabrinthError(_) | ErrorKind::HttpError { .. } => {
+            HTTP_SCHEME
+        }
+        ErrorKind::HashError(_, _) => DIAGNOSTICS_INTEGRITY,
+        ErrorKind::JSONError(_) => DIAGNOSTICS_INTEGRITY,
+        ErrorKind::IOError(_) | ErrorKind::StdIOError(_) => DIAGNOSTICS_IO,
         ErrorKind::OtherError(message) => {
             let message = message.to_ascii_lowercase();
-            if message.contains("content-range") || message.contains("range") {
-                "range"
-            } else if message.contains("integrity")
-                || message.contains("checksum")
-                || message.contains("validation")
+            if message.contains(DIAGNOSTICS_CONTENT_RANGE)
+                || message.contains(DIAGNOSTICS_RANGE)
             {
-                "integrity"
-            } else if message.contains("truncated") {
-                "stall"
+                DIAGNOSTICS_RANGE
+            } else if message.contains(DIAGNOSTICS_INTEGRITY)
+                || message.contains(DIAGNOSTICS_CHECKSUM)
+                || message.contains(DIAGNOSTICS_VALIDATION)
+            {
+                DIAGNOSTICS_INTEGRITY
+            } else if message.contains(DIAGNOSTICS_TRUNCATED) {
+                DIAGNOSTICS_STALL
             } else {
-                "other"
+                DIAGNOSTICS_OTHER
             }
         }
-        _ => "other",
+        _ => DIAGNOSTICS_OTHER,
     }
 }
 
@@ -155,14 +180,16 @@ pub(crate) fn download_error_detail(error: &crate::Error) -> String {
             |status| format!("HTTP {}", status.as_u16()),
         ),
         ErrorKind::LabrinthError(error) => error.status.map_or_else(
-            || "API response failure".to_string(),
+            || DIAGNOSTICS_API_RESPONSE_FAILURE.to_string(),
             |status| format!("HTTP {status}"),
         ),
         ErrorKind::HttpError { status, .. } => format!("HTTP {status}"),
-        ErrorKind::HashError(_, _) => "hash mismatch".to_string(),
-        ErrorKind::JSONError(_) => "JSON validation failed".to_string(),
+        ErrorKind::HashError(_, _) => DIAGNOSTICS_HASH_MISMATCH.to_string(),
+        ErrorKind::JSONError(_) => {
+            DIAGNOSTICS_JSON_VALIDATION_FAILED.to_string()
+        }
         ErrorKind::IOError(_) | ErrorKind::StdIOError(_) => {
-            "I/O failure".to_string()
+            DIAGNOSTICS_I_O_FAILURE.to_string()
         }
         ErrorKind::OtherError(_) | ErrorKind::NetworkError(_) => {
             format!("{} failure", download_error_category(error))
@@ -259,7 +286,7 @@ pub(crate) fn attach_download_attempt_history(
             item.detail,
         );
         if context.len() + line.len() > MAX_DOWNLOAD_DIAGNOSTIC_BYTES {
-            context.push_str("\n- older diagnostic details omitted");
+            context.push_str(DIAGNOSTICS_N_OLDER_DIAGNOSTIC_DETAILS_OMITTED);
             break;
         }
         context.push_str(&line);

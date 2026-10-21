@@ -6,6 +6,11 @@ use super::model::{
     InstanceUpgradeResult, MissingModpackContentState,
 };
 use super::store;
+use crate::util::download::constants::CONTENT_CHECKPOINT_FILE_COUNT;
+use crate::util::download::constants::CONTENT_CHECKPOINT_INTERVAL;
+use crate::util::download::constants::LIVE_PROGRESS_EMIT_INTERVAL;
+use crate::util::download::constants::LIVE_PROGRESS_MAX_WAIT;
+use crate::util::download::constants::LIVE_PROGRESS_MIN_BYTES;
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, LazyLock, Weak};
@@ -15,11 +20,6 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 // Keep per-file progress responsive without emitting every network chunk.
-const LIVE_PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(100);
-const LIVE_PROGRESS_MAX_WAIT: Duration = Duration::from_secs(1);
-const LIVE_PROGRESS_MIN_BYTES: u64 = 64 * 1024;
-const CONTENT_CHECKPOINT_FILE_COUNT: usize = 25;
-const CONTENT_CHECKPOINT_INTERVAL: Duration = Duration::from_secs(2);
 
 static REPORTER_STATES: LazyLock<
     dashmap::DashMap<Uuid, Weak<Mutex<InstallProgressReporterState>>>,

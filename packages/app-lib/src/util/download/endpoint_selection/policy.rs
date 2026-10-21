@@ -1,21 +1,26 @@
 use super::model::{Protocol, ThroughputSample};
+use crate::util::download::constants::{
+    ENDPOINT_MAX_RATE_SPREAD, ENDPOINT_MIN_SAMPLE_TIME,
+    ENDPOINT_MIN_SUCCESS_SAMPLES,
+};
 use crate::util::download::native_slow;
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-pub(super) const MAX_CANDIDATES: usize = 16;
-pub(super) const VALIDATION_CONCURRENCY: usize = 3;
-pub(super) const VALIDATION_TIMEOUT: Duration = Duration::from_secs(3);
-pub(super) const ROUND_TIMEOUT: Duration = Duration::from_secs(20);
-pub(super) const VALIDATION_BYTES: u64 = 64 * 1024;
-pub(super) const MAX_MEASURED_CANDIDATES: usize = 4;
-pub(super) const SAMPLE_TIMEOUT: Duration = Duration::from_secs(3);
-pub(super) const SAMPLE_BYTES: u64 = 4 * 1024 * 1024;
-pub(super) const ROUND_BYTES: u64 = 32 * 1024 * 1024;
-pub(super) const HOURLY_BYTES: u64 = 64 * 1024 * 1024;
-pub(super) const COOLDOWN: Duration = Duration::from_secs(60);
-pub(super) const SELECTION_LIFETIME: Duration = Duration::from_secs(5 * 60);
+pub(super) use crate::util::download::constants::{
+    ENDPOINT_COOLDOWN as COOLDOWN, ENDPOINT_HOURLY_BYTES as HOURLY_BYTES,
+    ENDPOINT_MAX_CANDIDATES as MAX_CANDIDATES,
+    ENDPOINT_MAX_MEASURED_CANDIDATES as MAX_MEASURED_CANDIDATES,
+    ENDPOINT_ROUND_BYTES as ROUND_BYTES,
+    ENDPOINT_ROUND_TIMEOUT as ROUND_TIMEOUT,
+    ENDPOINT_SAMPLE_BYTES as SAMPLE_BYTES,
+    ENDPOINT_SAMPLE_TIMEOUT as SAMPLE_TIMEOUT,
+    ENDPOINT_SELECTION_LIFETIME as SELECTION_LIFETIME,
+    ENDPOINT_VALIDATION_BYTES as VALIDATION_BYTES,
+    ENDPOINT_VALIDATION_CONCURRENCY as VALIDATION_CONCURRENCY,
+    ENDPOINT_VALIDATION_TIMEOUT as VALIDATION_TIMEOUT,
+};
 
 pub(super) struct ProbeBudget {
     started_at: Instant,
@@ -69,7 +74,7 @@ pub(super) fn rank_candidates(
             || sample.bytes < VALIDATION_BYTES
             || sample.elapsed.is_zero()
             || !sample.complete_object
-                && sample.elapsed < Duration::from_millis(250)
+                && sample.elapsed < ENDPOINT_MIN_SAMPLE_TIME
                 && sample.bytes < SAMPLE_BYTES
             || sample.observed_at > now
             || now.saturating_duration_since(sample.observed_at)
@@ -114,13 +119,15 @@ pub(super) fn rank_candidates(
                 rates.push(rate.min(u64::MAX as f64) as u64);
             }
         }
-        if rates.len() < 2 {
+        if rates.len() < ENDPOINT_MIN_SUCCESS_SAMPLES {
             continue;
         }
         rates.sort_unstable();
         let slowest = rates[0];
         // Large disagreement means the trial is uncertain rather than fast.
-        if rates[rates.len() - 1] > slowest.saturating_mul(2) {
+        if rates[rates.len() - 1]
+            > slowest.saturating_mul(ENDPOINT_MAX_RATE_SPREAD)
+        {
             continue;
         }
         ranked.push((ip, slowest));

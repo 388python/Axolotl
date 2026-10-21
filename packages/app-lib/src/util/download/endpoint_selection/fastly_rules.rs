@@ -1,19 +1,20 @@
 use super::model::{CandidateSource, EndpointCandidate};
+use crate::util::download::constants::ENDPOINT_HINT_LIFETIME;
 use crate::util::download::modrinth_cdn;
 use crate::util::download_dns::{DnsAnswer, DnsSource};
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const CATALOG_VERSION: u32 = 1;
+use crate::util::download::constants::{
+    FASTLY_CATALOG_LIFETIME as CATALOG_LIFETIME,
+    FASTLY_CATALOG_VERSION as CATALOG_VERSION,
+    FASTLY_KNOWN_CNAME as KNOWN_CNAME,
+    FASTLY_POOL_THIRD_OCTETS as POOL_THIRD_OCTETS,
+    FASTLY_REVIEWED_UNIX_SECONDS as REVIEWED_UNIX_SECONDS,
+    FASTLY_SEED_PREFIXES as SEED_PREFIXES,
+};
 // Reviewed 2026-10-21 against the public A/AAAA and CNAME responses. These
 // prefixes remain untrusted seeds; every use requires TLS and Range checks.
-const REVIEWED_UNIX_SECONDS: u64 = 1_792_540_800;
-const CATALOG_LIFETIME: Duration = Duration::from_secs(90 * 24 * 60 * 60);
-const KNOWN_CNAME: &str = "72b69f.atlas.fastly.net";
-const POOL_THIRD_OCTETS: [u8; 4] = [1, 65, 129, 193];
-const SEED_PREFIXES: [[u8; 3]; 3] =
-    [[146, 75, 113], [151, 101, 41], [146, 75, 93]];
-
 pub(super) fn seed_candidates(
     answers: &[DnsAnswer],
     now: Instant,
@@ -39,7 +40,7 @@ pub(super) fn seed_candidates(
     }
     let mut suffix = None;
     let mut seen = [false; 4];
-    let mut valid_until = now + Duration::from_secs(5 * 60);
+    let mut valid_until = now + ENDPOINT_HINT_LIFETIME;
     for answer in fresh {
         for address in answer.addresses.iter().filter(|a| a.expires_at > now) {
             valid_until = valid_until.min(address.expires_at);

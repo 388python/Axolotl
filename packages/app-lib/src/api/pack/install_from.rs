@@ -11,6 +11,9 @@ use crate::state::{
     LoaderComponentKind, LoaderComponentRole, ModrinthProjectId,
     ModrinthVersionId, SideType,
 };
+use crate::util::download::constants::{
+    INSTALL_FILE_REPORTED_ATTEMPTS, MODPACK_REQUESTED_H2_RANGES,
+};
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
     FetchProgressFn, Integrity, ResourceClass, download_to_path, fetch,
@@ -404,7 +407,7 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
             vec![InstallJobEventKind::ContentFileQueued {
                 path: item_path,
                 bytes_total: Some(pack_file.size as u64),
-                max_attempts: 5,
+                max_attempts: INSTALL_FILE_REPORTED_ATTEMPTS,
             }],
         )
         .await?;
@@ -418,7 +421,7 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
                 content: ContentValidation::Jar,
                 ..Integrity::default()
             })
-            .with_h2_range_concurrency(16)
+            .with_h2_range_concurrency(MODPACK_REQUESTED_H2_RANGES)
             .with_download_meta(download_meta)
             .with_install_tracking(
                 reporter.clone(),

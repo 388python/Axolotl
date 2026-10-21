@@ -1,18 +1,23 @@
 //! Slow-transfer and optimal-stop policy for the native download engine.
 
-use std::time::{Duration, Instant};
-
-const WINDOW: Duration = Duration::from_secs(3);
-const MIN_FLOW: Duration = Duration::from_secs(10);
-const REQUIRED_SLOW_WINDOWS: u8 = 2;
-const ABSOLUTE_SPEED_FLOOR: u64 = 16 * 1024;
-const COLD_SPEED_FLOOR: u64 = 256 * 1024;
-const RECONNECT_OVERHEAD: Duration = Duration::from_millis(600);
-const MIN_SAVINGS: Duration = Duration::from_secs(2);
+use crate::util::download::constants::NATIVE_SLOW_ABSOLUTE_SPEED_FLOOR as ABSOLUTE_SPEED_FLOOR;
+use crate::util::download::constants::NATIVE_SLOW_COLD_SPEED_FLOOR as COLD_SPEED_FLOOR;
 #[cfg(not(test))]
-const IDLE_TIMEOUT: Duration = Duration::from_secs(20);
+use crate::util::download::constants::NATIVE_SLOW_IDLE_TIMEOUT as IDLE_TIMEOUT;
 #[cfg(test)]
-const IDLE_TIMEOUT: Duration = Duration::from_millis(500);
+use crate::util::download::constants::NATIVE_SLOW_IDLE_TIMEOUT as IDLE_TIMEOUT;
+use crate::util::download::constants::NATIVE_SLOW_MIN_FLOW as MIN_FLOW;
+use crate::util::download::constants::NATIVE_SLOW_MIN_SAVINGS as MIN_SAVINGS;
+use crate::util::download::constants::NATIVE_SLOW_RECONNECT_OVERHEAD as RECONNECT_OVERHEAD;
+use crate::util::download::constants::NATIVE_SLOW_REQUIRED_WINDOWS as REQUIRED_SLOW_WINDOWS;
+use crate::util::download::constants::NATIVE_SLOW_WINDOW as WINDOW;
+use crate::util::download::constants::{
+    DOWNLOAD_PERCENT_BASE, NATIVE_SLOW_EXPECTED_PERCENT,
+    NATIVE_SWITCH_MIN_SAVINGS_RATIO, NATIVE_SWITCH_PERCENT_BASE,
+    NATIVE_SWITCH_SPEED_PERCENT, RECONNECT_OVERHEAD_MAX,
+    RECONNECT_OVERHEAD_MIN,
+};
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SlowDecision {
@@ -168,7 +173,10 @@ impl NativeSlowPolicy {
     fn speed_floor(&self) -> u64 {
         let expected_floor = self
             .expected_speed
-            .map(|expected| expected.saturating_mul(40) / 100)
+            .map(|expected| {
+                expected.saturating_mul(NATIVE_SLOW_EXPECTED_PERCENT)
+                    / DOWNLOAD_PERCENT_BASE
+            })
             .unwrap_or(COLD_SPEED_FLOOR)
             .max(ABSOLUTE_SPEED_FLOOR);
         // A multiplexed stream shares bandwidth with other downloads, so a
@@ -222,14 +230,17 @@ pub(crate) fn should_switch_with_overhead(
     if current_speed == 0 || candidate_speed == 0 {
         return false;
     }
-    if candidate_speed.saturating_mul(100) < current_speed.saturating_mul(125) {
+    if candidate_speed.saturating_mul(NATIVE_SWITCH_PERCENT_BASE)
+        < current_speed.saturating_mul(NATIVE_SWITCH_SPEED_PERCENT)
+    {
         return false;
     }
     let stay = estimated_duration(remaining_bytes, current_speed);
     let switch = reconnect_overhead
-        .clamp(Duration::from_millis(100), Duration::from_secs(5))
+        .clamp(RECONNECT_OVERHEAD_MIN, RECONNECT_OVERHEAD_MAX)
         .saturating_add(estimated_duration(restart_bytes, candidate_speed));
-    let required_savings = MIN_SAVINGS.max(stay.mul_f64(0.15));
+    let required_savings =
+        MIN_SAVINGS.max(stay.mul_f64(NATIVE_SWITCH_MIN_SAVINGS_RATIO));
     switch.saturating_add(required_savings) < stay
 }
 

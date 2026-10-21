@@ -5,6 +5,17 @@ use super::model::{
 };
 use super::policy::{self, ProbeBudget};
 use super::probe::{ProbeObservation, ProbeSession};
+use crate::util::download::constants::{
+    CATALOG_MODE_ON, DOWNLOAD_SCHEDULER_INTERVAL, DOWNLOAD_SCHEDULING_GRACE,
+    ENDPOINT_BUDGET_WINDOW, ENDPOINT_CATALOG_ENV, ENDPOINT_DNS_TIMEOUT,
+    ENDPOINT_FAILURES_BEFORE_REFRESH, ENDPOINT_GENERATION_HISTORY,
+    ENDPOINT_PROBE_ROUND_CONCURRENCY, ENDPOINT_ROLLBACK_PERCENT_BASE,
+    ENDPOINT_ROLLBACK_SPEED_PERCENT, ENDPOINT_ROLLBACK_WINDOWS,
+    ENDPOINT_SELECTION_ENV, HTTPS_PORT, MODRINTH_CDN_AUTHORITY,
+    MODRINTH_CDN_ORIGIN, NATIVE_SLOW_RECONNECT_OVERHEAD, NATIVE_SLOW_WINDOW,
+    RECONNECT_OVERHEAD_MIN, SELECTION_MODE_AUTO, SELECTION_MODE_OBSERVE,
+    SELECTION_MODE_OFF,
+};
 use crate::util::download::diagnostics::EndpointReason;
 use crate::util::download::{modrinth_cdn, native, native_breaker};
 use crate::util::fetch::{
@@ -22,8 +33,9 @@ use tokio::sync::{Semaphore, watch};
 use tokio_util::sync::CancellationToken;
 
 static NEXT_EPOCH: AtomicU64 = AtomicU64::new(1);
-static PROBE_ROUNDS: LazyLock<Arc<Semaphore>> =
-    LazyLock::new(|| Arc::new(Semaphore::new(1)));
+static PROBE_ROUNDS: LazyLock<Arc<Semaphore>> = LazyLock::new(|| {
+    Arc::new(Semaphore::new(ENDPOINT_PROBE_ROUND_CONCURRENCY))
+});
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SelectionMode {
@@ -35,21 +47,25 @@ pub(crate) enum SelectionMode {
 impl SelectionMode {
     pub(crate) fn parse(value: Option<&str>) -> Self {
         match value {
-            Some("observe") => Self::Observe,
-            Some("auto") => Self::Auto,
+            Some(SELECTION_MODE_OBSERVE) => Self::Observe,
+            Some(SELECTION_MODE_AUTO) => Self::Auto,
             // Enable by default only after the full recovery regression gate.
-            None | Some("off") => Self::Off,
+            None | Some(SELECTION_MODE_OFF) => Self::Off,
             Some(_) => Self::Off,
         }
     }
 
     pub(crate) fn configured() -> Self {
         static MODE: LazyLock<SelectionMode> = LazyLock::new(|| {
-            let value = std::env::var("AXOLOTL_MODRINTH_IP_SELECTION").ok();
-            if value
-                .as_deref()
-                .is_some_and(|s| !matches!(s, "off" | "observe" | "auto"))
-            {
+            let value = std::env::var(ENDPOINT_SELECTION_ENV).ok();
+            if value.as_deref().is_some_and(|s| {
+                !matches!(
+                    s,
+                    SELECTION_MODE_OFF
+                        | SELECTION_MODE_OBSERVE
+                        | SELECTION_MODE_AUTO
+                )
+            }) {
                 tracing::warn!("Invalid Modrinth IP selection mode; using off");
             }
             SelectionMode::parse(value.as_deref())
@@ -327,19 +343,21 @@ impl EndpointSelector {
         }
         window.bytes = window.bytes.saturating_add(bytes);
         let elapsed = now.saturating_duration_since(window.started);
-        if elapsed < Duration::from_secs(3) {
+        if elapsed < NATIVE_SLOW_WINDOW {
             return;
         }
         let speed = (window.bytes as f64 / elapsed.as_secs_f64()) as u64;
-        window.bad_windows =
-            if speed.saturating_mul(100) < previous_speed.saturating_mul(80) {
-                window.bad_windows.saturating_add(1)
-            } else {
-                0
-            };
+        window.bad_windows = if speed
+            .saturating_mul(ENDPOINT_ROLLBACK_PERCENT_BASE)
+            < previous_speed.saturating_mul(ENDPOINT_ROLLBACK_SPEED_PERCENT)
+        {
+            window.bad_windows.saturating_add(1)
+        } else {
+            0
+        };
         window.bytes = 0;
         window.started = now;
-        if window.bad_windows < 2 {
+        if window.bad_windows < ENDPOINT_ROLLBACK_WINDOWS {
             return;
         }
         if let Some(previous) = state
@@ -400,7 +418,7 @@ impl EndpointSelector {
         let mut generations = request.endpoint_migration_generations.lock();
         let generation = (lease.pool.network.epoch, lease.pool.generation);
         if !generations.contains(&generation) {
-            if generations.len() >= 2 {
+            if generations.len() >= ENDPOINT_GENERATION_HISTORY {
                 return None;
             }
             generations.insert(generation);
@@ -430,7 +448,7 @@ impl EndpointSelector {
                 active_feedback: HashMap::new(),
                 feedback: None,
                 #[cfg(test)]
-                endpoint_port: 443,
+                endpoint_port: HTTPS_PORT,
                 closed: false,
                 epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
                 generation: 0,
@@ -549,7 +567,7 @@ impl EndpointSelector {
             .filter(|s| s.protocol == protocol && s.expires_at > now)?;
         Some(EndpointLease {
             pool: PoolKey {
-                authority: Arc::from("cdn.modrinth.com:443"),
+                authority: Arc::from(MODRINTH_CDN_AUTHORITY),
                 network: NetworkContext {
                     config_scope: self.config_scope.clone(),
                     epoch: state.epoch,
@@ -562,7 +580,7 @@ impl EndpointSelector {
                     }
                     #[cfg(not(test))]
                     {
-                        443
+                        HTTPS_PORT
                     }
                 }),
                 protocol,
@@ -574,7 +592,7 @@ impl EndpointSelector {
 
     pub(crate) fn is_current(&self, lease: &EndpointLease) -> bool {
         self.lease(
-            &url::Url::parse("https://cdn.modrinth.com/").unwrap(),
+            &url::Url::parse(MODRINTH_CDN_ORIGIN).unwrap(),
             lease.pool.protocol,
         )
         .is_some_and(|current| current.pool == lease.pool)
@@ -608,7 +626,8 @@ impl EndpointSelector {
         let failures =
             state.failures.entry(lease.pool.endpoint.ip()).or_default();
         *failures = failures.saturating_add(1);
-        if !invalid_certificate && *failures < 2 {
+        if !invalid_certificate && *failures < ENDPOINT_FAILURES_BEFORE_REFRESH
+        {
             return;
         }
         let now = Instant::now();
@@ -642,7 +661,7 @@ impl EndpointSelector {
             return None;
         }
         while state.hourly_reservations.front().is_some_and(|(at, _)| {
-            now.saturating_duration_since(*at) >= Duration::from_secs(3600)
+            now.saturating_duration_since(*at) >= ENDPOINT_BUDGET_WINDOW
         }) {
             state.hourly_reservations.pop_front();
         }
@@ -771,7 +790,7 @@ impl EndpointSelector {
         let Some(trial) = self.trials.acquire(
             super::tuning::TrialKind::Endpoint,
             Instant::now(),
-            policy::ROUND_TIMEOUT + Duration::from_secs(1),
+            policy::ROUND_TIMEOUT + DOWNLOAD_SCHEDULING_GRACE,
         ) else {
             return;
         };
@@ -859,7 +878,7 @@ impl EndpointSelector {
                     return;
                 }
             }
-            tokio::time::sleep(Duration::from_millis(250)).await;
+            tokio::time::sleep(DOWNLOAD_SCHEDULER_INTERVAL).await;
         }
     }
 
@@ -895,7 +914,7 @@ impl EndpointSelector {
             .candidate_snapshot(
                 modrinth_cdn::HOST,
                 cancellation,
-                deadline.min(started + Duration::from_secs(5)),
+                deadline.min(started + ENDPOINT_DNS_TIMEOUT),
             )
             .await
         else {
@@ -1132,8 +1151,8 @@ impl EndpointSelector {
             .iter()
             .find(|(candidate, _)| candidate.ip == best)
             .map(|(_, observation)| observation.ttfb)
-            .unwrap_or(Duration::from_millis(600))
-            .clamp(Duration::from_millis(100), Duration::from_secs(5));
+            .unwrap_or(NATIVE_SLOW_RECONNECT_OVERHEAD)
+            .clamp(RECONNECT_OVERHEAD_MIN, ENDPOINT_DNS_TIMEOUT);
         let estimated_savings = super::super::native_slow::estimated_duration(
             remaining,
             current_speed,
@@ -1172,7 +1191,7 @@ impl EndpointSelector {
                     .map(|(c, _)| c)
             })
             .map(|candidate| Selection {
-                reconnect_overhead: Duration::from_millis(600),
+                reconnect_overhead: NATIVE_SLOW_RECONNECT_OVERHEAD,
                 protocol: target.protocol,
                 preferred: candidate.clone(),
                 backups: Vec::new(),
@@ -1280,7 +1299,7 @@ impl EndpointSelector {
         let mut state = self.state.lock();
         state.endpoint_port = endpoint.port();
         state.selected = Some(Selection {
-            reconnect_overhead: Duration::from_millis(600),
+            reconnect_overhead: NATIVE_SLOW_RECONNECT_OVERHEAD,
             protocol,
             preferred: EndpointCandidate {
                 ip: endpoint.ip(),

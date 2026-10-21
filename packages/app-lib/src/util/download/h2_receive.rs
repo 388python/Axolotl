@@ -1,11 +1,16 @@
 //! Shared receive-side accounting for native HTTP/2 streams.
 
+use crate::util::download::constants::{
+    ADAPTIVE_CONNECTION_WINDOW, NATIVE_SLOW_COLD_SPEED_FLOOR,
+};
 use bytes::Bytes;
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::Instant;
 
-const STREAM_RECV_TIMEOUT: Duration = Duration::from_secs(30);
-const MIN_PROGRESS_BYTES: u64 = 256 * 1024;
-const MAX_PROGRESS_WAIT: Duration = Duration::from_secs(1);
+use super::constants::{
+    MAX_PROGRESS_WAIT, MIN_PROGRESS_BYTES, STREAM_RECV_TIMEOUT,
+};
 
 /// Recent aggregate socket rate, independent of one multiplexed stream.
 /// Reset every window so a fast prefix cannot hide a later slow tail.
@@ -34,7 +39,7 @@ impl ConnectionRateWindow {
             return None;
         }
         let elapsed = now.duration_since(self.started_at);
-        if elapsed >= Duration::from_secs(3) {
+        if elapsed >= ADAPTIVE_CONNECTION_WINDOW {
             self.rate = Some(
                 ((bytes - self.start_bytes) as f64 / elapsed.as_secs_f64())
                     as u64,
@@ -54,7 +59,7 @@ pub(crate) fn endpoint_speed(
     if active_streams <= 1 {
         return Some(stream_speed);
     }
-    aggregate.filter(|speed| *speed < 256 * 1024)
+    aggregate.filter(|speed| *speed < NATIVE_SLOW_COLD_SPEED_FLOOR)
 }
 
 /// Tracks one active H2 stream in the native automatic-concurrency metrics.
@@ -160,7 +165,7 @@ mod tests {
         let now = Instant::now();
         let mut window = ConnectionRateWindow::new(0, now);
         assert_eq!(
-            window.observe(30 * 1024 * 1024, now + Duration::from_secs(3)),
+            window.observe(30 * 1024 * 1024, now + ADAPTIVE_CONNECTION_WINDOW),
             Some(10 * 1024 * 1024)
         );
         assert_eq!(endpoint_speed(45 * 1024, 2, window.rate), None);
@@ -215,8 +220,9 @@ mod tests {
 
     #[tokio::test]
     async fn receive_capacity_allows_body_larger_than_initial_window() {
-        const BODY_SIZE: usize = 2 * 1024 * 1024;
-        const FRAME_SIZE: usize = 16 * 1024;
+        use crate::util::download::constants::TEST_BODY_SIZE as BODY_SIZE;
+
+        use crate::util::download::constants::TEST_FRAME_SIZE as FRAME_SIZE;
 
         let (client_io, server_io) = tokio::io::duplex(64 * 1024);
         let server = tokio::spawn(async move {

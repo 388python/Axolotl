@@ -3,10 +3,16 @@
 use super::modrinth_redirect::repair_official_redirect as repair_official_cdn_redirect;
 use super::retired_sources;
 use crate::ErrorKind;
+use crate::util::download::constants::{
+    API_KEY_HEADER, AUTHORIZATION_HEADER, CURSEFORGE_API_HOST,
+    CURSEFORGE_EDGE_HOST, DOWNLOAD_META_HEADER, IDENTITY_ENCODING,
+    MAX_DOWNLOAD_REDIRECTS, MAX_REDIRECT_LOCATION_BYTES,
+    NATIVE_REQUEST_TIMED_OUT_WAITING_FOR_CDN_RESPONSE_CONNECTION_BUDGET,
+    RESOURCE_WAIT_TIMEOUT,
+};
 use crate::util::fetch::{
-    DIRECT_REQWEST_CLIENT, DOWNLOAD_META_HEADER, DownloadClients, DownloadMeta,
-    DownloadRoute, MAX_REDIRECT_LOCATION_BYTES, NO_REDIRECT_REQWEST_CLIENT,
-    ProxyPolicy, authority_uses_http1_fallback_for,
+    DIRECT_REQWEST_CLIENT, DownloadClients, DownloadMeta, DownloadRoute,
+    NO_REDIRECT_REQWEST_CLIENT, ProxyPolicy, authority_uses_http1_fallback_for,
     forget_effective_route_authority, is_allowed_download_redirect,
     is_h2_protocol_failure, is_official_modrinth_download_url,
     is_sensitive_header, record_authority_h2_failure_for,
@@ -67,7 +73,7 @@ async fn send_cdn_request_inner(
     *request.url_mut() =
         retired_sources::normalize_parsed(request.url().clone())?;
     let original = request.url().clone();
-    for hop in 0..=5 {
+    for hop in 0..=MAX_DOWNLOAD_REDIRECTS {
         let physical_budget = if let Some(permit) = admitted.take() {
             Some(std::sync::Arc::new(permit))
         } else if let Some((_, proxy)) = selection {
@@ -81,13 +87,13 @@ async fn send_cdn_request_inner(
             };
             Some(std::sync::Arc::new(
                 tokio::time::timeout(
-                    std::time::Duration::from_secs(45),
+                    RESOURCE_WAIT_TIMEOUT,
                     super::native_budget::acquire(&route),
                 )
                 .await
                 .map_err(|_| {
                     ErrorKind::NetworkError(
-                        "timed out waiting for CDN response connection budget"
+                        NATIVE_REQUEST_TIMED_OUT_WAITING_FOR_CDN_RESPONSE_CONNECTION_BUDGET
                             .into(),
                     )
                 })??,
@@ -141,7 +147,8 @@ async fn send_cdn_request_inner(
                 ),
             );
         }
-        if !response.status().is_redirection() || hop == 5 {
+        if !response.status().is_redirection() || hop == MAX_DOWNLOAD_REDIRECTS
+        {
             return Ok(response);
         }
         let Some(location) =
@@ -213,7 +220,7 @@ pub(crate) async fn send_path_request_with_clients(
     };
     current = retired_sources::normalize_parsed(current)?;
     let mut reused_redirect_target = current != original;
-    for redirect_count in 0..=5 {
+    for redirect_count in 0..=MAX_DOWNLOAD_REDIRECTS {
         let fallback_to_http1 = clients.force_http1
             || url_authority(current.as_str()).is_some_and(|authority| {
                 authority_uses_http1_fallback_for(&authority, route.proxy)
@@ -243,13 +250,14 @@ pub(crate) async fn send_path_request_with_clients(
         let mut request = client.get(current.clone());
         if let Some((name, value)) = custom_header
             && (allow_sensitive || !is_sensitive_header(name))
-            && (!name.eq_ignore_ascii_case("x-api-key")
-                || original.host_str() == Some("api.curseforge.com"))
+            && (!name.eq_ignore_ascii_case(API_KEY_HEADER)
+                || original.host_str() == Some(CURSEFORGE_API_HOST))
         {
             request = request.header(name, value);
         }
         if allow_sensitive && let Some(credentials) = credentials {
-            request = request.header("Authorization", &credentials.session);
+            request =
+                request.header(AUTHORIZATION_HEADER, &credentials.session);
         }
         if !route.is_mirror
             && same_as_original
@@ -260,13 +268,13 @@ pub(crate) async fn send_path_request_with_clients(
                 .header(DOWNLOAD_META_HEADER, download_meta.to_header_value());
         }
         let redirect_probe = (range_start.is_some()
-            && current.host_str() == Some("edge.forgecdn.net"))
+            && current.host_str() == Some(CURSEFORGE_EDGE_HOST))
         .then(|| request.try_clone())
         .flatten();
         if let Some(range) = byte_range_header_value(range_start, range_end) {
             request = request
                 .header(header::RANGE, range)
-                .header(header::ACCEPT_ENCODING, "identity");
+                .header(header::ACCEPT_ENCODING, IDENTITY_ENCODING);
         }
         let mut response = match request.send().await {
             Ok(response) => response,
@@ -292,7 +300,7 @@ pub(crate) async fn send_path_request_with_clients(
                     .await;
                 }
                 if !fallback_to_http1
-                    && redirect_count < 5
+                    && redirect_count < MAX_DOWNLOAD_REDIRECTS
                     && is_h2_protocol_failure(&error)
                     && let Some(authority) = url_authority(current.as_str())
                 {
@@ -361,7 +369,7 @@ pub(crate) async fn send_path_request_with_clients(
             );
             return Ok((response, current.into()));
         }
-        if redirect_count == 5 {
+        if redirect_count == MAX_DOWNLOAD_REDIRECTS {
             return Err(ErrorKind::OtherError(format!(
                 "Too many redirects while downloading {}",
                 route.url

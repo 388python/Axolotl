@@ -4,7 +4,25 @@
 //! connection. Minecraft assets use the dedicated batch multiplexer below,
 //! which can add one sibling connection only after sustained saturation.
 
+pub(crate) use super::constants::ASSET_BATCH_CONCURRENCY;
+use super::constants::{
+    ASSET_BATCH_RETRY_PASSES, ASSET_RESOURCE_WAIT_TIMEOUT,
+    H2_RANGE_FILE_THRESHOLD, MAX_H2_RANGES_PER_FILE,
+};
 use super::h2_pool::{H2ConnectFailureKind, SharedH2Connection};
+use crate::util::download::constants::{
+    API_KEY_HEADER, CURSEFORGE_API_HOST, DOWNLOAD_FAIR_SHARE_DIVISOR,
+    DOWNLOAD_META_HEADER, DOWNLOAD_SCHEDULER_INTERVAL, H2_DOWNLOAD_ASSET,
+    H2_DOWNLOAD_AXOLOTL_LAUNCHER, H2_DOWNLOAD_BELOW_EXPECTATION,
+    H2_DOWNLOAD_BYTES_0_0, H2_DOWNLOAD_CONTENT_RANGE,
+    H2_DOWNLOAD_DOWNLOADED_ASSET_IS_EMPTY,
+    H2_DOWNLOAD_DOWNLOADED_FILE_IS_EMPTY, H2_DOWNLOAD_EMPTY, H2_DOWNLOAD_GET,
+    H2_DOWNLOAD_HTTP_2, H2_DOWNLOAD_INVALID_JAR, H2_DOWNLOAD_PROBE,
+    H2_DOWNLOAD_RANGE_STREAM, H2_DOWNLOAD_SEGMENT,
+    H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_DESTINATION_LOCK,
+    H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT,
+    IDENTITY_ENCODING, PARTIAL_FILE_SUFFIX,
+};
 use crate::util::fetch;
 use crate::util::fetch::{
     DownloadRequest, DownloadResult, DownloadRoute, DownloadRouteSource,
@@ -17,17 +35,11 @@ use std::path::Path;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::Instant;
 use tokio::io::AsyncWriteExt;
 use url::Url;
-
-/// Logical worker target for the batch asset downloader. Actual H2 stream
-/// admission is separately capped so assets cannot starve ordinary content.
-pub(crate) const ASSET_BATCH_CONCURRENCY: usize = 64;
-/// Internal retry passes for failed batch items before they are handed back
-/// to the caller for the regular per-file download path.
-const ASSET_BATCH_RETRY_PASSES: usize = 2;
-const ASSET_RESOURCE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// Outcome of attempting a multiplexed download.
 pub(crate) enum H2DownloadOutcome {
@@ -154,9 +166,12 @@ pub(crate) async fn try_download_via_h2(
             }
         };
         let mut probe_headers = request_headers(request, route);
-        probe_headers.insert(RANGE, HeaderValue::from_static("bytes=0-0"));
         probe_headers
-            .insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+            .insert(RANGE, HeaderValue::from_static(H2_DOWNLOAD_BYTES_0_0));
+        probe_headers.insert(
+            ACCEPT_ENCODING,
+            HeaderValue::from_static(IDENTITY_ENCODING),
+        );
 
         let (response, mut probe_body) =
             match open_stream(&connection, &uri, probe_headers).await {
@@ -337,11 +352,15 @@ fn h2_range_limit(
     global_limit: usize,
     disk_limit: usize,
 ) -> usize {
-    let size_limit = if size >= 64 * 1024 * 1024 { 4 } else { 1 };
+    let size_limit = if size >= H2_RANGE_FILE_THRESHOLD {
+        MAX_H2_RANGES_PER_FILE
+    } else {
+        1
+    };
     requested
         .max(1)
         .min(size_limit)
-        .min((global_limit / 2).max(1))
+        .min((global_limit / DOWNLOAD_FAIR_SHARE_DIVISOR).max(1))
         .min(disk_limit.max(1))
 }
 
@@ -436,25 +455,26 @@ pub(crate) fn classify_download_error(
         }
         crate::ErrorKind::JSONError(_) => H2DownloadFailure::Content,
         crate::ErrorKind::NetworkError(message)
-            if message.contains("below expectation") =>
+            if message.contains(H2_DOWNLOAD_BELOW_EXPECTATION) =>
         {
             H2DownloadFailure::Slow
         }
         crate::ErrorKind::NetworkError(message)
-            if message.contains("HTTP/2")
-                || message.contains("range stream") =>
+            if message.contains(H2_DOWNLOAD_HTTP_2)
+                || message.contains(H2_DOWNLOAD_RANGE_STREAM) =>
         {
             H2DownloadFailure::Protocol
         }
         crate::ErrorKind::OtherError(message)
-            if message.contains("HTTP/2")
-                || message.contains("Content-Range")
-                || message.contains("segment") =>
+            if message.contains(H2_DOWNLOAD_HTTP_2)
+                || message.contains(H2_DOWNLOAD_CONTENT_RANGE)
+                || message.contains(H2_DOWNLOAD_SEGMENT) =>
         {
             H2DownloadFailure::Protocol
         }
         crate::ErrorKind::OtherError(message)
-            if message.contains("empty") || message.contains("Invalid JAR") =>
+            if message.contains(H2_DOWNLOAD_EMPTY)
+                || message.contains(H2_DOWNLOAD_INVALID_JAR) =>
         {
             H2DownloadFailure::Content
         }
@@ -469,16 +489,17 @@ pub(crate) fn request_headers(
     let mut headers = HeaderMap::new();
     headers.insert(
         USER_AGENT,
-        HeaderValue::from_str(&crate::launcher_user_agent())
-            .unwrap_or_else(|_| HeaderValue::from_static("Axolotl Launcher")),
+        HeaderValue::from_str(&crate::launcher_user_agent()).unwrap_or_else(
+            |_| HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER),
+        ),
     );
     let route_host = Url::parse(&route.url)
         .ok()
         .and_then(|url| url.host_str().map(str::to_string));
     if let Some((name, value)) = &request.header
         && (route.allow_sensitive_headers || !fetch::is_sensitive_header(name))
-        && (!name.eq_ignore_ascii_case("x-api-key")
-            || route_host.as_deref() == Some("api.curseforge.com"))
+        && (!name.eq_ignore_ascii_case(API_KEY_HEADER)
+            || route_host.as_deref() == Some(CURSEFORGE_API_HOST))
         && let Ok(name) = http::header::HeaderName::from_str(name)
         && let Ok(value) = HeaderValue::from_str(value)
     {
@@ -490,7 +511,7 @@ pub(crate) fn request_headers(
         && let Ok(value) =
             HeaderValue::from_str(&download_meta.to_header_value())
     {
-        headers.insert("modrinth-download-meta", value);
+        headers.insert(DOWNLOAD_META_HEADER, value);
     }
     headers
 }
@@ -537,7 +558,9 @@ pub(crate) async fn open_stream(
 async fn drain_body(stream: &mut h2::RecvStream) {
     loop {
         let chunk =
-            match super::h2_receive::receive_chunk(stream, "probe").await {
+            match super::h2_receive::receive_chunk(stream, H2_DOWNLOAD_PROBE)
+                .await
+            {
                 Ok(Some(chunk)) => chunk,
                 Ok(None) | Err(_) => break,
             };
@@ -563,7 +586,8 @@ async fn single_stream(
     connection_activity: super::h2_pool::H2StreamActivity,
 ) -> crate::Result<DownloadResult> {
     let mut headers = request_headers(request, route);
-    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    headers
+        .insert(ACCEPT_ENCODING, HeaderValue::from_static(IDENTITY_ENCODING));
 
     let (response, mut stream) = open_stream(connection, uri, headers).await?;
     super::native_breaker::record_response_status_failure(
@@ -574,7 +598,7 @@ async fn single_stream(
     if !response.status().is_success() {
         return Err(crate::ErrorKind::HttpError {
             status: response.status().as_u16(),
-            method: "GET".to_string(),
+            method: H2_DOWNLOAD_GET.to_string(),
             url: fetch::sanitize_url_for_log(uri.to_string().as_str()),
         }
         .into());
@@ -597,7 +621,7 @@ async fn single_stream(
         connection.bytes_transferred_for_scheduler(),
         transfer_started,
     );
-    let mut timer = tokio::time::interval(Duration::from_millis(250));
+    let mut timer = tokio::time::interval(DOWNLOAD_SCHEDULER_INTERVAL);
     let mut last_endpoint_speed = 0;
     timer.tick().await;
     loop {
@@ -770,7 +794,7 @@ async fn verify_and_finalize(
     fetch::validate_file_content(part_path, integrity.content).await?;
     if downloaded == 0 {
         return Err(crate::ErrorKind::OtherError(
-            "downloaded file is empty".to_string(),
+            H2_DOWNLOAD_DOWNLOADED_FILE_IS_EMPTY.to_string(),
         )
         .into());
     }
@@ -1269,7 +1293,7 @@ where
 async fn prepare_asset_part_path(
     destination: &Path,
 ) -> crate::Result<std::path::PathBuf> {
-    let part_path = fetch::suffixed_path(destination, ".part");
+    let part_path = fetch::suffixed_path(destination, PARTIAL_FILE_SUFFIX);
     if let Some(parent) = part_path.parent() {
         crate::util::io::create_dir_all(parent).await?;
     }
@@ -1298,7 +1322,8 @@ async fn download_asset_item(
     .await
     .map_err(|_| {
         crate::ErrorKind::NetworkError(
-            "timed out waiting for asset destination lock".to_string(),
+            H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_DESTINATION_LOCK
+                .to_string(),
         )
     })?;
     // A different downloader may have committed the object while this item
@@ -1352,7 +1377,7 @@ async fn download_asset_item(
             .await
             .map_err(|_| {
                 crate::ErrorKind::NetworkError(
-                    "timed out waiting for asset HTTP/2 stream permit"
+                    H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT
                         .to_string(),
                 )
             })??,
@@ -1365,10 +1390,12 @@ async fn download_asset_item(
     let mut headers = HeaderMap::new();
     headers.insert(
         USER_AGENT,
-        HeaderValue::from_str(&crate::launcher_user_agent())
-            .unwrap_or_else(|_| HeaderValue::from_static("Axolotl Launcher")),
+        HeaderValue::from_str(&crate::launcher_user_agent()).unwrap_or_else(
+            |_| HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER),
+        ),
     );
-    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    headers
+        .insert(ACCEPT_ENCODING, HeaderValue::from_static(IDENTITY_ENCODING));
 
     let (response, mut stream) = open_stream(&connection, uri, headers).await?;
     super::native_breaker::record_response_status_failure(
@@ -1407,8 +1434,11 @@ async fn download_asset_item(
         let mut downloaded = 0_u64;
         let activity = super::h2_receive::H2TransferActivity::begin();
         loop {
-            let chunk =
-                super::h2_receive::receive_chunk(&mut stream, "asset").await?;
+            let chunk = super::h2_receive::receive_chunk(
+                &mut stream,
+                H2_DOWNLOAD_ASSET,
+            )
+            .await?;
             let Some(chunk) = chunk else {
                 break;
             };
@@ -1443,7 +1473,7 @@ async fn download_asset_item(
         drop(_stream_permit);
         if downloaded == 0 {
             return Err(crate::ErrorKind::OtherError(
-                "downloaded asset is empty".to_string(),
+                H2_DOWNLOAD_DOWNLOADED_ASSET_IS_EMPTY.to_string(),
             )
             .into());
         }

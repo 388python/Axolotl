@@ -19,6 +19,17 @@ use crate::state::{
     ModrinthProjectId, ModrinthVersionId, ProjectType, ReleaseChannel,
     Settings,
 };
+use crate::util::download::constants::CURSEFORGE_OVERRIDE_EXTRACTION_CONCURRENCY as OVERRIDE_EXTRACTION_CONCURRENCY;
+use crate::util::download::constants::MODPACK_DATABASE_BATCH_SIZE;
+use crate::util::download::constants::MODPACK_DATABASE_FLUSH_INTERVAL;
+use crate::util::download::constants::MODPACK_DATABASE_QUEUE_CAPACITY;
+use crate::util::download::constants::MODPACK_FILE_INSTALL_ATTEMPTS;
+use crate::util::download::constants::MODPACK_METADATA_CONCURRENCY;
+use crate::util::download::constants::MODPACK_VERIFICATION_CONCURRENCY;
+use crate::util::download::constants::MODPACK_VERIFICATION_QUEUE_CAPACITY;
+use crate::util::download::constants::{
+    CURSEFORGE_H2_RANGE_THRESHOLD, CURSEFORGE_REQUESTED_H2_RANGES,
+};
 use crate::util::fetch::{
     ContentValidation, DownloadRequest, DownloadRouteSource, FetchProgressFn,
     Integrity, ProxyPolicy, ResourceClass, download_to_path,
@@ -61,13 +72,7 @@ use curseforge_mapping::{
 const API_BASE_URL: &str = "https://api.curseforge.com";
 const MINECRAFT_GAME_ID: u32 = 432;
 const MAX_PAGE_SIZE: u32 = 50;
-const MODPACK_FILE_INSTALL_ATTEMPTS: usize = 3;
-const MODPACK_METADATA_CONCURRENCY: usize = 4;
-const MODPACK_VERIFICATION_CONCURRENCY: usize = 4;
-const MODPACK_DATABASE_BATCH_SIZE: usize = 25;
-const MODPACK_DATABASE_FLUSH_INTERVAL: Duration = Duration::from_millis(500);
-const MODPACK_VERIFICATION_QUEUE_CAPACITY: usize = 128;
-const MODPACK_DATABASE_QUEUE_CAPACITY: usize = 128;
+
 const DEPENDENCY_RELATION_EMBEDDED: u32 = 1;
 const DEPENDENCY_RELATION_OPTIONAL: u32 = 2;
 pub(crate) const DEPENDENCY_RELATION_REQUIRED: u32 = 3;
@@ -79,7 +84,6 @@ pub(crate) const QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID: u32 = 634179;
 const CURSEFORGE_LOADER_QUILT: u32 = 5;
 const MAX_DEPENDENCY_DEPTH: usize = 32;
 const DEPENDENCY_PLAN_TTL: Duration = Duration::from_secs(10 * 60);
-const OVERRIDE_EXTRACTION_CONCURRENCY: usize = 4;
 
 static UNAUTHORIZED: AtomicBool = AtomicBool::new(false);
 static CATEGORY_CACHE: LazyLock<RwLock<Option<Vec<CurseForgeCategory>>>> =
@@ -8815,8 +8819,8 @@ fn curseforge_integrity(
 }
 
 const fn curseforge_modpack_h2_range_concurrency(size: u64) -> Option<usize> {
-    if size >= 64 * 1024 * 1024 {
-        Some(4)
+    if size >= CURSEFORGE_H2_RANGE_THRESHOLD {
+        Some(CURSEFORGE_REQUESTED_H2_RANGES)
     } else {
         None
     }
@@ -9642,7 +9646,8 @@ async fn fingerprint_and_sha1_file(
     } else {
         acquire.await?
     };
-    const BUFFER_SIZE: usize = 256 * 1024;
+
+    use crate::util::download::constants::CURSEFORGE_VERIFY_BUFFER_SIZE as BUFFER_SIZE;
     let mut file = tokio::fs::File::open(path).await?;
     let mut buffer = vec![0_u8; BUFFER_SIZE];
     let mut sha1 = sha1_smol::Sha1::new();

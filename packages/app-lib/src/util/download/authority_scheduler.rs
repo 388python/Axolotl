@@ -2,16 +2,28 @@ use super::endpoint_selection::tuning::{
     TRIALS, TrialKind, TrialLease, TrialRegistry,
 };
 use super::h2_pool::SharedH2Connection;
+use crate::util::download::constants::{
+    ADAPTIVE_CONNECTION_GAIN_PERCENT, ADAPTIVE_CONNECTION_INITIAL_TARGET,
+    ADAPTIVE_CONNECTION_MAX_TARGET, ADAPTIVE_CONNECTION_PERCENT_BASE,
+    ADAPTIVE_CONNECTION_RATE_SPREAD, ADAPTIVE_CONNECTION_TRIAL_TIMEOUT,
+    ADAPTIVE_CONNECTION_TRIAL_WINDOWS, CONNECTION_FAILURE_COOLDOWN_WINDOWS,
+    CONNECTION_GROWTH_FACTOR,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use std::time::Duration;
+use std::time::Instant;
 
-pub(crate) const INITIAL_CONNECTION_TARGET: usize = 4;
-pub(crate) const MAX_CONNECTION_TARGET: usize = 32;
-pub(crate) const STABILITY_WINDOW: Duration = Duration::from_millis(500);
+pub(crate) use super::constants::{
+    ADAPTIVE_CONNECTION_COOLDOWN as ADAPTIVE_COOLDOWN,
+    ADAPTIVE_CONNECTION_WINDOW as ADAPTIVE_WINDOW,
+    CONNECTION_STABILITY_WINDOW as STABILITY_WINDOW, INITIAL_CONNECTION_TARGET,
+    MAX_CONNECTION_TARGET,
+};
 
 fn next_target(current: usize) -> usize {
-    (current * 2).min(MAX_CONNECTION_TARGET)
+    (current * CONNECTION_GROWTH_FACTOR).min(MAX_CONNECTION_TARGET)
 }
 
 pub(crate) struct AuthorityScheduler {
@@ -73,7 +85,7 @@ impl AuthorityScheduler {
         });
         if self.connections.is_empty() {
             self.target = if self.adaptive.is_some() {
-                2
+                ADAPTIVE_CONNECTION_INITIAL_TARGET
             } else {
                 INITIAL_CONNECTION_TARGET
             };
@@ -229,9 +241,11 @@ impl AuthorityScheduler {
             self.target = adaptive.target;
             return;
         }
-        self.target = (self.target / 2).max(INITIAL_CONNECTION_TARGET);
+        self.target = (self.target / CONNECTION_GROWTH_FACTOR)
+            .max(INITIAL_CONNECTION_TARGET);
         self.stable_since = None;
-        self.cooldown_until = Some(now + STABILITY_WINDOW * 4);
+        self.cooldown_until =
+            Some(now + STABILITY_WINDOW * CONNECTION_FAILURE_COOLDOWN_WINDOWS);
     }
 
     #[cfg(test)]
@@ -243,7 +257,7 @@ impl AuthorityScheduler {
         if self.adaptive.is_none() {
             self.adaptive =
                 Some(AdaptiveConnections::new(now, self.monotonic_bytes));
-            self.target = 2;
+            self.target = ADAPTIVE_CONNECTION_INITIAL_TARGET;
         }
     }
 
@@ -276,9 +290,6 @@ impl AuthorityScheduler {
         });
     }
 }
-
-const ADAPTIVE_WINDOW: Duration = Duration::from_secs(3);
-const ADAPTIVE_COOLDOWN: Duration = Duration::from_secs(30);
 
 struct ConnectionTrial {
     lease: TrialLease,
@@ -313,7 +324,7 @@ impl AdaptiveConnections {
         let revision = registry.snapshot(now).0;
         Self {
             registry,
-            target: 2,
+            target: ADAPTIVE_CONNECTION_INITIAL_TARGET,
             sampled_at: now,
             sampled_bytes: bytes,
             baseline_bps: None,
@@ -393,11 +404,14 @@ impl AdaptiveConnections {
             }
             trial.windows += 1;
             trial.rate_sum = trial.rate_sum.saturating_add(rate);
-            if trial.windows < 2 {
+            if trial.windows < ADAPTIVE_CONNECTION_TRIAL_WINDOWS {
                 return false;
             }
-            let gain = u128::from(trial.rate_sum / 2) * 100
-                >= u128::from(trial.baseline_bps) * 110;
+            let gain = u128::from(
+                trial.rate_sum / u64::from(ADAPTIVE_CONNECTION_TRIAL_WINDOWS),
+            ) * ADAPTIVE_CONNECTION_PERCENT_BASE
+                >= u128::from(trial.baseline_bps)
+                    * ADAPTIVE_CONNECTION_GAIN_PERCENT;
             if !gain {
                 self.rollback(now);
                 return count > self.target;
@@ -408,7 +422,7 @@ impl AdaptiveConnections {
             return false;
         }
         if count < self.target
-            || self.target >= 31
+            || self.target >= ADAPTIVE_CONNECTION_MAX_TARGET
             || self.cooldown_until.is_some_and(|until| until > now)
         {
             return false;
@@ -416,13 +430,15 @@ impl AdaptiveConnections {
         let Some(baseline) = self.baseline_bps.replace(rate) else {
             return false;
         };
-        if rate < baseline / 2 || rate > baseline.saturating_mul(2) {
+        if rate < baseline / ADAPTIVE_CONNECTION_RATE_SPREAD
+            || rate > baseline.saturating_mul(ADAPTIVE_CONNECTION_RATE_SPREAD)
+        {
             return false;
         }
         let Some(lease) = self.registry.acquire(
             TrialKind::Connections,
             now,
-            Duration::from_secs(25),
+            ADAPTIVE_CONNECTION_TRIAL_TIMEOUT,
         ) else {
             return false;
         };

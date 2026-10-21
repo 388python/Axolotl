@@ -1,4 +1,16 @@
 //! Theseus state management system
+use crate::util::download::constants::MAX_CONCURRENT_INSTALL_JOBS;
+use crate::util::download::constants::{
+    AUTO_DOWNLOAD_CONCURRENCY_INITIAL, AUTO_DOWNLOAD_CONCURRENCY_MAX,
+    AUTO_DOWNLOAD_CONCURRENCY_MIN, AUTO_DOWNLOAD_CONCURRENCY_STEP,
+    AUTO_DOWNLOAD_EXPANSION_ERROR_RATE, AUTO_DOWNLOAD_PRESSURE_ERROR_RATE,
+    AUTO_DOWNLOAD_PRESSURE_WINDOWS, AUTO_DOWNLOAD_PROBE_COOLDOWN,
+    AUTO_DOWNLOAD_SAMPLE_INTERVAL, AUTO_DOWNLOAD_TRIAL_WINDOWS,
+    AUTO_DOWNLOAD_UTILIZATION_WINDOWS, DOWNLOAD_CONCURRENCY_HARD_MAX,
+};
+use crate::util::download::constants::{
+    AUTO_DOWNLOAD_MIN_GAIN_PERCENT, AUTO_DOWNLOAD_PERCENT_BASE,
+};
 use crate::util::fetch::{FetchSemaphore, IoSemaphore};
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -89,16 +101,7 @@ pub mod server_join_log;
 // Global state
 // RwLock on state only has concurrent reads, except for config dir change which takes control of the State
 static LAUNCHER_STATE: OnceCell<Arc<State>> = OnceCell::const_new();
-const MAX_CONCURRENT_INSTALL_JOBS: usize = 1;
-const AUTO_DOWNLOAD_CONCURRENCY_INITIAL: usize = 64;
-const AUTO_DOWNLOAD_CONCURRENCY_MIN: usize = 16;
-const AUTO_DOWNLOAD_CONCURRENCY_MAX: usize = 128;
-const AUTO_DOWNLOAD_CONCURRENCY_STEP: usize = 8;
-/// Number of consecutive pressured sample windows required before the global
-/// download concurrency backs off. Host-level throttling reacts immediately.
-const AUTO_DOWNLOAD_PRESSURE_WINDOWS: usize = 2;
-const AUTO_DOWNLOAD_SAMPLE_INTERVAL: Duration = Duration::from_secs(3);
-const AUTO_DOWNLOAD_PROBE_COOLDOWN: Duration = Duration::from_secs(30);
+
 pub struct State {
     /// Information on the location of files used in the launcher
     pub directories: DirectoryInfo,
@@ -518,7 +521,8 @@ impl AutoConcurrencyController {
         // A single throttled window is handled by the per-host limiter; the
         // global concurrency only backs off when pressure persists across
         // several samples, and then in small steps instead of a big cut.
-        let pressured = sample.throttles > 0 || error_rate >= 0.05;
+        let pressured = sample.throttles > 0
+            || error_rate >= AUTO_DOWNLOAD_PRESSURE_ERROR_RATE;
         if pressured {
             self.high_utilization_windows = 0;
             self.probe = None;
@@ -539,11 +543,13 @@ impl AutoConcurrencyController {
         if let Some(probe) = &mut self.probe {
             probe.windows += 1;
             probe.throughput = probe.throughput.saturating_add(sample.bytes);
-            if probe.windows >= 2 {
+            if probe.windows >= AUTO_DOWNLOAD_TRIAL_WINDOWS {
                 let average = probe.throughput / probe.windows as u64;
                 let productive = probe.baseline_throughput > 0
-                    && average.saturating_mul(100)
-                        >= probe.baseline_throughput.saturating_mul(105);
+                    && average.saturating_mul(AUTO_DOWNLOAD_PERCENT_BASE)
+                        >= probe
+                            .baseline_throughput
+                            .saturating_mul(AUTO_DOWNLOAD_MIN_GAIN_PERCENT);
                 let previous = probe.previous_target;
                 self.probe = None;
                 if !productive {
@@ -556,7 +562,7 @@ impl AutoConcurrencyController {
         }
 
         if self.cooldown_until.is_some_and(|until| until > now)
-            || error_rate >= 0.02
+            || error_rate >= AUTO_DOWNLOAD_EXPANSION_ERROR_RATE
             || sample.throttles > 0
         {
             self.high_utilization_windows = 0;
@@ -570,7 +576,9 @@ impl AutoConcurrencyController {
         } else {
             self.high_utilization_windows = 0;
         }
-        if self.high_utilization_windows < 2 || current >= ceiling {
+        if self.high_utilization_windows < AUTO_DOWNLOAD_UTILIZATION_WINDOWS
+            || current >= ceiling
+        {
             return current;
         }
 
@@ -954,7 +962,7 @@ impl State {
     }
 
     fn resize_download_concurrency(self: &Arc<Self>, target: usize) {
-        let target = target.clamp(1, 256);
+        let target = target.clamp(1, DOWNLOAD_CONCURRENCY_HARD_MAX);
         self.download_concurrency_target
             .store(target, Ordering::Release);
 

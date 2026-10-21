@@ -7,6 +7,16 @@ use crate::install::{
 };
 use crate::instance::QuickPlayType;
 use crate::launcher::parse_rules;
+use crate::util::download::constants::DERIVED_VERSION_CACHE_FORMAT;
+use crate::util::download::constants::FABRIC_MAVEN;
+use crate::util::download::constants::FORGE_MAVEN;
+use crate::util::download::constants::LAUNCHER_META_MAVEN;
+pub(crate) use crate::util::download::constants::LIBRARIES_MAVEN;
+use crate::util::download::constants::MAVEN_CENTRAL;
+use crate::util::download::constants::MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES;
+use crate::util::download::constants::NEOFORGE_MAVEN;
+use crate::util::download::constants::QUILT_MAVEN;
+use crate::util::download::constants::SPONGE_MAVEN;
 use crate::{
     event::{
         LoadingBarId,
@@ -40,8 +50,6 @@ use std::{
     },
 };
 use url::Url;
-
-const MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalRuntimeSource {
@@ -476,8 +484,9 @@ async fn download_minecraft_file_with_candidates(
 }
 
 pub(crate) fn minecraft_library_mirrors(url: &str) -> Vec<String> {
-    const MACHINA_LWJGL_RELEASE: &str = "https://github.com/MinecraftMachina/lwjgl/releases/download/2.9.4-20150209-mmachina.2/";
-    const MOJANG_LWJGL_PATH: &str = "https://libraries.minecraft.net/org/lwjgl/lwjgl/lwjgl-platform/2.9.4-nightly-20150209/";
+    use crate::util::download::constants::MACHINA_LWJGL_RELEASE;
+
+    use crate::util::download::constants::MOJANG_LWJGL_PATH;
 
     let mut mirrors = vec![url.to_string()];
     if let Some(file_name) = url.strip_prefix(MACHINA_LWJGL_RELEASE) {
@@ -485,15 +494,6 @@ pub(crate) fn minecraft_library_mirrors(url: &str) -> Vec<String> {
     }
     mirrors
 }
-
-const LAUNCHER_META_MAVEN: &str = "https://launcher-meta.modrinth.com/maven";
-pub(crate) const LIBRARIES_MAVEN: &str = "https://libraries.minecraft.net";
-const FABRIC_MAVEN: &str = "https://maven.fabricmc.net";
-const FORGE_MAVEN: &str = "https://maven.minecraftforge.net";
-const NEOFORGE_MAVEN: &str = "https://maven.neoforged.net/releases";
-const QUILT_MAVEN: &str = "https://maven.quiltmc.org/repository/release";
-const SPONGE_MAVEN: &str = "https://repo.spongepowered.org/maven";
-const MAVEN_CENTRAL: &str = "https://repo.maven.apache.org/maven2";
 
 pub(crate) fn legacy_library_download_urls(
     repository: Option<&str>,
@@ -1335,7 +1335,6 @@ async fn write_version_info(path: &Path, data: Vec<u8>) -> crate::Result<()> {
 }
 
 /// Bumped when derived loader metadata must be rebuilt from the base profile.
-const DERIVED_VERSION_CACHE_FORMAT: &str = "5";
 
 fn normalize_version_timestamps(
     version: &GameVersion,
