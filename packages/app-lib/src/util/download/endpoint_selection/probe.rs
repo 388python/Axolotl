@@ -42,13 +42,28 @@ impl ProbeSession {
     ) -> Result<Self, ProbeFailure> {
         use crate::util::fetch::ProxyPolicy;
         use crate::util::proxy::ProxyMode;
+        #[cfg(test)]
+        let fixture = clients.endpoints.probe_fixture.lock().as_ref().and_then(
+            |fixture| {
+                fixture
+                    .candidates
+                    .iter()
+                    .find(|(address, _)| address.ip() == candidate.ip)
+                    .cloned()
+            },
+        );
+        #[cfg(test)]
+        let public_candidate =
+            super::candidates::is_public_ip(candidate.ip) || fixture.is_some();
+        #[cfg(not(test))]
+        let public_candidate = super::candidates::is_public_ip(candidate.ip);
         if clients.ignore_ssl_errors
             || !crate::util::download::modrinth_cdn::is_current_url(&target.url)
             || !target.url.path().starts_with("/data/")
             || target.url.query().is_some()
             || target.size == 0
             || candidate.expires_at <= Instant::now()
-            || !super::candidates::is_public_ip(candidate.ip)
+            || !public_candidate
             || (route.proxy == ProxyPolicy::System
                 && (clients.proxy.mode == ProxyMode::Custom
                     || clients.proxy.mode == ProxyMode::System
@@ -59,9 +74,20 @@ impl ProbeSession {
         let permit =
             crate::util::download::native_budget::try_acquire_recovery(route)
                 .map_err(|_| ProbeFailure::BudgetExhausted)?;
-        let client = probe_client_builder(&candidate, &target)
-            .build()
-            .map_err(|_| ProbeFailure::Transport)?;
+        #[cfg(test)]
+        let mut target = target;
+        #[cfg(test)]
+        if let Some((address, _)) = &fixture {
+            target.url.set_port(Some(address.port())).unwrap();
+        }
+        let builder = probe_client_builder(&candidate, &target);
+        #[cfg(test)]
+        let builder = if let Some((_, root)) = fixture {
+            builder.add_root_certificate(root)
+        } else {
+            builder
+        };
+        let client = builder.build().map_err(|_| ProbeFailure::Transport)?;
         Ok(Self::with_client(
             candidate,
             target,

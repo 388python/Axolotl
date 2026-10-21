@@ -44,6 +44,105 @@ fn mode_defaults_and_unknown_values_are_passive() {
 }
 
 #[test]
+fn two_valid_bad_production_windows_roll_back_without_accepting_stale_feedback()
+{
+    let selector = EndpointSelector::with_mode("rollback", SelectionMode::Auto);
+    let now = Instant::now();
+    selector.install_test_selection(
+        "146.75.113.242:443".parse().unwrap(),
+        Protocol::H2,
+    );
+    {
+        let mut state = selector.state.lock();
+        let mut old = selection("151.101.1.242", now);
+        old.speed = 1_000_000;
+        state.previous = Some(old);
+    }
+    let url = "https://cdn.modrinth.com/data/a".parse().unwrap();
+    let lease = selector.lease(&url, Protocol::H2).unwrap();
+    selector.observe_payload(&lease, 0, now, false);
+    selector.observe_payload(
+        &lease,
+        100_000,
+        now + Duration::from_secs(3),
+        false,
+    );
+    assert!(selector.is_current(&lease));
+    selector.observe_payload(
+        &lease,
+        100_000,
+        now + Duration::from_secs(6),
+        false,
+    );
+    assert_eq!(
+        selector
+            .lease(&url, Protocol::H2)
+            .unwrap()
+            .pool
+            .endpoint
+            .ip()
+            .to_string(),
+        "151.101.1.242"
+    );
+    assert!(!selector.is_current(&lease));
+    assert!(selector.state.lock().cooldown_until.is_some());
+    let generation = selector.state.lock().generation;
+    selector.observe_payload(&lease, 1, now + Duration::from_secs(9), false);
+    assert_eq!(selector.state.lock().generation, generation);
+}
+
+#[test]
+fn pressure_or_another_trial_invalidates_the_bad_window_sequence() {
+    let selector =
+        EndpointSelector::with_mode("rollback-pressure", SelectionMode::Auto);
+    let now = Instant::now();
+    selector.install_test_selection(
+        "146.75.113.242:443".parse().unwrap(),
+        Protocol::H2,
+    );
+    selector.state.lock().previous = Some(selection("151.101.1.242", now));
+    let lease = selector
+        .lease(
+            &"https://cdn.modrinth.com/data/a".parse().unwrap(),
+            Protocol::H2,
+        )
+        .unwrap();
+    selector.observe_payload(&lease, 0, now, false);
+    selector.observe_payload(&lease, 10, now + Duration::from_secs(3), false);
+    selector.observe_payload(&lease, 10, now + Duration::from_secs(6), true);
+    selector.observe_payload(&lease, 10, now + Duration::from_secs(9), false);
+    assert!(selector.is_current(&lease));
+}
+
+#[test]
+fn ending_last_active_transfer_discards_idle_time_from_feedback() {
+    use super::super::metrics::EndpointTransferGuard;
+    let selector =
+        EndpointSelector::with_mode("idle-feedback", SelectionMode::Auto);
+    let now = Instant::now();
+    selector.install_test_selection(
+        "146.75.113.242:443".parse().unwrap(),
+        Protocol::H2,
+    );
+    selector.state.lock().previous = Some(selection("151.101.1.242", now));
+    let lease = selector
+        .lease(
+            &"https://cdn.modrinth.com/data/a".parse().unwrap(),
+            Protocol::H2,
+        )
+        .unwrap();
+    let guard = EndpointTransferGuard::new(&selector, lease.clone());
+    let clone = guard.clone();
+    selector.observe_payload(&lease, 0, now, false);
+    selector.observe_payload(&lease, 10, now + Duration::from_secs(3), false);
+    drop(guard);
+    assert!(selector.state.lock().feedback.is_some());
+    drop(clone);
+    assert!(selector.state.lock().feedback.is_none());
+    assert!(selector.state.lock().active_feedback.is_empty());
+}
+
+#[test]
 fn twenty_downloads_share_one_round_and_one_cancellation_does_not_cancel_others()
  {
     let selector = EndpointSelector::with_mode("test", SelectionMode::Auto);
@@ -257,7 +356,13 @@ fn same_url_new_endpoint_recovers_only_with_integrity_and_shared_migration_budge
     };
     let previous = Some("151.101.65.242:443".parse().unwrap());
     let clone = request.clone();
-    for request in [&request, &clone] {
+    for (index, request) in [&request, &clone].into_iter().enumerate() {
+        if index > 0 {
+            selector.install_test_selection(
+                "151.101.1.242:443".parse().unwrap(),
+                Protocol::H2,
+            );
+        }
         let lease = selector
             .recovery_lease(
                 request,
@@ -269,7 +374,25 @@ fn same_url_new_endpoint_recovers_only_with_integrity_and_shared_migration_budge
             )
             .unwrap();
         assert_eq!(lease.pool.endpoint.ip().to_string(), "151.101.1.242");
+        // Other ranges can follow the same published generation without
+        // spending another file-level migration.
+        assert!(
+            selector
+                .recovery_lease(
+                    request,
+                    &route,
+                    Protocol::H2,
+                    previous,
+                    45 * 1024,
+                    512 * 1024
+                )
+                .is_some()
+        );
     }
+    selector.install_test_selection(
+        "151.101.1.242:443".parse().unwrap(),
+        Protocol::H2,
+    );
     assert!(
         selector
             .recovery_lease(

@@ -259,18 +259,29 @@ impl RangeTransport for NativeRangeTransport<'_> {
             return Err(range_response_failure(response.status().as_u16()));
         }
         let peer = response.remote_addr();
+        let feedback = response
+            .extensions()
+            .get::<super::endpoint_selection::metrics::EndpointTransferGuard>()
+            .cloned();
         let stream = futures::stream::unfold(
-            (Some(response), permit),
-            |(response, permit)| async move {
+            (Some(response), permit, feedback),
+            |(response, permit, feedback)| async move {
                 let mut response = response?;
                 match response.chunk().await {
                     Ok(Some(chunk)) => {
-                        Some((Ok(chunk), (Some(response), permit)))
+                        if let Some(feedback) = &feedback {
+                            feedback.record(
+                                chunk.len(),
+                                super::local_resources::network_pressure(),
+                            );
+                        }
+                        Some((Ok(chunk), (Some(response), permit, feedback)))
                     }
                     Ok(None) => None,
-                    Err(_) => {
-                        Some((Err(H2DownloadFailure::Protocol), (None, permit)))
-                    }
+                    Err(_) => Some((
+                        Err(H2DownloadFailure::Protocol),
+                        (None, permit, feedback),
+                    )),
                 }
             },
         );

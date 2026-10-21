@@ -1,4 +1,6 @@
-use super::endpoint_selection::tuning::{TRIALS, TrialKind, TrialLease};
+use super::endpoint_selection::tuning::{
+    TRIALS, TrialKind, TrialLease, TrialRegistry,
+};
 use super::h2_pool::SharedH2Connection;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -277,6 +279,7 @@ struct ConnectionTrial {
 }
 
 struct AdaptiveConnections {
+    registry: Arc<TrialRegistry>,
     target: usize,
     sampled_at: Instant,
     sampled_bytes: u64,
@@ -288,14 +291,24 @@ struct AdaptiveConnections {
 
 impl AdaptiveConnections {
     fn new(now: Instant, bytes: u64) -> Self {
+        Self::with_registry(now, bytes, TRIALS.clone())
+    }
+
+    fn with_registry(
+        now: Instant,
+        bytes: u64,
+        registry: Arc<TrialRegistry>,
+    ) -> Self {
+        let revision = registry.snapshot(now).0;
         Self {
+            registry,
             target: 2,
             sampled_at: now,
             sampled_bytes: bytes,
             baseline_bps: None,
             cooldown_until: None,
             trial: None,
-            revision: TRIALS.snapshot(now).0,
+            revision,
         }
     }
 
@@ -327,7 +340,7 @@ impl AdaptiveConnections {
             self.sampled_bytes = bytes;
             return count > self.target;
         }
-        let (revision, owner) = TRIALS.snapshot(now);
+        let (revision, owner) = self.registry.snapshot(now);
         if self.trial.is_none()
             && (owner.is_some() || revision != self.revision)
         {
@@ -380,7 +393,7 @@ impl AdaptiveConnections {
             }
             self.trial = None;
             self.baseline_bps = None;
-            self.revision = TRIALS.snapshot(now).0;
+            self.revision = self.registry.snapshot(now).0;
             return false;
         }
         if count < self.target
@@ -395,7 +408,7 @@ impl AdaptiveConnections {
         if rate < baseline / 2 || rate > baseline.saturating_mul(2) {
             return false;
         }
-        let Some(lease) = TRIALS.acquire(
+        let Some(lease) = self.registry.acquire(
             TrialKind::Connections,
             now,
             Duration::from_secs(25),
@@ -421,11 +434,12 @@ mod adaptive_tests {
 
     #[test]
     fn adaptive_accepts_gain_rolls_back_no_gain_and_ignores_empty_queue() {
-        // Single test owns the process-wide trial lease; other policy tests
-        // use their own registry to avoid shared mutable test configuration.
+        // Isolated registries keep policy tests independent of concurrent
+        // end-to-end endpoint trials in the same test process.
         for (rate, accepted) in [(1200, true), (1000, false)] {
             let start = Instant::now();
-            let mut policy = AdaptiveConnections::new(start, 0);
+            let mut policy =
+                AdaptiveConnections::with_registry(start, 0, Arc::default());
             policy.observe(start + ADAPTIVE_WINDOW, 3000, 2, true, true);
             policy.observe(start + ADAPTIVE_WINDOW * 2, 6000, 2, true, true);
             assert_eq!(policy.target, 3);
@@ -449,7 +463,8 @@ mod adaptive_tests {
             assert!(policy.trial.is_none());
         }
         let now = Instant::now();
-        let mut policy = AdaptiveConnections::new(now, 0);
+        let mut policy =
+            AdaptiveConnections::with_registry(now, 0, Arc::default());
         for n in 1..5 {
             policy.observe(now + ADAPTIVE_WINDOW * n, 0, 2, false, true);
         }

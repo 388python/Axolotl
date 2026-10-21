@@ -85,6 +85,8 @@ struct ActiveRound {
 }
 
 struct State {
+    active_feedback: HashMap<PoolKey, usize>,
+    feedback: Option<FeedbackWindow>,
     #[cfg(test)]
     endpoint_port: u16,
     closed: bool,
@@ -102,12 +104,26 @@ struct State {
     hourly_reservations: VecDeque<(Instant, u64)>,
 }
 
+struct FeedbackWindow {
+    generation: u64,
+    started: Instant,
+    bytes: u64,
+    bad_windows: u8,
+}
+
 pub(crate) struct EndpointSelector {
+    #[cfg(test)]
+    pub(super) probe_fixture: Mutex<Option<ProbeFixture>>,
     mode: SelectionMode,
     config_scope: Arc<str>,
     state: Mutex<State>,
     probe_bytes: Arc<AtomicU64>,
     pub(super) pinned_clients: super::clients::PinnedClients,
+}
+
+#[cfg(test)]
+pub(super) struct ProbeFixture {
+    pub(super) candidates: Vec<(SocketAddr, reqwest::Certificate)>,
 }
 
 /// Removing one registration cannot cancel a probe needed by another file.
@@ -143,6 +159,7 @@ struct RoundGuard {
 
 impl RoundGuard {
     fn finish(mut self, status: RoundStatus) {
+        tracing::debug!(authority = modrinth_cdn::HOST, round = self.id, reason = ?status, "Finished Modrinth endpoint trial");
         self.finished = true;
         self.status.send_replace(status);
         self.clear();
@@ -166,6 +183,12 @@ impl RoundGuard {
 impl Drop for RoundGuard {
     fn drop(&mut self) {
         if !self.finished {
+            tracing::debug!(
+                authority = modrinth_cdn::HOST,
+                round = self.id,
+                reason = "cancelled",
+                "Finished Modrinth endpoint trial"
+            );
             self.status.send_replace(RoundStatus::Cancelled);
             self.clear();
         }
@@ -181,6 +204,101 @@ struct RoundStart {
 }
 
 impl EndpointSelector {
+    pub(crate) fn begin_feedback(&self, lease: &EndpointLease) {
+        let mut state = self.state.lock();
+        *state.active_feedback.entry(lease.pool.clone()).or_default() += 1;
+    }
+
+    pub(crate) fn end_feedback(&self, lease: &EndpointLease) {
+        let mut state = self.state.lock();
+        if let Some(count) = state.active_feedback.get_mut(&lease.pool) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                state.active_feedback.remove(&lease.pool);
+            }
+        }
+        if !state.active_feedback.keys().any(|key| {
+            key.generation == state.generation
+                && key.network.epoch == state.epoch
+        }) {
+            // Gaps between files are idle time, not evidence of a slower
+            // endpoint. Two bad windows must belong to continuous activity.
+            state.feedback = None;
+        }
+    }
+    pub(crate) fn observe_payload(
+        &self,
+        lease: &EndpointLease,
+        bytes: u64,
+        now: Instant,
+        contaminated: bool,
+    ) {
+        let mut state = self.state.lock();
+        if state.closed
+            || state.epoch != lease.pool.network.epoch
+            || state.generation != lease.pool.generation
+            || state.selected.as_ref().is_none_or(|s| {
+                s.preferred.ip != lease.pool.endpoint.ip()
+                    || s.protocol != lease.pool.protocol
+            })
+        {
+            return;
+        }
+        let previous_speed = state
+            .previous
+            .as_ref()
+            .map_or(0, |selection| selection.speed);
+        let generation = state.generation;
+        let window = state.feedback.get_or_insert(FeedbackWindow {
+            generation,
+            started: now,
+            bytes: 0,
+            bad_windows: 0,
+        });
+        if window.generation != generation || contaminated {
+            *window = FeedbackWindow {
+                generation,
+                started: now,
+                bytes: 0,
+                bad_windows: 0,
+            };
+            return;
+        }
+        window.bytes = window.bytes.saturating_add(bytes);
+        let elapsed = now.saturating_duration_since(window.started);
+        if elapsed < Duration::from_secs(3) {
+            return;
+        }
+        let speed = (window.bytes as f64 / elapsed.as_secs_f64()) as u64;
+        window.bad_windows =
+            if speed.saturating_mul(100) < previous_speed.saturating_mul(80) {
+                window.bad_windows.saturating_add(1)
+            } else {
+                0
+            };
+        window.bytes = 0;
+        window.started = now;
+        if window.bad_windows < 2 {
+            return;
+        }
+        if let Some(previous) = state
+            .previous
+            .take()
+            .filter(|s| s.expires_at > now && s.preferred.expires_at > now)
+        {
+            state.selected = Some(previous);
+            state.generation += 1;
+            state.cooldown_until = Some(now + policy::COOLDOWN);
+            state.feedback = None;
+            tracing::info!(
+                authority = modrinth_cdn::HOST,
+                generation = state.generation,
+                reason = "rollback",
+                "Reverted Modrinth endpoint after two poor production windows"
+            );
+        }
+    }
+
     pub(crate) fn recovery_lease(
         &self,
         request: &DownloadRequest,
@@ -207,12 +325,15 @@ impl EndpointSelector {
         if !policy::should_publish(current_speed, speed, remaining) {
             return None;
         }
-        request
-            .endpoint_migrations
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                (used < 2).then_some(used + 1)
-            })
-            .ok()?;
+        let mut generations = request.endpoint_migration_generations.lock();
+        let generation = (lease.pool.network.epoch, lease.pool.generation);
+        if !generations.contains(&generation) {
+            if generations.len() >= 2 {
+                return None;
+            }
+            generations.insert(generation);
+            request.endpoint_migrations.fetch_add(1, Ordering::AcqRel);
+        }
         Some(lease)
     }
     pub(crate) fn new(scope: impl Into<Arc<str>>) -> Arc<Self> {
@@ -224,11 +345,15 @@ impl EndpointSelector {
         mode: SelectionMode,
     ) -> Arc<Self> {
         Arc::new(Self {
+            #[cfg(test)]
+            probe_fixture: Mutex::new(None),
             pinned_clients: super::clients::PinnedClients::default(),
             mode,
             config_scope: scope.into(),
             probe_bytes: Arc::new(AtomicU64::new(0)),
             state: Mutex::new(State {
+                active_feedback: HashMap::new(),
+                feedback: None,
                 #[cfg(test)]
                 endpoint_port: 443,
                 closed: false,
@@ -538,10 +663,16 @@ impl EndpointSelector {
                 else {
                     return RoundStatus::BudgetExhausted;
                 };
-                if !matches!(
-                    crate::util::network::is_network_metered().await,
-                    Ok(false)
-                ) {
+                #[cfg(test)]
+                let fixture = selector.probe_fixture.lock().is_some();
+                #[cfg(not(test))]
+                let fixture = false;
+                if !fixture
+                    && !matches!(
+                        crate::util::network::is_network_metered().await,
+                        Ok(false)
+                    )
+                {
                     return RoundStatus::NoGain;
                 }
                 selector
@@ -631,14 +762,32 @@ impl EndpointSelector {
                 })
                 .unwrap_or_default()
         };
+        let history = super::store::load().await;
         let candidates = collect_candidates(
             &answers,
             &verified,
-            &[],
+            &history,
             true,
             Instant::now(),
             SystemTime::now(),
         );
+        #[cfg(test)]
+        let candidates = self
+            .probe_fixture
+            .lock()
+            .as_ref()
+            .map(|fixture| {
+                fixture
+                    .candidates
+                    .iter()
+                    .map(|(address, _)| EndpointCandidate {
+                        ip: address.ip(),
+                        source: super::model::CandidateSource::History,
+                        expires_at: Instant::now() + policy::SELECTION_LIFETIME,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or(candidates);
         let budget = Mutex::new(ProbeBudget::new(started, allowance));
         tracing::debug!(
             authority = modrinth_cdn::HOST,
@@ -681,6 +830,13 @@ impl EndpointSelector {
             }
         }
         drop(pending);
+        // These are availability hints only. Save asynchronously so disk I/O
+        // cannot consume the remaining network trial deadline.
+        let hints = validated
+            .iter()
+            .map(|(candidate, _)| candidate.clone())
+            .collect();
+        tokio::spawn(super::store::save(hints));
         // Sample the incumbent and distinct seed/family paths before filling
         // remaining slots with the ordinary anycast pool.
         validated.sort_by_key(|(candidate, _)| {
@@ -760,6 +916,17 @@ impl EndpointSelector {
         else {
             return RoundStatus::NoGain;
         };
+        let previous = validated.iter().find(|(c, _)| c.ip == incumbent).map(
+            |(candidate, _)| Selection {
+                protocol: target.protocol,
+                preferred: candidate.clone(),
+                backups: Vec::new(),
+                speed: *current_speed,
+                expires_at: candidate
+                    .expires_at
+                    .min(Instant::now() + policy::SELECTION_LIFETIME),
+            },
+        );
         let backups = validated
             .into_iter()
             .map(|(c, _)| c)
@@ -774,7 +941,7 @@ impl EndpointSelector {
             backups,
             speed,
         };
-        self.publish(selection, epoch, generation)
+        self.publish_with_previous(selection, previous, epoch, generation)
     }
 
     fn log_observation(
@@ -791,9 +958,20 @@ impl EndpointSelector {
             path_unknown = true, "Modrinth endpoint sample");
     }
 
+    #[cfg(test)]
     fn publish(
         &self,
         selection: Selection,
+        epoch: u64,
+        generation: u64,
+    ) -> RoundStatus {
+        self.publish_with_previous(selection, None, epoch, generation)
+    }
+
+    fn publish_with_previous(
+        &self,
+        selection: Selection,
+        previous: Option<Selection>,
         epoch: u64,
         generation: u64,
     ) -> RoundStatus {
@@ -812,8 +990,19 @@ impl EndpointSelector {
         {
             return RoundStatus::Stale;
         }
-        state.previous = state.selected.take();
+        state.previous = state.selected.take().or(previous);
+        state.feedback = None;
         state.selected = Some(selection);
+        #[cfg(test)]
+        if let Some(fixture) = self.probe_fixture.lock().as_ref()
+            && let Some((address, _)) =
+                fixture.candidates.iter().find(|(address, _)| {
+                    Some(address.ip())
+                        == state.selected.as_ref().map(|s| s.preferred.ip)
+                })
+        {
+            state.endpoint_port = address.port();
+        }
         state.generation += 1;
         state.failures.clear();
         tracing::info!(authority = modrinth_cdn::HOST, epoch, generation = state.generation,
@@ -842,6 +1031,17 @@ impl EndpointSelector {
             expires_at: Instant::now() + policy::SELECTION_LIFETIME,
         });
         state.generation += 1;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_test_backup(&self, ip: IpAddr) {
+        if let Some(selection) = &mut self.state.lock().selected {
+            selection.backups.push(EndpointCandidate {
+                ip,
+                source: super::model::CandidateSource::Verified,
+                expires_at: Instant::now() + policy::SELECTION_LIFETIME,
+            });
+        }
     }
 }
 

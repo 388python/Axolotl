@@ -93,6 +93,8 @@ pub struct SharedH2Connection {
 }
 
 pub(crate) struct H2StreamActivity {
+    _endpoint_feedback:
+        Option<super::endpoint_selection::metrics::EndpointTransferGuard>,
     active_streams: Arc<AtomicUsize>,
     last_activity: Arc<Mutex<std::time::Instant>>,
     drained: Arc<Notify>,
@@ -182,6 +184,20 @@ impl SharedH2Connection {
 
     pub(crate) fn record_bytes(&self, bytes: usize) {
         self.bytes_transferred.fetch_add(bytes, Ordering::Relaxed);
+        if let Some(lease) = &self.endpoint_lease
+            && let Some(clients) = super::proxy_context::clients()
+        {
+            clients.endpoints.observe_payload(
+                lease,
+                bytes as u64,
+                std::time::Instant::now(),
+                super::local_resources::network_pressure().blocks_expansion()
+                    || super::endpoint_selection::tuning::TRIALS
+                        .snapshot(std::time::Instant::now())
+                        .1
+                        .is_some(),
+            );
+        }
     }
 
     pub(crate) fn bytes_transferred_for_scheduler(&self) -> usize {
@@ -213,6 +229,9 @@ impl SharedH2Connection {
         self.active_streams.fetch_add(1, Ordering::AcqRel);
         self.release_stream_reservation();
         H2StreamActivity {
+            _endpoint_feedback: self.endpoint_lease.as_ref().and_then(|lease|
+                super::proxy_context::clients().map(|clients|
+                    super::endpoint_selection::metrics::EndpointTransferGuard::new(&clients.endpoints, lease.clone()))),
             active_streams: Arc::clone(&self.active_streams),
             last_activity: Arc::clone(&self.last_activity),
             drained: Arc::clone(&self.drained),

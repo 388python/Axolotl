@@ -65,6 +65,17 @@ impl TlsFixture {
         expired: bool,
         bind_ip: Ipv4Addr,
     ) -> Self {
+        Self::start_on_port(host, kind, protocol, expired, bind_ip, 0).await
+    }
+
+    async fn start_on_port(
+        host: &str,
+        kind: ResponseKind,
+        protocol: Protocol,
+        expired: bool,
+        bind_ip: Ipv4Addr,
+        port: u16,
+    ) -> Self {
         let mut ca_params = CertificateParams::new(vec![]).unwrap();
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         let ca_key = KeyPair::generate().unwrap();
@@ -89,8 +100,9 @@ impl TlsFixture {
             config.alpn_protocols = vec![b"h2".to_vec()];
         }
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
-        let listener =
-            tokio::net::TcpListener::bind((bind_ip, 0)).await.unwrap();
+        let listener = tokio::net::TcpListener::bind((bind_ip, port))
+            .await
+            .unwrap();
         let address = listener.local_addr().unwrap();
         let root = reqwest::Certificate::from_der(ca.der()).unwrap();
         let requests = Arc::new(AtomicU64::new(0));
@@ -157,9 +169,10 @@ impl TlsFixture {
                             if matches!(kind, ResponseKind::SlowFile | ResponseKind::File) {
                                 let range = request.lines().find_map(|line| line.strip_prefix("range: bytes="));
                                 let start = range.map(|range| range.split_once('-').unwrap().0.parse::<usize>().unwrap()).unwrap_or(0);
-                                let length = 1_048_576 - start;
+                                let end = range.and_then(|range| range.split_once('-').unwrap().1.parse::<usize>().ok()).unwrap_or(1_048_575);
+                                let length = end + 1 - start;
                                 let headers = if range.is_some() {
-                                    format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-1048575/1048576\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
+                                    format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/1048576\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
                                 } else {
                                     format!("HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
                                 };
@@ -257,6 +270,7 @@ fn production_clients(
         false,
     )
     .unwrap();
+    clients.scope = format!("tls-fixture-{}", fixture.address.port());
     clients.endpoints =
         crate::util::download::endpoint_selection::EndpointSelector::with_mode(
             clients.scope.clone(),
@@ -287,6 +301,148 @@ fn fixture_route() -> DownloadRoute {
         supports_range: true,
         proxy: ProxyPolicy::Direct,
     }
+}
+
+#[tokio::test]
+async fn native_h2_tries_verified_backup_after_primary_tcp_accepts_but_tls_fails()
+ {
+    use crate::util::download::{h2_pool, proxy_context};
+    let invalid = TlsFixture::start_protocol(
+        "wrong-host.invalid",
+        ResponseKind::Valid,
+        Protocol::H2,
+    )
+    .await;
+    let valid = TlsFixture::start_on_port(
+        "cdn.modrinth.com",
+        ResponseKind::Valid,
+        Protocol::H2,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+        invalid.address.port(),
+    )
+    .await;
+    let clients = production_clients(&invalid);
+    clients.endpoints.install_test_backup(valid.address.ip());
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(invalid.rustls_root.clone()).unwrap();
+    roots.add(valid.rustls_root.clone()).unwrap();
+    let mut config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec()];
+    let mut route = fixture_route();
+    route.proxy = ProxyPolicy::System;
+    proxy_context::with_snapshot(
+        clients,
+        h2_pool::with_test_tls_config(Arc::new(config), async {
+            let connection = tokio::time::timeout(
+                Duration::from_secs(3),
+                h2_pool::shared_connection(&route, true, true, false),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(connection.remote_addr, Some(valid.address));
+            assert_eq!(
+                connection
+                    .endpoint_lease
+                    .as_ref()
+                    .unwrap()
+                    .pool
+                    .endpoint
+                    .ip(),
+                valid.address.ip()
+            );
+            connection.retire();
+        }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn automatic_trial_measures_candidates_publishes_and_resumes_real_https_file()
+ {
+    use crate::util::download::{native_slow, proxy_context};
+    let slow =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::SlowFile).await;
+    let fast = TlsFixture::start_on(
+        "cdn.modrinth.com",
+        ResponseKind::File,
+        Protocol::Http1,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let mut clients = production_clients(&slow);
+    clients.scope = format!("automatic-trial-{}", slow.address.port());
+    clients
+        .endpoints
+        .pinned_clients
+        .trust_test_root(fast.root.clone());
+    *clients.endpoints.probe_fixture.lock() =
+        Some(super::super::coordinator::ProbeFixture {
+            candidates: vec![
+                (slow.address, slow.root.clone()),
+                (fast.address, fast.root.clone()),
+            ],
+        });
+    let selector = clients.endpoints.clone();
+    let data = vec![42; 1_048_576];
+    let request = crate::util::fetch::DownloadRequest::new(
+        fixture_route().url,
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1(
+            sha1_smol::Sha1::from(&data[..]).hexdigest(),
+        )
+        .with_size(data.len() as u64),
+    )
+    .with_segmented_download(false);
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("automatic.jar");
+    let semaphore =
+        crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(4));
+    let transfer = proxy_context::with_snapshot(clients, async {
+        for proxy in [ProxyPolicy::System, ProxyPolicy::Direct] {
+            crate::util::fetch::record_authority_h2_failure_for(
+                "cdn.modrinth.com:443",
+                proxy,
+            );
+        }
+        native_slow::with_test_timing(
+            Duration::from_millis(75),
+            Duration::from_millis(150),
+            crate::util::fetch::download_endpoint_fixture(
+                request.clone(),
+                &destination,
+                &semaphore,
+            ),
+        )
+        .await
+    });
+    let result = tokio::time::timeout(Duration::from_secs(20), transfer)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.attempts, 2);
+    assert_eq!(tokio::fs::read(&destination).await.unwrap(), data);
+    let lease = selector
+        .lease(&fixture_route().url.parse().unwrap(), Protocol::Http1)
+        .unwrap();
+    assert_eq!(lease.pool.endpoint, fast.address);
+    assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
+    assert!(slow.requests.load(Ordering::SeqCst) >= 4);
+    assert!(fast.requests.load(Ordering::SeqCst) >= 4);
+    assert_eq!(
+        request.transfer_counters.snapshot().received_payload_bytes,
+        data.len() as u64
+    );
+    assert_eq!(
+        request.transfer_counters.snapshot().committed_unique_bytes,
+        data.len() as u64
+    );
 }
 
 #[tokio::test]
@@ -373,7 +529,8 @@ async fn native_h2_new_selection_retires_old_pool_and_preserves_authority_budget
         .with_root_certificates(roots)
         .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec()];
-    let route = fixture_route();
+    let mut route = fixture_route();
+    route.proxy = ProxyPolicy::System;
     proxy_context::with_snapshot(
         clients,
         h2_pool::with_test_tls_config(Arc::new(config), async {

@@ -273,6 +273,7 @@ pub struct DownloadRequest {
     pub(crate) cancellation: Option<tokio_util::sync::CancellationToken>,
     pub(crate) install_tracking: Option<DownloadInstallTracking>,
     pub(crate) endpoint_migrations: Arc<std::sync::atomic::AtomicU8>,
+    pub(crate) endpoint_migration_generations: Arc<Mutex<HashSet<(u64, u64)>>>,
     pub(crate) transfer_counters:
         Arc<super::download::endpoint_selection::metrics::TransferCounters>,
 }
@@ -299,6 +300,7 @@ impl DownloadRequest {
             cancellation: None,
             install_tracking: None,
             endpoint_migrations: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+            endpoint_migration_generations: Arc::default(),
             transfer_counters: Arc::default(),
         }
     }
@@ -2440,6 +2442,7 @@ async fn fetch_advanced_inner(
                         );
                     }
                     let transfer_started = Instant::now();
+                    let endpoint_feedback = resp.extensions().get::<super::download::endpoint_selection::metrics::EndpointTransferGuard>().cloned();
                     let bytes: eyre::Result<Bytes> = if loading_bar.is_some()
                         || progress.is_some()
                     {
@@ -2460,6 +2463,7 @@ async fn fetch_advanced_inner(
 								})?;
 
                                 downloaded += chunk.len() as u64;
+                                if let Some(feedback) = &endpoint_feedback { feedback.record(chunk.len(), super::download::local_resources::network_pressure()); }
                                 bytes.extend_from_slice(&chunk);
 
                                 if modrinth_request_kind == Some("CDN")
@@ -2514,6 +2518,17 @@ async fn fetch_advanced_inner(
                             )
 						})
                     };
+                    if loading_bar.is_none()
+                        && progress.is_none()
+                        && let Ok(bytes) = &bytes
+                        && let Some(feedback) = &endpoint_feedback
+                    {
+                        feedback.record(
+                            bytes.len(),
+                            super::download::local_resources::network_pressure(
+                            ),
+                        );
+                    }
                     drop(permit);
 
                     if let Ok(bytes) = bytes {
@@ -4388,8 +4403,9 @@ async fn download_segment(
     semaphore: &FetchSemaphore,
     hedge_count: &AtomicUsize,
     hedge_active: &AtomicBool,
-    counters: &super::download::endpoint_selection::metrics::TransferCounters,
+    request: &DownloadRequest,
 ) -> Result<SegmentDownloadCompletion, SegmentDownloadError> {
+    let counters = &request.transfer_counters;
     let _activity = crate::State::get_if_initialized()
         .map(|state| state.begin_download_connection());
     let _range_guard = DownloadRangeGuard(Arc::clone(&range.state));
@@ -4399,6 +4415,8 @@ async fn download_segment(
     let mut final_url = route.url.clone();
     let mut remote_addr = None;
     let mut http_version = None;
+    let mut slow = super::download::native_slow::NativeSlowPolicy::new(0, None);
+    let mut last_slow_speed = None;
     for attempt in 1..=SEGMENT_RETRY_ATTEMPTS {
         let requested_start = range.start + {
             let state = range.state.lock();
@@ -4506,7 +4524,8 @@ async fn download_segment(
                 "Confirmed byte-range download support"
             );
         }
-        let mut stream = response.bytes_stream();
+        let endpoint_feedback = response.extensions().get::<super::download::endpoint_selection::metrics::EndpointTransferGuard>().cloned();
+        let mut stream = Some(response.bytes_stream());
         let mut stream_end_reason = None;
         loop {
             let tail_threshold = TAIL_HEDGE_MIN_REMAINING.max(total_size / 10);
@@ -4517,7 +4536,9 @@ async fn download_segment(
                 } else {
                     RANGE_IDLE_RECONNECT_TIMEOUT
                 },
-                stream.next(),
+                async {
+                    stream.as_mut().expect("active segment body").next().await
+                },
             )
             .await
             {
@@ -4539,7 +4560,7 @@ async fn download_segment(
                             (global_permit, connection_permit)
                         {
                             hedge_count.fetch_add(1, Ordering::AcqRel);
-                            drop(stream);
+                            drop(stream.take());
                             let raced = race_tail_candidates(
                                 route,
                                 &range,
@@ -4677,6 +4698,12 @@ async fn download_segment(
                 }
             };
             counters.received(chunk.len() as u64);
+            if let Some(feedback) = &endpoint_feedback {
+                feedback.record(
+                    chunk.len(),
+                    super::download::local_resources::pressure(part_path),
+                );
+            }
             let (accepted, completed) = range.accept_chunk(chunk.len());
             writer
                 .write_next(&chunk[..accepted])
@@ -4693,7 +4720,50 @@ async fn download_segment(
             if completed {
                 break;
             }
+            let pressure =
+                super::download::local_resources::pressure(part_path);
+            let downloaded_range = range.state.lock().downloaded;
+            if let super::download::native_slow::SlowDecision::Probe {
+                bytes_per_second,
+            } = slow.observe_with_pressure(
+                downloaded_range,
+                range.remaining(),
+                pressure,
+            ) {
+                last_slow_speed = Some(bytes_per_second);
+                if let Some(clients) = super::download::proxy_context::clients()
+                {
+                    clients.endpoints.on_slow(
+                        request,
+                        route,
+                        &clients,
+                        super::download::endpoint_selection::Protocol::Http1,
+                        remote_addr.map(|a| a.ip()),
+                        range.remaining(),
+                        pressure,
+                    );
+                }
+            }
+            if let Some(current_speed) = last_slow_speed
+                && !pressure.blocks_expansion()
+                && let Some(clients) = super::download::proxy_context::clients()
+                && clients
+                    .endpoints
+                    .recovery_lease(
+                        request,
+                        route,
+                        super::download::endpoint_selection::Protocol::Http1,
+                        remote_addr,
+                        current_speed,
+                        range.remaining(),
+                    )
+                    .is_some()
+            {
+                stream_end_reason = Some("selected endpoint changed".into());
+                break;
+            }
         }
+        drop(stream);
         if range.remaining() == 0 {
             writer
                 .flush()
@@ -4974,7 +5044,7 @@ async fn try_segmented_download(
             semaphore,
             &hedge_count,
             &hedge_active,
-            &request.transfer_counters,
+            request,
         ));
     }
     tracing::debug!(
@@ -5214,7 +5284,7 @@ async fn try_segmented_download(
                             semaphore,
                             &hedge_count,
                             &hedge_active,
-                            &request.transfer_counters,
+                            request,
                         ));
                         ranges.push(new_range);
                         expansion_baseline = Some(snapshot.recent_average);
@@ -6903,6 +6973,7 @@ async fn run_native_route_attempts(
         let mut file =
             super::download::stream_output::StreamOutput::new(file, part_path);
         let response_length = response.content_length().unwrap_or(0);
+        let endpoint_feedback = response.extensions().get::<super::download::endpoint_selection::metrics::EndpointTransferGuard>().cloned();
         let total_size = request
             .integrity
             .size
@@ -6956,6 +7027,7 @@ async fn run_native_route_attempts(
                         }
                     };
                     request.transfer_counters.received(chunk.len() as u64);
+                    if let Some(feedback) = &endpoint_feedback { feedback.record(chunk.len(), super::download::local_resources::pressure(part_path)); }
                     file.write_chunk(&chunk).await.map_err(|error| {
                         IOError::with_path(error, part_path)
                     })?;
@@ -10194,7 +10266,7 @@ mod tests {
             &semaphore,
             &AtomicUsize::new(0),
             &AtomicBool::new(false),
-            &super::super::download::endpoint_selection::metrics::TransferCounters::default(),
+            &DownloadRequest::new(&route.url, ResourceClass::Other),
         )
         .await;
         assert!(matches!(

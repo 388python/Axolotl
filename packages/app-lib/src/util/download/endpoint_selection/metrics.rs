@@ -3,6 +3,58 @@
 use parking_lot::Mutex;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Weak};
+use std::time::Instant;
+
+#[derive(Clone)]
+pub(crate) struct EndpointTransferGuard {
+    inner: Arc<TransferLifetime>,
+}
+
+struct TransferLifetime {
+    selector: Weak<super::EndpointSelector>,
+    lease: super::EndpointLease,
+}
+
+impl EndpointTransferGuard {
+    pub(crate) fn new(
+        selector: &Arc<super::EndpointSelector>,
+        lease: super::EndpointLease,
+    ) -> Self {
+        selector.begin_feedback(&lease);
+        Self {
+            inner: Arc::new(TransferLifetime {
+                selector: Arc::downgrade(selector),
+                lease,
+            }),
+        }
+    }
+
+    pub(crate) fn record(
+        &self,
+        bytes: usize,
+        pressure: super::super::local_resources::Pressure,
+    ) {
+        if let Some(selector) = self.inner.selector.upgrade() {
+            let contaminated = pressure.blocks_expansion()
+                || super::tuning::TRIALS.snapshot(Instant::now()).1.is_some();
+            selector.observe_payload(
+                &self.inner.lease,
+                bytes as u64,
+                Instant::now(),
+                contaminated,
+            );
+        }
+    }
+}
+
+impl Drop for TransferLifetime {
+    fn drop(&mut self) {
+        if let Some(selector) = self.selector.upgrade() {
+            selector.end_feedback(&self.lease);
+        }
+    }
+}
 
 #[derive(Default, Debug)]
 pub(crate) struct TransferCounters {

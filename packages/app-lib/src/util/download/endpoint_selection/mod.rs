@@ -8,6 +8,7 @@ pub(crate) mod metrics;
 mod model;
 mod policy;
 mod probe;
+mod store;
 pub(crate) mod tuning;
 
 pub(crate) use coordinator::{EndpointSelector, SelectionMode};

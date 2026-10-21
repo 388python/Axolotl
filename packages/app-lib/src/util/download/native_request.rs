@@ -69,7 +69,17 @@ async fn send_cdn_request_inner(
         });
         let active_client =
             pinned.as_ref().map_or(&client, |(client, _)| client);
-        let response = active_client.execute(request).await?;
+        let mut response = active_client.execute(request).await?;
+        if let Some((_, lease)) = pinned
+            && let Some((clients, _)) = selection
+        {
+            response.extensions_mut().insert(
+                super::endpoint_selection::metrics::EndpointTransferGuard::new(
+                    &clients.endpoints,
+                    lease,
+                ),
+            );
+        }
         if !response.status().is_redirection() || hop == 5 {
             return Ok(response);
         }
@@ -230,6 +240,14 @@ pub(crate) async fn send_path_request_with_clients(
                 return Err(error.into());
             }
         };
+        if let Some((_, lease)) = pinned {
+            response.extensions_mut().insert(
+                super::endpoint_selection::metrics::EndpointTransferGuard::new(
+                    &clients.endpoints,
+                    lease,
+                ),
+            );
+        }
         if response.status() == reqwest::StatusCode::NOT_FOUND
             && let Some(probe) = redirect_probe
             && let Ok(redirect) = probe.send().await
