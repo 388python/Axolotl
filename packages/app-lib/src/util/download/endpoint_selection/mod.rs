@@ -13,6 +13,7 @@ pub(crate) mod tuning;
 
 pub(crate) use coordinator::{EndpointSelector, SelectionMode};
 pub(crate) use model::{EndpointLease, PoolKey, Protocol};
+pub(crate) use probe::invalid_certificate;
 
 #[cfg(test)]
 mod tests;

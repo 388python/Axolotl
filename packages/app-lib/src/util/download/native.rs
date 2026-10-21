@@ -55,6 +55,9 @@ pub(crate) fn h2_ineligible_reason(
         return Some(NativeH2IneligibleReason::Http1Fallback);
     }
     if let Some(clients) = super::proxy_context::clients() {
+        if clients.force_http1 {
+            return Some(NativeH2IneligibleReason::Http1Fallback);
+        }
         if clients.ignore_ssl_errors {
             return Some(NativeH2IneligibleReason::CertificatePolicy);
         }

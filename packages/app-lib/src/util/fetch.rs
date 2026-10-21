@@ -1007,6 +1007,8 @@ pub(crate) async fn acquire_native_validation_permit()
 
 static H2_FALLBACK_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
+static HTTP1_PREFERENCE_AUTHORITIES: LazyLock<Mutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub(crate) fn authority_uses_http1_fallback(authority: &str) -> bool {
     authority_uses_http1_fallback_for(authority, ProxyPolicy::System)
@@ -1018,6 +1020,13 @@ pub(crate) fn authority_uses_http1_fallback_for(
 ) -> bool {
     let authority =
         super::download::proxy_context::authority_key(authority, proxy);
+    {
+        let mut preferences = HTTP1_PREFERENCE_AUTHORITIES.lock();
+        preferences.retain(|_, until| *until > Instant::now());
+        if preferences.contains_key(&authority) {
+            return true;
+        }
+    }
     let mut fallbacks = H2_FALLBACK_AUTHORITIES.lock();
     match fallbacks.get(&authority) {
         Some(until) if *until > Instant::now() => true,
@@ -1043,6 +1052,15 @@ pub(crate) fn record_authority_h2_failure_for(
     fallbacks.insert(
         super::download::proxy_context::authority_key(authority, proxy),
         now + H2_FALLBACK_TTL,
+    );
+}
+
+fn prefer_measured_http1(authority: &str, proxy: ProxyPolicy) {
+    let mut preferences = HTTP1_PREFERENCE_AUTHORITIES.lock();
+    preferences.retain(|_, until| *until > Instant::now());
+    preferences.insert(
+        super::download::proxy_context::authority_key(authority, proxy),
+        Instant::now() + time::Duration::from_secs(30),
     );
 }
 
@@ -3871,14 +3889,11 @@ async fn probe_recovery_route(
     if let Some(probe) =
         selected.as_ref().filter(|probe| probe.route == *current)
     {
-        record_authority_h2_failure_for(
-            &probe.effective_authority,
-            current.proxy,
-        );
+        prefer_measured_http1(&probe.effective_authority, current.proxy);
         if let Some(authority) = url_authority(&current.url)
             && authority != probe.effective_authority
         {
-            record_authority_h2_failure_for(&authority, current.proxy);
+            prefer_measured_http1(&authority, current.proxy);
         }
     }
     selected
@@ -7089,10 +7104,7 @@ async fn run_native_route_attempts(
                             bytes_per_second,
                         } = slow_decision
                     {
-                        if let Some(authority) = url_authority(&final_url) {
-                            record_authority_h2_failure_for(&authority, route.proxy);
-                        }
-                        tracing::warn!(
+                        tracing::debug!(
                             path = %destination.display(),
                             url = %log_url,
                             source = route.source.as_str(),
@@ -7103,12 +7115,8 @@ async fn run_native_route_attempts(
                             reason = "sustained_slow_after_route_probes",
                             bytes_per_second,
                             remaining_bytes = total_size.saturating_sub(downloaded),
-                            "HTTP/2 download stayed slow; retrying over HTTP/1.1"
+                            "HTTP/2 transfer remains slow without a proven faster route"
                         );
-                        transfer_error = Some(crate::ErrorKind::NetworkError(
-                            "HTTP/2 download stayed below expectation".to_string(),
-                        ).into());
-                        break;
                     }
                     if (downgrade_slow_http2 || (allow_low_throughput_abort
                         && total_size >= SEGMENTED_DOWNLOAD_THRESHOLD))
@@ -7137,11 +7145,6 @@ async fn run_native_route_attempts(
                             elapsed,
                         } = slow_decision
                     {
-                        if downgrade_slow_http2
-                            && let Some(authority) = url_authority(&final_url)
-                        {
-                            record_authority_h2_failure_for(&authority, route.proxy);
-                        }
                         tracing::warn!(
                             path = %destination.display(),
                             url = %log_url,
@@ -9652,7 +9655,7 @@ mod tests {
             .unwrap(),
             H2AttemptResult::Fallback { .. }
         ));
-        let protocol_failed = !matches!(failure, H2FailureFixture::Slow);
+        let protocol_failed = matches!(failure, H2FailureFixture::Reset);
         assert_eq!(connection.is_retiring(), protocol_failed);
         assert!(
             !connection.is_dead(),
@@ -9760,7 +9763,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn recovery_probe_downgrades_redirect_target_authority() {
+    async fn recovery_probe_prefers_measured_http1_without_recording_protocol_failure()
+     {
         let data = Arc::new(vec![9_u8; 512 * 1024]);
         let (target_url, target_requests, _, target_server) =
             spawn_range_server(data.clone(), Default::default()).await;
@@ -9791,6 +9795,14 @@ mod tests {
         assert_eq!(selected.effective_authority, target);
         assert!(authority_uses_http1_fallback_for(&original, primary.proxy));
         assert!(authority_uses_http1_fallback_for(&target, primary.proxy));
+        for authority in [&original, &target] {
+            assert!(!H2_FALLBACK_AUTHORITIES.lock().contains_key(
+                &super::super::download::proxy_context::authority_key(
+                    authority,
+                    primary.proxy
+                )
+            ));
+        }
         assert_eq!(redirect_requests.load(Ordering::Relaxed), 1);
         assert_eq!(target_requests.load(Ordering::Relaxed), 1);
         redirect_server.abort();

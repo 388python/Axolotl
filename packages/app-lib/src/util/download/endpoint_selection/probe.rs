@@ -311,13 +311,16 @@ fn probe_client_builder(
     }
 }
 
+pub(crate) fn invalid_certificate(error: &reqwest::Error) -> bool {
+    let detail = format!("{error:?}").to_ascii_lowercase();
+    detail.contains("certificate") || detail.contains("certnotvalidforname")
+}
+
 fn classify_transport(error: reqwest::Error) -> ProbeFailure {
     if error.is_timeout() {
         return ProbeFailure::Timeout;
     }
-    let detail = format!("{error:?}").to_ascii_lowercase();
-    if detail.contains("certificate") || detail.contains("certnotvalidforname")
-    {
+    if invalid_certificate(&error) {
         ProbeFailure::InvalidCertificate
     } else if error.is_body() {
         ProbeFailure::Truncated

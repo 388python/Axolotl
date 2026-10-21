@@ -390,6 +390,10 @@ fn classify_download_error(error: &crate::Error) -> H2DownloadFailure {
         crate::ErrorKind::DownloadEndpointChanged => {
             H2DownloadFailure::EndpointChanged
         }
+        crate::ErrorKind::DownloadTransferSlow
+        | crate::ErrorKind::DownloadStreamStalled { .. } => {
+            H2DownloadFailure::Slow
+        }
         crate::ErrorKind::HttpError { .. }
         | crate::ErrorKind::LabrinthError(_) => H2DownloadFailure::Http,
         crate::ErrorKind::IOError(_) | crate::ErrorKind::StdIOError(_) => {
@@ -605,9 +609,7 @@ async fn single_stream(
                     drop(stream);
                     file.flush().await?;
                     request.transfer_counters.commit(0, downloaded);
-                    return Err(crate::ErrorKind::NetworkError(
-                        "HTTP/2 single stream stayed below expectation".into(),
-                    ).into());
+                    return Err(crate::ErrorKind::DownloadTransferSlow.into());
                 }
                 continue;
             }
@@ -814,6 +816,27 @@ impl AssetBatchConnectionGroup {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_transfer_recovery_is_not_a_protocol_failure() {
+        for error in [
+            crate::ErrorKind::DownloadTransferSlow,
+            crate::ErrorKind::DownloadStreamStalled {
+                context: "range".into(),
+            },
+        ] {
+            assert_eq!(
+                classify_download_error(&error.into()),
+                H2DownloadFailure::Slow
+            );
+        }
+        assert_eq!(
+            classify_download_error(
+                &crate::ErrorKind::DownloadEndpointChanged.into()
+            ),
+            H2DownloadFailure::EndpointChanged
+        );
+    }
 
     #[test]
     fn slow_h2_transfers_do_not_poison_protocol_health() {

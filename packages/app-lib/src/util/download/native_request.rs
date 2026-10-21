@@ -69,7 +69,20 @@ async fn send_cdn_request_inner(
         });
         let active_client =
             pinned.as_ref().map_or(&client, |(client, _)| client);
-        let mut response = active_client.execute(request).await?;
+        let mut response = match active_client.execute(request).await {
+            Ok(response) => response,
+            Err(error) => {
+                if let Some((_, lease)) = &pinned
+                    && let Some((clients, _)) = selection
+                {
+                    clients.endpoints.record_failure(
+                        lease,
+                        super::endpoint_selection::invalid_certificate(&error),
+                    );
+                }
+                return Err(error.into());
+            }
+        };
         if let Some((_, lease)) = pinned
             && let Some((clients, _)) = selection
         {
@@ -208,7 +221,10 @@ pub(crate) async fn send_path_request_with_clients(
             Ok(response) => response,
             Err(error) => {
                 if let Some((_, lease)) = &pinned {
-                    clients.endpoints.record_failure(lease, false);
+                    clients.endpoints.record_failure(
+                        lease,
+                        super::endpoint_selection::invalid_certificate(&error),
+                    );
                 }
                 tracing::warn!(
                     url = %sanitize_url_for_log(current.as_str()),

@@ -76,10 +76,8 @@ pub(crate) async fn receive_chunk(
 ) -> crate::Result<Option<Bytes>> {
     tokio::time::timeout(STREAM_RECV_TIMEOUT, stream.data())
         .await
-        .map_err(|_| {
-            crate::ErrorKind::NetworkError(format!(
-                "HTTP/2 {context} stream receive timed out"
-            ))
+        .map_err(|_| crate::ErrorKind::DownloadStreamStalled {
+            context: context.to_string(),
         })?
         .transpose()
         .map_err(|error| {

@@ -82,6 +82,12 @@ pub enum ErrorKind {
     #[error("download endpoint changed; resume the validated partial file")]
     DownloadEndpointChanged,
 
+    #[error("download transfer remained below its expected throughput")]
+    DownloadTransferSlow,
+
+    #[error("download {context} stream receive timed out")]
+    DownloadStreamStalled { context: String },
+
     #[error("HTTP {status} for {method} {url}")]
     HttpError {
         status: u16,

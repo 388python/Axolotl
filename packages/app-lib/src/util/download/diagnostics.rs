@@ -33,6 +33,9 @@ pub(crate) fn bounded_diagnostic_text(
 
 pub(crate) fn download_error_category(error: &crate::Error) -> &'static str {
     match error.raw.as_ref() {
+        ErrorKind::DownloadEndpointChanged => "endpoint_changed",
+        ErrorKind::DownloadTransferSlow => "slow",
+        ErrorKind::DownloadStreamStalled { .. } => "stall",
         ErrorKind::FetchError(source) => {
             let detail = format!("{source:?}").to_ascii_lowercase();
             if source.status().is_some() {

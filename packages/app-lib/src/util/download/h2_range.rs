@@ -199,8 +199,17 @@ impl RangeTransport for NativeRangeTransport<'_> {
                             ))
                         }
                         Ok(None) => None,
-                        Err(_) => Some((
-                            Err(H2DownloadFailure::Protocol),
+                        Err(error) => Some((
+                            Err(
+                                if matches!(
+                                    error.raw.as_ref(),
+                                    crate::ErrorKind::DownloadStreamStalled { .. }
+                                ) {
+                                    H2DownloadFailure::Slow
+                                } else {
+                                    H2DownloadFailure::Protocol
+                                },
+                            ),
                             (None, permit, connection_for_metrics),
                         )),
                     }

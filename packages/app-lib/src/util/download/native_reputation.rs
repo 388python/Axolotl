@@ -10,7 +10,8 @@ use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const FILE_NAME: &str = "native-download-reputation.json";
-const SCHEMA_VERSION: u32 = 2;
+// Previous versions mixed slow streams with H2 protocol failure scores.
+const SCHEMA_VERSION: u32 = 3;
 const MAX_ENTRIES: usize = 256;
 const MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
 const WRITE_DELAY: Duration = Duration::from_secs(5);
