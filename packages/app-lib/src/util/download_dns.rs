@@ -31,6 +31,23 @@ const FAMILY_COLLECTION_GRACE: Duration = Duration::from_millis(500);
 const FAILURE_CACHE_TTL: Duration = Duration::from_secs(2);
 const MAX_DNS_MESSAGE_BYTES: usize = 65535;
 const CANDIDATE_CACHE_TTL: Duration = Duration::from_secs(30);
+const MAX_METADATA_HOSTS: usize = 128;
+
+fn make_metadata_room<T>(
+    cache: &mut HashMap<String, T>,
+    host: &str,
+    fetched_at: impl Fn(&T) -> Instant,
+) {
+    if !cache.contains_key(host) && cache.len() >= MAX_METADATA_HOSTS {
+        if let Some(oldest) = cache
+            .iter()
+            .min_by_key(|(_, value)| fetched_at(value))
+            .map(|(host, _)| host.clone())
+        {
+            cache.remove(&oldest);
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum DnsSource {
@@ -485,6 +502,22 @@ impl DownloadDnsResolver {
     fn remember_answer(&self, host: &str, answer: DnsAnswer) {
         let now = Instant::now();
         let mut cache = self.dns_answers.lock();
+        cache.retain(|_, answers| {
+            answers.iter().any(|answer| {
+                now.saturating_duration_since(answer.fetched_at) < CACHE_TTL
+                    && answer
+                        .addresses
+                        .iter()
+                        .any(|address| address.expires_at > now)
+            })
+        });
+        make_metadata_room(&mut cache, host, |answers| {
+            answers
+                .iter()
+                .map(|answer| answer.fetched_at)
+                .max()
+                .unwrap_or(now)
+        });
         let answers = cache.entry(host.to_string()).or_default();
         answers.retain(|old| {
             old.addresses.iter().any(|address| address.expires_at > now)
@@ -517,6 +550,17 @@ impl DownloadDnsResolver {
         (!answers.is_empty()).then_some(answers)
     }
 
+    fn remember_candidates(&self, host: String, snapshot: CandidateSnapshot) {
+        let now = Instant::now();
+        let mut cache = self.candidate_snapshots.lock();
+        cache.retain(|_, value| {
+            now.saturating_duration_since(value.fetched_at)
+                < CANDIDATE_CACHE_TTL
+        });
+        make_metadata_room(&mut cache, &host, |value| value.fetched_at);
+        cache.insert(host, snapshot);
+    }
+
     /// Collects independent provider answers within the caller's overall
     /// deadline. Ordinary resolution still returns the first usable provider
     /// in each family and never waits on this candidate-query lock.
@@ -531,12 +575,24 @@ impl DownloadDnsResolver {
             if let Some(answers) = self.cached_candidates(&host) {
                 return Ok(answers);
             }
-            let host_lock = self
-                .candidate_hosts
-                .lock()
-                .entry(host.clone())
-                .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-                .clone();
+            let host_lock = {
+                let mut hosts = self.candidate_hosts.lock();
+                if hosts.len() >= MAX_METADATA_HOSTS {
+                    hosts.retain(|_, lock| Arc::strong_count(lock) > 1);
+                }
+                if !hosts.contains_key(&host)
+                    && hosts.len() >= MAX_METADATA_HOSTS
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::WouldBlock,
+                        "Candidate DNS host query capacity exhausted",
+                    ));
+                }
+                hosts
+                    .entry(host.clone())
+                    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+                    .clone()
+            };
             let _guard =
                 tokio::time::timeout_at(deadline.into(), host_lock.lock())
                     .await
@@ -581,7 +637,7 @@ impl DownloadDnsResolver {
                     fetched_at: now,
                     source: DnsSource::System,
                 };
-                self.candidate_snapshots.lock().insert(
+                self.remember_candidates(
                     host.clone(),
                     CandidateSnapshot {
                         answers: vec![answer.clone()],
@@ -657,7 +713,7 @@ impl DownloadDnsResolver {
                     )
                 }));
             }
-            self.candidate_snapshots.lock().insert(
+            self.remember_candidates(
                 host.clone(),
                 CandidateSnapshot {
                     answers: answers.clone(),

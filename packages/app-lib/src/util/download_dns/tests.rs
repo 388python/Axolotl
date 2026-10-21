@@ -44,6 +44,76 @@ fn metadata_preserves_source_chain_and_minimum_path_ttl() {
 }
 
 #[test]
+fn provider_metadata_and_candidate_snapshots_have_finite_host_capacity() {
+    let resolver = DownloadDnsResolver::default();
+    for index in 0..MAX_METADATA_HOSTS + 20 {
+        let host = format!("cdn-{index}.example");
+        let query = doh_query(&host, RecordType::A).unwrap();
+        let answer = parse_doh_metadata(
+            &response_with_chain(&query, 60).to_vec().unwrap(),
+            &query,
+            DnsSource::System,
+        )
+        .unwrap();
+        resolver.remember_answer(&host, answer.clone());
+        resolver.remember_candidates(
+            host,
+            CandidateSnapshot {
+                answers: vec![answer],
+                fetched_at: Instant::now(),
+            },
+        );
+    }
+    assert_eq!(resolver.dns_answers.lock().len(), MAX_METADATA_HOSTS);
+    assert_eq!(
+        resolver.candidate_snapshots.lock().len(),
+        MAX_METADATA_HOSTS
+    );
+    assert!(!resolver.dns_answers.lock().contains_key("cdn-0.example"));
+    assert!(
+        !resolver
+            .candidate_snapshots
+            .lock()
+            .contains_key("cdn-0.example")
+    );
+    assert!(
+        resolver
+            .cached_candidates(&format!(
+                "cdn-{}.example",
+                MAX_METADATA_HOSTS + 19
+            ))
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn candidate_host_admission_does_not_grow_past_active_query_capacity() {
+    let resolver = DownloadDnsResolver::default();
+    let held: Vec<_> = (0..MAX_METADATA_HOSTS)
+        .map(|index| {
+            let lock = Arc::new(tokio::sync::Mutex::new(()));
+            resolver
+                .candidate_hosts
+                .lock()
+                .insert(format!("busy-{index}.example"), lock.clone());
+            lock
+        })
+        .collect();
+    let token = CancellationToken::new();
+    let error = resolver
+        .candidate_snapshot(
+            "new.example",
+            &token,
+            Instant::now() + Duration::from_secs(1),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
+    assert_eq!(resolver.candidate_hosts.lock().len(), MAX_METADATA_HOSTS);
+    drop(held);
+}
+
+#[test]
 fn address_ttl_can_be_shorter_than_cname_and_duplicate_uses_shortest() {
     let query = doh_query("cdn.example", RecordType::A).unwrap();
     let mut response = response_with_chain(&query, 100);
