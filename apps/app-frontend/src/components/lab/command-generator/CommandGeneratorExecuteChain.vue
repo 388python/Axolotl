@@ -465,7 +465,7 @@ defineExpose({ getState, setState })
     border-radius: 999px;
     background: var(--surface-1);
     padding: 0.35rem 0.8rem;
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     font-size: 0.72rem;
     cursor: pointer;
     transition:
@@ -726,7 +726,7 @@ defineExpose({ getState, setState })
     border-radius: 999px;
     background: var(--surface-1);
     padding: 0.25rem 0.6rem;
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     font-family: var(--mono-font, monospace);
     font-size: 0.68rem;
     cursor: pointer;

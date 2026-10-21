@@ -1078,7 +1078,7 @@ function presetCategoryLabel(commandId: string): string {
     margin: 0;
     font-size: 0.8rem;
     line-height: 1.6;
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
 }
 
 .guide-block {

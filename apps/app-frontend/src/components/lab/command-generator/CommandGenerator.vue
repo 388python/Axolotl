@@ -127,7 +127,7 @@ async function copy() {
             v-if="currentGuide"
             class="flex flex-col gap-2 rounded-[var(--radius-lg)] bg-[var(--surface-3)] p-[0.95rem_1rem]"
         >
-            <p class="m-0 text-[0.78rem] text-[var(--color-text-secondary)]">
+            <p class="m-0 text-[0.78rem] text-[var(--color-text-tertiary)]">
                 {{ t(currentGuide.summaryKey) }}
             </p>
             <div v-for="ex in currentGuide.examples" :key="ex.command" class="flex flex-col gap-1">

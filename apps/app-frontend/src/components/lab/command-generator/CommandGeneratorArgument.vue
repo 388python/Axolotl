@@ -281,6 +281,7 @@ function onItemPicked(id: string) {
         <label v-else-if="arg.type === 'boolean'" class="argument-toggle">
             <input
                 type="checkbox"
+                class="accent-[var(--color-brand)]"
                 :checked="modelValue === true || modelValue === 'true'"
                 @change="onCheckboxChange(($event.target as HTMLInputElement).checked)"
             />
@@ -442,11 +443,7 @@ function onItemPicked(id: string) {
     align-items: center;
     gap: 0.55rem;
     font-size: 0.75rem;
-    color: var(--color-text-secondary);
-}
-
-.argument-toggle input {
-    accent-color: var(--color-brand);
+    color: var(--color-text-tertiary);
 }
 
 .argument-placeholder {
@@ -472,7 +469,7 @@ function onItemPicked(id: string) {
     border-radius: 999px;
     background: var(--surface-1);
     padding: 0.28rem 0.65rem;
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     font-size: 0.7rem;
     cursor: pointer;
     transition:

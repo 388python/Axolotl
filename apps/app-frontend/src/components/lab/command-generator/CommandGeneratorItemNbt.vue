@@ -965,7 +965,7 @@ function setEnchantLevel(index: number, level: number) {
     border-radius: var(--radius-sm);
     background: var(--surface-1);
     padding: 0.55rem 0.65rem;
-    color: var(--color-text-secondary);
+    color: var(--color-text-tertiary);
     font-family: var(--mono-font, monospace);
     font-size: 0.68rem;
     white-space: pre-wrap;
