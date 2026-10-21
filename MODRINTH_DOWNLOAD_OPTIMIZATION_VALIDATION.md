@@ -140,6 +140,18 @@ HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序�
 
 ## 尚待完成的要求
 
+长时实验前最终生产检查 `%TEMP%/axolotl-pre-long-production-check.log` 通过；`%TEMP%/axolotl-pre-long-matrix-regression.log` 为 312 项通过、5 项显式基准跳过；完整 fetch `%TEMP%/axolotl-pre-long-fetch-final.log` 为 91 项通过；auto_concurrency 5 项通过。均沿用 target/profile、临时关闭 incremental。
+
+主机扩容审计补上既有 3 秒 State 循环对 adaptive H2 pool 的采样：长流没有新请求取用连接时，也能结束试验、判定无收益并退休额外连接，pressure 时回退。off 的非 adaptive pool 不参与。新增真实 H2 sender/连接活动计数与注入时钟测试证明无新 checkout 也能回退；`%TEMP%/axolotl-background-pool-tests.log` 3 项通过，`cargo check -p theseus --tests` 通过（`%TEMP%/axolotl-background-pool-check.log`）。性能收益的真实每连接/公共瓶颈实验仍待补齐，不以策略测试替代。
+
+长时基准增加只用于显式 ignored 测试的 `AXOLOTL_BENCH_SHARD=0..9`：每个 shard 为一个 iteration×冷/暖组合，内部按原三模式交错顺序执行，默认未设置时仍跑完整原矩阵。每片输出 partial 标记，只有收齐 10 片、每模式冷暖各五次才能外部汇总验收。用独立测试进程运行各片，保持每进程全局探测许可独立；本机 CPU/磁盘仍共享，必须记录该实验限制。`AXOLOTL_BENCH_SIZE_MIB=1`、shard0 的 AllSlow 调度烟测通过（`%TEMP%/axolotl-shard-scaled-smoke.log`），三模式耗时 22804/22785/22780ms、无迁移、峰值≤3、received=unique；该 scaled 单片不计完整性能验收。
+
+重复执行 `%TEMP%/axolotl-h2-expanded-final-tests.log` 曾出现一次饱和恢复 fixture 失败：两次瞬间返回的 1MiB 样本差异过大，选择器正确拒绝晋升，但测试在 20s 超时。此前同测试通过，因此不能省略这次失败。将测试服务端的 File/LargeFile 以 32MiB/s pacing，避免把本机毫秒调度噪声当作稳定带宽；未放宽生产一致性/收益门槛。修正后的 `%TEMP%/axolotl-paced-tls-recovery-tests.log` 为 54 项通过、5 项显式基准跳过。
+
+H2 Range 的 reqwest 回退路径现在保留 typed reqwest 错误：正文超时为 Slow，连接失败为 Connect，证书失败为 Tls，均不伪装 H2 Protocol。真实本地 206 正文停滞测试通过。原生 H2 单流、未知大小探测、资产和 H2/HTTP1 Range 响应接入现有主机 429/503 与 Retry-After 解析和冷却，沿用既有失败阈值，不随 IP/generation 重置。真实 TLS/H2 429 用例证明冷却建立后不能取得恢复 lease，原连接不退休：`%TEMP%/axolotl-native-h2-cooldown-proof.log` 1 项通过；前一版 `%TEMP%/axolotl-range-status-error-tests.log` 下载回归 311 项通过、5 项跳过，最终版正在重新验证。
+
+显式性能矩阵新增总探测预算、最多两轮及 32 连接断言；全部慢候选中位完成耗时回归不得超过 10%，健康网络现在同时约束 DNS 与 expanded 模式的 5% 门槛。原始失败结果不会因新增断言改记为通过。
+
 新增原生 H2 实际生产恢复证据：本地严格 TLS fixture 支持无 Range 的完整 GET、非零/开放结束 Range 与持续小块限速。单流测试为 1MiB；H2 Range 测试为完整 64MiB、显式两范围，满足生产范围并发大小限制。两者先确认慢 peer 的原生 SharedH2Connection 实际消费了正文，再由真实候选验证和两样本测速发布新 IP；最终 received=unique=文件大小、一次迁移、内容 SHA-1 正确。Range 另外要求新 peer 的原生 H2 连接实际消费正文，不能由 reqwest H2 路径代替证据。测试仅缩短观察窗口，严格 TLS/Range/预算/最终哈希沿用生产逻辑。`%TEMP%/axolotl-h2-range-full-proof.log`：54 项通过、5 项显式基准跳过。
 
 DNS metadata 缓存阶段：provider answers 和候选快照最多各保留 128 个 host，插入时清理过期项并淘汰最早获取的缓存。候选查询锁清理无人持有的 entry；128 个活跃 host 已满时拒绝新候选查询，保留已在途的单主机合并锁，避免用淘汰活跃锁制造重复查询。普通下载 DNS 不依赖候选锁，不因候选缓存淘汰而禁用正常下载。新增 148 个 host 插入后的容量与旧项淘汰测试，以及活跃候选查询容量拒绝测试；上述 308 项回归已覆盖。

@@ -143,6 +143,9 @@ async fn run(
         assert_eq!(counters.committed_unique_bytes, size);
         let (probe_after, _, rounds_after) = selector.benchmark_counters();
         let migrations = request.endpoint_migrations.load(Ordering::Relaxed);
+        assert!(probe_after - probe_before <= 64 * 1024 * 1024);
+        assert!(rounds_after - rounds_before <= 2);
+        assert!(stats.peak.load(Ordering::Relaxed) <= 32);
         if mode == Mode::Off { assert_eq!(probe_after, probe_before); assert_eq!(migrations, 0); }
         if matches!(scenario, Scenario::Healthy | Scenario::AllSlow) { assert_eq!(migrations, 0); }
         if matches!(scenario, Scenario::SlowTail) && mode == Mode::Expanded {
@@ -176,15 +179,27 @@ async fn matrix(scenario: Scenario) {
         Some("expanded") => vec![Mode::Expanded],
         Some(_) => panic!("benchmark mode must be off, dns or expanded"),
     };
-    let partial = modes.len() != 3;
+    let shard = std::env::var("AXOLOTL_BENCH_SHARD")
+        .ok()
+        .map(|value| value.parse::<usize>().expect("integer shard index"));
+    assert!(shard.is_none_or(|shard| shard < 10));
+    let partial = modes.len() != 3 || shard.is_some();
     if partial {
         println!(
-            "benchmark_partial_mode true; one-mode diagnostics do not satisfy comparative acceptance"
+            "benchmark_partial_mode true; mode or shard diagnostics require complete cross-run aggregation for comparative acceptance"
         );
     }
+    println!(
+        "benchmark_schedule shard={shard:?}; each shard retains sequential interleaved modes; separate processes have independent admission but share CPU and disk"
+    );
     let mut results = Vec::new();
     for iteration in 0..5 {
         for warm in [false, true] {
+            if shard
+                .is_some_and(|shard| shard != iteration * 2 + usize::from(warm))
+            {
+                continue;
+            }
             // Interleaving rotates order so one mode never always runs first.
             for offset in 0..modes.len() {
                 let mode = modes[(iteration + offset) % modes.len()];
@@ -204,6 +219,9 @@ async fn matrix(scenario: Scenario) {
                 .iter()
                 .filter(|run| run.mode == mode && run.warm == warm)
                 .collect();
+            if group.is_empty() {
+                continue;
+            }
             let mut times: Vec<_> =
                 group.iter().map(|run| run.elapsed_ms).collect();
             times.sort_unstable();
@@ -230,9 +248,19 @@ async fn matrix(scenario: Scenario) {
                 "full weak-network gain should exceed 5x"
             );
         }
+        if !partial && matches!(scenario, Scenario::AllSlow) {
+            for &median in &medians[1..] {
+                assert!(
+                    median <= medians[0] * 110 / 100,
+                    "all-slow probing must not regress median completion by more than 10 percent"
+                );
+            }
+        }
         if !partial
             && matches!(scenario, Scenario::Healthy)
-            && medians[2] > medians[0] * 105 / 100
+            && medians[1..]
+                .iter()
+                .any(|median| *median > medians[0] * 105 / 100)
         {
             println!(
                 "benchmark_noise healthy regression above 5 percent; inspect timer and disk variance before acceptance"
