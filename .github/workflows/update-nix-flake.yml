@@ -1,0 +1,224 @@
+name: Update nix flake
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - pnpm-lock.yaml
+      - .github/workflows/update-nix-flake.yml
+  release:
+    types:
+      - published
+  # Upstream inputs move daily and a security fix cannot be told apart from
+  # them, so the lock stays on the branch until a maintainer dispatches this.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Every run commits into the branch it updates, so queue instead of cancelling.
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh the nix locks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      branch: ${{ steps.branch.outputs.name }}
+      flake: ${{ steps.flake-inputs.outputs.changed }}
+      hash: ${{ steps.pnpm-deps.outputs.changed }}
+      old-hash: ${{ steps.pnpm-deps.outputs.old }}
+      new-hash: ${{ steps.pnpm-deps.outputs.new }}
+    steps:
+      - name: Resolve the branch to update
+        id: branch
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # A release refreshes the default branch; a branch push refreshes itself.
+          if [ "$REF_TYPE" = 'tag' ] || [ "$EVENT_NAME" = 'release' ]; then
+            echo "name=$DEFAULT_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=$REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+      # This job runs code from the flake inputs, so it holds no write
+      # credential; only the commit job below is allowed to write.
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
+      - name: Update flake inputs
+        id: flake-inputs
+        # The pinned inputs stay usable when the update fails, so report it
+        # instead of failing the run.
+        continue-on-error: true
+        run: |
+          nix flake update --accept-flake-config
+          if git diff --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The launcher itself is built and cached by Axolotl-Cachix
+      # (Axolotl-Launcher/Axolotl-Cachix), so this job only proves that the
+      # refreshed inputs still evaluate and fetch their pnpm dependencies.
+      - name: Recompute the pnpm dependency hash
+        id: pnpm-deps
+        run: |
+          read_hash() {
+            sed -nE 's|^[[:space:]]*hash = "(sha256-[A-Za-z0-9+/=]+)";[[:space:]]*$|\1|p' nix/axolotl.nix
+          }
+          old_hash="$(read_hash)"
+          if [ "$(printf '%s' "$old_hash" | grep -c '^sha256-')" -ne 1 ]; then
+            echo "error: expected exactly one pnpm dependency hash in nix/axolotl.nix" >&2
+            exit 1
+          fi
+          nix develop . --accept-flake-config --command update-pnpm-deps
+          new_hash="$(read_hash)"
+          echo "old=$old_hash" >> "$GITHUB_OUTPUT"
+          echo "new=$new_hash" >> "$GITHUB_OUTPUT"
+          if [ "$old_hash" = "$new_hash" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload the refreshed lock file
+        if: steps.flake-inputs.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nix-flake-lock
+          path: flake.lock
+          overwrite: true
+          retention-days: 1
+          if-no-files-found: error
+
+  commit:
+    name: Commit the refreshed nix locks
+    needs: refresh
+    if: needs.refresh.outputs.flake == 'true' || needs.refresh.outputs.hash == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.refresh.outputs.branch }}
+          # Full history keeps the rebase below possible when the branch has
+          # advanced while the refresh job ran.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download the refreshed lock file
+        if: needs.refresh.outputs.flake == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: nix-flake-lock
+          path: refreshed
+
+      - name: Apply the refreshed lock file
+        if: needs.refresh.outputs.flake == 'true'
+        # Only the expected file with the expected structure crosses the job
+        # boundary; anything else the refresh job produced is dropped.
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const lock = JSON.parse(fs.readFileSync("refreshed/flake.lock", "utf8"));
+            const keys = Object.keys(lock).sort().join(",");
+            if (keys !== "nodes,root,version") {
+              throw new Error("unexpected flake.lock keys: " + keys);
+            }
+          '
+          install -m 644 refreshed/flake.lock flake.lock
+
+      - name: Commit the refreshed lock file
+        if: needs.refresh.outputs.flake == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git
+          git add flake.lock
+          git commit -m "chore(nix): update flake inputs [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
+              exit 0
+            fi
+            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
+            git fetch origin "${TARGET_BRANCH}"
+            git rebase FETCH_HEAD || {
+              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
+              exit 1
+            }
+          done
+          echo "error: could not push the updated flake inputs after 3 attempts" >&2
+          exit 1
+
+      - name: Apply the recomputed pnpm dependency hash
+        if: needs.refresh.outputs.hash == 'true'
+        env:
+          OLD_HASH: ${{ needs.refresh.outputs.old-hash }}
+          NEW_HASH: ${{ needs.refresh.outputs.new-hash }}
+        # The refresh job ran the updated flake, so only two hash strings cross
+        # the job boundary and both are matched against the current file here.
+        run: |
+          hash_pattern='^sha256-[A-Za-z0-9+/]{43}=$'
+          if ! [[ "$OLD_HASH" =~ $hash_pattern ]]; then
+            echo "error: unexpected old pnpm dependency hash: $OLD_HASH" >&2
+            exit 1
+          fi
+          if ! [[ "$NEW_HASH" =~ $hash_pattern ]]; then
+            echo "error: unexpected new pnpm dependency hash: $NEW_HASH" >&2
+            exit 1
+          fi
+          occurrences="$(grep -cF "hash = \"$OLD_HASH\";" nix/axolotl.nix || true)"
+          if [ "$occurrences" -ne 1 ]; then
+            echo "error: expected the pnpm dependency hash once in nix/axolotl.nix, found $occurrences" >&2
+            exit 1
+          fi
+          sed -i "s|hash = \"$OLD_HASH\";|hash = \"$NEW_HASH\";|" nix/axolotl.nix
+          grep -qF "hash = \"$NEW_HASH\";" nix/axolotl.nix
+
+      - name: Commit the recomputed pnpm dependency hash
+        if: needs.refresh.outputs.hash == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git
+          git add nix/axolotl.nix
+          git commit -m "chore(nix): update pnpm dependency hash [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
+              exit 0
+            fi
+            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
+            git fetch origin "${TARGET_BRANCH}"
+            git rebase FETCH_HEAD || {
+              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
+              exit 1
+            }
+          done
+          echo "error: could not push the updated pnpm dependency hash after 3 attempts" >&2
+          exit 1
