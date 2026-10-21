@@ -5850,7 +5850,7 @@
     "message": "要执行的命令"
   },
   "app.lab.command-generator.execute.final-placeholder": {
-    "message": "say hello"
+    "message": "say 你好"
   },
   "app.lab.command-generator.execute.final-hint": {
     "message": "输入实际命令，不带斜杠。"
@@ -6192,7 +6192,7 @@
     "message": "管理员"
   },
   "app.lab.command-generator.perm.2": {
-    "message": "OP"
+    "message": "OP (管理员权限)"
   },
   "app.lab.command-generator.perm.3": {
     "message": "服务器控制台"
@@ -6960,10 +6960,10 @@
     "message": "点数"
   },
   "app.lab.command-generator.preset.boolean.true": {
-    "message": "true"
+    "message": "true (真)"
   },
   "app.lab.command-generator.preset.boolean.false": {
-    "message": "false"
+    "message": "false (假)"
   },
   "app.lab.command-generator.preset.coord.current": {
     "message": "当前位置"
@@ -7545,7 +7545,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.attribute.action.desc": {
-    "message": "get / base / value"
+    "message": "get / base / value (获取 / 基础值 / 当前值)"
   },
   "app.lab.command-generator.arg.attribute.value.display": {
     "message": "值"
@@ -7587,10 +7587,10 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.bossbar.action.desc": {
-    "message": "add / remove / get / set / list"
+    "message": "add / remove / get / set / list (添加 / 移除 / 获取 / 设置 / 列出)"
   },
   "app.lab.command-generator.arg.bossbar.id.display": {
-    "message": "ID"
+    "message": "ID (标识符)"
   },
   "app.lab.command-generator.arg.bossbar.id.desc": {
     "message": "Boss 栏标识符"
@@ -7599,7 +7599,7 @@
     "message": "属性"
   },
   "app.lab.command-generator.arg.bossbar.property.desc": {
-    "message": "name / color / style / value / max / visible / players"
+    "message": "name / color / style / value / max / visible / players (名称 / 颜色 / 样式 / 值 / 最大值 / 可见性 / 玩家)"
   },
   "app.lab.command-generator.arg.bossbar.value.display": {
     "message": "值"
@@ -7647,7 +7647,7 @@
     "message": "遮罩模式"
   },
   "app.lab.command-generator.arg.clone.maskMode.desc": {
-    "message": "filtered / replace / masked"
+    "message": "filtered / replace / masked (过滤 / 替换 / 遮罩)"
   },
   "app.lab.command-generator.arg.damage.target.display": {
     "message": "目标"
@@ -7677,13 +7677,13 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.data.action.desc": {
-    "message": "get / merge / modify / remove"
+    "message": "get / merge / modify / remove (获取 / 合并 / 修改 / 移除)"
   },
   "app.lab.command-generator.arg.data.targetType.display": {
     "message": "目标类型"
   },
   "app.lab.command-generator.arg.data.targetType.desc": {
-    "message": "block / entity / storage"
+    "message": "block / entity / storage (方块 / 实体 / 存储)"
   },
   "app.lab.command-generator.arg.data.target.display": {
     "message": "目标"
@@ -7707,7 +7707,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.datapack.action.desc": {
-    "message": "enable / disable / list"
+    "message": "enable / disable / list (启用 / 禁用 / 列出)"
   },
   "app.lab.command-generator.arg.datapack.name.display": {
     "message": "数据包名"
@@ -7719,13 +7719,13 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.debug.action.desc": {
-    "message": "start / stop / function"
+    "message": "start / stop / function (开始 / 停止 / 函数)"
   },
   "app.lab.command-generator.arg.defaultgamemode.mode.display": {
     "message": "模式"
   },
   "app.lab.command-generator.arg.defaultgamemode.mode.desc": {
-    "message": "survival / creative / adventure / spectator"
+    "message": "survival / creative / adventure / spectator (生存 / 创造 / 冒险 / 旁观)"
   },
   "app.lab.command-generator.arg.deop.target.display": {
     "message": "玩家名"
@@ -7749,7 +7749,7 @@
     "message": "难度"
   },
   "app.lab.command-generator.arg.difficulty.difficulty.desc": {
-    "message": "peaceful / easy / normal / hard"
+    "message": "peaceful / easy / normal / hard (和平 / 简单 / 普通 / 困难)"
   },
   "app.lab.command-generator.arg.effect.action.display": {
     "message": "操作"
@@ -7851,7 +7851,7 @@
     "message": "模式"
   },
   "app.lab.command-generator.arg.fill.mode.desc": {
-    "message": "replace / keep / outline / hollow / destroy"
+    "message": "replace / keep / outline / hollow / destroy (替换 / 保留 / 轮廓 / 中空 / 摧毁)"
   },
   "app.lab.command-generator.arg.fillbiome.from.display": {
     "message": "起始坐标"
@@ -7875,7 +7875,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.forceload.action.desc": {
-    "message": "add / remove / query"
+    "message": "add / remove / query (添加 / 移除 / 查询)"
   },
   "app.lab.command-generator.arg.forceload.from.display": {
     "message": "起始坐标"
@@ -7899,7 +7899,7 @@
     "message": "模式"
   },
   "app.lab.command-generator.arg.gamemode.mode.desc": {
-    "message": "survival / creative / adventure / spectator"
+    "message": "survival / creative / adventure / spectator (生存 / 创造 / 冒险 / 旁观)"
   },
   "app.lab.command-generator.arg.gamemode.target.display": {
     "message": "目标"
@@ -7938,7 +7938,7 @@
     "message": "物品数量"
   },
   "app.lab.command-generator.arg.give.nbt.display": {
-    "message": "NBT"
+    "message": "NBT (NBT 数据)"
   },
   "app.lab.command-generator.arg.give.nbt.desc": {
     "message": "物品 NBT 数据"
@@ -7959,7 +7959,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.item.action.desc": {
-    "message": "replace / modify / block"
+    "message": "replace / modify / block (替换 / 修改 / 方块)"
   },
   "app.lab.command-generator.arg.item.pos.display": {
     "message": "容器坐标"
@@ -7986,7 +7986,7 @@
     "message": "物品数量"
   },
   "app.lab.command-generator.arg.item.nbt.display": {
-    "message": "NBT"
+    "message": "NBT (NBT 数据)"
   },
   "app.lab.command-generator.arg.item.nbt.desc": {
     "message": "物品 NBT 数据"
@@ -8025,7 +8025,7 @@
     "message": "类型"
   },
   "app.lab.command-generator.arg.locate.type.desc": {
-    "message": "structure / biome / poi"
+    "message": "structure / biome / poi (结构 / 生物群系 / 标记点)"
   },
   "app.lab.command-generator.arg.locate.id.display": {
     "message": "标识符"
@@ -8037,7 +8037,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.loot.action.desc": {
-    "message": "give / insert / spawn"
+    "message": "give / insert / spawn (给予 / 插入 / 生成)"
   },
   "app.lab.command-generator.arg.loot.target.display": {
     "message": "目标"
@@ -8199,7 +8199,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.random.action.desc": {
-    "message": "value / roll / reset"
+    "message": "value / roll / reset (值 / 掷骰 / 重置)"
   },
   "app.lab.command-generator.arg.random.range.display": {
     "message": "范围"
@@ -8256,7 +8256,7 @@
     "message": "物品数量"
   },
   "app.lab.command-generator.arg.replaceitem.nbt.display": {
-    "message": "NBT"
+    "message": "NBT (NBT 数据)"
   },
   "app.lab.command-generator.arg.replaceitem.nbt.desc": {
     "message": "物品 NBT 数据"
@@ -8313,7 +8313,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.scoreboard.action.desc": {
-    "message": "add / remove / list / set / get / reset / operation"
+    "message": "add / remove / list / set / get / reset / operation (添加 / 移除 / 列出 / 设置 / 获取 / 重置 / 运算)"
   },
   "app.lab.command-generator.arg.scoreboard.objective.display": {
     "message": "计分项"
@@ -8337,7 +8337,7 @@
     "message": "模式"
   },
   "app.lab.command-generator.arg.setblock.mode.desc": {
-    "message": "replace / keep / destroy"
+    "message": "replace / keep / destroy (替换 / 保留 / 摧毁)"
   },
   "app.lab.command-generator.arg.setidletimeout.minutes.display": {
     "message": "分钟"
@@ -8439,10 +8439,10 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.stopwatch.action.desc": {
-    "message": "create / query / restart / remove"
+    "message": "create / query / restart / remove (创建 / 查询 / 重启 / 移除)"
   },
   "app.lab.command-generator.arg.stopwatch.id.display": {
-    "message": "ID"
+    "message": "ID (标识符)"
   },
   "app.lab.command-generator.arg.stopwatch.id.desc": {
     "message": "秒表标识符"
@@ -8466,7 +8466,7 @@
     "message": "生成坐标"
   },
   "app.lab.command-generator.arg.summon.nbt.display": {
-    "message": "NBT"
+    "message": "NBT (NBT 数据)"
   },
   "app.lab.command-generator.arg.summon.nbt.desc": {
     "message": "实体 NBT 数据"
@@ -8493,7 +8493,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.tag.action.desc": {
-    "message": "add / remove / list"
+    "message": "add / remove / list (添加 / 移除 / 列出)"
   },
   "app.lab.command-generator.arg.tag.name.display": {
     "message": "标签名"
@@ -8505,7 +8505,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.team.action.desc": {
-    "message": "add / remove / empty / join / leave / list / modify"
+    "message": "add / remove / empty / join / leave / list / modify (添加 / 移除 / 清空 / 加入 / 离开 / 列出 / 修改)"
   },
   "app.lab.command-generator.arg.team.team.display": {
     "message": "队伍名"
@@ -8571,7 +8571,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.tick.action.desc": {
-    "message": "freeze / unfreeze / rate / sprint / step / query"
+    "message": "freeze / unfreeze / rate / sprint / step / query (冻结 / 解冻 / 速率 / 疾跑 / 单步 / 查询)"
   },
   "app.lab.command-generator.arg.tick.value.display": {
     "message": "值"
@@ -8601,7 +8601,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.title.action.desc": {
-    "message": "title / subtitle / actionbar / times / reset"
+    "message": "title / subtitle / actionbar / times / reset (标题 / 副标题 / 动作栏 / 次数 / 重置)"
   },
   "app.lab.command-generator.arg.title.value.display": {
     "message": "内容"
@@ -8625,7 +8625,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.waypoint.action.desc": {
-    "message": "list / add / remove / modify"
+    "message": "list / add / remove / modify (列出 / 添加 / 移除 / 修改)"
   },
   "app.lab.command-generator.arg.waypoint.name.display": {
     "message": "名称"
@@ -8649,7 +8649,7 @@
     "message": "天气"
   },
   "app.lab.command-generator.arg.weather.type.desc": {
-    "message": "clear / rain / thunder"
+    "message": "clear / rain / thunder (晴天 / 雨天 / 雷暴)"
   },
   "app.lab.command-generator.arg.weather.duration.display": {
     "message": "持续时间"
@@ -8661,7 +8661,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.whitelist.action.desc": {
-    "message": "add / remove / list / on / off / reload"
+    "message": "add / remove / list / on / off / reload (添加 / 移除 / 列出 / 开启 / 关闭 / 重新加载)"
   },
   "app.lab.command-generator.arg.whitelist.target.display": {
     "message": "玩家名"
@@ -8673,7 +8673,7 @@
     "message": "操作"
   },
   "app.lab.command-generator.arg.worldborder.action.desc": {
-    "message": "add / set / center / damage / get / warning"
+    "message": "add / set / center / damage / get / warning (添加 / 设置 / 居中 / 伤害 / 获取 / 警告)"
   },
   "app.lab.command-generator.arg.worldborder.value.display": {
     "message": "值"
@@ -8895,7 +8895,7 @@
     "message": "目标类型"
   },
   "app.lab.command-generator.arg.execute.if-data.targetType.desc": {
-    "message": "block / entity / storage"
+    "message": "block / entity / storage (方块 / 实体 / 存储)"
   },
   "app.lab.command-generator.arg.execute.if-data.target.display": {
     "message": "目标"
