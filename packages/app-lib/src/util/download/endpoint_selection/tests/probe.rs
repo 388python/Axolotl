@@ -17,6 +17,8 @@ enum ResponseKind {
     RateLimited,
     Missing,
     Stall,
+    SlowFile,
+    File,
 }
 
 struct TlsFixture {
@@ -152,6 +154,26 @@ impl TlsFixture {
                                 || line.starts_with("host: cdn.modrinth.com:")));
                             assert!(!request.contains("authorization:"));
                             assert!(!request.contains(crate::util::fetch::DOWNLOAD_META_HEADER));
+                            if matches!(kind, ResponseKind::SlowFile | ResponseKind::File) {
+                                let range = request.lines().find_map(|line| line.strip_prefix("range: bytes="));
+                                let start = range.map(|range| range.split_once('-').unwrap().0.parse::<usize>().unwrap()).unwrap_or(0);
+                                let length = 1_048_576 - start;
+                                let headers = if range.is_some() {
+                                    format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-1048575/1048576\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
+                                } else {
+                                    format!("HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nConnection: close\r\n\r\n")
+                                };
+                                if stream.write_all(headers.as_bytes()).await.is_err() { return; }
+                                let mut remaining = length;
+                                while remaining > 0 {
+                                    let chunk = remaining.min(if matches!(kind, ResponseKind::SlowFile) { 1024 } else { 64 * 1024 });
+                                    if stream.write_all(&vec![42; chunk]).await.is_err() { return; }
+                                    remaining -= chunk;
+                                    if matches!(kind, ResponseKind::SlowFile) { tokio::time::sleep(Duration::from_millis(25)).await; }
+                                }
+                                let _ = stream.shutdown().await;
+                                return;
+                            }
                             let range = request.lines().find_map(|line| line.strip_prefix("range: bytes=0-")).unwrap();
                             let length = range.trim().parse::<u64>().unwrap() + 1;
                             let header = match kind {
@@ -247,6 +269,12 @@ fn production_clients(
     clients
         .endpoints
         .install_test_selection(fixture.address, fixture.protocol);
+    clients
+        .system_dns
+        .set_test_addresses("cdn.modrinth.com", vec![fixture.address]);
+    clients
+        .direct_dns
+        .set_test_addresses("cdn.modrinth.com", vec![fixture.address]);
     clients
 }
 
@@ -389,6 +417,79 @@ async fn native_h2_new_selection_retires_old_pool_and_preserves_authority_budget
         }),
     )
     .await;
+}
+
+#[tokio::test]
+async fn same_url_http1_download_resumes_on_new_ip_and_verifies_final_hash() {
+    use crate::util::download::{native_slow, proxy_context};
+    let slow =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::SlowFile).await;
+    let fast = TlsFixture::start_on(
+        "cdn.modrinth.com",
+        ResponseKind::File,
+        Protocol::Http1,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let mut clients = production_clients(&slow);
+    clients.scope = format!("http1-recovery-{}", slow.address.port());
+    clients
+        .endpoints
+        .pinned_clients
+        .trust_test_root(fast.root.clone());
+    let selector = clients.endpoints.clone();
+    let bytes = vec![42; 1_048_576];
+    let request = crate::util::fetch::DownloadRequest::new(
+        fixture_route().url,
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1(
+            sha1_smol::Sha1::from(&bytes[..]).hexdigest(),
+        )
+        .with_size(bytes.len() as u64),
+    )
+    .with_segmented_download(false);
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("verified.jar");
+    let semaphore =
+        crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(4));
+    let publish = async {
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        selector.install_test_selection(fast.address, Protocol::Http1);
+    };
+    let transfer = proxy_context::with_snapshot(clients, async {
+        // Select the HTTP/1 fixture path before the production entry
+        // evaluates native H2, so this test cannot access public DNS.
+        for proxy in [ProxyPolicy::System, ProxyPolicy::Direct] {
+            crate::util::fetch::record_authority_h2_failure_for(
+                "cdn.modrinth.com:443",
+                proxy,
+            );
+        }
+        native_slow::with_test_timing(
+            Duration::from_millis(75),
+            Duration::from_millis(150),
+            crate::util::fetch::download_endpoint_fixture(
+                request.clone(),
+                &destination,
+                &semaphore,
+            ),
+        )
+        .await
+    });
+    let (result, _) = tokio::time::timeout(Duration::from_secs(8), async {
+        tokio::join!(transfer, publish)
+    })
+    .await
+    .unwrap();
+    let result = result.unwrap();
+    assert_eq!(tokio::fs::read(&destination).await.unwrap(), bytes);
+    assert_eq!(result.attempts, 2);
+    assert_eq!(slow.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(fast.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
 }
 
 #[tokio::test]

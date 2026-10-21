@@ -230,3 +230,82 @@ async fn saturated_production_leaves_exactly_one_recovery_slot_across_generation
     })
     .await;
 }
+
+#[test]
+fn same_url_new_endpoint_recovers_only_with_integrity_and_shared_migration_budget()
+ {
+    let selector =
+        EndpointSelector::with_mode("recovery-test", SelectionMode::Auto);
+    selector.install_test_selection(
+        "151.101.1.242:443".parse().unwrap(),
+        Protocol::H2,
+    );
+    let request = DownloadRequest::new(
+        "https://cdn.modrinth.com/data/project/file.jar",
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1("test").with_size(1024 * 1024),
+    );
+    let route = DownloadRoute {
+        url: request.url.clone(),
+        source: crate::util::fetch::DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::Direct,
+    };
+    let previous = Some("151.101.65.242:443".parse().unwrap());
+    let clone = request.clone();
+    for request in [&request, &clone] {
+        let lease = selector
+            .recovery_lease(
+                request,
+                &route,
+                Protocol::H2,
+                previous,
+                45 * 1024,
+                512 * 1024,
+            )
+            .unwrap();
+        assert_eq!(lease.pool.endpoint.ip().to_string(), "151.101.1.242");
+    }
+    assert!(
+        selector
+            .recovery_lease(
+                &request,
+                &route,
+                Protocol::H2,
+                previous,
+                45 * 1024,
+                512 * 1024
+            )
+            .is_none()
+    );
+    let fresh = DownloadRequest::new(request.url.clone(), request.resource)
+        .with_integrity(request.integrity.clone());
+    assert!(
+        selector
+            .recovery_lease(
+                &fresh,
+                &route,
+                Protocol::H2,
+                Some("151.101.1.242:443".parse().unwrap()),
+                45 * 1024,
+                512 * 1024
+            )
+            .is_none()
+    );
+    assert!(
+        selector
+            .recovery_lease(
+                &DownloadRequest::new(request.url, request.resource),
+                &route,
+                Protocol::H2,
+                previous,
+                45 * 1024,
+                512 * 1024
+            )
+            .is_none()
+    );
+}

@@ -180,6 +180,40 @@ struct RoundStart {
 }
 
 impl EndpointSelector {
+    pub(crate) fn recovery_lease(
+        &self,
+        request: &DownloadRequest,
+        route: &DownloadRoute,
+        protocol: Protocol,
+        current_peer: Option<SocketAddr>,
+        current_speed: u64,
+        remaining: u64,
+    ) -> Option<EndpointLease> {
+        if !request.integrity.supports_resume()
+            || native_breaker::is_open(route)
+        {
+            return None;
+        }
+        let url = url::Url::parse(&route.url).ok()?;
+        if !eligible_target(&url, &request.integrity) {
+            return None;
+        }
+        let lease = self.lease(&url, protocol)?;
+        if current_peer == Some(lease.pool.endpoint) {
+            return None;
+        }
+        let speed = self.state.lock().selected.as_ref()?.speed;
+        if !policy::should_publish(current_speed, speed, remaining) {
+            return None;
+        }
+        request
+            .endpoint_migrations
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                (used < 2).then_some(used + 1)
+            })
+            .ok()?;
+        Some(lease)
+    }
     pub(crate) fn new(scope: impl Into<Arc<str>>) -> Arc<Self> {
         Self::with_mode(scope, SelectionMode::configured())
     }

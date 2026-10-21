@@ -79,6 +79,9 @@ pub enum ErrorKind {
     #[error("Network download error: {0}")]
     NetworkError(String),
 
+    #[error("download endpoint changed; resume the validated partial file")]
+    DownloadEndpointChanged,
+
     #[error("HTTP {status} for {method} {url}")]
     HttpError {
         status: u16,

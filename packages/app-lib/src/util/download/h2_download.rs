@@ -56,11 +56,12 @@ pub(crate) enum H2DownloadFailure {
     Content,
     Io,
     Slow,
+    EndpointChanged,
 }
 
 impl H2DownloadFailure {
     pub(crate) const fn should_cooldown_authority(self) -> bool {
-        matches!(self, Self::Protocol | Self::Slow)
+        matches!(self, Self::Protocol)
     }
 
     pub(crate) const fn is_transfer_failure(self) -> bool {
@@ -285,10 +286,17 @@ pub(crate) async fn try_download_via_h2(
             {
                 return H2DownloadOutcome::Canceled;
             }
-            connection.record_stream_failure();
             let failure = classify_download_error(&error);
+            if matches!(
+                failure,
+                H2DownloadFailure::Protocol
+                    | H2DownloadFailure::Connect
+                    | H2DownloadFailure::Tls
+            ) {
+                connection.record_stream_failure();
+            }
             match failure {
-                H2DownloadFailure::Slow | H2DownloadFailure::Protocol => {
+                H2DownloadFailure::Protocol => {
                     connection.retire();
                 }
                 _ => {}
@@ -303,7 +311,9 @@ pub(crate) async fn try_download_via_h2(
                 preserve_partial: integrity.supports_resume()
                     && matches!(
                         failure,
-                        H2DownloadFailure::Protocol | H2DownloadFailure::Slow
+                        H2DownloadFailure::Protocol
+                            | H2DownloadFailure::Slow
+                            | H2DownloadFailure::EndpointChanged
                     ),
             }
         }
@@ -377,6 +387,9 @@ fn classify_download_error(error: &crate::Error) -> H2DownloadFailure {
         return H2DownloadFailure::Integrity;
     }
     match error.raw.as_ref() {
+        crate::ErrorKind::DownloadEndpointChanged => {
+            H2DownloadFailure::EndpointChanged
+        }
         crate::ErrorKind::HttpError { .. }
         | crate::ErrorKind::LabrinthError(_) => H2DownloadFailure::Http,
         crate::ErrorKind::IOError(_) | crate::ErrorKind::StdIOError(_) => {
@@ -533,6 +546,7 @@ async fn single_stream(
     );
     let transfer_started = Instant::now();
     let mut timer = tokio::time::interval(Duration::from_millis(250));
+    let mut last_endpoint_speed = 0;
     timer.tick().await;
     loop {
         let chunk = tokio::select! {
@@ -552,6 +566,17 @@ async fn single_stream(
                     total_size.saturating_sub(downloaded),
                     super::local_resources::pressure(part_path),
                 );
+                if let super::native_slow::SlowDecision::Probe { bytes_per_second } = decision {
+                    last_endpoint_speed = bytes_per_second;
+                }
+                if let Some(clients) = super::proxy_context::clients()
+                    && clients.endpoints.recovery_lease(request, route, super::endpoint_selection::Protocol::H2,
+                        connection.remote_addr, last_endpoint_speed, total_size.saturating_sub(downloaded)).is_some()
+                {
+                    drop(stream);
+                    super::local_resources::write(part_path, 0, file.flush()).await?;
+                    return Err(crate::ErrorKind::DownloadEndpointChanged.into());
+                }
                 if matches!(decision, super::native_slow::SlowDecision::Probe { .. })
                     && let Some(clients) = super::proxy_context::clients()
                 {
@@ -780,8 +805,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn slow_h2_transfers_cool_down_the_authority() {
-        assert!(H2DownloadFailure::Slow.should_cooldown_authority());
+    fn slow_h2_transfers_do_not_poison_protocol_health() {
+        assert!(!H2DownloadFailure::Slow.should_cooldown_authority());
+        assert!(
+            !H2DownloadFailure::EndpointChanged.should_cooldown_authority()
+        );
         assert!(H2DownloadFailure::Protocol.should_cooldown_authority());
         assert!(!H2DownloadFailure::Http.should_cooldown_authority());
     }

@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 const WINDOW: Duration = Duration::from_secs(3);
 const MIN_FLOW: Duration = Duration::from_secs(10);
 const REQUIRED_SLOW_WINDOWS: u8 = 2;
-const MIN_REMAINING_BYTES: u64 = 1024 * 1024;
 const ABSOLUTE_SPEED_FLOOR: u64 = 16 * 1024;
 const COLD_SPEED_FLOOR: u64 = 256 * 1024;
 const RECONNECT_OVERHEAD: Duration = Duration::from_millis(600);
@@ -24,6 +23,8 @@ pub(crate) enum SlowDecision {
 }
 
 pub(crate) struct NativeSlowPolicy {
+    window: Duration,
+    min_flow: Duration,
     started_at: Instant,
     window_started_at: Instant,
     window_start_bytes: u64,
@@ -58,7 +59,15 @@ impl NativeSlowPolicy {
         expected_speed: Option<u64>,
     ) -> Self {
         let now = Instant::now();
+        #[cfg(test)]
+        let (window, min_flow) = TEST_TIMING
+            .try_with(|timing| *timing)
+            .unwrap_or((WINDOW, MIN_FLOW));
+        #[cfg(not(test))]
+        let (window, min_flow) = (WINDOW, MIN_FLOW);
         Self {
+            window,
+            min_flow,
             started_at: now,
             window_started_at: now,
             window_start_bytes: starting_bytes,
@@ -100,26 +109,22 @@ impl NativeSlowPolicy {
             return SlowDecision::Continue;
         }
         let elapsed = self.window_started_at.elapsed();
-        if elapsed < WINDOW {
+        if elapsed < self.window {
             return SlowDecision::Continue;
         }
-        let speed = downloaded
-            .saturating_sub(self.window_start_bytes)
-            .checked_div(elapsed.as_secs().max(1))
-            .unwrap_or(0);
+        let speed = (downloaded.saturating_sub(self.window_start_bytes) as f64
+            / elapsed.as_secs_f64()) as u64;
         self.window_started_at = Instant::now();
         self.window_start_bytes = downloaded;
 
-        if (!self.probe_small_transfers && remaining < MIN_REMAINING_BYTES)
-            || estimated_duration(remaining, speed)
+        // Zero is also used for unknown length by legacy callers. It must
+        // not permanently commit an otherwise stalled or slow transfer.
+        if remaining > 0
+            && estimated_duration(remaining, speed)
                 <= RECONNECT_OVERHEAD + MIN_SAVINGS
         {
-            if self.probe_small_transfers {
-                self.slow_windows = 0;
-                return SlowDecision::Continue;
-            }
-            self.committed = true;
-            return SlowDecision::Commit;
+            self.slow_windows = 0;
+            return SlowDecision::Continue;
         }
         let expected_floor = self
             .expected_speed
@@ -138,7 +143,7 @@ impl NativeSlowPolicy {
         } else {
             self.slow_windows = 0;
         }
-        if self.started_at.elapsed() >= MIN_FLOW
+        if self.started_at.elapsed() >= self.min_flow
             && self.slow_windows >= REQUIRED_SLOW_WINDOWS
         {
             self.slow_windows = 0;
@@ -153,6 +158,18 @@ impl NativeSlowPolicy {
     pub(crate) fn commit(&mut self) {
         self.committed = true;
     }
+}
+
+#[cfg(test)]
+tokio::task_local! { static TEST_TIMING: (Duration, Duration); }
+
+#[cfg(test)]
+pub(crate) async fn with_test_timing<F: std::future::Future>(
+    window: Duration,
+    min_flow: Duration,
+    future: F,
+) -> F::Output {
+    TEST_TIMING.scope((window, min_flow), future).await
 }
 
 pub(crate) fn should_switch(
@@ -184,6 +201,38 @@ fn estimated_duration(bytes: u64, speed: u64) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordinary_small_tail_probes_by_eta_and_keeps_monitoring_fast_tail() {
+        for (speed, remaining, expected) in [
+            (45 * 1024, 512 * 1024, true),
+            (30 * 1024 * 1024, 512 * 1024, false),
+        ] {
+            let mut policy = NativeSlowPolicy::new(0, None);
+            policy.started_at = Instant::now() - MIN_FLOW;
+            policy.window_started_at = Instant::now() - WINDOW;
+            policy.slow_windows = REQUIRED_SLOW_WINDOWS - 1;
+            let decision = policy.observe(speed * WINDOW.as_secs(), remaining);
+            assert_eq!(
+                matches!(decision, SlowDecision::Probe { .. }),
+                expected
+            );
+            assert!(!policy.committed);
+        }
+    }
+
+    #[test]
+    fn unknown_remaining_does_not_commit_a_slow_stream() {
+        let mut policy = NativeSlowPolicy::new(0, None);
+        policy.started_at = Instant::now() - MIN_FLOW;
+        policy.window_started_at = Instant::now() - WINDOW;
+        policy.slow_windows = REQUIRED_SLOW_WINDOWS - 1;
+        assert!(matches!(
+            policy.observe(45 * 1024 * WINDOW.as_secs(), 0),
+            SlowDecision::Probe { .. }
+        ));
+        assert!(!policy.committed);
+    }
 
     #[test]
     fn healthy_http2_stream_is_not_downgraded_against_single_file_peak() {

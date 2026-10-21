@@ -272,6 +272,7 @@ pub struct DownloadRequest {
     pub(crate) h2_range_concurrency: Option<usize>,
     pub(crate) cancellation: Option<tokio_util::sync::CancellationToken>,
     pub(crate) install_tracking: Option<DownloadInstallTracking>,
+    pub(crate) endpoint_migrations: Arc<std::sync::atomic::AtomicU8>,
 }
 
 #[derive(Clone, Debug)]
@@ -295,6 +296,7 @@ impl DownloadRequest {
             h2_range_concurrency: None,
             cancellation: None,
             install_tracking: None,
+            endpoint_migrations: Arc::new(std::sync::atomic::AtomicU8::new(0)),
         }
     }
 
@@ -5831,6 +5833,15 @@ async fn download_to_path_inner(
     Ok(attach_verified_integrity(result, &request_integrity).await)
 }
 
+#[cfg(test)]
+pub(crate) async fn download_endpoint_fixture(
+    request: DownloadRequest,
+    destination: &Path,
+    semaphore: &FetchSemaphore,
+) -> crate::Result<DownloadResult> {
+    download_to_path_inner(request, destination, semaphore, None).await
+}
+
 enum NativeSegmentedAttempt {
     RetryRoute,
     Completed(DownloadResult),
@@ -6890,6 +6901,8 @@ async fn run_native_route_attempts(
         let mut alternate_probe_finished = false;
         let mut confirmed_switch = None;
         let mut transfer_error: Option<crate::Error> = None;
+        let mut switched_endpoint = false;
+        let mut last_endpoint_speed = 0;
         loop {
             tokio::select! {
                 item = stream.next() => {
@@ -6938,6 +6951,19 @@ async fn run_native_route_attempts(
                         total_size.saturating_sub(downloaded),
                         super::download::local_resources::pressure(part_path),
                     );
+                    if let super::download::native_slow::SlowDecision::Probe { bytes_per_second } = slow_decision {
+                        last_endpoint_speed = bytes_per_second;
+                    }
+                    if let Some(clients) = super::download::proxy_context::clients() {
+                        let protocol = if http_version == reqwest::Version::HTTP_2 {
+                            super::download::endpoint_selection::Protocol::H2
+                        } else { super::download::endpoint_selection::Protocol::Http1 };
+                        if clients.endpoints.recovery_lease(request, route, protocol, remote_addr,
+                            last_endpoint_speed, total_size.saturating_sub(downloaded)).is_some() {
+                            switched_endpoint = true;
+                            break;
+                        }
+                    }
                     if matches!(slow_decision, super::download::native_slow::SlowDecision::Probe { .. })
                         && let Some(clients) = super::download::proxy_context::clients()
                     {
@@ -7063,6 +7089,7 @@ async fn run_native_route_attempts(
             }
         }
         drop(alternate_probe);
+        drop(stream);
         record_install_download_progress(request, downloaded, total_size).await;
         super::download::local_resources::write(part_path, 0, file.flush())
             .await
@@ -7081,6 +7108,11 @@ async fn run_native_route_attempts(
         drop(file);
         drop(permit);
         drop(activity.take());
+
+        if switched_endpoint {
+            session.preferred_route = Some(route.clone());
+            break 'attempt;
+        }
 
         if let Some(probe) = confirmed_switch {
             session.preferred_route = Some(probe.route);
@@ -9510,19 +9542,25 @@ mod tests {
             .unwrap(),
             H2AttemptResult::Fallback { .. }
         ));
-        assert!(connection.is_retiring());
+        let protocol_failed = !matches!(failure, H2FailureFixture::Slow);
+        assert_eq!(connection.is_retiring(), protocol_failed);
         assert!(
             !connection.is_dead(),
             "healthy stream must keep its driver alive"
         );
-        assert!(
-            !super::super::download::h2_pool::has_live_connection(&primary)
-                .await
+        assert_eq!(
+            super::super::download::h2_pool::has_live_connection(&primary)
+                .await,
+            !protocol_failed
         );
-        assert!(scheduler.select_connection().is_none());
+        assert_eq!(scheduler.select_connection().is_none(), protocol_failed);
+        connection.release_stream_reservation();
         scheduler.prune();
-        assert!(scheduler.select_connection().is_none());
-        assert!(connection.open(http::Request::new(())).await.is_err());
+        assert_eq!(scheduler.select_connection().is_none(), protocol_failed);
+        connection.release_stream_reservation();
+        if protocol_failed {
+            assert!(connection.open(http::Request::new(())).await.is_err());
+        }
         finish_healthy.notify_one();
         let healthy_bytes =
             tokio::time::timeout(Duration::from_secs(3), healthy_download)
@@ -9536,15 +9574,19 @@ mod tests {
                 .all(|byte| *byte == 3)
         );
         assert!(healthy_bytes.ends_with(b"done"));
+        connection.retire();
         tokio::time::timeout(Duration::from_secs(3), driver)
             .await
             .unwrap()
             .unwrap();
         assert!(connection.is_dead());
-        assert!(authority_uses_http1_fallback_for(
-            &url_authority(&url).unwrap(),
-            primary.proxy
-        ));
+        assert_eq!(
+            authority_uses_http1_fallback_for(
+                &url_authority(&url).unwrap(),
+                primary.proxy
+            ),
+            protocol_failed
+        );
         if resume {
             let len = tokio::fs::metadata(&part).await.unwrap().len();
             assert!(len > 0 && len < data.len() as u64);

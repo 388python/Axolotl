@@ -767,7 +767,11 @@ impl DownloadDnsResolver {
     }
 
     #[cfg(test)]
-    fn set_test_addresses(&self, host: &str, addresses: Vec<SocketAddr>) {
+    pub(crate) fn set_test_addresses(
+        &self,
+        host: &str,
+        addresses: Vec<SocketAddr>,
+    ) {
         self.test_addresses
             .lock()
             .insert(host.to_string(), addresses);
