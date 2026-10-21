@@ -443,6 +443,179 @@ impl AdaptiveConnections {
 mod adaptive_tests {
     use super::*;
 
+    struct PacedH2 {
+        connection: Arc<SharedH2Connection>,
+        tasks: Vec<tokio::task::JoinHandle<()>>,
+    }
+
+    impl Drop for PacedH2 {
+        fn drop(&mut self) {
+            for task in &self.tasks {
+                task.abort();
+            }
+        }
+    }
+
+    async fn paced_h2(
+        clock: Arc<tokio::sync::Mutex<tokio::time::Instant>>,
+    ) -> PacedH2 {
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            socket.set_nodelay(true).unwrap();
+            let mut connection = h2::server::handshake(socket).await.unwrap();
+            let mut transfers = tokio::task::JoinSet::new();
+            while let Some(request) = connection.accept().await {
+                let (_, mut respond) = request.unwrap();
+                let mut stream = respond
+                    .send_response(http::Response::new(()), false)
+                    .unwrap();
+                let clock = clock.clone();
+                transfers.spawn(async move {
+                    loop {
+                        stream.reserve_capacity(2048);
+                        let Some(Ok(capacity)) =
+                            futures::future::poll_fn(|cx| {
+                                stream.poll_capacity(cx)
+                            })
+                            .await
+                        else {
+                            return;
+                        };
+                        let count = capacity.min(2048);
+                        if count == 0 {
+                            continue;
+                        }
+                        let due = {
+                            let mut next = clock.lock().await;
+                            *next = (*next).max(tokio::time::Instant::now())
+                                + Duration::from_secs_f64(
+                                    count as f64 / (128 * 1024) as f64,
+                                );
+                            *next
+                        };
+                        tokio::time::sleep_until(due).await;
+                        if stream
+                            .send_data(
+                                bytes::Bytes::from(vec![42; count]),
+                                false,
+                            )
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        let socket = tokio::net::TcpStream::connect(address).await.unwrap();
+        socket.set_nodelay(true).unwrap();
+        let (sender, driver) = h2::client::handshake(socket).await.unwrap();
+        let driver = tokio::spawn(async move {
+            let _ = driver.await;
+        });
+        let connection = Arc::new(SharedH2Connection::for_test(sender));
+        let mut tasks = vec![server, driver];
+        for id in 0..2 {
+            let response = connection
+                .open(
+                    http::Request::get(format!("http://{address}/{id}"))
+                        .body(())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let connection = connection.clone();
+            let active = connection.track_stream();
+            tasks.push(tokio::spawn(async move {
+                let _active = active;
+                let mut body = response.into_body();
+                while let Some(Ok(chunk)) = body.data().await {
+                    connection.record_bytes(chunk.len());
+                    body.flow_control().release_capacity(chunk.len()).unwrap();
+                }
+            }));
+        }
+        PacedH2 { connection, tasks }
+    }
+
+    async fn measured_socket_trial(shared_bottleneck: bool) {
+        let shared_clock =
+            Arc::new(tokio::sync::Mutex::new(tokio::time::Instant::now()));
+        let mut fixtures = Vec::new();
+        for _ in 0..2 {
+            let clock = if shared_bottleneck {
+                shared_clock.clone()
+            } else {
+                Arc::new(tokio::sync::Mutex::new(tokio::time::Instant::now()))
+            };
+            fixtures.push(paced_h2(clock).await);
+        }
+        let now = Instant::now();
+        let mut scheduler = AuthorityScheduler::default();
+        scheduler.adaptive =
+            Some(AdaptiveConnections::with_registry(now, 0, Arc::default()));
+        scheduler.target = 2;
+        for fixture in &fixtures {
+            scheduler.add_connection(fixture.connection.clone());
+        }
+        let mut timer = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            timer.tick().await;
+            scheduler.observe_background(Instant::now(), false);
+            if scheduler.target == 3 {
+                break;
+            }
+        }
+        let baseline = scheduler
+            .adaptive
+            .as_ref()
+            .unwrap()
+            .trial
+            .as_ref()
+            .unwrap()
+            .baseline_bps;
+        let clock = if shared_bottleneck {
+            shared_clock
+        } else {
+            Arc::new(tokio::sync::Mutex::new(tokio::time::Instant::now()))
+        };
+        fixtures.push(paced_h2(clock).await);
+        scheduler.add_connection(fixtures.last().unwrap().connection.clone());
+        scheduler.observe_background(Instant::now(), false);
+        loop {
+            timer.tick().await;
+            scheduler.observe_background(Instant::now(), false);
+            if scheduler.adaptive.as_ref().unwrap().trial.is_none() {
+                break;
+            }
+        }
+        println!(
+            "h2_socket_trial shared_bottleneck={shared_bottleneck} baseline_bps={baseline} accepted_target={} elapsed_ms={} received_bytes={}",
+            scheduler.target,
+            now.elapsed().as_millis(),
+            scheduler.monotonic_bytes
+        );
+        assert_eq!(scheduler.target, if shared_bottleneck { 2 } else { 3 });
+        assert_eq!(
+            fixtures.last().unwrap().connection.is_retiring(),
+            shared_bottleneck
+        );
+    }
+
+    #[tokio::test]
+    async fn real_h2_socket_measurements_accept_per_connection_gain_and_reject_common_bottleneck()
+     {
+        tokio::time::timeout(Duration::from_secs(40), async {
+            measured_socket_trial(false).await;
+            measured_socket_trial(true).await;
+        })
+        .await
+        .expect("bounded socket expansion experiment");
+    }
+
     #[tokio::test]
     async fn background_samples_roll_back_unproductive_connection_without_new_checkout()
      {
