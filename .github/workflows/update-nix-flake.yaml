@@ -1,0 +1,136 @@
+name: Update nix flake
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    paths:
+      - pnpm-lock.yaml
+      - .github/workflows/update-nix-flake.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-nix-flake
+  # Every run commits into the branch it updates, so queue instead of cancelling.
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Resolve the branch to update
+        id: branch
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          # A release tag refreshes the default branch; a branch push refreshes itself.
+          if [ "$REF_TYPE" = 'tag' ]; then
+            echo "name=$DEFAULT_BRANCH" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=$REF_NAME" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+          submodules: recursive
+          # The update steps below run code from the branch, so keep the job
+          # token out of the checkout; the commit steps authenticate on their own.
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
+      - name: Update flake inputs
+        id: flake-inputs
+        # The pinned inputs stay usable when the update fails, so report it
+        # instead of failing the run.
+        continue-on-error: true
+        run: |
+          nix flake update --accept-flake-config
+          if git diff --quiet -- flake.lock; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit the updated flake inputs
+        if: steps.flake-inputs.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git
+          git add flake.lock
+          git commit -m "chore(nix): update flake inputs [skip ci]"
+          # Another push can advance the branch while this job runs; rebase onto
+          # it and retry.
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
+              exit 0
+            fi
+            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
+            git fetch --depth=1 origin "${TARGET_BRANCH}"
+            git rebase FETCH_HEAD || {
+              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
+              exit 1
+            }
+          done
+          echo "error: could not push the updated flake inputs after 3 attempts" >&2
+          exit 1
+
+      - name: Recompute the pnpm dependency hash
+        id: pnpm-deps
+        # Only a hash that is needed but not rewritten is an error; a run that
+        # leaves nix/axolotl.nix untouched reports its status as a warning.
+        run: |
+          status=0
+          nix develop . --accept-flake-config --command update-pnpm-deps || status=$?
+          if git diff --quiet -- nix/axolotl.nix; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            if [ "$status" -ne 0 ]; then
+              echo "::warning::update-pnpm-deps exited with $status and left nix/axolotl.nix unchanged"
+            fi
+            exit 0
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error::update-pnpm-deps exited with $status after changing nix/axolotl.nix"
+            exit 1
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the updated pnpm dependency hash
+        if: steps.pnpm-deps.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git
+          git add nix/axolotl.nix
+          git commit -m "chore(nix): update pnpm dependency hash [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
+              exit 0
+            fi
+            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
+            git fetch --depth=1 origin "${TARGET_BRANCH}"
+            git rebase FETCH_HEAD || {
+              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
+              exit 1
+            }
+          done
+          echo "error: could not push the updated pnpm dependency hash after 3 attempts" >&2
+          exit 1
