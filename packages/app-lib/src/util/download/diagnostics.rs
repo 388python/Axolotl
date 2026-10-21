@@ -9,6 +9,55 @@ use crate::util::fetch::{
 use reqwest::StatusCode;
 use std::collections::VecDeque;
 
+/// Stable local diagnostic codes; presentation text must not be used to
+/// classify endpoint failures or decide protocol health.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EndpointReason {
+    DnsOnly,
+    RuleIneligible,
+    InvalidCertificate,
+    RangeUnsupported,
+    InvalidRange,
+    InvalidEncoding,
+    Truncated,
+    InsufficientSample,
+    NoGain,
+    Selected,
+    Rollback,
+    ProxyIneligible,
+    BudgetExhausted,
+    StaleEpoch,
+    ServerCooldown,
+    LocalPressure,
+    Cancelled,
+    Measuring,
+}
+
+impl EndpointReason {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::DnsOnly => "dns_only",
+            Self::RuleIneligible => "rule_ineligible",
+            Self::InvalidCertificate => "invalid_certificate",
+            Self::RangeUnsupported => "range_unsupported",
+            Self::InvalidRange => "invalid_range",
+            Self::InvalidEncoding => "invalid_encoding",
+            Self::Truncated => "truncated",
+            Self::InsufficientSample => "insufficient_sample",
+            Self::NoGain => "no_gain",
+            Self::Selected => "selected",
+            Self::Rollback => "rollback",
+            Self::ProxyIneligible => "proxy_ineligible",
+            Self::BudgetExhausted => "budget_exhausted",
+            Self::StaleEpoch => "stale_epoch",
+            Self::ServerCooldown => "server_cooldown",
+            Self::LocalPressure => "local_pressure",
+            Self::Cancelled => "cancelled",
+            Self::Measuring => "measuring",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct DownloadAttemptDiagnostic {
     pub(crate) attempt: usize,

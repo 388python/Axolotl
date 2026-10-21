@@ -145,6 +145,11 @@ async fn run(
         let migrations = request.endpoint_migrations.load(Ordering::Relaxed);
         if mode == Mode::Off { assert_eq!(probe_after, probe_before); assert_eq!(migrations, 0); }
         if matches!(scenario, Scenario::Healthy | Scenario::AllSlow) { assert_eq!(migrations, 0); }
+        if matches!(scenario, Scenario::SlowTail) && mode == Mode::Expanded {
+            assert_eq!(migrations, 1, "tail matrix must prove actual recovery, not merely successful completion");
+            assert_eq!(result.attempts, 2);
+            assert_eq!(counters.received_payload_bytes, size);
+        }
         Run { scenario, mode, iteration, warm, size_bytes: size, elapsed_ms: elapsed.as_millis() as u64,
             unique_goodput_bps: (size as f64 / elapsed.as_secs_f64()) as u64,
             received_bytes: counters.received_payload_bytes, unique_bytes: counters.committed_unique_bytes,

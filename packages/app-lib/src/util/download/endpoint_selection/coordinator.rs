@@ -5,6 +5,7 @@ use super::model::{
 };
 use super::policy::{self, ProbeBudget};
 use super::probe::{ProbeObservation, ProbeSession};
+use crate::util::download::diagnostics::EndpointReason;
 use crate::util::download::{modrinth_cdn, native, native_breaker};
 use crate::util::fetch::{
     DownloadClients, DownloadRequest, DownloadRoute, ProxyPolicy,
@@ -67,6 +68,19 @@ pub(super) enum RoundStatus {
     BudgetExhausted,
 }
 
+impl RoundStatus {
+    fn reason(self) -> EndpointReason {
+        match self {
+            Self::Running => EndpointReason::Measuring,
+            Self::Selected => EndpointReason::Selected,
+            Self::NoGain => EndpointReason::NoGain,
+            Self::Cancelled => EndpointReason::Cancelled,
+            Self::Stale => EndpointReason::StaleEpoch,
+            Self::BudgetExhausted => EndpointReason::BudgetExhausted,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Selection {
     reconnect_overhead: Duration,
@@ -115,7 +129,7 @@ struct FeedbackWindow {
 }
 
 pub(crate) struct EndpointSelector {
-    trials: Arc<super::tuning::TrialRegistry>,
+    pub(super) trials: Arc<super::tuning::TrialRegistry>,
     #[cfg(test)]
     pub(super) probe_fixture: Mutex<Option<ProbeFixture>>,
     mode: SelectionMode,
@@ -155,6 +169,10 @@ impl Drop for DownloadRegistration {
 /// Created before spawning: even an unpolled or panicking worker clears its
 /// slot and leaves a retained terminal result for every watch subscriber.
 struct RoundGuard {
+    started_at: Instant,
+    initial_probe_bytes: u64,
+    network_epoch: u64,
+    generation: u64,
     trial: Option<super::tuning::TrialLease>,
     selector: Weak<EndpointSelector>,
     id: u64,
@@ -163,8 +181,26 @@ struct RoundGuard {
 }
 
 impl RoundGuard {
+    fn log_finished(&self, status: RoundStatus) {
+        if let Some(selector) = self.selector.upgrade() {
+            tracing::debug!(
+                authority = modrinth_cdn::HOST,
+                round = self.id,
+                network_epoch = self.network_epoch,
+                generation = self.generation,
+                reason = status.reason().as_str(),
+                elapsed_ms = self.started_at.elapsed().as_millis() as u64,
+                probe_bytes = selector
+                    .probe_bytes
+                    .load(Ordering::Relaxed)
+                    .saturating_sub(self.initial_probe_bytes),
+                "Finished Modrinth endpoint trial"
+            );
+        }
+    }
+
     fn finish(mut self, status: RoundStatus) {
-        tracing::debug!(authority = modrinth_cdn::HOST, round = self.id, reason = ?status, "Finished Modrinth endpoint trial");
+        self.log_finished(status);
         self.finished = true;
         self.status.send_replace(status);
         self.clear();
@@ -192,12 +228,7 @@ impl RoundGuard {
 impl Drop for RoundGuard {
     fn drop(&mut self) {
         if !self.finished {
-            tracing::debug!(
-                authority = modrinth_cdn::HOST,
-                round = self.id,
-                reason = "cancelled",
-                "Finished Modrinth endpoint trial"
-            );
+            self.log_finished(RoundStatus::Cancelled);
             self.status.send_replace(RoundStatus::Cancelled);
             self.clear();
         }
@@ -323,7 +354,7 @@ impl EndpointSelector {
             tracing::info!(
                 authority = modrinth_cdn::HOST,
                 generation = state.generation,
-                reason = "rollback",
+                reason = EndpointReason::Rollback.as_str(),
                 "Reverted Modrinth endpoint after two poor production windows"
             );
         }
@@ -645,6 +676,10 @@ impl EndpointSelector {
         });
         Some(RoundStart {
             guard: RoundGuard {
+                started_at: now,
+                initial_probe_bytes: self.probe_bytes.load(Ordering::Relaxed),
+                network_epoch: epoch,
+                generation,
                 trial: None,
                 selector: Arc::downgrade(self),
                 id,
@@ -698,11 +733,25 @@ impl EndpointSelector {
         let Ok(url) = url::Url::parse(&route.url) else {
             return;
         };
-        if !Self::eligible_network(clients, route.proxy)
-            || !eligible_target(&url, &request.integrity)
+        if !Self::eligible_network(clients, route.proxy) {
+            tracing::trace!(
+                authority = modrinth_cdn::HOST,
+                reason = EndpointReason::ProxyIneligible.as_str(),
+                "Endpoint trial ineligible"
+            );
+            return;
+        }
+        if pressure.blocks_expansion() {
+            tracing::trace!(
+                authority = modrinth_cdn::HOST,
+                reason = EndpointReason::LocalPressure.as_str(),
+                "Endpoint trial deferred"
+            );
+            return;
+        }
+        if !eligible_target(&url, &request.integrity)
             || request.header.is_some()
             || native_breaker::is_open(route)
-            || pressure.blocks_expansion()
             || region.start >= region.end
             || region.end > request.integrity.size.unwrap_or(0)
         {
@@ -739,6 +788,11 @@ impl EndpointSelector {
             region,
             protocol,
         };
+        tracing::debug!(authority = modrinth_cdn::HOST,
+            network_epoch = start.epoch, generation = start.generation,
+            round = start.guard.id, reason = EndpointReason::Measuring.as_str(),
+            protocol = ?protocol, remaining_bytes = target.region.end - target.region.start,
+            "Starting Modrinth endpoint trial");
         tokio::spawn(async move {
             let RoundStart {
                 guard,
@@ -904,12 +958,23 @@ impl EndpointSelector {
                     .is_none_or(|current| current.ip != candidate.ip)
             })
             .collect::<Vec<_>>();
+        let has_rule = candidates.iter().any(|candidate| {
+            matches!(
+                candidate.source,
+                super::model::CandidateSource::FastlyRule(_)
+            )
+        });
         tracing::debug!(
             authority = modrinth_cdn::HOST,
             epoch,
             generation,
             candidates = candidates.len(),
-            "Starting Modrinth endpoint trial"
+            reason = if has_rule {
+                EndpointReason::Measuring.as_str()
+            } else {
+                EndpointReason::DnsOnly.as_str()
+            },
+            "Collected Modrinth endpoint candidates"
         );
         let mut pending =
             stream::iter(candidates.into_iter().map(|candidate| async {
@@ -940,6 +1005,15 @@ impl EndpointSelector {
                     status,
                     retry_after,
                 }) => {
+                    tracing::debug!(
+                        authority = modrinth_cdn::HOST,
+                        network_epoch = epoch,
+                        generation,
+                        status,
+                        reason = EndpointReason::ServerCooldown.as_str(),
+                        retry_after_ms = retry_after.as_millis() as u64,
+                        "Server deferred Modrinth endpoint probes"
+                    );
                     native_breaker::record_response_status_failure(
                         route,
                         status,
@@ -950,7 +1024,13 @@ impl EndpointSelector {
                 Err(ProbeFailure::TargetMissing | ProbeFailure::Cancelled) => {
                     return RoundStatus::NoGain;
                 }
-                Err(_) => {}
+                Err(error) => tracing::debug!(
+                    authority = modrinth_cdn::HOST,
+                    network_epoch = epoch,
+                    generation,
+                    reason = error.reason().as_str(),
+                    "Modrinth candidate validation failed"
+                ),
             }
         }
         drop(pending);
@@ -1026,6 +1106,13 @@ impl EndpointSelector {
         let ranked =
             policy::rank_candidates(&samples, target.protocol, Instant::now());
         let Some(&(best, speed)) = ranked.first() else {
+            tracing::debug!(
+                authority = modrinth_cdn::HOST,
+                network_epoch = epoch,
+                generation,
+                reason = EndpointReason::InsufficientSample.as_str(),
+                "No rankable Modrinth candidate samples"
+            );
             return RoundStatus::NoGain;
         };
         let Some(incumbent) = incumbent else {
@@ -1047,6 +1134,17 @@ impl EndpointSelector {
             .map(|(_, observation)| observation.ttfb)
             .unwrap_or(Duration::from_millis(600))
             .clamp(Duration::from_millis(100), Duration::from_secs(5));
+        let estimated_savings = super::super::native_slow::estimated_duration(
+            remaining,
+            current_speed,
+        )
+        .saturating_sub(overhead.saturating_add(
+            super::super::native_slow::estimated_duration(remaining, speed),
+        ));
+        tracing::debug!(authority = modrinth_cdn::HOST, network_epoch = epoch, generation,
+            candidate_ip = %best, current_throughput_bps = current_speed, throughput_bps = speed,
+            remaining_bytes = remaining, estimated_savings_ms = estimated_savings.as_millis() as u64,
+            "Evaluating Modrinth endpoint recovery benefit");
         if best == incumbent
             || !super::super::native_slow::should_switch_with_overhead(
                 current_speed,
@@ -1107,9 +1205,13 @@ impl EndpointSelector {
         generation: u64,
     ) {
         tracing::debug!(authority = modrinth_cdn::HOST, epoch, generation,
+            sample_kind = "probe", candidate_source = ?observation.source,
+            candidate_ip = %observation.sample.ip, reused_connection = false,
+            throughput_bps = (observation.sample.bytes as f64 / observation.sample.elapsed.as_secs_f64().max(f64::MIN_POSITIVE)) as u64,
+            contaminated = observation.sample.contaminated,
             remote_ip = %observation.remote_addr, protocol = ?observation.sample.protocol,
             connection_id = observation.sample.connection_id, probe_bytes = observation.sample.bytes,
-            body_elapsed_ms = observation.sample.elapsed.as_millis() as u64,
+            body_elapsed_ms = observation.body_elapsed.as_millis() as u64,
             ttfb_ms = observation.ttfb.as_millis() as u64,
             x_served_by = %observation.x_served_by, cache_status = %observation.cache_status,
             path_unknown = true, "Modrinth endpoint sample");
@@ -1163,6 +1265,7 @@ impl EndpointSelector {
         state.generation += 1;
         state.failures.clear();
         tracing::info!(authority = modrinth_cdn::HOST, epoch, generation = state.generation,
+            reason = EndpointReason::Selected.as_str(),
             preferred_ip = %state.selected.as_ref().unwrap().preferred.ip,
             throughput_bps = state.selected.as_ref().unwrap().speed, "Selected Modrinth endpoint");
         RoundStatus::Selected

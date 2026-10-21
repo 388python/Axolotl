@@ -265,6 +265,7 @@ impl TlsFixture {
             builder.build().unwrap(),
             crate::util::download::native_budget::try_acquire(&route).unwrap(),
             Arc::new(AtomicU64::new(0)),
+            Arc::default(),
         )
     }
 }
@@ -928,6 +929,37 @@ async fn stalled_body_and_cancelled_probe_have_bounded_lifetimes() {
         )
         .await;
     assert_eq!(result.unwrap_err(), ProbeFailure::Cancelled);
+}
+
+#[tokio::test]
+async fn throughput_sample_crossing_another_tuning_trial_is_contaminated() {
+    let fixture =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::SlowFile).await;
+    let session = fixture.session(true);
+    let budget =
+        Mutex::new(ProbeBudget::new(Instant::now(), policy::ROUND_BYTES));
+    let cancellation = CancellationToken::new();
+    let sample = session.sample_endpoint(
+        &budget,
+        &cancellation,
+        Instant::now() + Duration::from_secs(1),
+    );
+    let concurrent_tuning = async {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let lease = session.trials.acquire(
+            crate::util::download::endpoint_selection::tuning::TrialKind::Files,
+            Instant::now(), Duration::from_secs(2),
+        ).unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        drop(lease);
+    };
+    let (result, _) = tokio::join!(sample, concurrent_tuning);
+    let sample = result.unwrap().sample;
+    assert!(sample.bytes > 0);
+    assert!(
+        sample.contaminated,
+        "trial revision changes invalidate the complete measurement window"
+    );
 }
 
 #[test]

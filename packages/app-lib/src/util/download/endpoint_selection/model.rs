@@ -80,6 +80,25 @@ pub(super) enum ProbeFailure {
     Truncated,
 }
 
+impl ProbeFailure {
+    pub(super) fn reason(self) -> super::super::diagnostics::EndpointReason {
+        use super::super::diagnostics::EndpointReason;
+        match self {
+            Self::InvalidCertificate => EndpointReason::InvalidCertificate,
+            Self::RangeUnsupported => EndpointReason::RangeUnsupported,
+            Self::InvalidRange => EndpointReason::InvalidRange,
+            Self::InvalidEncoding => EndpointReason::InvalidEncoding,
+            Self::Truncated => EndpointReason::Truncated,
+            Self::BudgetExhausted => EndpointReason::BudgetExhausted,
+            Self::ServerCooldown { .. } => EndpointReason::ServerCooldown,
+            Self::Cancelled => EndpointReason::Cancelled,
+            Self::Ineligible => EndpointReason::RuleIneligible,
+            Self::Timeout => EndpointReason::InsufficientSample,
+            _ => EndpointReason::NoGain,
+        }
+    }
+}
+
 /// A measurement is attributable to one connection and one protocol. An IP
 /// alone does not identify a sample when several H2 streams share a socket.
 #[derive(Clone, Debug)]

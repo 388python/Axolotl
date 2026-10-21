@@ -21,10 +21,13 @@ pub(super) struct ProbeSession {
     candidate: EndpointCandidate,
     target: ProbeTarget,
     bytes_received: Arc<AtomicU64>,
+    trials: Arc<super::tuning::TrialRegistry>,
 }
 
 #[derive(Debug)]
 pub(super) struct ProbeObservation {
+    pub(super) source: super::model::CandidateSource,
+    pub(super) body_elapsed: Duration,
     pub(super) sample: ThroughputSample,
     pub(super) remote_addr: std::net::SocketAddr,
     pub(super) ttfb: Duration,
@@ -90,6 +93,7 @@ impl ProbeSession {
             client,
             permit,
             bytes_received,
+            clients.endpoints.trials.clone(),
         ))
     }
 
@@ -99,6 +103,7 @@ impl ProbeSession {
         client: reqwest::Client,
         permit: NativeBudgetPermit,
         bytes_received: Arc<AtomicU64>,
+        trials: Arc<super::tuning::TrialRegistry>,
     ) -> Self {
         Self {
             client,
@@ -106,6 +111,7 @@ impl ProbeSession {
             candidate,
             target,
             bytes_received,
+            trials,
         }
     }
 
@@ -163,6 +169,10 @@ impl ProbeSession {
                 return Err(ProbeFailure::BudgetExhausted);
             }
             let started_at = Instant::now();
+            let trial_revision = self.trials.snapshot(started_at).0;
+            let mut contaminated =
+                crate::util::download::local_resources::network_pressure()
+                    .blocks_expansion();
             let connection_id =
                 NEXT_PROBE_CONNECTION.fetch_add(1, Ordering::Relaxed);
             let mut response = tokio::time::timeout_at(
@@ -245,6 +255,8 @@ impl ProbeSession {
                         break;
                     }
                     Ok(Ok(Some(chunk))) => {
+                        contaminated |= crate::util::download::local_resources::network_pressure().blocks_expansion()
+                            || self.trials.snapshot(Instant::now()).0 != trial_revision;
                         self.bytes_received
                             .fetch_add(chunk.len() as u64, Ordering::Relaxed);
                         received = received.saturating_add(chunk.len() as u64);
@@ -265,6 +277,8 @@ impl ProbeSession {
                 && received
                     == self.target.region.end - self.target.region.start;
             Ok(ProbeObservation {
+                source: self.candidate.source.clone(),
+                body_elapsed: observed_at.saturating_duration_since(body_started),
                 sample: ThroughputSample {
                     ip: self.candidate.ip,
                     protocol: self.target.protocol,
@@ -282,7 +296,9 @@ impl ProbeSession {
                     ),
                     observed_at,
                     complete_object,
-                    contaminated: false,
+                    contaminated: contaminated
+                        || crate::util::download::local_resources::network_pressure().blocks_expansion()
+                        || self.trials.snapshot(observed_at).0 != trial_revision,
                 },
                 remote_addr,
                 ttfb,

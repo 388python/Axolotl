@@ -140,6 +140,20 @@ HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序�
 
 ## 尚待完成的要求
 
+诊断与样本审计阶段：引入稳定 `EndpointReason` 枚举，区分证书、Range 不支持/边界错误/编码错误、正文截断、冷却、预算、旧 epoch、样本不足及本地压力。每轮开始/结束保留 captured epoch/generation、总耗时与本轮 probe bytes；测速日志补候选来源、目标 IP、协议、样本类型、正文时长、TTFB、throughput、污染状态与本地实际区间收益估计。没有记录 query/token/代理凭据，探测日志不替换生产最终错误。
+
+ProbeSession 捕获同一调节 registry，每次读正文及结束检查资源压力和 revision；跨过其他调节试验的窗口标记 contaminated，不能晋升。真实 TLS 慢文件测试在测量中间插入文件并发试验，断言样本被污染。极端 u64 文件长度的 ETA 和重连相加改为饱和运算，避免错误元数据导致 Duration panic。
+
+`%TEMP%/axolotl-diagnostics-download-tests.log`：308 项通过、5 项显式基准跳过，包含新增污染窗口、极端 ETA 及后续 DNS 缓存边界用例。`cargo check -p theseus --tests` 通过（`%TEMP%/axolotl-diagnostics-final-check.log`），最终新增测试已由 cargo test 重新编译；fmt/diff 检查通过。长时性能数据对应前一提交，后续行为影响仍按范围复查。
+
+200 文件对照 `%TEMP%/axolotl-idle-budget-many-files.log` 全部结束：15 个 batch、3000 个完整校验文件，三模式各五轮。off 总耗时中位数 94031ms、p95 94038ms；DNS 96879/96884ms；expanded 28531/31360ms（中位耗时约 3.30 倍改善）。全部 batch 峰值不超过 32、received=unique=117964800 字节。expanded 各轮仅一轮主机探测，五轮 probe 合计 4904960 字节，共 77 个文件安全迁移；off/DNS 均无迁移，DNS 因无其他端点本轮 probe=0。原始 batch 数据已保存 JSON。本地成功不替代高 RTT 公网及更复杂 socket 竞速的验证。
+
+健康重复轮 `%TEMP%/axolotl-idle-budget-healthy-repeat.log` 冷 off/DNS/expanded 中位数 2737/2683/2648ms，暖 2689/2670/2601ms，全部在 5% 中位回归门槛内。30 次均无 probe/migration/重复生产正文，峰值 1；原始数据保存 JSON。前一轮 DNS 暖 +5.20% 的记录保留，两轮都与批量实验共用本机，不能声称已获得隔离的公网握手成本结论。
+
+关闭空闲池后的慢尾部完整对照已完成，日志 `%TEMP%/axolotl-region-tail-matrix.log`，30 次完整原始数据存 JSON。冷 off/DNS/expanded 中位耗时 14200/13964/11414ms，p95 14274/14186/11437ms；暖中位耗时 13931/13991/11392ms，p95 14163/14097/11409ms。expanded 每次均一次真实迁移、两次尝试、一次探测轮，冷暖各五次 probe 合计均 2156544 字节（约 431KB/次），峰值 2。所有模式每次 received=unique=67108864，SHA-1 通过。新增后续矩阵强制断言，不能再出现“没有迁移但仅完成下载就算通过”。该轮为 `a423ffdb7` 对应测试二进制，之后诊断与污染窗口审计尚待测试。
+
+同状态完整 `util::fetch::tests` 91 项通过（`%TEMP%/axolotl-idle-budget-fetch.log`）。
+
 普通 DoH 家族等待修复：原 `resolve_families` 用 join 等待两个家族完整超时，即使 A 已成功也可能等待 AAAA 五秒。现在首个非空成功后仅收集最多 500ms 的另一家族，仍保留 400ms 到达的双栈结果；空答案或失败不取消尚可能成功的家族。候选汇总继续使用原独立整体 deadline。`%TEMP%/axolotl-dns-family-tests.log`：36 项通过，含 IPv4/IPv6 任一成功另一方永久停滞、晚到双栈和空答案回退。`cargo check -p theseus --tests` 已通过（`%TEMP%/axolotl-dns-family-check.log`），沿用 target/profile。
 
 - 健康网络本地回归已在隔离 fixture 后通过；最终代码变化如影响该路径，仍须按范围复查。

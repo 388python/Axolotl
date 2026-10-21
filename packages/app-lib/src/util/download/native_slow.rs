@@ -228,21 +228,31 @@ pub(crate) fn should_switch_with_overhead(
     let stay = estimated_duration(remaining_bytes, current_speed);
     let switch = reconnect_overhead
         .clamp(Duration::from_millis(100), Duration::from_secs(5))
-        + estimated_duration(restart_bytes, candidate_speed);
+        .saturating_add(estimated_duration(restart_bytes, candidate_speed));
     let required_savings = MIN_SAVINGS.max(stay.mul_f64(0.15));
     switch.saturating_add(required_savings) < stay
 }
 
-fn estimated_duration(bytes: u64, speed: u64) -> Duration {
+pub(crate) fn estimated_duration(bytes: u64, speed: u64) -> Duration {
     if speed == 0 {
         return Duration::MAX;
     }
-    Duration::from_secs_f64(bytes as f64 / speed as f64)
+    Duration::try_from_secs_f64(bytes as f64 / speed as f64)
+        .unwrap_or(Duration::MAX)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extreme_content_lengths_saturate_eta_and_reconnect_cost_without_panicking()
+     {
+        assert_eq!(estimated_duration(u64::MAX, 1), Duration::MAX);
+        assert!(!should_switch(1, 1, u64::MAX, u64::MAX));
+        assert!(should_switch(1, 10, u64::MAX, u64::MAX));
+        assert!(!should_switch(1, 10, 1, u64::MAX));
+    }
 
     #[test]
     fn slow_cold_connection_cost_can_outweigh_tail_speed_gain() {
