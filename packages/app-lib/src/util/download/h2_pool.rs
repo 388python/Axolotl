@@ -150,6 +150,11 @@ impl SharedH2Connection {
     }
 
     #[cfg(test)]
+    pub(crate) fn mark_success_for_test(&self) {
+        self.successful_responses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
     pub(crate) async fn cache_for_test(
         route: &DownloadRoute,
         sender: SendRequest<Bytes>,
@@ -983,6 +988,26 @@ pub(crate) async fn evict_idle_connections(scope: Option<&str>) {
                 }
             }
             state.prune();
+        }
+    }
+}
+
+/// Advance measured trials even while long-lived streams produce no new
+/// connection checkout. Otherwise an unproductive sibling could remain
+/// admitted until an unrelated future request happens to sample the pool.
+pub(crate) async fn observe_adaptive_connections() {
+    let pools: Vec<_> = PARALLEL_CONNECTIONS
+        .lock()
+        .await
+        .values()
+        .cloned()
+        .collect();
+    let now = std::time::Instant::now();
+    let pressure =
+        super::local_resources::network_pressure().blocks_expansion();
+    for pool in pools {
+        if let Ok(mut state) = pool.try_lock() {
+            state.observe_background(now, pressure);
         }
     }
 }

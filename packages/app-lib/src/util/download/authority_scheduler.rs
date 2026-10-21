@@ -45,6 +45,17 @@ impl Default for AuthorityScheduler {
 }
 
 impl AuthorityScheduler {
+    pub(crate) fn observe_background(&mut self, now: Instant, pressure: bool) {
+        if self.adaptive.is_none() {
+            return;
+        }
+        self.prune();
+        if pressure {
+            self.suspend_adaptive(now);
+        }
+        self.observe(now);
+    }
+
     pub(crate) fn prune(&mut self) {
         self.sample_connection_bytes();
         self.connections.retain(|connection| {
@@ -431,6 +442,48 @@ impl AdaptiveConnections {
 #[cfg(test)]
 mod adaptive_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn background_samples_roll_back_unproductive_connection_without_new_checkout()
+     {
+        async fn connection() -> Arc<SharedH2Connection> {
+            let (io, _server) = tokio::io::duplex(65536);
+            let (sender, _driver) = h2::client::handshake(io).await.unwrap();
+            let connection = Arc::new(SharedH2Connection::for_test(sender));
+            connection.mark_success_for_test();
+            connection
+        }
+        let first = connection().await;
+        let second = connection().await;
+        let sibling = connection().await;
+        let _active = [
+            first.track_stream(),
+            first.track_stream(),
+            second.track_stream(),
+            sibling.track_stream(),
+        ];
+        let now = Instant::now();
+        let mut scheduler = AuthorityScheduler::default();
+        scheduler.adaptive =
+            Some(AdaptiveConnections::with_registry(now, 0, Arc::default()));
+        scheduler.target = 2;
+        scheduler.add_connection(first.clone());
+        scheduler.add_connection(second.clone());
+        first.record_bytes(3000);
+        scheduler.observe_background(now + ADAPTIVE_WINDOW, false);
+        first.record_bytes(3000);
+        scheduler.observe_background(now + ADAPTIVE_WINDOW * 2, false);
+        assert_eq!(scheduler.target, 3);
+        scheduler.add_connection(sibling.clone());
+        scheduler.observe_background(now + ADAPTIVE_WINDOW * 2, false);
+        for step in 3..=4 {
+            first.record_bytes(3000);
+            scheduler.observe_background(now + ADAPTIVE_WINDOW * step, false);
+        }
+        assert_eq!(scheduler.target, 2);
+        assert!(sibling.is_retiring());
+        assert_eq!(scheduler.connection_count(), 2);
+    }
 
     #[test]
     fn adaptive_accepts_gain_rolls_back_no_gain_and_ignores_empty_queue() {

@@ -871,6 +871,8 @@ impl State {
         loop {
             interval.tick().await;
             crate::util::download::local_resources::sample_cpu().await;
+            crate::util::download::h2_pool::observe_adaptive_connections()
+                .await;
             if !self.auto_concurrent_downloads.load(Ordering::Acquire) {
                 controller = AutoConcurrencyController::default();
                 trial_lease = None;
