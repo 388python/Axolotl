@@ -2250,15 +2250,33 @@ async fn fetch_advanced_inner(
                 req = req.header(name.as_str(), value.as_str());
             }
 
-            let permit = semaphore.0.acquire().await?;
-            let request_started = Instant::now();
-            let result = if modrinth_request_kind == Some("CDN")
+            let native_budget = if modrinth_request_kind == Some("CDN")
                 && method == Method::GET
             {
-                super::download::native_request::send_cdn_request_with_clients(
+                Some(
+                    tokio::time::timeout(
+                        RESOURCE_WAIT_TIMEOUT,
+                        super::download::native_budget::acquire(route),
+                    )
+                    .await
+                    .map_err(|_| {
+                        ErrorKind::NetworkError(
+                            "timed out waiting for CDN connection resources"
+                                .into(),
+                        )
+                    })??,
+                )
+            } else {
+                None
+            };
+            let permit = semaphore.0.acquire().await?;
+            let request_started = Instant::now();
+            let result = if let Some(native_budget) = native_budget {
+                super::download::native_request::send_cdn_request_with_budget(
                     req,
                     &download_clients,
                     route.proxy,
+                    native_budget,
                 )
                 .await
             } else {
@@ -2267,6 +2285,14 @@ async fn fetch_advanced_inner(
             let ttfb = request_started.elapsed();
             match result {
                 Ok(resp) => {
+                    // Consuming reqwest helpers drop response extensions
+                    // before polling their body. Retain admission through
+                    // bytes()/bytes_stream()/JSON consumption and cancellation.
+                    let _physical_budget = resp
+                        .extensions()
+                        .get::<super::download::native_request::ResponseBudget>(
+                        )
+                        .cloned();
                     let status = resp.status();
                     let remote_addr = resp.remote_addr();
                     let http_version = resp.version();

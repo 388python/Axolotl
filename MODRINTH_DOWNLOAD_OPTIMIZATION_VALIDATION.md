@@ -35,6 +35,8 @@
 
 新增 HTTP/1 多 Range 真实选址续传测试：8MiB 文件、慢入口45KiB/s、备选5MiB/s，生产观察时间，最终一次主机探测和一次 generation 迁移；received=unique=8388608、最终哈希正确、峰值≤8，`%TEMP%/axolotl-http1-range-peer-proof.log` 1 项通过。磁盘写入75ms或CPU90%的 selector admission 测试要求不启动 round、不消耗小时预算、不改变调节 revision，`%TEMP%/axolotl-selector-pressure-tests.log` 1 项通过。
 
+旧内存 CDN GET 现在也先取得现有物理预算，再取得文件 semaphore；每跳选址随响应记录，重定向释放旧 hop 后再取得下一 hop 的预算。`ResponseBudget` 扩展与读取层的显式 clone 保证 reqwest 的 consuming `bytes()/bytes_stream()/json()` 在丢弃 response parts 后仍持有许可。真实慢正文测试通过 fetch_official 入口证明读取中预算少1，取消后物理和文件权重归还（只用临时内存 SQLite，没有访问应用数据库）。`%TEMP%/axolotl-memory-budget-proof.log` 1 项通过；最终下载回归 `%TEMP%/axolotl-response-budget-final-download.log` 318 项通过、5 项显式基准跳过，完整 fetch 91 项通过（`%TEMP%/axolotl-response-budget-final-fetch.log`），生产 check 通过（`%TEMP%/axolotl-response-budget-production-check.log`），fmt/diff 通过。原有 API/非 CDN 路径不因该预算改变；任意自定义客户端入口仍须按原契约审计。
+
 ## 确定性检查
 
 以下结果分别对应其运行时的文件状态；后续修改须重跑受影响检查。

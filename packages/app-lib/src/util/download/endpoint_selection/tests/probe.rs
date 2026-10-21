@@ -599,8 +599,17 @@ async fn production_reqwest_requests_and_retries_follow_new_selection_without_dn
         )
         .await
         .unwrap();
+    assert_eq!(crate::util::download::native_budget::available(&route), 31);
+    let budget = response
+        .extensions()
+        .get::<crate::util::download::native_request::ResponseBudget>()
+        .cloned()
+        .unwrap();
     assert_eq!(response.remote_addr(), Some(second.address));
     assert_eq!(response.bytes().await.unwrap().len(), 65536);
+    assert_eq!(crate::util::download::native_budget::available(&route), 31);
+    drop(budget);
+    assert_eq!(crate::util::download::native_budget::available(&route), 32);
 }
 
 #[tokio::test]
@@ -677,6 +686,52 @@ async fn native_h2_new_selection_retires_old_pool_and_preserves_authority_budget
             assert_eq!(native_budget::available(&route), initial_budget);
         }),
     )
+    .await;
+}
+
+#[tokio::test]
+async fn legacy_memory_cdn_fetch_holds_physical_budget_until_body_or_cancellation()
+ {
+    use crate::util::download::{native_budget, proxy_context};
+    let fixture =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::SlowFile).await;
+    let clients = production_clients(&fixture);
+    let audit_clients = clients.clone();
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let semaphore =
+        crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(4));
+    proxy_context::with_snapshot(clients, async {
+        let route = fixture_route();
+        let mut route = route;
+        route.proxy = ProxyPolicy::System;
+        let initial = native_budget::available(&route);
+        let fetch = crate::util::fetch::fetch_official(&route.url, None, None, None, &semaphore, &pool);
+        tokio::pin!(fetch);
+        tokio::select! {
+            result = &mut fetch => panic!("slow body completed before cancellation: {result:?}"),
+            _ = async {
+                tokio::time::timeout(Duration::from_secs(2), async {
+                    while fixture.requests.load(Ordering::Relaxed) == 0 {
+                        tokio::task::yield_now().await;
+                    }
+                }).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                assert_eq!(native_budget::available(&route), initial - 1);
+                assert_eq!(semaphore.0.available_permits(), 3);
+            } => {}
+        }
+    }).await;
+    assert_eq!(fixture.requests.load(Ordering::Relaxed), 1);
+    assert_eq!(semaphore.0.available_permits(), 4);
+    proxy_context::with_snapshot(audit_clients, async {
+        let mut route = fixture_route();
+        route.proxy = ProxyPolicy::System;
+        assert_eq!(native_budget::available(&route), 32);
+    })
     .await;
 }
 

@@ -32,7 +32,7 @@ pub(crate) fn byte_range_header_value(
 pub(crate) async fn send_cdn_request(
     builder: reqwest::RequestBuilder,
 ) -> crate::Result<reqwest::Response> {
-    send_cdn_request_inner(builder, None).await
+    send_cdn_request_inner(builder, None, None).await
 }
 
 pub(crate) async fn send_cdn_request_with_clients(
@@ -40,12 +40,27 @@ pub(crate) async fn send_cdn_request_with_clients(
     clients: &DownloadClients,
     proxy: ProxyPolicy,
 ) -> crate::Result<reqwest::Response> {
-    send_cdn_request_inner(builder, Some((clients, proxy))).await
+    send_cdn_request_inner(builder, Some((clients, proxy)), None).await
+}
+
+pub(crate) async fn send_cdn_request_with_budget(
+    builder: reqwest::RequestBuilder,
+    clients: &DownloadClients,
+    proxy: ProxyPolicy,
+    budget: super::native_budget::NativeBudgetPermit,
+) -> crate::Result<reqwest::Response> {
+    send_cdn_request_inner(builder, Some((clients, proxy)), Some(budget)).await
+}
+
+#[derive(Clone)]
+pub(crate) struct ResponseBudget {
+    _permit: std::sync::Arc<super::native_budget::NativeBudgetPermit>,
 }
 
 async fn send_cdn_request_inner(
     builder: reqwest::RequestBuilder,
     selection: Option<(&DownloadClients, ProxyPolicy)>,
+    mut admitted: Option<super::native_budget::NativeBudgetPermit>,
 ) -> crate::Result<reqwest::Response> {
     let (client, request) = builder.build_split();
     let mut request = request?;
@@ -53,6 +68,33 @@ async fn send_cdn_request_inner(
         retired_sources::normalize_parsed(request.url().clone())?;
     let original = request.url().clone();
     for hop in 0..=5 {
+        let physical_budget = if let Some(permit) = admitted.take() {
+            Some(std::sync::Arc::new(permit))
+        } else if let Some((_, proxy)) = selection {
+            let route = DownloadRoute {
+                url: request.url().to_string(),
+                source: crate::util::fetch::DownloadRouteSource::Official,
+                is_mirror: false,
+                allow_sensitive_headers: true,
+                supports_range: true,
+                proxy,
+            };
+            Some(std::sync::Arc::new(
+                tokio::time::timeout(
+                    std::time::Duration::from_secs(45),
+                    super::native_budget::acquire(&route),
+                )
+                .await
+                .map_err(|_| {
+                    ErrorKind::NetworkError(
+                        "timed out waiting for CDN response connection budget"
+                            .into(),
+                    )
+                })??,
+            ))
+        } else {
+            None
+        };
         let next_request = request.try_clone();
         let pinned = selection.and_then(|(clients, proxy)| {
             let fallback = clients.force_http1
@@ -84,6 +126,11 @@ async fn send_cdn_request_inner(
                 return Err(error.into());
             }
         };
+        if let Some(permit) = physical_budget {
+            response
+                .extensions_mut()
+                .insert(ResponseBudget { _permit: permit });
+        }
         if let Some((_, lease)) = pinned
             && let Some((clients, _)) = selection
         {
@@ -136,6 +183,9 @@ async fn send_cdn_request_inner(
             }
         }
         *cloned.url_mut() = next;
+        // A redirect must release its old-hop response and physical permit
+        // before admission for the next authority is awaited.
+        drop(response);
         request = cloned;
     }
     unreachable!()
