@@ -159,7 +159,7 @@ pub(crate) async fn h2_policy(
     )
 }
 
-fn system_proxy_configured() -> bool {
+pub(crate) fn system_proxy_configured() -> bool {
     let environment_proxy = [
         "HTTPS_PROXY",
         "https_proxy",

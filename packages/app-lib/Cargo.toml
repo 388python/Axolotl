@@ -148,6 +148,7 @@ zip = { workspace = true }
 
 [dev-dependencies]
 chrono-tz = "0.10.4"
+rcgen = { version = "0.14.7", default-features = false, features = ["ring"] }
 
 [build-dependencies]
 dotenvy = { workspace = true }

@@ -48,6 +48,33 @@ pub(crate) struct EndpointLease {
     pub(crate) expires_at: Instant,
 }
 
+#[derive(Clone, Debug)]
+pub(super) struct ProbeTarget {
+    pub(super) url: url::Url,
+    pub(super) size: u64,
+    pub(super) protocol: Protocol,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ProbeFailure {
+    Ineligible,
+    Cancelled,
+    BudgetExhausted,
+    Timeout,
+    Transport,
+    InvalidCertificate,
+    Redirect,
+    ServerCooldown,
+    TargetMissing,
+    HttpStatus,
+    RangeUnsupported,
+    InvalidRange,
+    InvalidEncoding,
+    WrongPeer,
+    WrongProtocol,
+    Truncated,
+}
+
 /// A measurement is attributable to one connection and one protocol. An IP
 /// alone does not identify a sample when several H2 streams share a socket.
 #[derive(Clone, Debug)]

@@ -1082,7 +1082,7 @@ fn reqwest_client_builder() -> reqwest::ClientBuilder {
         .user_agent(crate::launcher_user_agent())
 }
 
-fn file_reqwest_client_builder() -> reqwest::ClientBuilder {
+pub(crate) fn file_reqwest_client_builder() -> reqwest::ClientBuilder {
     reqwest_client_builder()
         .http2_adaptive_window(true)
         .http2_keep_alive_interval(Some(time::Duration::from_secs(15)))

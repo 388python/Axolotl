@@ -67,7 +67,9 @@ pub(super) fn rank_candidates(
             || sample.contaminated
             || sample.bytes < VALIDATION_BYTES
             || sample.complete_object && sample.bytes < SAMPLE_BYTES
+            || sample.elapsed.is_zero()
             || sample.elapsed < Duration::from_millis(250)
+                && sample.bytes < SAMPLE_BYTES
             || sample.observed_at > now
             || now.saturating_duration_since(sample.observed_at)
                 >= SELECTION_LIFETIME
