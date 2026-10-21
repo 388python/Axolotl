@@ -19,6 +19,8 @@ enum ResponseKind {
     Stall,
     SlowFile,
     File,
+    LargeSlowFile,
+    LargeFile,
 }
 
 struct TlsFixture {
@@ -129,13 +131,18 @@ impl TlsFixture {
                                     assert_eq!(request.uri().host(), Some("cdn.modrinth.com"));
                                     assert!(request.headers().get(header::AUTHORIZATION).is_none());
                                     assert!(request.headers().get(crate::util::fetch::DOWNLOAD_META_HEADER).is_none());
-                                    let (start, end) = request.headers()[header::RANGE].to_str().unwrap()
-                                        .strip_prefix("bytes=").unwrap().split_once('-').unwrap();
-                                    let start = start.parse::<usize>().unwrap();
-                                    let end = end.parse::<usize>().unwrap();
+                                    let size = if matches!(kind, ResponseKind::LargeSlowFile | ResponseKind::LargeFile) { 64 * 1024 * 1024 } else { 1_048_576 };
+                                    let range = request.headers().get(header::RANGE);
+                                    let (start, end) = range.map(|range| {
+                                        let (start, end) = range.to_str().unwrap().strip_prefix("bytes=").unwrap().split_once('-').unwrap();
+                                        (start.parse::<usize>().unwrap(), if end.is_empty() { size - 1 } else { end.parse::<usize>().unwrap() })
+                                    }).unwrap_or((0, size - 1));
                                     let length = end + 1 - start;
-                                    let response = http::Response::builder().status(206)
-                                        .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/1048576"))
+                                    let response = http::Response::builder().status(if range.is_some() { 206 } else { 200 });
+                                    let response = if range.is_some() {
+                                        response.header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}"))
+                                    } else { response };
+                                    let response = response
                                         .header(header::CONTENT_LENGTH, length)
                                         .header("x-served-by", "cache-h2-test")
                                         .body(()).unwrap();
@@ -145,12 +152,14 @@ impl TlsFixture {
                                     transfers.spawn(async move {
                                         let mut remaining = length;
                                         while remaining > 0 {
-                                            let wanted = remaining.min(16 * 1024);
+                                            let slow = matches!(kind, ResponseKind::SlowFile | ResponseKind::LargeSlowFile);
+                                            let wanted = remaining.min(if slow { 1024 } else { 16 * 1024 });
                                             stream.reserve_capacity(wanted);
                                             let Some(Ok(capacity)) = futures::future::poll_fn(|cx| stream.poll_capacity(cx)).await else { return };
                                             let sent = capacity.min(wanted);
                                             remaining -= sent;
                                             if stream.send_data(bytes::Bytes::from(vec![42; sent]), remaining == 0).is_err() { return; }
+                                            if slow { tokio::time::sleep(Duration::from_millis(25)).await; }
                                         }
                                     });
                                 }
@@ -730,6 +739,141 @@ async fn same_url_http1_download_resumes_on_new_ip_and_verifies_final_hash() {
     let counters = request.transfer_counters.snapshot();
     assert_eq!(counters.committed_unique_bytes, bytes.len() as u64);
     assert_eq!(counters.received_payload_bytes, bytes.len() as u64);
+}
+
+async fn automatic_native_h2_recovery(range_count: Option<usize>) {
+    use crate::util::download::{h2_pool, native_slow, proxy_context};
+    let slow = TlsFixture::start_protocol(
+        "cdn.modrinth.com",
+        if range_count.is_some() {
+            ResponseKind::LargeSlowFile
+        } else {
+            ResponseKind::SlowFile
+        },
+        Protocol::H2,
+    )
+    .await;
+    let fast = TlsFixture::start_on(
+        "cdn.modrinth.com",
+        if range_count.is_some() {
+            ResponseKind::LargeFile
+        } else {
+            ResponseKind::File
+        },
+        Protocol::H2,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let clients = production_clients(&slow);
+    clients
+        .endpoints
+        .pinned_clients
+        .trust_test_root(fast.root.clone());
+    *clients.endpoints.probe_fixture.lock() =
+        Some(super::super::coordinator::ProbeFixture {
+            metered: false,
+            candidates: vec![
+                (slow.address, slow.root.clone()),
+                (fast.address, fast.root.clone()),
+            ],
+        });
+    let selector = clients.endpoints.clone();
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(slow.rustls_root.clone()).unwrap();
+    roots.add(fast.rustls_root.clone()).unwrap();
+    let mut config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec()];
+    let data = vec![
+        42;
+        if range_count.is_some() {
+            64 * 1024 * 1024
+        } else {
+            1_048_576
+        }
+    ];
+    let mut request = crate::util::fetch::DownloadRequest::new(
+        fixture_route().url,
+        crate::util::fetch::ResourceClass::Modrinth,
+    )
+    .with_integrity(
+        crate::util::fetch::Integrity::sha1(
+            sha1_smol::Sha1::from(&data[..]).hexdigest(),
+        )
+        .with_size(data.len() as u64),
+    )
+    .with_http1_segmented_download(false);
+    request.h2_range_concurrency = range_count;
+    let directory = tempfile::tempdir().unwrap();
+    let destination = directory.path().join("native-h2.jar");
+    let semaphore =
+        crate::util::fetch::FetchSemaphore(tokio::sync::Semaphore::new(8));
+    let transfer = proxy_context::with_snapshot(
+        clients,
+        h2_pool::with_test_tls_config(Arc::new(config), async {
+            let mut route = fixture_route();
+            route.proxy = ProxyPolicy::System;
+            let initial = h2_pool::shared_connection(&route, true, true, false)
+                .await
+                .unwrap();
+            assert_eq!(initial.remote_addr, Some(slow.address));
+            let result = native_slow::with_test_timing(
+                Duration::from_millis(75),
+                Duration::from_millis(150),
+                crate::util::fetch::download_endpoint_fixture(
+                    request.clone(),
+                    &destination,
+                    &semaphore,
+                ),
+            )
+            .await;
+            assert!(
+                initial.bytes_transferred_for_scheduler() > 0,
+                "production must consume the native H2 pool rather than only reqwest H2"
+            );
+            if range_count.is_some() {
+                let selected = h2_pool::shared_batch_connection(&route, true)
+                    .await
+                    .unwrap();
+                assert_eq!(selected.remote_addr, Some(fast.address));
+                assert!(
+                    selected.bytes_transferred_for_scheduler() > 0,
+                    "unfinished range must consume native H2 on the new peer"
+                );
+            }
+            result
+        }),
+    );
+    let result = tokio::time::timeout(Duration::from_secs(15), transfer)
+        .await
+        .unwrap_or_else(|error| {
+            panic!("{error}; {}", selector.trial_diagnostic())
+        })
+        .unwrap();
+    assert_eq!(tokio::fs::read(&destination).await.unwrap(), data);
+    assert_eq!(result.size, data.len() as u64);
+    assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
+    let counters = request.transfer_counters.snapshot();
+    assert_eq!(counters.received_payload_bytes, data.len() as u64);
+    assert_eq!(counters.committed_unique_bytes, data.len() as u64);
+    let selected = selector
+        .lease(&fixture_route().url.parse().unwrap(), Protocol::H2)
+        .unwrap();
+    assert_eq!(selected.pool.endpoint, fast.address);
+    assert!(fast.requests.load(Ordering::Relaxed) >= 4);
+    selector.close();
+}
+
+#[tokio::test]
+async fn native_h2_single_stream_measures_new_peer_and_resumes_verified_file() {
+    automatic_native_h2_recovery(None).await;
+}
+
+#[tokio::test]
+async fn native_h2_ranges_measure_new_peer_and_resume_verified_file() {
+    automatic_native_h2_recovery(Some(2)).await;
 }
 
 #[tokio::test]

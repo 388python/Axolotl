@@ -140,6 +140,8 @@ HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序�
 
 ## 尚待完成的要求
 
+新增原生 H2 实际生产恢复证据：本地严格 TLS fixture 支持无 Range 的完整 GET、非零/开放结束 Range 与持续小块限速。单流测试为 1MiB；H2 Range 测试为完整 64MiB、显式两范围，满足生产范围并发大小限制。两者先确认慢 peer 的原生 SharedH2Connection 实际消费了正文，再由真实候选验证和两样本测速发布新 IP；最终 received=unique=文件大小、一次迁移、内容 SHA-1 正确。Range 另外要求新 peer 的原生 H2 连接实际消费正文，不能由 reqwest H2 路径代替证据。测试仅缩短观察窗口，严格 TLS/Range/预算/最终哈希沿用生产逻辑。`%TEMP%/axolotl-h2-range-full-proof.log`：54 项通过、5 项显式基准跳过。
+
 DNS metadata 缓存阶段：provider answers 和候选快照最多各保留 128 个 host，插入时清理过期项并淘汰最早获取的缓存。候选查询锁清理无人持有的 entry；128 个活跃 host 已满时拒绝新候选查询，保留已在途的单主机合并锁，避免用淘汰活跃锁制造重复查询。普通下载 DNS 不依赖候选锁，不因候选缓存淘汰而禁用正常下载。新增 148 个 host 插入后的容量与旧项淘汰测试，以及活跃候选查询容量拒绝测试；上述 308 项回归已覆盖。
 
 诊断与样本审计阶段：引入稳定 `EndpointReason` 枚举，区分证书、Range 不支持/边界错误/编码错误、正文截断、冷却、预算、旧 epoch、样本不足及本地压力。每轮开始/结束保留 captured epoch/generation、总耗时与本轮 probe bytes；测速日志补候选来源、目标 IP、协议、样本类型、正文时长、TTFB、throughput、污染状态与本地实际区间收益估计。没有记录 query/token/代理凭据，探测日志不替换生产最终错误。
