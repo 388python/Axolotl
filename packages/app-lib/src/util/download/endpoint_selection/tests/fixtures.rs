@@ -41,6 +41,9 @@ pub(super) struct SocketStats {
     pub(super) requests: AtomicU64,
     pub(super) server_payload: AtomicU64,
     pub(super) body_elapsed_us: AtomicU64,
+    pub(super) send_us: AtomicU64,
+    pub(super) pace_sleep_us: AtomicU64,
+    pub(super) max_pace_late_us: AtomicU64,
 }
 
 struct ActiveSocket(Arc<SocketStats>);
@@ -64,13 +67,18 @@ pub(super) struct EndpointFixture {
     pub(super) rustls_root: CertificateDer<'static>,
     pub(super) stats: Arc<SocketStats>,
     cancellation: CancellationToken,
-    task: tokio::task::JoinHandle<()>,
+    task: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Drop for EndpointFixture {
     fn drop(&mut self) {
         self.cancellation.cancel();
-        self.task.abort();
+        if let Some(task) = self.task.take() {
+            let result = task.join();
+            if !std::thread::panicking() {
+                result.expect("benchmark server thread");
+            }
+        }
     }
 }
 
@@ -98,14 +106,23 @@ impl EndpointFixture {
             )
             .unwrap();
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
-        let listener =
-            tokio::net::TcpListener::bind((bind_ip, 0)).await.unwrap();
+        let listener = std::net::TcpListener::bind((bind_ip, 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
         let address = listener.local_addr().unwrap();
         let cancellation = CancellationToken::new();
         let stop = cancellation.clone();
         let server_stats = stats.clone();
         let cached_objects = Arc::new(Mutex::new(HashSet::new()));
-        let task = tokio::spawn(async move {
+        // Keep the emulated remote server off the client's single-thread
+        // test executor. Client hashing or disk polling must not delay the
+        // server's pace clock and masquerade as a slower network endpoint.
+        let task = std::thread::spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::from_std(listener).unwrap();
             let mut handlers = tokio::task::JoinSet::new();
             loop {
                 tokio::select! {
@@ -165,12 +182,17 @@ impl EndpointFixture {
                                     let count = (end + 1 - offset).min((rate / 50).clamp(1024, 256 * 1024));
                                     // Application pacing is not TCP packet-loss emulation.
                                     let due = clock + Duration::from_secs_f64((sent + count) as f64 / rate as f64);
+                                    let sleep_started = Instant::now();
                                     tokio::time::sleep_until(due.into()).await;
+                                    stats.pace_sleep_us.fetch_add(sleep_started.elapsed().as_micros() as u64, Ordering::Relaxed);
+                                    stats.max_pace_late_us.fetch_max(Instant::now().saturating_duration_since(due).as_micros() as u64, Ordering::Relaxed);
+                                    let send_started = Instant::now();
                                     if socket.write_all(&vec![42; count as usize]).await.is_err() { return; }
                                     // TLS accepts plaintext into its own buffer;
                                     // an HTTP/1 fixture must flush each paced
                                     // frame rather than wait for the next request.
                                     if socket.flush().await.is_err() { return; }
+                                    stats.send_us.fetch_add(send_started.elapsed().as_micros() as u64, Ordering::Relaxed);
                                     stats.server_payload.fetch_add(count, Ordering::Relaxed);
                                     sent += count; offset += count;
                                 }
@@ -181,6 +203,8 @@ impl EndpointFixture {
                     result = handlers.join_next(), if !handlers.is_empty() => { result.unwrap().unwrap(); }
                 }
             }
+            handlers.shutdown().await;
+            });
         });
         Self {
             address,
@@ -188,7 +212,7 @@ impl EndpointFixture {
             rustls_root: ca.der().clone(),
             stats,
             cancellation,
-            task,
+            task: Some(task),
         }
     }
 }
@@ -238,6 +262,7 @@ pub(super) fn clients(
         .direct_dns
         .set_test_addresses("cdn.modrinth.com", vec![first.address]);
     *clients.endpoints.probe_fixture.lock() = Some(ProbeFixture {
+        metered: false,
         candidates: if expanded {
             vec![
                 (first.address, first.root.clone()),

@@ -46,6 +46,10 @@ struct Run {
     migrations: u8,
     trial_rounds: u64,
     attempts: usize,
+    client_phases: super::metrics::PhaseSnapshot,
+    server_send_us: u64,
+    server_pace_sleep_us: u64,
+    server_max_pace_late_us: u64,
 }
 
 fn size_bytes() -> u64 {
@@ -115,6 +119,8 @@ async fn run(
         let received_before = stats.server_payload.load(Ordering::Relaxed);
         let body_before = stats.body_elapsed_us.load(Ordering::Relaxed);
         let opened_before = stats.opened.load(Ordering::Relaxed);
+        let send_before = stats.send_us.load(Ordering::Relaxed);
+        let sleep_before = stats.pace_sleep_us.load(Ordering::Relaxed);
         let (probe_before, _, rounds_before) = selector.benchmark_counters();
         let started = Instant::now();
         let deadline = Duration::from_secs_f64(size as f64 / slow as f64 * 1.5 + 60.0);
@@ -145,7 +151,11 @@ async fn run(
             probe_bytes: probe_after - probe_before, server_payload_bytes: stats.server_payload.load(Ordering::Relaxed) - received_before,
             server_body_us: stats.body_elapsed_us.load(Ordering::Relaxed) - body_before,
             peak_connections: stats.peak.load(Ordering::Relaxed), opened_connections: stats.opened.load(Ordering::Relaxed) - opened_before,
-            migrations, trial_rounds: rounds_after - rounds_before, attempts: result.attempts }
+            migrations, trial_rounds: rounds_after - rounds_before, attempts: result.attempts,
+            client_phases: request.transfer_counters.phases.snapshot(),
+            server_send_us: stats.send_us.load(Ordering::Relaxed) - send_before,
+            server_pace_sleep_us: stats.pace_sleep_us.load(Ordering::Relaxed) - sleep_before,
+            server_max_pace_late_us: stats.max_pace_late_us.load(Ordering::Relaxed) }
     }).await;
     selector.close();
     drop(clients);
@@ -154,12 +164,24 @@ async fn run(
 
 async fn matrix(scenario: Scenario) {
     let size = size_bytes();
+    let modes = match std::env::var("AXOLOTL_BENCH_MODE").ok().as_deref() {
+        None => vec![Mode::Off, Mode::DnsOnly, Mode::Expanded],
+        Some("off") => vec![Mode::Off],
+        Some("dns") => vec![Mode::DnsOnly],
+        Some("expanded") => vec![Mode::Expanded],
+        Some(_) => panic!("benchmark mode must be off, dns or expanded"),
+    };
+    let partial = modes.len() != 3;
+    if partial {
+        println!(
+            "benchmark_partial_mode true; one-mode diagnostics do not satisfy comparative acceptance"
+        );
+    }
     let mut results = Vec::new();
     for iteration in 0..5 {
         for warm in [false, true] {
             // Interleaving rotates order so one mode never always runs first.
-            let modes = [Mode::Off, Mode::DnsOnly, Mode::Expanded];
-            for offset in 0..3 {
+            for offset in 0..modes.len() {
                 let mode = modes[(iteration + offset) % modes.len()];
                 let result = run(scenario, mode, iteration, warm, size).await;
                 println!(
@@ -172,7 +194,7 @@ async fn matrix(scenario: Scenario) {
     }
     for warm in [false, true] {
         let mut medians = Vec::new();
-        for mode in [Mode::Off, Mode::DnsOnly, Mode::Expanded] {
+        for &mode in &modes {
             let group: Vec<_> = results
                 .iter()
                 .filter(|run| run.mode == mode && run.warm == warm)
@@ -194,13 +216,17 @@ async fn matrix(scenario: Scenario) {
                 group.iter().map(|run| run.migrations as u64).sum::<u64>()
             );
         }
-        if matches!(scenario, Scenario::SlowFast) && size >= 64 * 1024 * 1024 {
+        if !partial
+            && matches!(scenario, Scenario::SlowFast)
+            && size >= 64 * 1024 * 1024
+        {
             assert!(
                 medians[2] * 5 <= medians[0],
                 "full weak-network gain should exceed 5x"
             );
         }
-        if matches!(scenario, Scenario::Healthy)
+        if !partial
+            && matches!(scenario, Scenario::Healthy)
             && medians[2] > medians[0] * 105 / 100
         {
             println!(

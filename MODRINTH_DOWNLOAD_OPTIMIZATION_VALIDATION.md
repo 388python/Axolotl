@@ -45,7 +45,7 @@ Cargo 检查沿用配置的 target 和 profile，仅对命令进程临时设置 
 
 `DnsOnly` 和 `Expanded` 在本地 fixture 中表示注入一组或扩展一组候选；生产 Fastly catalog 的前提与地址过滤由独立规则测试验证。这不能证明本地 IP 与真实 Fastly PoP 的对应关系。
 
-## 健康网络测量：门槛未通过
+## 健康网络测量：保留的失败记录
 
 命令：`cargo test -p theseus modrinth_download_benchmark_healthy -- --ignored --nocapture --test-threads=1`。
 
@@ -66,9 +66,57 @@ Cargo 检查沿用配置的 target 和 profile，仅对命令进程临时设置 
 
 先前两轮不采用为验收数据：第一轮继承测试超时并缺少 TLS flush，出现额外 64 KiB；第二轮改为生产超时但仍缺 flush，出现读超时重试，已停止本任务自己的该次测试进程。没有终止用户的开发或 Cargo 进程。
 
+## 分项诊断与隔离服务端后的健康验收
+
+前述失败之后增加了客户端 receive/output/hash，以及服务端 send/pacing 计时。共享客户端与服务端单线程执行器的诊断轮中，64 MiB 的 hash 大致为 1.0–1.1 秒，输出约为 30–43 毫秒；慢轮服务端发送耗时则从约 2.3 秒升到 3.8–4.4 秒。日志：`%TEMP%/axolotl-healthy-phase-diagnosis.log`。该轮暖连接门槛仍失败，未作为通过数据。
+
+随后只调整本地性能 fixture：每个服务端运行在独立 OS 线程的 Tokio runtime，Drop 取消并 join 线程，服务端退出时关闭所有连接任务。生产下载器仍运行在原执行器。这样客户端同步 hash 或文件 polling 不再阻塞被模拟的远端服务端 pace 时钟。未更改 target、构建 profile 或 5% 阈值。
+
+同样的完整 64 MiB、三模式、冷/暖各五轮交错测试通过。日志：`%TEMP%/axolotl-healthy-isolated-server.log`。
+
+| 连接 | 模式 | 轮数 | 中位完成时间 ms | p95 ms |
+|---|---|---:|---:|---:|
+| 冷 | off | 5 | 2638 | 2843 |
+| 冷 | DNS 候选 | 5 | 2677 | 2753 |
+| 冷 | 扩展候选 | 5 | 2504 | 2649 |
+| 暖 | off | 5 | 2643 | 2723 |
+| 暖 | DNS 候选 | 5 | 2664 | 2790 |
+| 暖 | 扩展候选 | 5 | 2618 | 2714 |
+
+30 次均只有一次下载尝试，received/unique/server payload 均为 67,108,864 字节；probe bytes=0、migration=0、连接峰值=1。扩展候选相对 off 的冷、暖中位数分别减少约 5.08%、0.95%。这满足本地健康回归门槛，不证明公网更快，也不说明一次本地均值差异具有统计显著性。服务器隔离消除了先前明显的双峰耗时，此证据支持原测量存在执行器耦合；保留旧失败而非将其改记为成功。
+
+## 64 MiB 慢入口到快备选：单模式测量已完成
+
+使用生产观察时间和请求超时，慢端点为应用层 45 KiB/s pacing，快备选为 5 MiB/s。完整文件 64 MiB；`AXOLOTL_BENCH_MODE=expanded` 指定单模式，测试输出明确标记 partial mode。日志：`%TEMP%/axolotl-slow-fast-expanded-full.log`。
+
+| 连接 | 模式 | 轮数 | 中位完成时间 ms | p95 ms | 每轮迁移 | 每轮探测轮数 | 连接峰值 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| 冷 | 扩展候选 | 5 | 32074 | 32092 | 1 | 1 | 3 |
+| 暖 | 扩展候选 | 5 | 32071 | 32082 | 1 | 1 | 3 |
+
+每轮生产 received=unique=67,108,864 字节，最终 SHA-1 校验成功，尝试次数=2。冷、暖五轮探测正文合计分别为 43,964,416 和 43,960,320 字节，约每轮 8.8 MB。server payload 包含探测和有限 socket 预读，不能与客户端 probe 计数视为精确相等的线路字节。
+
+本组没有实测 off/DNS 基线，不能据此声称 5 倍收益验收完成。64 MiB / 45 KiB/s 的理论耗时约 24 分钟，只用作规划运行时间。完整三模式对照仍是未完成要求。单模式开关仅供诊断，默认命令仍运行原三模式交错比较；非 64 MiB 的测试也仍标 scaled。
+
+## 本轮预算与策略审计
+
+- 原生 H2 双地址 TCP 竞速的第二个 socket 现在需要独立普通连接许可，不能使用保留恢复槽。无额度时按顺序推进候选，连接拒绝后仍可到达第三个地址。新增饱和主机真实 TCP 测试验证暂借额度释放。
+- reqwest 的 DNS adapter 不再只返回前两个 IP；普通 DoH 的有界 provider 池也包含第三个既有 provider。新增第三地址/第三 provider 回退测试。
+- 保留服务端 429/503 及其 Retry-After，并复用已有解析/上限；不再将所有探测 cooldown 都伪装成固定 429。
+- off/observe 及已处于 cooldown 的调用不会取得共享调节租约，避免无网络操作却污染其他试验的 revision。
+- 切换成本采用候选验证的 TTFB 作为保守冷连接开销估计（包含请求头等待，并不声称单独测出了 TCP/TLS 时间）；在 100ms–5s 内限制后用于收益判断，缺失数据保留 600ms 默认。
+- 对同一 pinned client key 的并发构建做缓存二次检查，避免多个已构建 handle 各自成为独立连接池。
+- 计费网络 fixture 验证实际启动的一轮在候选 DNS/正文探测前结束，probe bytes=0。
+
+`%TEMP%/axolotl-probe-policy-budget-gate.log`：297 项通过、5 项显式基准跳过。新增第三地址/第三 provider 后，`%TEMP%/axolotl-dns-third-address-gate.log` 为 298 项通过、5 项显式基准跳过；同状态完整 fetch 为 91 项通过（`%TEMP%/axolotl-latest-fetch-tests.log`）。
+
+随后补上 H2 等待旧连接槽时的选址竞争检查：等待者取得槽锁后重新核对 captured lease，如果代次已变化，不能分配旧连接；由有界外层重试获取当前选择。真实 TLS 测试在持有旧槽、等待请求已挂起时发布新 IP，解除锁后证明等待者使用新 peer，旧活动流仍可排空。`%TEMP%/axolotl-slot-generation-final-tests.log` 为 298 项通过、5 项显式基准跳过。
+
+前一检查 `%TEMP%/axolotl-budget-cooldown-production-check.log` 的非测试 `cargo check -p theseus` 通过；连接槽复查后的 `%TEMP%/axolotl-slot-generation-check.log` 也通过。所有检查沿用原 target/profile，临时关闭 incremental。
+
 ## 尚待完成的要求
 
-- 定位并解决健康暖连接测量差异，或提供足以证明测量无效的独立证据，然后重新执行验收。
+- 健康网络本地回归已在隔离 fixture 后通过；最终代码变化如影响该路径，仍须按范围复查。
 - 执行慢入口/快备选、全部慢入口、慢尾部及 200 文件对照矩阵；缩小规模不能替代完整规模的收益结论。
 - 继续审核 H2 单流、H2 Range、HTTP/1 Range、内存下载、重定向和失败恢复的全部实际路径与计数覆盖。
 - 补齐候选证据、计费网络、代理上下文、网络代次及过期结果的验收映射；记录未验证平台。

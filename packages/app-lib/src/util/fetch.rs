@@ -1340,7 +1340,9 @@ fn fetch_retry_delay(attempt: usize) -> time::Duration {
     time::Duration::from_secs_f64(base.as_secs_f64() * jitter)
 }
 
-fn retry_after(response: &reqwest::Response) -> Option<time::Duration> {
+pub(crate) fn retry_after(
+    response: &reqwest::Response,
+) -> Option<time::Duration> {
     let value = response.headers().get(header::RETRY_AFTER)?.to_str().ok()?;
     if let Ok(seconds) = value.parse::<u64>() {
         return Some(clamp_failure_cooldown(time::Duration::from_secs(
@@ -7075,7 +7077,11 @@ async fn run_native_route_attempts(
         let mut last_endpoint_speed = 0;
         loop {
             tokio::select! {
-                item = stream.next() => {
+                item = async {
+                    #[cfg(test)]
+                    let _phase = request.transfer_counters.phases.receive();
+                    stream.next().await
+                } => {
                     let Some(item) = item else {
                         break;
                     };
@@ -7094,10 +7100,18 @@ async fn run_native_route_attempts(
                     };
                     request.transfer_counters.received(chunk.len() as u64);
                     if let Some(feedback) = &endpoint_feedback { feedback.record(chunk.len(), super::download::local_resources::pressure(part_path)); }
+                    {
+                    #[cfg(test)]
+                    let _phase = request.transfer_counters.phases.output();
                     file.write_chunk(&chunk).await.map_err(|error| {
                         IOError::with_path(error, part_path)
                     })?;
+                    }
+                    {
+                    #[cfg(test)]
+                    let _phase = request.transfer_counters.phases.hash();
                     hashers.update(&chunk);
+                    }
                     downloaded += chunk.len() as u64;
                     request.transfer_counters.commit(starting_size, downloaded.saturating_sub(file.pending_bytes()));
                     if let Some(state) = crate::State::get_if_initialized() {

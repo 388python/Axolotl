@@ -58,9 +58,72 @@ impl Drop for TransferLifetime {
 
 #[derive(Default, Debug)]
 pub(crate) struct TransferCounters {
+    #[cfg(test)]
+    pub(crate) phases: BenchmarkPhases,
     received: AtomicU64,
     unique: AtomicU64,
     accepted: Mutex<BTreeMap<u64, u64>>,
+}
+
+#[cfg(test)]
+#[derive(Default, Debug)]
+pub(crate) struct BenchmarkPhases {
+    receive_us: AtomicU64,
+    output_us: AtomicU64,
+    hash_us: AtomicU64,
+}
+
+#[cfg(test)]
+#[derive(Debug, serde::Serialize)]
+pub(crate) struct PhaseSnapshot {
+    receive_us: u64,
+    output_us: u64,
+    hash_us: u64,
+}
+
+#[cfg(test)]
+pub(crate) struct PhaseTimer<'a> {
+    started: Instant,
+    destination: &'a AtomicU64,
+}
+
+#[cfg(test)]
+impl Drop for PhaseTimer<'_> {
+    fn drop(&mut self) {
+        self.destination.fetch_add(
+            self.started.elapsed().as_micros() as u64,
+            Ordering::Relaxed,
+        );
+    }
+}
+
+#[cfg(test)]
+impl BenchmarkPhases {
+    pub(crate) fn receive(&self) -> PhaseTimer<'_> {
+        PhaseTimer {
+            started: Instant::now(),
+            destination: &self.receive_us,
+        }
+    }
+    pub(crate) fn output(&self) -> PhaseTimer<'_> {
+        PhaseTimer {
+            started: Instant::now(),
+            destination: &self.output_us,
+        }
+    }
+    pub(crate) fn hash(&self) -> PhaseTimer<'_> {
+        PhaseTimer {
+            started: Instant::now(),
+            destination: &self.hash_us,
+        }
+    }
+    pub(crate) fn snapshot(&self) -> PhaseSnapshot {
+        PhaseSnapshot {
+            receive_us: self.receive_us.load(Ordering::Relaxed),
+            output_us: self.output_us.load(Ordering::Relaxed),
+            hash_us: self.hash_us.load(Ordering::Relaxed),
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq)]
