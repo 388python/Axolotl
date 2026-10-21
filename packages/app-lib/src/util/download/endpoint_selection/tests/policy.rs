@@ -115,3 +115,22 @@ fn zero_speeds_unknown_remaining_and_expired_samples_cannot_publish() {
     ];
     assert!(rank_candidates(&samples, Protocol::H2, now).is_empty());
 }
+
+#[test]
+fn repeated_small_object_completion_times_are_not_mixed_with_bulk_bandwidth() {
+    let now = Instant::now();
+    let mut first =
+        sample("151.101.1.242", now - Duration::from_secs(2), 128 * 1024, 1);
+    first.complete_object = true;
+    first.elapsed = Duration::from_millis(100);
+    let mut second = first.clone();
+    second.observed_at = now;
+    second.connection_id = 2;
+    assert_eq!(
+        rank_candidates(&[first.clone(), second.clone()], Protocol::H2, now)
+            .len(),
+        1
+    );
+    second.complete_object = false;
+    assert!(rank_candidates(&[first, second], Protocol::H2, now).is_empty());
+}

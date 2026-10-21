@@ -22,6 +22,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::Notify;
 use tokio_rustls::TlsConnector;
 
+use super::endpoint_selection::{EndpointLease, Protocol};
 use crate::util::fetch::DownloadRoute;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -67,6 +68,9 @@ impl H2ConnectError {
 /// A live shared HTTP/2 connection to one authority.
 pub struct SharedH2Connection {
     authority: String,
+    budget_scope: String,
+    pub(crate) endpoint_lease: Option<EndpointLease>,
+    pub(crate) connection_id: u64,
     pub(crate) remote_addr: Option<std::net::SocketAddr>,
     sender: Mutex<SendRequest<Bytes>>,
     // One permit represents the shared TCP/TLS connection, not every H2
@@ -114,6 +118,13 @@ impl SharedH2Connection {
         physical_budget: Option<super::native_budget::NativeBudgetPermit>,
     ) -> Self {
         Self {
+            budget_scope: authority.clone(),
+            endpoint_lease: None,
+            connection_id: {
+                static NEXT_ID: std::sync::atomic::AtomicU64 =
+                    std::sync::atomic::AtomicU64::new(1);
+                NEXT_ID.fetch_add(1, Ordering::Relaxed)
+            },
             authority,
             remote_addr: None,
             sender: Mutex::new(sender),
@@ -145,11 +156,8 @@ impl SharedH2Connection {
         let budget = super::native_budget::acquire(route).await.unwrap();
         let connection =
             Arc::new(Self::new(authority.clone(), sender, Some(budget)));
-        let slot = connection_slot(&super::proxy_context::authority_key(
-            &authority,
-            route.proxy,
-        ))
-        .await;
+        let (key, _) = connection_identity(route).unwrap();
+        let slot = connection_slot(&key).await;
         *slot.lock().await = Some(connection.clone());
         connection
     }
@@ -341,30 +349,80 @@ impl Drop for SharedH2Connection {
 
 type ConnectionSlot = Arc<AsyncMutex<Option<Arc<SharedH2Connection>>>>;
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct ConnectionPoolKey {
+    budget_scope: String,
+    selection: Option<super::endpoint_selection::PoolKey>,
+}
+
+fn connection_identity(
+    route: &DownloadRoute,
+) -> Result<(ConnectionPoolKey, Option<EndpointLease>), H2ConnectError> {
+    let authority =
+        crate::util::fetch::url_authority(&route.url).ok_or_else(|| {
+            H2ConnectError::new(
+                H2ConnectFailureKind::Protocol,
+                "HTTP/2 route has no authority".into(),
+            )
+        })?;
+    let lease = super::proxy_context::clients().and_then(|clients| {
+        if !super::endpoint_selection::EndpointSelector::eligible_network(
+            &clients,
+            route.proxy,
+        ) {
+            return None;
+        }
+        clients
+            .endpoints
+            .lease(&url::Url::parse(&route.url).ok()?, Protocol::H2)
+    });
+    Ok((
+        ConnectionPoolKey {
+            budget_scope: super::proxy_context::authority_key(
+                &authority,
+                route.proxy,
+            ),
+            selection: lease.as_ref().map(|lease| lease.pool.clone()),
+        },
+        lease,
+    ))
+}
+
+fn connection_matches(
+    route: &DownloadRoute,
+    lease: Option<&EndpointLease>,
+) -> bool {
+    connection_identity(route).is_ok_and(|(_, current)| {
+        current.as_ref().map(|l| &l.pool) == lease.map(|l| &l.pool)
+    })
+}
+
 /// Registry of live shared connections, keyed by authority.
 static CONNECTIONS: std::sync::LazyLock<
-    AsyncMutex<HashMap<String, ConnectionSlot>>,
+    AsyncMutex<HashMap<ConnectionPoolKey, ConnectionSlot>>,
 > = std::sync::LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
 type ParallelConnectionPool =
     Arc<AsyncMutex<super::authority_scheduler::AuthorityScheduler>>;
 
 static PARALLEL_CONNECTIONS: std::sync::LazyLock<
-    AsyncMutex<HashMap<String, ParallelConnectionPool>>,
+    AsyncMutex<HashMap<ConnectionPoolKey, ParallelConnectionPool>>,
 > = std::sync::LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
-async fn connection_slot(authority: &str) -> ConnectionSlot {
+async fn connection_slot(key: &ConnectionPoolKey) -> ConnectionSlot {
     let mut connections = CONNECTIONS.lock().await;
     connections
-        .entry(authority.to_string())
+        .entry(key.clone())
         .or_insert_with(|| Arc::new(AsyncMutex::new(None)))
         .clone()
 }
 
-async fn parallel_connection_pool(authority: &str) -> ParallelConnectionPool {
+async fn parallel_connection_pool(
+    key: &ConnectionPoolKey,
+) -> ParallelConnectionPool {
     let mut connections = PARALLEL_CONNECTIONS.lock().await;
     connections
-        .entry(authority.to_string())
+        .entry(key.clone())
         .or_insert_with(|| {
             Arc::new(AsyncMutex::new(
                 super::authority_scheduler::AuthorityScheduler::default(),
@@ -374,6 +432,10 @@ async fn parallel_connection_pool(authority: &str) -> ParallelConnectionPool {
 }
 
 fn tls_config() -> Arc<ClientConfig> {
+    #[cfg(test)]
+    if let Ok(config) = TEST_TLS_CONFIG.try_with(Arc::clone) {
+        return config;
+    }
     static INSTALL_PROVIDER: Once = Once::new();
     INSTALL_PROVIDER.call_once(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -394,6 +456,17 @@ fn tls_config() -> Arc<ClientConfig> {
     let config = Arc::new(config);
     *guard = Some(Arc::clone(&config));
     config
+}
+
+#[cfg(test)]
+tokio::task_local! { static TEST_TLS_CONFIG: Arc<ClientConfig>; }
+
+#[cfg(test)]
+pub(crate) async fn with_test_tls_config<F: std::future::Future>(
+    config: Arc<ClientConfig>,
+    future: F,
+) -> F::Output {
+    TEST_TLS_CONFIG.scope(config, future).await
 }
 
 fn platform_root_certs() -> rustls::RootCertStore {
@@ -565,6 +638,7 @@ async fn connect_tcp(
 async fn establish(
     route: &DownloadRoute,
     reserve_native_budget: bool,
+    lease: Option<EndpointLease>,
 ) -> Result<Arc<SharedH2Connection>, H2ConnectError> {
     if let Some(reason) = super::native::h2_ineligible_reason(route) {
         return Err(H2ConnectError::new(
@@ -594,7 +668,22 @@ async fn establish(
         .map(|(host, port)| (host, port.parse::<u16>().unwrap_or(443)))
         .unwrap_or((&authority, 443));
 
-    let tcp = connect_tcp(host, port, route.proxy).await.map_err(|error| {
+    let tcp_result = if let Some(lease) = &lease {
+        tokio::time::timeout(
+            CONNECT_TIMEOUT,
+            TcpStream::connect(lease.pool.endpoint),
+        )
+        .await
+        .unwrap_or_else(|_| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Pinned TCP connection timed out",
+            ))
+        })
+    } else {
+        connect_tcp(host, port, route.proxy).await
+    };
+    let tcp = tcp_result.map_err(|error| {
 		H2ConnectError::new(
 			H2ConnectFailureKind::Tcp,
 			format!(
@@ -629,6 +718,12 @@ async fn establish(
             format!("TLS handshake with {authority} failed: {error}"),
         )
     })?;
+    if tls.get_ref().1.alpn_protocol() != Some(b"h2") {
+        return Err(H2ConnectError::new(
+            H2ConnectFailureKind::Protocol,
+            "Endpoint did not negotiate h2".into(),
+        ));
+    }
 
     let mut builder = h2::client::Builder::new();
     builder
@@ -658,6 +753,9 @@ async fn establish(
 
     let mut shared =
         SharedH2Connection::new(authority.clone(), sender, physical_budget);
+    shared.budget_scope =
+        super::proxy_context::authority_key(&authority, route.proxy);
+    shared.endpoint_lease = lease;
     shared.remote_addr = remote_addr;
     let shared = Arc::new(shared);
 
@@ -741,7 +839,7 @@ pub(crate) async fn evict_idle_connections(scope: Option<&str>) {
         .lock()
         .await
         .iter()
-        .filter(|(key, _)| scope.is_none_or(|scope| key.as_str() == scope))
+        .filter(|(key, _)| scope.is_none_or(|scope| key.budget_scope == scope))
         .map(|(_, slot)| slot.clone())
         .collect::<Vec<_>>();
     for slot in slots {
@@ -756,7 +854,7 @@ pub(crate) async fn evict_idle_connections(scope: Option<&str>) {
         .lock()
         .await
         .iter()
-        .filter(|(key, _)| scope.is_none_or(|scope| key.as_str() == scope))
+        .filter(|(key, _)| scope.is_none_or(|scope| key.budget_scope == scope))
         .map(|(_, pool)| pool.clone())
         .collect::<Vec<_>>();
     for pool in pools {
@@ -771,9 +869,101 @@ pub(crate) async fn evict_idle_connections(scope: Option<&str>) {
     }
 }
 
+async fn retire_obsolete_connections(current: &ConnectionPoolKey) {
+    let slots = CONNECTIONS
+        .lock()
+        .await
+        .iter()
+        .filter(|(key, _)| {
+            key.budget_scope == current.budget_scope && *key != current
+        })
+        .map(|(_, slot)| slot.clone())
+        .collect::<Vec<_>>();
+    for slot in slots {
+        // An old handshake may hold the slot; its captured lease is checked
+        // before publication and cannot enter the current generation's pool.
+        if let Ok(mut cached) = slot.try_lock() {
+            if let Some(connection) = cached.take() {
+                connection.retire();
+            }
+        }
+    }
+    let pools = PARALLEL_CONNECTIONS
+        .lock()
+        .await
+        .iter()
+        .filter(|(key, _)| {
+            key.budget_scope == current.budget_scope && *key != current
+        })
+        .map(|(_, pool)| pool.clone())
+        .collect::<Vec<_>>();
+    for pool in pools {
+        if let Ok(mut state) = pool.try_lock() {
+            for connection in state.connections_for_eviction() {
+                connection.retire();
+            }
+            state.prune();
+        }
+    }
+    CONNECTIONS.lock().await.retain(|key, slot| {
+        key == current
+            || key.budget_scope != current.budget_scope
+            || Arc::strong_count(slot) > 1
+    });
+    PARALLEL_CONNECTIONS.lock().await.retain(|key, pool| {
+        key == current
+            || key.budget_scope != current.budget_scope
+            || Arc::strong_count(pool) > 1
+    });
+}
+
 /// Returns the live shared connection for `authority`, establishing one on
 /// first use or after a previous connection died.
 async fn shared_connection_single(
+    route: &DownloadRoute,
+    reserve_native_budget: bool,
+    allow_cold_connection: bool,
+) -> Result<Arc<SharedH2Connection>, H2ConnectError> {
+    let deadline = tokio::time::Instant::now() + CONNECTION_WAIT_TIMEOUT;
+    for attempt in 0..2 {
+        let (_, lease) = connection_identity(route)?;
+        let result = tokio::time::timeout_at(
+            deadline,
+            shared_connection_single_attempt(
+                route,
+                reserve_native_budget,
+                allow_cold_connection,
+            ),
+        )
+        .await
+        .map_err(|_| {
+            H2ConnectError::new(
+                H2ConnectFailureKind::Tcp,
+                "H2 connection deadline exhausted".into(),
+            )
+        })?;
+        match result {
+            Ok(connection) => return Ok(connection),
+            Err(error) => {
+                if let Some(lease) = &lease
+                    && let Some(clients) = super::proxy_context::clients()
+                {
+                    clients.endpoints.record_failure(
+                        lease,
+                        error.kind == H2ConnectFailureKind::Tls,
+                    );
+                    if attempt == 0 && !clients.endpoints.is_current(lease) {
+                        continue;
+                    }
+                }
+                return Err(error);
+            }
+        }
+    }
+    unreachable!("bounded H2 attempts always return")
+}
+
+async fn shared_connection_single_attempt(
     route: &DownloadRoute,
     reserve_native_budget: bool,
     allow_cold_connection: bool,
@@ -791,11 +981,9 @@ async fn shared_connection_single(
                 "HTTP/2 route has no authority".to_string(),
             )
         })?;
-    let slot = connection_slot(&super::proxy_context::authority_key(
-        &authority,
-        route.proxy,
-    ))
-    .await;
+    let (key, lease) = connection_identity(route)?;
+    retire_obsolete_connections(&key).await;
+    let slot = connection_slot(&key).await;
     let deadline = tokio::time::Instant::now() + CONNECTION_WAIT_TIMEOUT;
     let mut cached = tokio::time::timeout_at(deadline, slot.lock())
         .await
@@ -843,7 +1031,7 @@ async fn shared_connection_single(
     tracing::debug!(authority, "Establishing cold shared HTTP/2 connection");
     let connection = tokio::time::timeout_at(
         deadline,
-        establish(route, reserve_native_budget),
+        establish(route, reserve_native_budget, lease),
     )
     .await
     .map_err(|_| {
@@ -852,6 +1040,13 @@ async fn shared_connection_single(
             format!("timed out establishing HTTP/2 connection to {authority}"),
         )
     })??;
+    if !connection_matches(route, connection.endpoint_lease.as_ref()) {
+        connection.retire();
+        return Err(H2ConnectError::new(
+            H2ConnectFailureKind::Tcp,
+            "Endpoint selection changed during the H2 handshake".into(),
+        ));
+    }
     *cached = Some(Arc::clone(&connection));
     Ok(connection)
 }
@@ -874,21 +1069,21 @@ pub(crate) async fn shared_connection(
         .await;
     }
 
-    let authority =
-        crate::util::fetch::url_authority(&route.url).ok_or_else(|| {
-            H2ConnectError::new(
-                H2ConnectFailureKind::Protocol,
-                "HTTP/2 route has no authority".to_string(),
-            )
-        })?;
-    let key = super::proxy_context::authority_key(&authority, route.proxy);
-    let pool = parallel_connection_pool(&key).await;
     let primary = shared_connection_single(
         route,
         reserve_native_budget,
         allow_cold_connection,
     )
     .await?;
+    let (key, lease) = connection_identity(route)?;
+    if !connection_matches(route, primary.endpoint_lease.as_ref()) {
+        primary.retire();
+        return Err(H2ConnectError::new(
+            H2ConnectFailureKind::Tcp,
+            "Endpoint changed before H2 stream assignment".into(),
+        ));
+    }
+    let pool = parallel_connection_pool(&key).await;
     let route = route.clone();
     let clients = super::proxy_context::clients();
     select_parallel_connection(
@@ -896,7 +1091,19 @@ pub(crate) async fn shared_connection(
         primary,
         allow_cold_connection,
         move || async move {
-            let establish = establish(&route, reserve_native_budget);
+            let establish = async {
+                let sibling =
+                    establish(&route, reserve_native_budget, lease).await?;
+                if !connection_matches(&route, sibling.endpoint_lease.as_ref())
+                {
+                    sibling.retire();
+                    return Err(H2ConnectError::new(
+                        H2ConnectFailureKind::Tcp,
+                        "Endpoint selection changed during H2 expansion".into(),
+                    ));
+                }
+                Ok(sibling)
+            };
             match clients {
                 Some(clients) => {
                     super::proxy_context::with_snapshot(clients, establish)
@@ -1026,17 +1233,11 @@ pub(crate) async fn shared_batch_connection(
 }
 
 pub(crate) async fn has_live_connection(route: &DownloadRoute) -> bool {
-    let connections = CONNECTIONS.lock().await;
-    let Some(authority) = crate::util::fetch::url_authority(&route.url) else {
+    let Ok((key, _)) = connection_identity(route) else {
         return false;
     };
-    let Some(slot) = connections
-        .get(&super::proxy_context::authority_key(
-            &authority,
-            route.proxy,
-        ))
-        .cloned()
-    else {
+    let connections = CONNECTIONS.lock().await;
+    let Some(slot) = connections.get(&key).cloned() else {
         return false;
     };
     drop(connections);

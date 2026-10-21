@@ -552,6 +552,15 @@ async fn single_stream(
                     total_size.saturating_sub(downloaded),
                     super::local_resources::pressure(part_path),
                 );
+                if matches!(decision, super::native_slow::SlowDecision::Probe { .. })
+                    && let Some(clients) = super::proxy_context::clients()
+                {
+                    clients.endpoints.on_slow(request, route, &clients,
+                        super::endpoint_selection::Protocol::H2,
+                        connection.remote_addr.map(|address| address.ip()),
+                        total_size.saturating_sub(downloaded), super::local_resources::pressure(part_path));
+                    if clients.endpoints.is_probing() { continue; }
+                }
                 if matches!(decision, super::native_slow::SlowDecision::Probe { .. }
                     | super::native_slow::SlowDecision::Idle { .. }) {
                     tracing::warn!(

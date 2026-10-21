@@ -32,6 +32,21 @@ pub(crate) fn byte_range_header_value(
 pub(crate) async fn send_cdn_request(
     builder: reqwest::RequestBuilder,
 ) -> crate::Result<reqwest::Response> {
+    send_cdn_request_inner(builder, None).await
+}
+
+pub(crate) async fn send_cdn_request_with_clients(
+    builder: reqwest::RequestBuilder,
+    clients: &DownloadClients,
+    proxy: ProxyPolicy,
+) -> crate::Result<reqwest::Response> {
+    send_cdn_request_inner(builder, Some((clients, proxy))).await
+}
+
+async fn send_cdn_request_inner(
+    builder: reqwest::RequestBuilder,
+    selection: Option<(&DownloadClients, ProxyPolicy)>,
+) -> crate::Result<reqwest::Response> {
     let (client, request) = builder.build_split();
     let mut request = request?;
     *request.url_mut() =
@@ -39,7 +54,22 @@ pub(crate) async fn send_cdn_request(
     let original = request.url().clone();
     for hop in 0..=5 {
         let next_request = request.try_clone();
-        let response = client.execute(request).await?;
+        let pinned = selection.and_then(|(clients, proxy)| {
+            let fallback = url_authority(request.url().as_str()).is_some_and(
+                |authority| {
+                    authority_uses_http1_fallback_for(&authority, proxy)
+                },
+            );
+            clients.endpoints.client_for(
+                request.url(),
+                proxy,
+                clients,
+                fallback,
+            )
+        });
+        let active_client =
+            pinned.as_ref().map_or(&client, |(client, _)| client);
+        let response = active_client.execute(request).await?;
         if !response.status().is_redirection() || hop == 5 {
             return Ok(response);
         }
@@ -110,8 +140,8 @@ pub(crate) async fn send_path_request_with_clients(
     current = retired_sources::normalize_parsed(current)?;
     let mut reused_redirect_target = current != original;
     for redirect_count in 0..=5 {
-        let fallback_to_http1 =
-            url_authority(current.as_str()).is_some_and(|authority| {
+        let fallback_to_http1 = clients.force_http1
+            || url_authority(current.as_str()).is_some_and(|authority| {
                 authority_uses_http1_fallback_for(&authority, route.proxy)
             });
         let (system_client_for_hop, direct_client_for_hop): (
@@ -127,6 +157,13 @@ pub(crate) async fn send_path_request_with_clients(
         } else {
             system_client_for_hop
         };
+        let pinned = clients.endpoints.client_for(
+            &current,
+            route.proxy,
+            clients,
+            fallback_to_http1,
+        );
+        let client = pinned.as_ref().map_or(client, |(client, _)| client);
         let same_as_original = same_origin(&original, &current);
         let allow_sensitive = route.allow_sensitive_headers && same_as_original;
         let mut request = client.get(current.clone());
@@ -160,6 +197,9 @@ pub(crate) async fn send_path_request_with_clients(
         let mut response = match request.send().await {
             Ok(response) => response,
             Err(error) => {
+                if let Some((_, lease)) = &pinned {
+                    clients.endpoints.record_failure(lease, false);
+                }
                 tracing::warn!(
                     url = %sanitize_url_for_log(current.as_str()),
                     http1_fallback = fallback_to_http1,

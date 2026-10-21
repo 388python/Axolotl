@@ -735,7 +735,9 @@ impl State {
             settings.doh_enabled,
         )?;
         crate::state::proxy_settings::set(&self.pool, config).await?;
-        *self.configured_http_client.write() = client;
+        let mut current = self.configured_http_client.write();
+        current.endpoints.close();
+        *current = client;
         Ok(())
     }
 
@@ -759,7 +761,9 @@ impl State {
             settings.ignore_ssl_errors,
             settings.doh_enabled,
         )?;
-        *self.configured_http_client.write() = client;
+        let mut current = self.configured_http_client.write();
+        current.endpoints.close();
+        *current = client;
         Ok(())
     }
 

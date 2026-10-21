@@ -56,8 +56,9 @@ impl ProbeSession {
         {
             return Err(ProbeFailure::Ineligible);
         }
-        let permit = crate::util::download::native_budget::try_acquire(route)
-            .map_err(|_| ProbeFailure::BudgetExhausted)?;
+        let permit =
+            crate::util::download::native_budget::try_acquire_recovery(route)
+                .map_err(|_| ProbeFailure::BudgetExhausted)?;
         let client = probe_client_builder(&candidate, &target)
             .build()
             .map_err(|_| ProbeFailure::Transport)?;
@@ -221,16 +222,25 @@ impl ProbeSession {
                 return Err(ProbeFailure::Truncated);
             }
             let observed_at = Instant::now();
+            let complete_object = complete && received == self.target.size;
             Ok(ProbeObservation {
                 sample: ThroughputSample {
                     ip: self.candidate.ip,
                     protocol: self.target.protocol,
                     connection_id,
                     bytes: received,
-                    elapsed: observed_at
-                        .saturating_duration_since(body_started),
+                    // Full small objects compare total completion cost. A
+                    // cold handshake must not disappear into a body-only
+                    // rate inferred from a millisecond-long cached response.
+                    elapsed: observed_at.saturating_duration_since(
+                        if complete_object {
+                            started_at
+                        } else {
+                            body_started
+                        },
+                    ),
                     observed_at,
-                    complete_object: complete && received == self.target.size,
+                    complete_object,
                     contaminated: false,
                 },
                 remote_addr,

@@ -25,6 +25,7 @@ struct TlsFixture {
     requests: Arc<AtomicU64>,
     server: tokio::task::JoinHandle<()>,
     protocol: Protocol,
+    rustls_root: rustls_pki_types::CertificateDer<'static>,
 }
 
 impl Drop for TlsFixture {
@@ -52,6 +53,16 @@ impl TlsFixture {
         protocol: Protocol,
         expired: bool,
     ) -> Self {
+        Self::start_on(host, kind, protocol, expired, Ipv4Addr::LOCALHOST).await
+    }
+
+    async fn start_on(
+        host: &str,
+        kind: ResponseKind,
+        protocol: Protocol,
+        expired: bool,
+        bind_ip: Ipv4Addr,
+    ) -> Self {
         let mut ca_params = CertificateParams::new(vec![]).unwrap();
         ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         let ca_key = KeyPair::generate().unwrap();
@@ -76,9 +87,8 @@ impl TlsFixture {
             config.alpn_protocols = vec![b"h2".to_vec()];
         }
         let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
-        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .await
-            .unwrap();
+        let listener =
+            tokio::net::TcpListener::bind((bind_ip, 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let root = reqwest::Certificate::from_der(ca.der()).unwrap();
         let requests = Arc::new(AtomicU64::new(0));
@@ -138,7 +148,8 @@ impl TlsFixture {
                             }
                             counted.fetch_add(1, Ordering::SeqCst);
                             let request = String::from_utf8(request).unwrap();
-                            assert!(request.contains("host: cdn.modrinth.com:"));
+                            assert!(request.lines().any(|line| line == "host: cdn.modrinth.com"
+                                || line.starts_with("host: cdn.modrinth.com:")));
                             assert!(!request.contains("authorization:"));
                             assert!(!request.contains(crate::util::fetch::DOWNLOAD_META_HEADER));
                             let range = request.lines().find_map(|line| line.strip_prefix("range: bytes=0-")).unwrap();
@@ -166,6 +177,7 @@ impl TlsFixture {
             }
         });
         Self {
+            rustls_root: ca.der().clone(),
             address,
             root,
             requests,
@@ -209,6 +221,174 @@ impl TlsFixture {
             Arc::new(AtomicU64::new(0)),
         )
     }
+}
+
+fn production_clients(
+    fixture: &TlsFixture,
+) -> crate::util::fetch::DownloadClients {
+    let mut clients = crate::util::fetch::DownloadClients::build(
+        &crate::util::proxy::ProxyConfig {
+            mode: crate::util::proxy::ProxyMode::None,
+            ..Default::default()
+        },
+        false,
+        false,
+    )
+    .unwrap();
+    clients.endpoints =
+        crate::util::download::endpoint_selection::EndpointSelector::with_mode(
+            clients.scope.clone(),
+            crate::util::download::endpoint_selection::SelectionMode::Auto,
+        );
+    clients
+        .endpoints
+        .pinned_clients
+        .trust_test_root(fixture.root.clone());
+    clients
+        .endpoints
+        .install_test_selection(fixture.address, fixture.protocol);
+    clients
+}
+
+fn fixture_route() -> DownloadRoute {
+    DownloadRoute {
+        url: "https://cdn.modrinth.com/data/project/file.jar".into(),
+        source: DownloadRouteSource::Official,
+        is_mirror: false,
+        allow_sensitive_headers: true,
+        supports_range: true,
+        proxy: ProxyPolicy::Direct,
+    }
+}
+
+#[tokio::test]
+async fn production_reqwest_requests_and_retries_follow_new_selection_without_dns_override()
+ {
+    let first =
+        TlsFixture::start("cdn.modrinth.com", ResponseKind::Valid).await;
+    let second = TlsFixture::start_on(
+        "cdn.modrinth.com",
+        ResponseKind::Valid,
+        Protocol::Http1,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let clients = production_clients(&first);
+    clients
+        .endpoints
+        .pinned_clients
+        .trust_test_root(second.root.clone());
+    let route = fixture_route();
+    for expected in [first.address, second.address] {
+        clients
+            .endpoints
+            .install_test_selection(expected, Protocol::Http1);
+        let (response, _) = crate::util::download::native_request::send_path_request_with_clients(
+            &route, None, None, None, Some(0), Some(65535), &clients, None).await.unwrap();
+        assert_eq!(response.remote_addr(), Some(expected));
+        assert_eq!(response.bytes().await.unwrap().len(), 65536);
+    }
+    assert_eq!(first.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(second.requests.load(Ordering::SeqCst), 1);
+    assert!(
+        clients
+            .direct_dns
+            .host_override("cdn.modrinth.com")
+            .is_none()
+    );
+    assert!(
+        clients
+            .direct_dns
+            .resolved_addresses("cdn.modrinth.com")
+            .is_empty()
+    );
+    let response =
+        crate::util::download::native_request::send_cdn_request_with_clients(
+            clients
+                .direct
+                .get(&route.url)
+                .header(header::RANGE, "bytes=0-65535"),
+            &clients,
+            route.proxy,
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.remote_addr(), Some(second.address));
+    assert_eq!(response.bytes().await.unwrap().len(), 65536);
+}
+
+#[tokio::test]
+async fn native_h2_new_selection_retires_old_pool_and_preserves_authority_budget()
+ {
+    use crate::util::download::{h2_pool, native_budget, proxy_context};
+    let first = TlsFixture::start_protocol(
+        "cdn.modrinth.com",
+        ResponseKind::Valid,
+        Protocol::H2,
+    )
+    .await;
+    let second = TlsFixture::start_on(
+        "cdn.modrinth.com",
+        ResponseKind::Valid,
+        Protocol::H2,
+        false,
+        Ipv4Addr::new(127, 0, 0, 2),
+    )
+    .await;
+    let clients = production_clients(&first);
+    let selector = clients.endpoints.clone();
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(first.rustls_root.clone()).unwrap();
+    roots.add(second.rustls_root.clone()).unwrap();
+    let mut config = rustls::ClientConfig::builder()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"h2".to_vec()];
+    let route = fixture_route();
+    proxy_context::with_snapshot(
+        clients,
+        h2_pool::with_test_tls_config(Arc::new(config), async {
+            let initial_budget = native_budget::available(&route);
+            let initial_key = proxy_context::authority_key(
+                "cdn.modrinth.com:443",
+                route.proxy,
+            );
+            let old = h2_pool::shared_connection(&route, true, true, false)
+                .await
+                .unwrap();
+            assert_eq!(old.remote_addr, Some(first.address));
+            let active = old.track_stream();
+            selector.install_test_selection(second.address, Protocol::H2);
+            assert!(!h2_pool::has_live_connection(&route).await);
+            let new = h2_pool::shared_connection(&route, true, true, false)
+                .await
+                .unwrap();
+            assert_eq!(new.remote_addr, Some(second.address));
+            assert_ne!(old.connection_id, new.connection_id);
+            assert!(old.is_retiring());
+            assert!(!old.is_dead());
+            assert_eq!(
+                initial_key,
+                proxy_context::authority_key(
+                    "cdn.modrinth.com:443",
+                    route.proxy
+                )
+            );
+            assert_eq!(native_budget::available(&route), initial_budget - 2);
+            drop(active);
+            new.retire();
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while !old.is_dead() || !new.is_dead() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(native_budget::available(&route), initial_budget);
+        }),
+    )
+    .await;
 }
 
 #[tokio::test]

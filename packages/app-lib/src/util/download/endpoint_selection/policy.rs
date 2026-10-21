@@ -60,15 +60,16 @@ pub(super) fn rank_candidates(
     protocol: Protocol,
     now: Instant,
 ) -> Vec<(IpAddr, u64)> {
-    let mut grouped: HashMap<IpAddr, Vec<&ThroughputSample>> = HashMap::new();
+    let mut grouped: HashMap<(IpAddr, bool, u64), Vec<&ThroughputSample>> =
+        HashMap::new();
     let mut seen = HashSet::new();
     for sample in samples {
         if sample.protocol != protocol
             || sample.contaminated
             || sample.bytes < VALIDATION_BYTES
-            || sample.complete_object && sample.bytes < SAMPLE_BYTES
             || sample.elapsed.is_zero()
-            || sample.elapsed < Duration::from_millis(250)
+            || !sample.complete_object
+                && sample.elapsed < Duration::from_millis(250)
                 && sample.bytes < SAMPLE_BYTES
             || sample.observed_at > now
             || now.saturating_duration_since(sample.observed_at)
@@ -81,10 +82,21 @@ pub(super) fn rank_candidates(
         {
             continue;
         }
-        grouped.entry(sample.ip).or_default().push(sample);
+        grouped
+            .entry((
+                sample.ip,
+                sample.complete_object,
+                if sample.complete_object {
+                    sample.bytes
+                } else {
+                    0
+                },
+            ))
+            .or_default()
+            .push(sample);
     }
     let mut ranked = Vec::new();
-    for (ip, mut samples) in grouped {
+    for ((ip, _, _), mut samples) in grouped {
         samples.sort_by_key(|sample| sample.observed_at);
         let mut rates: Vec<u64> = Vec::new();
         let mut previous_end = None;

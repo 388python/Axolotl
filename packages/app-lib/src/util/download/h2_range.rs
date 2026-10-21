@@ -189,6 +189,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
         );
         clients.system = clients.http1_system.clone();
         clients.direct = clients.http1_direct.clone();
+        clients.force_http1 = true;
         let (response, _) =
             super::native_request::send_path_request_with_clients(
                 self.route,

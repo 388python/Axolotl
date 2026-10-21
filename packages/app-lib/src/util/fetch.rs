@@ -1116,6 +1116,9 @@ pub(crate) struct DownloadClients {
     pub(crate) system_dns: Arc<DownloadDnsResolver>,
     pub(crate) direct_dns: Arc<DownloadDnsResolver>,
     pub(crate) doh_enabled: bool,
+    pub(crate) force_http1: bool,
+    pub(crate) endpoints:
+        Arc<super::download::endpoint_selection::EndpointSelector>,
 }
 
 impl DownloadClients {
@@ -1159,6 +1162,14 @@ impl DownloadClients {
             builder.build().map_err(crate::Error::from)
         };
         Ok(Self {
+            endpoints:
+                super::download::endpoint_selection::EndpointSelector::new(
+                    super::download::proxy_context::fingerprint_with_doh(
+                        proxy,
+                        ignore_ssl_errors,
+                        doh_enabled,
+                    ),
+                ),
             metadata: proxy
                 .apply(
                     reqwest_client_builder()
@@ -1180,6 +1191,7 @@ impl DownloadClients {
             system_dns,
             direct_dns,
             doh_enabled,
+            force_http1: false,
         })
     }
 
@@ -1194,6 +1206,7 @@ impl DownloadClients {
             ) {
                 clients.system = clients.http1_system.clone();
                 clients.direct = clients.http1_direct.clone();
+                clients.force_http1 = true;
             }
             return clients;
         }
@@ -1209,6 +1222,14 @@ impl DownloadClients {
             system_dns: Arc::clone(&DOWNLOAD_DNS_RESOLVER),
             direct_dns: Arc::clone(&DOWNLOAD_DNS_RESOLVER),
             doh_enabled: false,
+            force_http1: std::ptr::eq(
+                system,
+                &raw const *HTTP1_NO_REDIRECT_REQWEST_CLIENT,
+            ),
+            endpoints:
+                super::download::endpoint_selection::EndpointSelector::new(
+                    "unconfigured",
+                ),
         }
     }
 }
@@ -2187,7 +2208,12 @@ async fn fetch_advanced_inner(
             let result = if modrinth_request_kind == Some("CDN")
                 && method == Method::GET
             {
-                super::download::native_request::send_cdn_request(req).await
+                super::download::native_request::send_cdn_request_with_clients(
+                    req,
+                    &download_clients,
+                    route.proxy,
+                )
+                .await
             } else {
                 req.send().await.map_err(crate::Error::from)
             };
@@ -5700,6 +5726,8 @@ async fn download_to_path_inner(
     semaphore: &FetchSemaphore,
     progress: Option<&mut FetchProgressFn<'_>>,
 ) -> crate::Result<DownloadResult> {
+    let _endpoint_registration = super::download::proxy_context::clients()
+        .and_then(|clients| clients.endpoints.register_download(&request));
     if let Some(parent) = destination.parent() {
         io::create_dir_all(parent).await?;
     }
@@ -6910,6 +6938,17 @@ async fn run_native_route_attempts(
                         total_size.saturating_sub(downloaded),
                         super::download::local_resources::pressure(part_path),
                     );
+                    if matches!(slow_decision, super::download::native_slow::SlowDecision::Probe { .. })
+                        && let Some(clients) = super::download::proxy_context::clients()
+                    {
+                        let protocol = if http_version == reqwest::Version::HTTP_2 {
+                            super::download::endpoint_selection::Protocol::H2
+                        } else { super::download::endpoint_selection::Protocol::Http1 };
+                        clients.endpoints.on_slow(request, route, &clients, protocol,
+                            remote_addr.map(|address| address.ip()), total_size.saturating_sub(downloaded),
+                            super::download::local_resources::pressure(part_path));
+                        if clients.endpoints.is_probing() { continue; }
+                    }
                     if downgrade_slow_http2 && alternate_probe_finished
                         && let crate::util::download::native_slow::SlowDecision::Probe {
                             bytes_per_second,
