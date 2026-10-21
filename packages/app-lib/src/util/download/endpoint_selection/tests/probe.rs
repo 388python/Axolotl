@@ -129,10 +129,13 @@ impl TlsFixture {
                                     assert_eq!(request.uri().host(), Some("cdn.modrinth.com"));
                                     assert!(request.headers().get(header::AUTHORIZATION).is_none());
                                     assert!(request.headers().get(crate::util::fetch::DOWNLOAD_META_HEADER).is_none());
-                                    let length = request.headers()[header::RANGE].to_str().unwrap()
-                                        .strip_prefix("bytes=0-").unwrap().parse::<usize>().unwrap() + 1;
+                                    let (start, end) = request.headers()[header::RANGE].to_str().unwrap()
+                                        .strip_prefix("bytes=").unwrap().split_once('-').unwrap();
+                                    let start = start.parse::<usize>().unwrap();
+                                    let end = end.parse::<usize>().unwrap();
+                                    let length = end + 1 - start;
                                     let response = http::Response::builder().status(206)
-                                        .header(header::CONTENT_RANGE, format!("bytes 0-{}/1048576", length - 1))
+                                        .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/1048576"))
                                         .header(header::CONTENT_LENGTH, length)
                                         .header("x-served-by", "cache-h2-test")
                                         .body(()).unwrap();
@@ -191,15 +194,18 @@ impl TlsFixture {
                                 let _ = stream.shutdown().await;
                                 return;
                             }
-                            let range = request.lines().find_map(|line| line.strip_prefix("range: bytes=0-")).unwrap();
-                            let length = range.trim().parse::<u64>().unwrap() + 1;
+                            let range = request.lines().find_map(|line| line.strip_prefix("range: bytes=")).unwrap();
+                            let (start, end) = range.trim().split_once('-').unwrap();
+                            let start = start.parse::<u64>().unwrap();
+                            let end = end.parse::<u64>().unwrap();
+                            let length = end + 1 - start;
                             let header = match kind {
                                 ResponseKind::IgnoreRange => "HTTP/1.1 200 OK\r\nContent-Length: 999999999\r\n\r\n".to_string(),
                                 ResponseKind::Redirect => "HTTP/1.1 302 Found\r\nLocation: https://different.invalid/file\r\nContent-Length: 0\r\n\r\n".to_string(),
                                 ResponseKind::RateLimited => "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 30\r\nContent-Length: 0\r\n\r\n".to_string(),
                                 ResponseKind::Missing => "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n".to_string(),
-                                _ => format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes 0-{}/{}\r\nContent-Length: {length}\r\n{}X-Served-By: cache-test\r\nX-Cache: HIT\r\nConnection: close\r\n\r\n",
-                                    length - 1, if matches!(kind, ResponseKind::WrongTotal) { 999_999 } else { 1_048_576 },
+                                _ => format!("HTTP/1.1 206 Partial Content\r\nContent-Range: bytes {start}-{end}/{}\r\nContent-Length: {length}\r\n{}X-Served-By: cache-test\r\nX-Cache: HIT\r\nConnection: close\r\n\r\n",
+                                    if matches!(kind, ResponseKind::WrongTotal) { 999_999 } else { 1_048_576 },
                                     if matches!(kind, ResponseKind::Encoded) { "Content-Encoding: gzip\r\n" } else { "" }),
                             };
                             if stream.write_all(header.as_bytes()).await.is_err() { return; }
@@ -233,6 +239,7 @@ impl TlsFixture {
             ))
             .unwrap(),
             size: 1_048_576,
+            region: 0..1_048_576,
             protocol: self.protocol,
         };
         let candidate = EndpointCandidate {
@@ -502,7 +509,7 @@ async fn automatic_trial_measures_candidates_with_only_one_recovery_slot_and_res
         .unwrap();
     assert_eq!(lease.pool.endpoint, fast.address);
     assert_eq!(request.endpoint_migrations.load(Ordering::Relaxed), 1);
-    assert!(slow.requests.load(Ordering::SeqCst) >= 4);
+    assert_eq!(slow.requests.load(Ordering::SeqCst), 1);
     assert!(fast.requests.load(Ordering::SeqCst) >= 4);
     assert_eq!(
         request.transfer_counters.snapshot().received_payload_bytes,
@@ -773,6 +780,61 @@ async fn validates_real_h2_tls_alpn_peer_and_bounded_payload() {
 }
 
 #[tokio::test]
+async fn probes_unfinished_region_with_exact_nonzero_bounds_over_http1_and_h2()
+{
+    for protocol in [Protocol::Http1, Protocol::H2] {
+        let fixture = TlsFixture::start_protocol(
+            "cdn.modrinth.com",
+            ResponseKind::Valid,
+            protocol,
+        )
+        .await;
+        let mut session = fixture.session(true);
+        session.target.region = 983_040..1_048_576;
+        let result = session
+            .validate_endpoint(
+                &Mutex::new(ProbeBudget::new(
+                    Instant::now(),
+                    policy::ROUND_BYTES,
+                )),
+                &CancellationToken::new(),
+                Instant::now() + Duration::from_secs(2),
+            )
+            .await
+            .unwrap();
+        assert_eq!(result.sample.bytes, 65_536);
+        assert!(result.sample.complete_object);
+        assert_eq!(result.remote_addr, fixture.address);
+    }
+}
+
+#[test]
+fn nonzero_range_validation_rejects_prefix_wrong_end_and_overflow() {
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::CONTENT_RANGE,
+        "bytes 983040-1048575/1048576".parse().unwrap(),
+    );
+    headers.insert(header::CONTENT_LENGTH, "65536".parse().unwrap());
+    assert_eq!(
+        validate_headers(&headers, 983_040, 65_536, 1_048_576),
+        Ok(())
+    );
+    assert_eq!(
+        validate_headers(&headers, 0, 65_536, 1_048_576),
+        Err(ProbeFailure::InvalidRange)
+    );
+    assert_eq!(
+        validate_headers(&headers, 983_040, 65_535, 1_048_576),
+        Err(ProbeFailure::InvalidRange)
+    );
+    assert_eq!(
+        validate_headers(&headers, u64::MAX, 2, u64::MAX),
+        Err(ProbeFailure::InvalidRange)
+    );
+}
+
+#[tokio::test]
 async fn wrong_hostname_and_untrusted_ca_fail_before_any_http_request() {
     for (host, trust, expired) in [
         ("different.invalid", true, false),
@@ -880,7 +942,7 @@ fn header_checks_reject_wrong_bounds_unknown_total_short_or_missing_length() {
         headers.insert(header::CONTENT_RANGE, range.parse().unwrap());
         headers.insert(header::CONTENT_LENGTH, "65536".parse().unwrap());
         assert_eq!(
-            validate_headers(&headers, 65536, 1048576),
+            validate_headers(&headers, 0, 65536, 1048576),
             Err(ProbeFailure::InvalidRange)
         );
     }
@@ -895,7 +957,7 @@ fn header_checks_reject_wrong_bounds_unknown_total_short_or_missing_length() {
             headers.insert(header::CONTENT_LENGTH, length.parse().unwrap());
         }
         assert_eq!(
-            validate_headers(&headers, 65536, 1048576),
+            validate_headers(&headers, 0, 65536, 1048576),
             Err(ProbeFailure::InvalidRange)
         );
     }
@@ -935,6 +997,7 @@ fn production_probe_rejects_custom_proxy_insecure_tls_nonpublic_and_expired_cand
             .parse()
             .unwrap(),
         size: 1_048_576,
+        region: 0..1_048_576,
         protocol: Protocol::H2,
     };
     let candidate = EndpointCandidate {

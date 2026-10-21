@@ -60,6 +60,8 @@ impl ProbeSession {
             || !target.url.path().starts_with("/data/")
             || target.url.query().is_some()
             || target.size == 0
+            || target.region.start >= target.region.end
+            || target.region.end > target.size
             || candidate.expires_at <= Instant::now()
             || !public_candidate
         {
@@ -153,9 +155,10 @@ impl ProbeSession {
             {
                 return Err(ProbeFailure::Timeout);
             }
-            let length = budget
-                .lock()
-                .reserve(wanted.min(self.target.size), Instant::now());
+            let length = budget.lock().reserve(
+                wanted.min(self.target.region.end - self.target.region.start),
+                Instant::now(),
+            );
             if length == 0 {
                 return Err(ProbeFailure::BudgetExhausted);
             }
@@ -166,7 +169,14 @@ impl ProbeSession {
                 deadline.into(),
                 self.client
                     .get(self.target.url.clone())
-                    .header(header::RANGE, format!("bytes=0-{}", length - 1))
+                    .header(
+                        header::RANGE,
+                        format!(
+                            "bytes={}-{}",
+                            self.target.region.start,
+                            self.target.region.start + length - 1
+                        ),
+                    )
                     .header(header::ACCEPT_ENCODING, "identity")
                     .send(),
             )
@@ -193,7 +203,12 @@ impl ProbeSession {
                 StatusCode::PARTIAL_CONTENT => {}
                 _ => return Err(ProbeFailure::HttpStatus),
             }
-            validate_headers(response.headers(), length, self.target.size)?;
+            validate_headers(
+                response.headers(),
+                self.target.region.start,
+                length,
+                self.target.size,
+            )?;
             let remote_addr =
                 response.remote_addr().ok_or(ProbeFailure::WrongPeer)?;
             if remote_addr.ip() != self.candidate.ip {
@@ -246,14 +261,16 @@ impl ProbeSession {
                 return Err(ProbeFailure::Truncated);
             }
             let observed_at = Instant::now();
-            let complete_object = complete && received == self.target.size;
+            let complete_object = complete
+                && received
+                    == self.target.region.end - self.target.region.start;
             Ok(ProbeObservation {
                 sample: ThroughputSample {
                     ip: self.candidate.ip,
                     protocol: self.target.protocol,
                     connection_id,
                     bytes: received,
-                    // Full small objects compare total completion cost. A
+                    // Complete unfinished regions compare total completion cost. A
                     // cold handshake must not disappear into a body-only
                     // rate inferred from a millisecond-long cached response.
                     elapsed: observed_at.saturating_duration_since(
@@ -329,6 +346,7 @@ fn classify_transport(error: reqwest::Error) -> ProbeFailure {
 
 fn validate_headers(
     headers: &header::HeaderMap,
+    start: u64,
     length: u64,
     total: u64,
 ) -> Result<(), ProbeFailure> {
@@ -338,7 +356,15 @@ fn validate_headers(
     {
         return Err(ProbeFailure::InvalidEncoding);
     }
-    let expected = format!("bytes 0-{}/{total}", length - 1);
+    let Some(end) =
+        start.checked_add(length).and_then(|end| end.checked_sub(1))
+    else {
+        return Err(ProbeFailure::InvalidRange);
+    };
+    if length == 0 || end >= total {
+        return Err(ProbeFailure::InvalidRange);
+    }
+    let expected = format!("bytes {start}-{end}/{total}");
     if headers
         .get(header::CONTENT_RANGE)
         .and_then(|value| value.to_str().ok())

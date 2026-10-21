@@ -62,6 +62,7 @@ trait RangeTransport: Sync {
         _identity: &RangeIdentity,
         _speed: u64,
         _remaining: u64,
+        _region: std::ops::Range<u64>,
         _pressure: super::local_resources::Pressure,
     ) -> bool {
         false
@@ -321,6 +322,7 @@ impl RangeTransport for NativeRangeTransport<'_> {
         identity: &RangeIdentity,
         speed: u64,
         remaining: u64,
+        region: std::ops::Range<u64>,
         pressure: super::local_resources::Pressure,
     ) -> bool {
         let Some(clients) = super::proxy_context::clients() else {
@@ -355,13 +357,14 @@ impl RangeTransport for NativeRangeTransport<'_> {
         } else {
             speed
         };
-        clients.endpoints.on_slow(
+        clients.endpoints.on_slow_region(
             self.request,
             self.route,
             &clients,
             protocol,
             identity.peer.map(|a| a.ip()),
-            remaining,
+            region,
+            Some(speed),
             pressure,
         );
         clients
@@ -749,7 +752,7 @@ async fn recover_range(
                     }
                     if let Some(speed) = last_slow_speed
                         && !pressure.blocks_expansion()
-                        && transport.on_slow(&identity, speed, range.end - offset, pressure) {
+                        && transport.on_slow(&identity, speed, range.end - offset, offset..range.end, pressure) {
                         failure = Some(H2DownloadFailure::EndpointChanged); break;
                     }
                     continue;
@@ -933,6 +936,7 @@ mod tests {
             _identity: &RangeIdentity,
             _speed: u64,
             _remaining: u64,
+            _region: std::ops::Range<u64>,
             _pressure: super::super::local_resources::Pressure,
         ) -> bool {
             true

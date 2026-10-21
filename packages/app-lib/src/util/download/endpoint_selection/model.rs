@@ -52,6 +52,8 @@ pub(crate) struct EndpointLease {
 pub(super) struct ProbeTarget {
     pub(super) url: url::Url,
     pub(super) size: u64,
+    /// Unfinished half-open interval that triggered recovery.
+    pub(super) region: std::ops::Range<u64>,
     pub(super) protocol: Protocol,
 }
 

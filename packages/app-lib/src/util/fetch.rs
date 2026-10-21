@@ -4784,13 +4784,15 @@ async fn download_segment(
                 last_slow_speed = Some(bytes_per_second);
                 if let Some(clients) = super::download::proxy_context::clients()
                 {
-                    clients.endpoints.on_slow(
+                    clients.endpoints.on_slow_region(
                         request,
                         route,
                         &clients,
                         super::download::endpoint_selection::Protocol::Http1,
                         remote_addr.map(|a| a.ip()),
-                        range.remaining(),
+                        range.start + downloaded_range
+                            ..range.end().saturating_add(1),
+                        Some(bytes_per_second),
                         pressure,
                     );
                 }
@@ -7159,8 +7161,8 @@ async fn run_native_route_attempts(
                         let protocol = if http_version == reqwest::Version::HTTP_2 {
                             super::download::endpoint_selection::Protocol::H2
                         } else { super::download::endpoint_selection::Protocol::Http1 };
-                        clients.endpoints.on_slow(request, route, &clients, protocol,
-                            remote_addr.map(|address| address.ip()), total_size.saturating_sub(downloaded),
+                        clients.endpoints.on_slow_region(request, route, &clients, protocol,
+                            remote_addr.map(|address| address.ip()), downloaded..total_size, Some(last_endpoint_speed),
                             super::download::local_resources::pressure(part_path));
                         if clients.endpoints.is_probing() { continue; }
                     }

@@ -272,6 +272,27 @@ async fn benchmark_fixture_smoke_is_local_and_verifies_one_complete_file() {
 }
 
 #[tokio::test]
+async fn real_slow_tail_is_probed_at_unfinished_offset_and_resumed_without_duplicate_payload()
+ {
+    let result = run(
+        Scenario::SlowTail,
+        Mode::Expanded,
+        0,
+        false,
+        64 * 1024 * 1024,
+    )
+    .await;
+    println!("tail_recovery {}", serde_json::to_string(&result).unwrap());
+    assert_eq!(
+        result.migrations, 1,
+        "tail recovery must actually change endpoint"
+    );
+    assert_eq!(result.attempts, 2);
+    assert_eq!(result.received_bytes, result.unique_bytes);
+    assert!(result.probe_bytes > 0 && result.probe_bytes <= 2 * 1024 * 1024);
+}
+
+#[tokio::test]
 async fn automatic_official_download_does_not_launch_a_duplicate_url_route_probe()
  {
     let stats = Arc::new(SocketStats::default());

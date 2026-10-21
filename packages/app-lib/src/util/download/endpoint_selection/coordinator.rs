@@ -668,6 +668,30 @@ impl EndpointSelector {
         remaining: u64,
         pressure: super::super::local_resources::Pressure,
     ) {
+        let size = request.integrity.size.unwrap_or(0);
+        self.on_slow_region(
+            request,
+            route,
+            clients,
+            protocol,
+            incumbent,
+            size.saturating_sub(remaining)..size,
+            None,
+            pressure,
+        );
+    }
+
+    pub(crate) fn on_slow_region(
+        self: &Arc<Self>,
+        request: &DownloadRequest,
+        route: &DownloadRoute,
+        clients: &DownloadClients,
+        protocol: Protocol,
+        incumbent: Option<IpAddr>,
+        region: std::ops::Range<u64>,
+        production_speed: Option<u64>,
+        pressure: super::super::local_resources::Pressure,
+    ) {
         if self.mode != SelectionMode::Auto {
             return;
         }
@@ -679,6 +703,8 @@ impl EndpointSelector {
             || request.header.is_some()
             || native_breaker::is_open(route)
             || pressure.blocks_expansion()
+            || region.start >= region.end
+            || region.end > request.integrity.size.unwrap_or(0)
         {
             return;
         }
@@ -710,6 +736,7 @@ impl EndpointSelector {
         let target = ProbeTarget {
             url,
             size: request.integrity.size.unwrap_or(0),
+            region,
             protocol,
         };
         tokio::spawn(async move {
@@ -750,7 +777,7 @@ impl EndpointSelector {
                         &route,
                         &clients,
                         incumbent,
-                        remaining,
+                        production_speed,
                         epoch,
                         generation,
                         allowance,
@@ -796,13 +823,14 @@ impl EndpointSelector {
         route: &DownloadRoute,
         clients: &DownloadClients,
         incumbent: Option<IpAddr>,
-        remaining: u64,
+        production_speed: Option<u64>,
         epoch: u64,
         generation: u64,
         allowance: u64,
         cancellation: &CancellationToken,
     ) -> RoundStatus {
         let started = Instant::now();
+        let remaining = target.region.end - target.region.start;
         let deadline = started + policy::ROUND_TIMEOUT;
         let resolver = if route.proxy == ProxyPolicy::Direct {
             &clients.direct_dns
@@ -858,6 +886,24 @@ impl EndpointSelector {
             })
             .unwrap_or(candidates);
         let budget = Mutex::new(ProbeBudget::new(started, allowance));
+        // The triggering pressure-free production window already proves a
+        // live, strictly verified incumbent. Re-downloading its slow tail
+        // would spend most of the remaining ETA before testing alternatives.
+        let production_incumbent = candidates
+            .iter()
+            .find(|candidate| {
+                Some(candidate.ip) == incumbent
+                    && production_speed.is_some_and(|speed| speed > 0)
+            })
+            .cloned();
+        let candidates = candidates
+            .into_iter()
+            .filter(|candidate| {
+                production_incumbent
+                    .as_ref()
+                    .is_none_or(|current| current.ip != candidate.ip)
+            })
+            .collect::<Vec<_>>();
         tracing::debug!(
             authority = modrinth_cdn::HOST,
             epoch,
@@ -932,6 +978,11 @@ impl EndpointSelector {
         let mut samples = Vec::new();
         for _ in 0..2 {
             for (candidate, _) in &validated {
+                if production_speed.is_some_and(|speed| speed > 0)
+                    && Some(candidate.ip) == incumbent
+                {
+                    continue;
+                }
                 if Instant::now() >= deadline
                     || budget.lock().remaining(Instant::now()) == 0
                 {
@@ -980,8 +1031,13 @@ impl EndpointSelector {
         let Some(incumbent) = incumbent else {
             return RoundStatus::NoGain;
         };
-        let Some((_, current_speed)) =
-            ranked.iter().find(|(ip, _)| *ip == incumbent)
+        let Some(current_speed) =
+            production_speed.filter(|speed| *speed > 0).or_else(|| {
+                ranked
+                    .iter()
+                    .find(|(ip, _)| *ip == incumbent)
+                    .map(|(_, speed)| *speed)
+            })
         else {
             return RoundStatus::NoGain;
         };
@@ -993,7 +1049,7 @@ impl EndpointSelector {
             .clamp(Duration::from_millis(100), Duration::from_secs(5));
         if best == incumbent
             || !super::super::native_slow::should_switch_with_overhead(
-                *current_speed,
+                current_speed,
                 speed,
                 remaining,
                 remaining,
@@ -1009,18 +1065,24 @@ impl EndpointSelector {
         else {
             return RoundStatus::NoGain;
         };
-        let previous = validated.iter().find(|(c, _)| c.ip == incumbent).map(
-            |(candidate, _)| Selection {
+        let previous = production_incumbent
+            .as_ref()
+            .or_else(|| {
+                validated
+                    .iter()
+                    .find(|(c, _)| c.ip == incumbent)
+                    .map(|(c, _)| c)
+            })
+            .map(|candidate| Selection {
                 reconnect_overhead: Duration::from_millis(600),
                 protocol: target.protocol,
                 preferred: candidate.clone(),
                 backups: Vec::new(),
-                speed: *current_speed,
+                speed: current_speed,
                 expires_at: candidate
                     .expires_at
                     .min(Instant::now() + policy::SELECTION_LIFETIME),
-            },
-        );
+            });
         let backups = validated
             .into_iter()
             .map(|(c, _)| c)

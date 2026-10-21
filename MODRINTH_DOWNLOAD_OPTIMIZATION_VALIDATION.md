@@ -114,6 +114,20 @@ Cargo 检查沿用配置的 target 和 profile，仅对命令进程临时设置 
 
 前一检查 `%TEMP%/axolotl-budget-cooldown-production-check.log` 的非测试 `cargo check -p theseus` 通过；连接槽复查后的 `%TEMP%/axolotl-slot-generation-check.log` 也通过。所有检查沿用原 target/profile，临时关闭 incremental。
 
+## 尾段恢复修复与保留的失败证据
+
+HEAD `4013d87df` 的完整慢尾部三模式对照跑完 30 次，测试程序退出 0，但 expanded 全部没有迁移，冷/暖中位耗时分别为 13867/13798ms。该结果不满足尾部恢复行为验收，不能用退出码代替验收。旧测速固定读取前缀，无法代表最后 512KiB 的慢速区间。原始逐轮数据已追加到 JSON，日志为 `%TEMP%/axolotl-slow-tail-full-comparison.log`。
+
+同状态 200 文件对照在第二个 batch 失败：off 的总耗时 94050ms、连接峰值 32；DNS 模式总耗时 96865ms、峰值 33，超过 32 条上限。两批各完成 117964800 字节，received=unique，没有迁移。已保留数据，尚未解释或豁免超限；reqwest 请求许可与池中实际 socket 生命周期仍需修正。日志为 `%TEMP%/axolotl-many-files-full-comparison.log`。
+
+本次修复把 ProbeTarget 明确为文件内的未完成半开区间，验证和吞吐请求都检查非零起止及原文件总长度。HTTP/1 单流、分段、H2 单流、H2 Range 均传递真实剩余范围。压力检查通过的触发生产窗口作为 incumbent 基准，避免再下载慢尾段两次；新候选仍需严格 TLS/Range 验证及两次一致样本。短剩余区间完成成本包含冷连接时间，不能当作饱和带宽外推。
+
+`%TEMP%/axolotl-region-tail-proof.log` 的真实 HTTPS 64MiB 文件仅最后 512KiB 为 45KiB/s，备选 5MiB/s；使用生产观察时间，完成 11418ms、一次迁移、两次尝试、一次探测轮，probe=401408 字节、峰值 2；生产 received=unique=67108864，最终 SHA-1 正确。这是单次恢复证明，未替代五轮完整对照。新增 HTTP/1/H2 非零 Range 和溢出拒绝测试。
+
+修复后 `%TEMP%/axolotl-region-selection-tests.log`：50 项通过、5 项显式基准跳过；`%TEMP%/axolotl-region-download-regression.log`：301 项通过、5 项显式基准跳过。`cargo fmt --all --check`、`git diff --check` 通过；先前 `cargo check -p theseus --tests` 通过，后续测试已重新编译最终代码。
+
+本任务启动的两项旧二进制长时基准（slow-fast/all-slow）在首个完整慢基线完成前停止，以便 Windows 链接修复后的同名测试程序。保留的进度日志不是完整验收数据，完整三模式慢网络对照仍未完成。未停止用户进程，未改 target/profile。
+
 ## 尚待完成的要求
 
 - 健康网络本地回归已在隔离 fixture 后通过；最终代码变化如影响该路径，仍须按范围复查。
