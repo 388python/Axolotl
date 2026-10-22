@@ -16,6 +16,13 @@ fn run_command(command: &mut Command, description: &str) {
     );
 }
 
+fn copy_if_changed(source: &std::path::Path, destination: &std::path::Path) {
+    let contents = std::fs::read(source).expect("Read generated resource");
+    if std::fs::read(destination).ok().as_deref() != Some(contents.as_slice()) {
+        std::fs::copy(source, destination).expect("Copy generated resource");
+    }
+}
+
 fn newest_mtime(path: &std::path::Path) -> Option<std::time::SystemTime> {
     let mut newest: Option<std::time::SystemTime> = None;
     if path.is_file() {
@@ -233,6 +240,9 @@ fn build_seed_map_engine() {
                     "-fwrapv",
                     "-static-libgcc",
                     "-Wl,--export-all-symbols",
+                    // Tauri watches the bundled DLL. Keep identical builds
+                    // byte-for-byte stable so syncing it preserves its mtime.
+                    "-Wl,--no-insert-timestamp",
                     "-Ivendor/cubiomes",
                 ])
                 .arg("-include")
@@ -244,13 +254,11 @@ fn build_seed_map_engine() {
         );
         let resources = std::path::Path::new("resources/seed-map");
         std::fs::create_dir_all(resources).expect("Create seed map resources");
-        std::fs::copy(&dll, resources.join("axolotl-cubiomes.dll"))
-            .expect("Bundle seed map DLL");
-        std::fs::copy(
-            source.join("LICENSE"),
-            resources.join("LICENSE.cubiomes.txt"),
-        )
-        .expect("Bundle cubiomes license");
+        copy_if_changed(&dll, &resources.join("axolotl-cubiomes.dll"));
+        copy_if_changed(
+            &source.join("LICENSE"),
+            &resources.join("LICENSE.cubiomes.txt"),
+        );
         println!(
             "cargo:rustc-env=AXOLOTL_CUBIOMES_BUILD_DLL={}",
             dll.display()
