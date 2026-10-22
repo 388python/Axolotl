@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 
+#[cfg(any(windows, test))]
+mod windows;
+
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize,
 )]
@@ -133,7 +136,12 @@ impl ProxyConfig {
     pub fn apply(&self, builder: ClientBuilder) -> Result<ClientBuilder> {
         match self.mode {
             ProxyMode::None => Ok(builder.no_proxy()),
-            ProxyMode::System => Ok(builder),
+            ProxyMode::System => {
+                #[cfg(windows)]
+                return windows::apply(builder);
+                #[cfg(not(windows))]
+                Ok(builder)
+            }
             ProxyMode::Custom => {
                 let url = self.custom_url_trimmed().ok_or_else(|| {
                     crate::ErrorKind::InputError(

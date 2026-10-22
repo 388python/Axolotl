@@ -22,7 +22,7 @@ export function useMojangAuthStatus() {
 /** Owned once by App, enabled only after the local application shell is ready. */
 export function setupMojangAuthMonitor(ready: Ref<boolean>) {
     const queryClient = useQueryClient()
-    const { browserOffline, setNetworkReachable } = useNetworkStatus()
+    const { browserOffline } = useNetworkStatus()
     const enabled = computed(() => ready.value && !browserOffline.value)
     const monitor = createMojangAuthMonitor({
         configuration: getMojangAuthConfiguration,
@@ -32,7 +32,6 @@ export function setupMojangAuthMonitor(ready: Ref<boolean>) {
         enabled: () => enabled.value,
         publish(value) {
             reachable.value = value
-            setNetworkReachable(value)
         },
     })
     const query = useQuery({

@@ -15,7 +15,7 @@ use crate::state::{
     YggdrasilAccount,
 };
 pub use crate::state::{MinecraftDeviceLoginFlow, MinecraftDeviceLoginPoll};
-use crate::util::fetch::INSECURE_REQWEST_CLIENT;
+use crate::util::fetch::authentication_client;
 use crate::util::mojang::{mojang_service_url, should_use_mojang_mirror};
 
 /// Budget for the Mojang reachability probes.
@@ -29,24 +29,13 @@ use crate::util::mojang::{mojang_service_url, should_use_mojang_mirror};
 /// idle check runs.
 const REACHABILITY_TIMEOUT: Duration = Duration::from_secs(12);
 
-/// The client used for reachability probes: the app's configured client, so a
-/// proxy the user configured is honoured exactly as it is for every other
-/// request. Before the app state exists (very early startup) the plain client
-/// is the only option.
-fn reachability_client() -> reqwest::Client {
-    match State::get_if_initialized() {
-        Some(state) => state.configured_http_client(),
-        None => INSECURE_REQWEST_CLIENT.clone(),
-    }
-}
-
 #[tracing::instrument]
 pub async fn check_reachable() -> crate::Result<()> {
     let url = mojang_service_url(
         "https://sessionserver.mojang.com/session/minecraft/hasJoined",
         should_use_mojang_mirror(),
     );
-    let resp = reachability_client()
+    let resp = authentication_client()
         .get(url.as_ref())
         .timeout(REACHABILITY_TIMEOUT)
         .send()
@@ -109,7 +98,7 @@ const MOJANG_SERVICES: [(&str, &str); 4] = [
 
 #[tracing::instrument]
 pub async fn check_mojang_services() -> Vec<MojangServiceStatus> {
-    let client = reachability_client();
+    let client = authentication_client();
     futures::future::join_all(MOJANG_SERVICES.map(|(service, url)| {
         let client = client.clone();
         async move {

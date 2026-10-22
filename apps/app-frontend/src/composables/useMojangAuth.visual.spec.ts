@@ -96,7 +96,8 @@ it('uses one retry scheduler and restores connectivity without reopening a page'
     app(ref(true))
     await flushPromises()
     expect(backend.apply).toHaveBeenNthCalledWith(1, 'auto', true)
-    expect(useNetworkStatus().offline.value).toBe(true)
+    expect(useMojangAuthStatus().reachable.value).toBe(false)
+    expect(useNetworkStatus().offline.value).toBe(false)
     await vi.advanceTimersByTimeAsync(14_999)
     expect(backend.official).toHaveBeenCalledOnce()
     await vi.advanceTimersByTimeAsync(1)
@@ -109,6 +110,19 @@ it('uses one retry scheduler and restores connectivity without reopening a page'
     await vi.advanceTimersByTimeAsync(1)
     await flushPromises()
     expect(backend.official).toHaveBeenCalledTimes(3)
+})
+
+it('an unreachable authentication service does not disable unrelated network features', async () => {
+    backend.configuration.mockResolvedValue({ source: 'official_only', key: 'official_only' })
+    backend.selected.mockRejectedValue(new Error('Mojang unavailable'))
+    app(ref(true))
+    await flushPromises()
+    expect(useMojangAuthStatus().reachable.value).toBe(false)
+    expect(useNetworkStatus().browserOffline.value).toBe(false)
+    expect(useNetworkStatus().offline.value).toBe(false)
+    useNetworkStatus().setBrowserOffline(true)
+    await flushPromises()
+    expect(useNetworkStatus().offline.value).toBe(true)
 })
 
 it('pauses while browser-offline, checks on reconnect, and ignores unrelated settings events', async () => {

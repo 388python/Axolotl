@@ -170,11 +170,15 @@ static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 });
 
 static PROXY_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(15))
-        .read_timeout(Duration::from_secs(30))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(crate::launcher_user_agent())
+    crate::util::proxy::ProxyConfig::default()
+        .apply(
+            reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(15))
+                .read_timeout(Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
+                .user_agent(crate::launcher_user_agent()),
+        )
+        .expect("CurseForge system proxy configuration should be valid")
         .build()
         .expect("CurseForge proxy client configuration should be valid")
 });

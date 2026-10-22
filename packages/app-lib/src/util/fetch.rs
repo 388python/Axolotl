@@ -1133,7 +1133,6 @@ pub(crate) fn file_reqwest_client_builder() -> reqwest::ClientBuilder {
         .http2_keep_alive_interval(Some(FILE_H2_KEEPALIVE))
 }
 
-/// Fallback to direct connection on error.
 pub fn build_proxied_client(
     proxy: &crate::util::proxy::ProxyConfig,
 ) -> reqwest::Client {
@@ -1142,6 +1141,21 @@ pub fn build_proxied_client(
         .expect(FETCH_PROXY_CONFIGURATION_SHOULD_BE_VALID)
         .build()
         .expect(FETCH_PROXIED_CLIENT_CONFIGURATION_SHOULD_BE_VALID)
+}
+
+/// Authentication and reachability probes share the current proxy, DNS and TLS
+/// settings. The fallback is only for callers before application initialization.
+pub(crate) fn authentication_client() -> reqwest::Client {
+    if let Some(clients) = super::download::proxy_context::explicit_clients() {
+        return clients.metadata;
+    }
+    if let Some(state) = crate::State::get_if_initialized() {
+        return state.configured_http_client();
+    }
+    static SYSTEM_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+        build_proxied_client(&crate::util::proxy::ProxyConfig::default())
+    });
+    SYSTEM_CLIENT.clone()
 }
 
 pub async fn configured_client() -> crate::Result<reqwest::Client> {
