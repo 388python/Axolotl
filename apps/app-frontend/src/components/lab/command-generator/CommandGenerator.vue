@@ -13,6 +13,7 @@ import {
 } from '@/lab/command-generator/commands/registry.ts'
 import {
     buildCommand,
+    getActiveArguments,
     getDefaultValues,
     validateCommand,
 } from '@/lab/command-generator/generator.ts'
@@ -150,7 +151,9 @@ async function copy() {
 
         <template v-if="currentCommand">
             <CommandGeneratorArgument
-                v-for="arg in currentCommand.arguments"
+                v-for="arg in getActiveArguments(currentCommand, values).filter(
+                    (arg) => arg.literal === undefined,
+                )"
                 :key="arg.name"
                 v-model="values[arg.name]"
                 :arg="arg"

@@ -18787,5 +18787,44 @@
   },
   "app.resources.error.incomplete-versions": {
     "message": "内容来源未能返回全部版本，请打开项目的“版本”标签页选择文件。"
+  },
+  "app.lab.command-generator.arg.item.targetType.display": {
+    "message": "目标类型"
+  },
+  "app.lab.command-generator.arg.item.targetType.desc": {
+    "message": "选择方块或实体。"
+  },
+  "app.lab.command-generator.arg.item.target.display": {
+    "message": "目标实体"
+  },
+  "app.lab.command-generator.arg.item.target.desc": {
+    "message": "要修改物品的实体。"
+  },
+  "app.lab.command-generator.arg.item.source.display": {
+    "message": "替换来源"
+  },
+  "app.lab.command-generator.arg.item.source.desc": {
+    "message": "用所选物品替换槽位。"
+  },
+  "app.lab.command-generator.arg.item.modifier.display": {
+    "message": "物品修饰器"
+  },
+  "app.lab.command-generator.arg.item.modifier.desc": {
+    "message": "物品修饰器的资源 ID。"
+  },
+  "app.lab.command-generator.arg.advancement.mode.display": {
+    "message": "选择模式"
+  },
+  "app.lab.command-generator.arg.advancement.mode.desc": {
+    "message": "选择单个进度、进度树或全部进度。"
+  },
+  "app.lab.command-generator.cmd.locatebiome.desc": {
+    "message": "定位最近的生物群系。"
+  },
+  "app.lab.command-generator.nbt.type.long": {
+    "message": "长整型"
+  },
+  "app.lab.command-generator.nbt.type.raw": {
+    "message": "SNBT 数组"
   }
 }

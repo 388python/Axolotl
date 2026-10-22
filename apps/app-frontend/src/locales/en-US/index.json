@@ -18763,5 +18763,44 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Unknown file warning"
+  },
+  "app.lab.command-generator.arg.item.targetType.display": {
+    "message": "Target type"
+  },
+  "app.lab.command-generator.arg.item.targetType.desc": {
+    "message": "Choose a block or an entity."
+  },
+  "app.lab.command-generator.arg.item.target.display": {
+    "message": "Target entity"
+  },
+  "app.lab.command-generator.arg.item.target.desc": {
+    "message": "Entity whose item will be changed."
+  },
+  "app.lab.command-generator.arg.item.source.display": {
+    "message": "Replacement source"
+  },
+  "app.lab.command-generator.arg.item.source.desc": {
+    "message": "Replace the slot with the selected item."
+  },
+  "app.lab.command-generator.arg.item.modifier.display": {
+    "message": "Item modifier"
+  },
+  "app.lab.command-generator.arg.item.modifier.desc": {
+    "message": "Resource ID of the item modifier."
+  },
+  "app.lab.command-generator.arg.advancement.mode.display": {
+    "message": "Selection mode"
+  },
+  "app.lab.command-generator.arg.advancement.mode.desc": {
+    "message": "Choose one advancement, a tree, or everything."
+  },
+  "app.lab.command-generator.cmd.locatebiome.desc": {
+    "message": "Locate the nearest biome."
+  },
+  "app.lab.command-generator.nbt.type.long": {
+    "message": "Long"
+  },
+  "app.lab.command-generator.nbt.type.raw": {
+    "message": "SNBT array"
   }
 }

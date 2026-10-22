@@ -27,6 +27,8 @@ const messages = defineMessages({
         id: 'app.lab.command-generator.nbt.type.int',
         defaultMessage: 'Int',
     },
+    typeLong: { id: 'app.lab.command-generator.nbt.type.long', defaultMessage: 'Long' },
+    typeRaw: { id: 'app.lab.command-generator.nbt.type.raw', defaultMessage: 'SNBT array' },
     typeShort: {
         id: 'app.lab.command-generator.nbt.type.short',
         defaultMessage: 'Short',
@@ -64,6 +66,8 @@ const isContainer = computed(() => props.node.type === 'compound' || props.node.
 const typeOptions = computed<ComboboxOption[]>(() => [
     { value: 'string', label: formatMessage(messages.typeString) },
     { value: 'int', label: formatMessage(messages.typeInt) },
+    { value: 'long', label: formatMessage(messages.typeLong) },
+    { value: 'raw', label: formatMessage(messages.typeRaw) },
     { value: 'short', label: formatMessage(messages.typeShort) },
     { value: 'byte', label: formatMessage(messages.typeByte) },
     { value: 'float', label: formatMessage(messages.typeFloat) },

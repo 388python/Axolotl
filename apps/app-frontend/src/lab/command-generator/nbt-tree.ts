@@ -1,5 +1,8 @@
+import { NbtTag, NbtType } from 'deepslate/nbt'
+import { StringReader } from 'deepslate/util'
+
 export type NbtTagType =
-    'byte' | 'short' | 'int' | 'long' | 'float' | 'double' | 'string' | 'list' | 'compound'
+    'byte' | 'short' | 'int' | 'long' | 'float' | 'double' | 'string' | 'list' | 'compound' | 'raw'
 
 export interface NbtTagNode {
     id: string
@@ -30,7 +33,7 @@ export function serializeNbt(nodes: NbtTagNode[]): string {
     if (nodes.length === 0) return '{}'
 
     const pairs = nodes.map((node) => {
-        const key = `"${node.name}"`
+        const key = quoteSnbt(node.name)
         const value = serializeNbtValue(node)
         return `${key}:${value}`
     })
@@ -38,7 +41,11 @@ export function serializeNbt(nodes: NbtTagNode[]): string {
     return `{${pairs.join(',')}}`
 }
 
-function serializeNbtValue(node: NbtTagNode): string {
+export function quoteSnbt(value: string): string {
+    return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+export function serializeNbtValue(node: NbtTagNode): string {
     switch (node.type) {
         case 'byte':
             return `${node.value}b`
@@ -54,8 +61,7 @@ function serializeNbtValue(node: NbtTagNode): string {
         case 'double':
             return `${node.value}d`
         case 'string':
-            // 修复：SNBT 双引号字符串只需转义 \ 和 "
-            return `"${String(node.value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+            return quoteSnbt(String(node.value))
         case 'compound':
             return serializeNbt(node.children ?? [])
         case 'list': {
@@ -65,6 +71,103 @@ function serializeNbtValue(node: NbtTagNode): string {
         default:
             return String(node.value)
     }
+}
+
+function fromTag(name: string, tag: NbtTag): NbtTagNode {
+    if (tag.isCompound()) {
+        return createNbtTag(
+            name,
+            'compound',
+            '',
+            [...tag.keys()].map((key) => fromTag(key, tag.get(key)!)),
+        )
+    }
+    if (tag.isList()) {
+        return createNbtTag(
+            name,
+            'list',
+            '',
+            Array.from({ length: tag.length }, (_, i) => fromTag(String(i), tag.get(i))),
+        )
+    }
+    if (tag.isString()) return createNbtTag(name, 'string', tag.getAsString())
+    const type = NbtType[tag.getId()].toLowerCase()
+    if (['byte', 'short', 'int', 'long', 'float', 'double'].includes(type)) {
+        const value = tag.toString().replace(/[bslfd]$/i, '')
+        return createNbtTag(name, type as NbtTagType, value)
+    }
+    // Typed arrays retain their exact SNBT representation, including long precision.
+    const raw = tag.isLongArray()
+        ? `[L;${Array.from({ length: tag.length }, (_, i) => tag.get(i).toString()).join(',')}]`
+        : tag.toString()
+    return createNbtTag(name, 'raw', raw)
+}
+
+export function parseNbt(input: string): { nodes: NbtTagNode[]; components: boolean } {
+    if (!input.trim()) return { nodes: [], components: false }
+    const reader = new StringReader(input.trim())
+    if (reader.peek() === '[') {
+        reader.skip()
+        const nodes: NbtTagNode[] = []
+        reader.skipWhitespace()
+        while (reader.canRead() && reader.peek() !== ']') {
+            const start = reader.cursor
+            while (reader.canRead() && /[a-z0-9_:./-]/.test(reader.peek())) reader.skip()
+            const name = reader.getRead(start)
+            if (!name) throw reader.createError('Expected component name')
+            reader.expect('=', true)
+            nodes.push(fromTag(name, NbtTag.fromString(reader)))
+            reader.skipWhitespace()
+            if (reader.peek() === ']') break
+            reader.expect(',')
+            reader.skipWhitespace()
+        }
+        reader.expect(']')
+        reader.skipWhitespace()
+        if (reader.canRead()) throw reader.createError('Unexpected trailing input')
+        return { nodes, components: true }
+    }
+    const tag = NbtTag.fromString(reader)
+    reader.skipWhitespace()
+    if (reader.canRead()) throw reader.createError('Unexpected trailing input')
+    if (!tag.isCompound()) throw new Error('NBT root must be a compound')
+    return { nodes: fromTag('', tag).children ?? [], components: false }
+}
+
+export function serializeNbtDocument(nodes: NbtTagNode[], components: boolean): string {
+    return components
+        ? `[${nodes.map((node) => `${node.name}=${serializeNbtValue(node)}`).join(',')}]`
+        : serializeNbt(nodes)
+}
+
+/** Keep tags outside the simple item's editing scope when a field changes. */
+export function mergeItemNbt(original: string, edited: string, components: boolean): string {
+    let previous: ReturnType<typeof parseNbt>
+    try {
+        previous = parseNbt(original)
+    } catch {
+        return edited
+    }
+    if (previous.components !== components || previous.nodes.length === 0) return edited
+    const next = parseNbt(edited)
+    const managed = components
+        ? ['custom_name', 'lore', 'enchantments', 'unbreakable']
+        : ['display', 'Enchantments', 'Unbreakable']
+    const nodes = previous.nodes.filter(
+        (node) => !managed.includes(node.name.replace(/^minecraft:/, '')),
+    )
+    if (!components) {
+        const oldDisplay = previous.nodes.find((node) => node.name === 'display')
+        const extras =
+            oldDisplay?.children?.filter((node) => !['Name', 'Lore'].includes(node.name)) ?? []
+        if (extras.length) {
+            const display = next.nodes.find((node) => node.name === 'display')
+            if (display) display.children = [...extras, ...(display.children ?? [])]
+            else next.nodes.push(createNbtTag('display', 'compound', '', extras))
+        }
+    }
+    const result = [...nodes, ...next.nodes]
+    return result.length ? serializeNbtDocument(result, components) : ''
 }
 
 export function createItemNbtTree(): NbtTagNode[] {

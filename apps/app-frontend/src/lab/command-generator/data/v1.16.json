@@ -51,6 +51,15 @@
           ]
         },
         {
+          "name": "mode",
+          "displayNameKey": "app.lab.command-generator.arg.advancement.mode.display",
+          "type": "enum",
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.advancement.mode.desc",
+          "enumValues": ["only", "from", "through", "until", "everything"],
+          "defaultValue": "only"
+        },
+        {
           "name": "advancement",
           "displayNameKey": "app.lab.command-generator.arg.advancement.advancement.display",
           "type": "string",
@@ -90,7 +99,10 @@
               "labelKey": "app.lab.command-generator.preset.advancement.breed-animals",
               "value": "minecraft:husbandry/breed_an_animal"
             }
-          ]
+          ],
+          "when": {
+            "mode": ["only", "from", "through", "until"]
+          }
         },
         {
           "name": "criterion",
@@ -98,7 +110,10 @@
           "type": "string",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.advancement.criterion.desc",
-          "placeholder": "*"
+          "placeholder": "*",
+          "when": {
+            "mode": ["only"]
+          }
         }
       ]
     },
@@ -580,7 +595,8 @@
               "labelKey": "app.lab.command-generator.preset.effect.action.1",
               "value": "clear"
             }
-          ]
+          ],
+          "defaultValue": "give"
         },
         {
           "name": "target",
@@ -659,7 +675,10 @@
               "labelKey": "app.lab.command-generator.preset.duration.10m",
               "value": 600
             }
-          ]
+          ],
+          "when": {
+            "action": ["give"]
+          }
         },
         {
           "name": "amplifier",
@@ -667,14 +686,21 @@
           "type": "integer",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.effect.amplifier.desc",
-          "defaultValue": 0
+          "defaultValue": 0,
+          "when": {
+            "action": ["give"]
+          }
         },
         {
           "name": "hideParticles",
           "displayNameKey": "app.lab.command-generator.arg.effect.hideParticles.display",
           "type": "boolean",
           "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.effect.hideParticles.desc"
+          "descriptionKey": "app.lab.command-generator.arg.effect.hideParticles.desc",
+          "when": {
+            "action": ["give"]
+          },
+          "defaultValue": false
         }
       ]
     },
@@ -1241,7 +1267,8 @@
                   "descriptionKey": "app.lab.command-generator.arg.execute.if-biome.biome.desc",
                   "placeholder": "minecraft:plains"
                 }
-              ]
+              ],
+              "sinceVersion": "1.19"
             },
             {
               "id": "if-data",
@@ -1870,79 +1897,6 @@
       ]
     },
     {
-      "id": "item",
-      "name": "item",
-      "descriptionKey": "app.lab.command-generator.cmd.item.desc",
-      "category": "item",
-      "permissionLevel": 2,
-      "arguments": [
-        {
-          "name": "action",
-          "displayNameKey": "app.lab.command-generator.arg.item.action.display",
-          "type": "enum",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.item.action.desc",
-          "enumValues": ["replace", "modify", "block"]
-        },
-        {
-          "name": "pos",
-          "displayNameKey": "app.lab.command-generator.arg.item.pos.display",
-          "type": "coordinates",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.item.pos.desc"
-        },
-        {
-          "name": "slot",
-          "displayNameKey": "app.lab.command-generator.arg.item.slot.display",
-          "type": "slot",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.item.slot.desc",
-          "placeholder": "container.0"
-        },
-        {
-          "name": "item",
-          "displayNameKey": "app.lab.command-generator.arg.item.item.display",
-          "type": "item",
-          "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.item.item.desc"
-        },
-        {
-          "name": "nbt",
-          "displayNameKey": "app.lab.command-generator.arg.item.nbt.display",
-          "type": "nbt",
-          "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.item.nbt.desc",
-          "supportsNbtEditor": true,
-          "nbtKind": "item",
-          "attachToPrevious": true
-        },
-        {
-          "name": "count",
-          "displayNameKey": "app.lab.command-generator.arg.item.count.display",
-          "type": "integer",
-          "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.item.count.desc"
-        }
-      ]
-    },
-    {
-      "id": "jfr",
-      "name": "jfr",
-      "descriptionKey": "app.lab.command-generator.cmd.jfr.desc",
-      "category": "misc",
-      "permissionLevel": 4,
-      "arguments": [
-        {
-          "name": "action",
-          "displayNameKey": "app.lab.command-generator.arg.jfr.action.display",
-          "type": "enum",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.jfr.action.desc",
-          "enumValues": ["start", "stop"]
-        }
-      ]
-    },
-    {
       "id": "kick",
       "name": "kick",
       "descriptionKey": "app.lab.command-generator.cmd.kick.desc",
@@ -1997,7 +1951,8 @@
           "displayNameKey": "app.lab.command-generator.arg.list.uuids.display",
           "type": "boolean",
           "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.list.uuids.desc"
+          "descriptionKey": "app.lab.command-generator.arg.list.uuids.desc",
+          "booleanKeyword": "uuids"
         }
       ]
     },
@@ -2009,20 +1964,12 @@
       "permissionLevel": 2,
       "arguments": [
         {
-          "name": "type",
-          "displayNameKey": "app.lab.command-generator.arg.locate.type.display",
-          "type": "enum",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.locate.type.desc",
-          "enumValues": ["structure", "biome", "poi"]
-        },
-        {
           "name": "id",
           "displayNameKey": "app.lab.command-generator.arg.locate.id.display",
           "type": "string",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.locate.id.desc",
-          "placeholder": "minecraft:village_plains"
+          "placeholder": "minecraft:village"
         }
       ]
     },
@@ -2785,8 +2732,9 @@
           "name": "respectTeams",
           "displayNameKey": "app.lab.command-generator.arg.spreadplayers.respectTeams.display",
           "type": "boolean",
-          "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.spreadplayers.respectTeams.desc"
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.spreadplayers.respectTeams.desc",
+          "defaultValue": false
         },
         {
           "name": "target",
@@ -3358,6 +3306,23 @@
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.xp.unit.desc",
           "enumValues": ["points", "levels"]
+        }
+      ]
+    },
+    {
+      "id": "locatebiome",
+      "name": "locatebiome",
+      "descriptionKey": "app.lab.command-generator.cmd.locatebiome.desc",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "id",
+          "displayNameKey": "app.lab.command-generator.arg.locate.id.display",
+          "type": "biome",
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.locate.id.desc",
+          "placeholder": "minecraft:plains"
         }
       ]
     }

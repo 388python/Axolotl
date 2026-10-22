@@ -33,7 +33,7 @@ export function loadManifest(): VersionManifest {
     return manifestCache
 }
 
-export function loadCommandsForVersion(versionId: string): CommandDefinition[] {
+function resolveCommandsForVersion(versionId: string): CommandDefinition[] {
     const cached = resolvedCache.get(versionId)
     if (cached) return cached
 
@@ -53,13 +53,33 @@ export function loadCommandsForVersion(versionId: string): CommandDefinition[] {
     return resolved
 }
 
+export function loadCommandsForVersion(versionId: string): CommandDefinition[] {
+    return resolveCommandsForVersion(versionId).map((command) =>
+        command.chainCategories
+            ? {
+                  ...command,
+                  chainCategories: command.chainCategories.map((category) => ({
+                      ...category,
+                      subcommands: category.subcommands.filter(
+                          (subcommand) =>
+                              !subcommand.sinceVersion ||
+                              versionId.localeCompare(subcommand.sinceVersion, undefined, {
+                                  numeric: true,
+                              }) >= 0,
+                      ),
+                  })),
+              }
+            : command,
+    )
+}
+
 function resolvePatch(patch: PatchDataFile, visited: Set<string>): CommandDefinition[] {
     if (visited.has(patch.version)) {
         throw new Error(`Circular patch: ${patch.version}`)
     }
     visited.add(patch.version)
 
-    const baseCommands = loadCommandsForVersion(patch.base)
+    const baseCommands = resolveCommandsForVersion(patch.base)
     return applyPatch(baseCommands, patch)
 }
 

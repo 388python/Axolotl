@@ -58,6 +58,23 @@
           ]
         }
       ]
+    },
+    {
+      "id": "jfr",
+      "name": "jfr",
+      "descriptionKey": "app.lab.command-generator.cmd.jfr.desc",
+      "category": "misc",
+      "permissionLevel": 4,
+      "arguments": [
+        {
+          "name": "action",
+          "displayNameKey": "app.lab.command-generator.arg.jfr.action.display",
+          "type": "enum",
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.jfr.action.desc",
+          "enumValues": ["start", "stop"]
+        }
+      ]
     }
   ],
   "removed": [],

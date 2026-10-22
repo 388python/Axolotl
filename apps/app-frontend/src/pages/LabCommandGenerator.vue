@@ -18,6 +18,7 @@ import {
 import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
 import {
     buildCommand,
+    getActiveArguments,
     getDefaultValues,
     validateCommand,
 } from '@/lab/command-generator/generator.ts'
@@ -162,10 +163,11 @@ const currentGuide = computed(() =>
  * 生成命令时的顺序由 generator.ts 的 orderArguments 另行处理。
  */
 const uiArguments = computed<CommandArgument[]>(() => {
-    const args = currentCommand.value?.arguments ?? []
+    const args = currentCommand.value ? getActiveArguments(currentCommand.value, values.value) : []
     const nonNbt: CommandArgument[] = []
     const nbt: CommandArgument[] = []
     for (const arg of args) {
+        if (arg.literal !== undefined) continue
         if (arg.type === 'nbt') nbt.push(arg)
         else nonNbt.push(arg)
     }
@@ -349,7 +351,7 @@ function removePreset(id: string) {
 async function jumpToPreset(preset: UserPreset) {
     if (selectedVersion.value !== preset.versionId) {
         selectedVersion.value = preset.versionId
-        switchVersion(preset.versionId)
+        await nextTick()
     }
 
     filterCategory.value = ''

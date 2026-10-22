@@ -229,6 +229,32 @@
       ]
     }
   ],
-  "removed": ["placefeature"],
-  "patched": {}
+  "removed": ["placefeature", "locatebiome"],
+  "patched": {
+    "locate": {
+      "id": "locate",
+      "name": "locate",
+      "descriptionKey": "app.lab.command-generator.cmd.locate.desc",
+      "category": "world",
+      "permissionLevel": 2,
+      "arguments": [
+        {
+          "name": "type",
+          "displayNameKey": "app.lab.command-generator.arg.locate.type.display",
+          "type": "enum",
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.locate.type.desc",
+          "enumValues": ["structure", "biome", "poi"]
+        },
+        {
+          "name": "id",
+          "displayNameKey": "app.lab.command-generator.arg.locate.id.display",
+          "type": "string",
+          "required": true,
+          "descriptionKey": "app.lab.command-generator.arg.locate.id.desc",
+          "placeholder": "minecraft:village_plains"
+        }
+      ]
+    }
+  }
 }

@@ -1,6 +1,50 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const commandGeneratorMessages = defineMessages({
+    itemTargetType: {
+        id: 'app.lab.command-generator.arg.item.targetType.display',
+        defaultMessage: 'Target type',
+    },
+    itemTargetTypeDescription: {
+        id: 'app.lab.command-generator.arg.item.targetType.desc',
+        defaultMessage: 'Choose a block or an entity.',
+    },
+    itemTarget: {
+        id: 'app.lab.command-generator.arg.item.target.display',
+        defaultMessage: 'Target entity',
+    },
+    itemTargetDescription: {
+        id: 'app.lab.command-generator.arg.item.target.desc',
+        defaultMessage: 'Entity whose item will be changed.',
+    },
+    itemSource: {
+        id: 'app.lab.command-generator.arg.item.source.display',
+        defaultMessage: 'Replacement source',
+    },
+    itemSourceDescription: {
+        id: 'app.lab.command-generator.arg.item.source.desc',
+        defaultMessage: 'Replace the slot with the selected item.',
+    },
+    itemModifier: {
+        id: 'app.lab.command-generator.arg.item.modifier.display',
+        defaultMessage: 'Item modifier',
+    },
+    itemModifierDescription: {
+        id: 'app.lab.command-generator.arg.item.modifier.desc',
+        defaultMessage: 'Resource ID of the item modifier.',
+    },
+    advancementMode: {
+        id: 'app.lab.command-generator.arg.advancement.mode.display',
+        defaultMessage: 'Selection mode',
+    },
+    advancementModeDescription: {
+        id: 'app.lab.command-generator.arg.advancement.mode.desc',
+        defaultMessage: 'Choose one advancement, a tree, or everything.',
+    },
+    locateBiomeDescription: {
+        id: 'app.lab.command-generator.cmd.locatebiome.desc',
+        defaultMessage: 'Locate the nearest biome.',
+    },
     // ===== 页面标题 =====
     title: { id: 'app.lab.command-generator.title', defaultMessage: 'Command generator' },
     subtitle: {

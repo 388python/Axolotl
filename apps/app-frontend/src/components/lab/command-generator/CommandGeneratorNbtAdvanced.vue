@@ -7,7 +7,8 @@ import {
     createItemNbtTree,
     createNbtTag,
     type NbtTagNode,
-    serializeNbt,
+    parseNbt,
+    serializeNbtDocument,
 } from '@/lab/command-generator/nbt-tree.ts'
 
 import CommandGeneratorNbtNode from './CommandGeneratorNbtNode.vue'
@@ -46,6 +47,9 @@ const messages = defineMessages({
 })
 
 const nodes = ref<NbtTagNode[]>([])
+const components = ref(false)
+const parseError = ref('')
+let lastOutput = props.modelValue ?? ''
 
 const presets = [
     { label: messages.presetEnchanted, factory: () => createItemNbtTree() },
@@ -59,28 +63,36 @@ const presets = [
     },
 ]
 
-const snbtPreview = computed(() => serializeNbt(nodes.value))
-
-watch(
-    snbtPreview,
-    (val) => {
-        emit('update:modelValue', val)
-    },
-    { immediate: true },
-)
+const snbtPreview = computed(() => serializeNbtDocument(nodes.value, components.value))
 
 watch(
     () => props.modelValue,
     (val) => {
-        if (val && nodes.value.length === 0) {
-            nodes.value = [createNbtTag('value', 'string', val)]
+        if (val === lastOutput && nodes.value.length) return
+        lastOutput = val ?? ''
+        try {
+            const parsed = parseNbt(lastOutput)
+            nodes.value = parsed.nodes
+            components.value = parsed.components
+            parseError.value = ''
+        } catch (error) {
+            parseError.value = error instanceof Error ? error.message : String(error)
         }
     },
     { immediate: true },
 )
 
+function publish() {
+    if (parseError.value) return
+    lastOutput = snbtPreview.value
+    emit('update:modelValue', lastOutput)
+}
+
 function applyPreset(preset: (typeof presets)[number]) {
+    components.value = false
+    parseError.value = ''
     nodes.value = preset.factory()
+    publish()
 }
 
 function onUpdate(id: string, field: string, value: string) {
@@ -89,11 +101,13 @@ function onUpdate(id: string, field: string, value: string) {
         if (field === 'name') node.name = value
         else if (field === 'value') node.value = value
         else if (field === 'type') node.type = value as NbtTagNode['type']
+        publish()
     }
 }
 
 function onRemove(id: string) {
     removeNodeById(nodes.value, id)
+    publish()
 }
 
 function onAddChild(parentId: string) {
@@ -101,11 +115,13 @@ function onAddChild(parentId: string) {
     if (parent) {
         if (!parent.children) parent.children = []
         parent.children.push(createNbtTag('new_tag', 'string', ''))
+        publish()
     }
 }
 
 function addRootNode() {
     nodes.value.push(createNbtTag('new_tag', 'string', ''))
+    publish()
 }
 
 function findNodeById(list: NbtTagNode[], id: string): NbtTagNode | undefined {
@@ -153,7 +169,8 @@ function removeNodeById(list: NbtTagNode[], id: string): boolean {
             </div>
         </header>
 
-        <div class="nbt-tree">
+        <p v-if="parseError" class="text-sm text-red">{{ parseError }}</p>
+        <div v-else class="nbt-tree">
             <CommandGeneratorNbtNode
                 v-for="node in nodes"
                 :key="node.id"

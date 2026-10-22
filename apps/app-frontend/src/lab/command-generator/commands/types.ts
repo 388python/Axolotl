@@ -46,6 +46,12 @@ export interface CommandArgument {
     supportsNbtEditor?: boolean
     nbtKind?: NbtKind
     presets?: ArgumentPreset[]
+    /** Only include this argument when all named values match. */
+    when?: Record<string, Array<string | number | boolean>>
+    /** A boolean switch such as /list uuids, rather than a boolean value. */
+    booleanKeyword?: string
+    /** Fixed syntax emitted by the generator without an editable form field. */
+    literal?: string
     /**
      * 为 true 时，该参数渲染后直接追加到前一个参数尾部，**不加空格**。
      *
@@ -59,6 +65,7 @@ export interface CommandArgument {
 
 export interface ExecuteChainSubcommand {
     id: string
+    sinceVersion?: string
     labelKey: string
     descriptionKey: string
     template: string

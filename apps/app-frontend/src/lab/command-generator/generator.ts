@@ -1,6 +1,19 @@
 import { findCommand } from './commands/registry.ts'
 import type { CommandArgument, CommandDefinition } from './commands/types.ts'
 
+export function getActiveArguments(
+    def: CommandDefinition,
+    values: Record<string, string | number | boolean>,
+): CommandArgument[] {
+    return def.arguments.filter((arg) =>
+        Object.entries(arg.when ?? {}).every(([name, allowed]) =>
+            allowed.includes(
+                values[name] ?? def.arguments.find((a) => a.name === name)?.defaultValue ?? '',
+            ),
+        ),
+    )
+}
+
 function formatArgument(arg: CommandArgument, value: string | number | boolean): string {
     if (arg.type === 'boolean') {
         return String(value)
@@ -26,8 +39,7 @@ function formatArgument(arg: CommandArgument, value: string | number | boolean):
  * 没有 item / block 参数的命令（如 /summon）重排后 nbt 仍在末尾，
  * 生成时不会被误粘到坐标参数上。
  */
-function orderArguments(def: CommandDefinition): CommandArgument[] {
-    const args = def.arguments
+function orderArguments(args: CommandArgument[]): CommandArgument[] {
     if (!args.some((a) => a.type === 'nbt')) return args
 
     const nonNbt: CommandArgument[] = []
@@ -63,13 +75,13 @@ export function buildCommand(
     }
 
     const parts: string[] = [`/${def.id}`]
-    const orderedArgs = orderArguments(def)
+    const orderedArgs = orderArguments(getActiveArguments(def, values))
 
     // 追踪最后实际写入 parts 的 arg，用于决定 nbt 是否紧贴
     let lastEmittedArg: CommandArgument | null = null
 
     for (const arg of orderedArgs) {
-        const value = values[arg.name]
+        const value = arg.literal ?? values[arg.name]
 
         if (value === undefined || value === '' || value === null) {
             if (arg.required) {
@@ -80,9 +92,9 @@ export function buildCommand(
             continue
         }
 
-        if (arg.type === 'boolean') {
+        if (arg.type === 'boolean' && arg.booleanKeyword) {
             if (value === true || value === 'true') {
-                parts.push(arg.name)
+                parts.push(arg.booleanKeyword)
                 lastEmittedArg = arg
             }
             continue
@@ -117,8 +129,8 @@ export function validateCommand(
     const def = findCommand(commandId)
     if (!def) return [`指令 "${commandId}" 不存在`]
 
-    for (const arg of def.arguments) {
-        const value = values[arg.name]
+    for (const arg of getActiveArguments(def, values)) {
+        const value = arg.literal ?? values[arg.name]
 
         if (arg.required && (value === undefined || value === '' || value === null)) {
             errors.push(`参数 "${arg.displayNameKey}" 为必填项`)

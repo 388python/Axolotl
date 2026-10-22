@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
 import { Combobox, type ComboboxOption, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+
+import { mergeItemNbt, type NbtTagNode, parseNbt } from '@/lab/command-generator/nbt-tree.ts'
 
 interface EnchantEntry {
     key: number
@@ -367,11 +369,13 @@ function serializeLegacy(): string {
 
     const displayParts: string[] = []
     if (name.value.trim()) {
-        displayParts.push(`Name:'{"text":"${escapeSnbt(name.value, "'")}"}'`)
+        displayParts.push(`Name:'${escapeSnbt(JSON.stringify({ text: name.value }), "'")}'`)
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
-        const loreItems = cleanLore.map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`).join(',')
+        const loreItems = cleanLore
+            .map((l) => `'${escapeSnbt(JSON.stringify({ text: l }), "'")}'`)
+            .join(',')
         displayParts.push(`Lore:[${loreItems}]`)
     }
     if (displayParts.length) {
@@ -399,11 +403,13 @@ function serializeDataComponents(): string {
     const parts: string[] = []
 
     if (name.value.trim()) {
-        parts.push(`custom_name='{"text":"${escapeSnbt(name.value, "'")}"}'`)
+        parts.push(`custom_name='${escapeSnbt(JSON.stringify({ text: name.value }), "'")}'`)
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
-        const loreItems = cleanLore.map((l) => `'{"text":"${escapeSnbt(l, "'")}"}'`).join(',')
+        const loreItems = cleanLore
+            .map((l) => `'${escapeSnbt(JSON.stringify({ text: l }), "'")}'`)
+            .join(',')
         parts.push(`lore=[${loreItems}]`)
     }
 
@@ -436,21 +442,25 @@ if (props.modelValue) {
 watch(
     snbt,
     (val) => {
-        syncing = true
-        emit('update:modelValue', val)
-        nextTick(() => {
-            syncing = false
-        })
+        if (syncing) return
+        emit(
+            'update:modelValue',
+            mergeItemNbt(props.modelValue ?? '', val, useDataComponents.value),
+        )
     },
-    { immediate: true },
+    { flush: 'sync' },
 )
 
 watch(
     () => props.modelValue,
-    (val, oldVal) => {
-        if (val === oldVal) return
-        if (syncing) return
-        parseSnbt(val ?? '')
+    (val) => {
+        if (val === snbt.value) return
+        syncing = true
+        try {
+            parseSnbt(val ?? '')
+        } finally {
+            syncing = false
+        }
     },
 )
 
@@ -458,7 +468,10 @@ watch(
 watch(
     () => [props.version, props.forceDataComponents],
     () => {
-        emit('update:modelValue', snbt.value)
+        emit(
+            'update:modelValue',
+            mergeItemNbt(props.modelValue ?? '', snbt.value, useDataComponents.value),
+        )
     },
 )
 
@@ -472,120 +485,44 @@ function parseSnbt(snbtStr: string): void {
 
     if (!snbtStr) return
 
-    // 优先尝试解析新版数据组件格式（方括号包裹）
-    if (snbtStr.startsWith('[')) {
-        parseDataComponents(snbtStr)
-        return
-    }
-
-    // 旧版 NBT 格式（花括号包裹）
-    parseLegacy(snbtStr)
-}
-
-function parseLegacy(snbtStr: string): void {
-    const nameMatch = snbtStr.match(/Name:'((?:\\.|[^'\\])*)'/)
-    if (nameMatch) {
-        const content = unescapeSnbt(nameMatch[1])
-        try {
-            const parsed = JSON.parse(content)
-            if (parsed && typeof parsed.text === 'string') {
-                name.value = parsed.text
+    try {
+        const { nodes, components } = parseNbt(snbtStr)
+        const find = (list: NbtTagNode[], key: string) =>
+            list.find((node) => node.name.replace(/^minecraft:/, '') === key)
+        const readText = (node?: NbtTagNode): string => {
+            if (!node || node.type !== 'string') return ''
+            try {
+                const parsed = JSON.parse(String(node.value))
+                return typeof parsed === 'string'
+                    ? parsed
+                    : typeof parsed?.text === 'string'
+                      ? parsed.text
+                      : ''
+            } catch {
+                return ''
             }
-        } catch {
-            /* ignore */
         }
+        const display = components ? nodes : (find(nodes, 'display')?.children ?? [])
+        name.value = readText(find(display, components ? 'custom_name' : 'Name'))
+        lore.value = (find(display, components ? 'lore' : 'Lore')?.children ?? []).map(readText)
+        const ench = find(nodes, components ? 'enchantments' : 'Enchantments')?.children ?? []
+        enchantments.value = components
+            ? (find(ench, 'levels')?.children ?? ench).map((node) => ({
+                  key: nextKey++,
+                  id: node.name,
+                  level: Number(node.value),
+              }))
+            : ench.map((node) => ({
+                  key: nextKey++,
+                  id: String(find(node.children ?? [], 'id')?.value ?? ''),
+                  level: Number(find(node.children ?? [], 'lvl')?.value ?? 1),
+              }))
+        unbreakable.value = components
+            ? !!find(nodes, 'unbreakable')
+            : Number(find(nodes, 'Unbreakable')?.value ?? 0) !== 0
+    } catch {
+        // Keep the supplied value intact when it cannot be represented by this form.
     }
-
-    const loreMatch = snbtStr.match(/Lore:\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
-    if (loreMatch) {
-        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
-        lore.value = items
-            .map((raw) => {
-                const content = unescapeSnbt(raw.slice(1, -1))
-                try {
-                    const parsed = JSON.parse(content)
-                    return typeof parsed?.text === 'string' ? parsed.text : ''
-                } catch {
-                    return ''
-                }
-            })
-            .filter((s) => s.length > 0)
-    }
-
-    const enchMatch = snbtStr.match(/Enchantments:\[((?:\{[^{}]*\},?)+)\]/)
-    if (enchMatch) {
-        const items = enchMatch[1].match(/\{[^{}]*\}/g) ?? []
-        enchantments.value = items
-            .map((raw) => {
-                const idMatch = raw.match(/id:"([^"]*)"/)
-                const lvlMatch = raw.match(/lvl:(\d+)/)
-                return {
-                    key: nextKey++,
-                    id: idMatch ? idMatch[1] : '',
-                    level: lvlMatch ? Number(lvlMatch[1]) : 1,
-                }
-            })
-            .filter((e) => e.id)
-    }
-
-    if (/Unbreakable:1b/.test(snbtStr)) {
-        unbreakable.value = true
-    }
-}
-
-function parseDataComponents(snbtStr: string): void {
-    const nameMatch = snbtStr.match(/custom_name='((?:\\.|[^'\\])*)'/)
-    if (nameMatch) {
-        const content = unescapeSnbt(nameMatch[1])
-        try {
-            const parsed = JSON.parse(content)
-            if (parsed && typeof parsed.text === 'string') {
-                name.value = parsed.text
-            }
-        } catch {
-            /* ignore */
-        }
-    }
-
-    const loreMatch = snbtStr.match(/lore=\[((?:'(?:\\.|[^'\\])*',?)+)\]/)
-    if (loreMatch) {
-        const items = loreMatch[1].match(/'(?:\\.|[^'\\])*'/g) ?? []
-        lore.value = items
-            .map((raw) => {
-                const content = unescapeSnbt(raw.slice(1, -1))
-                try {
-                    const parsed = JSON.parse(content)
-                    return typeof parsed?.text === 'string' ? parsed.text : ''
-                } catch {
-                    return ''
-                }
-            })
-            .filter((s) => s.length > 0)
-    }
-
-    const enchMatch = snbtStr.match(/enchantments=\{([^}]*)\}/)
-    if (enchMatch) {
-        const pairs = enchMatch[1].match(/"([^"]+)":(\d+)/g) ?? []
-        enchantments.value = pairs
-            .map((pair) => {
-                const m = pair.match(/"([^"]+)":(\d+)/)
-                if (!m) return null
-                return {
-                    key: nextKey++,
-                    id: m[1],
-                    level: Number(m[2]),
-                }
-            })
-            .filter((e): e is EnchantEntry => e !== null)
-    }
-
-    if (/unbreakable=\{\}/.test(snbtStr)) {
-        unbreakable.value = true
-    }
-}
-
-function unescapeSnbt(value: string): string {
-    return value.replace(/\\(.)/g, '$1')
 }
 
 // ============ 编辑操作 ============

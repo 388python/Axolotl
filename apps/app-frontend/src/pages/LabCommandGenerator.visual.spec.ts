@@ -1,0 +1,181 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { NbtTag } from 'deepslate/nbt'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { defineComponent, h, ref } from 'vue'
+
+import CommandGeneratorItemNbt from '@/components/lab/command-generator/CommandGeneratorItemNbt.vue'
+import CommandGeneratorNbtAdvanced from '@/components/lab/command-generator/CommandGeneratorNbtAdvanced.vue'
+import CommandGeneratorNbtEditor from '@/components/lab/command-generator/CommandGeneratorNbtEditor.vue'
+import { parseNbt } from '@/lab/command-generator/nbt-tree.ts'
+import { saveUserPreset } from '@/lab/command-generator/presets.ts'
+
+import LabCommandGenerator from './LabCommandGenerator.vue'
+
+vi.mock('@/components/lab/command-generator/CommandGeneratorItemPickerModal.vue', () => ({
+    default: { render: () => null },
+}))
+vi.mock('@modrinth/ui', async () => {
+    const { defineComponent, h } = await import('vue')
+    return {
+        Button: defineComponent({
+            setup:
+                (_, { slots }) =>
+                () =>
+                    h('button', slots.default?.()),
+        }),
+        Toggle: defineComponent({ render: () => null }),
+        Combobox: defineComponent({
+            props: ['modelValue', 'options'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h(
+                        'select',
+                        {
+                            value: props.modelValue,
+                            onChange: (event: Event) =>
+                                emit(
+                                    'update:modelValue',
+                                    (event.target as HTMLSelectElement).value,
+                                ),
+                        },
+                        (props.options as Array<{ value: string; label: string }>).map((option) =>
+                            h('option', { value: option.value }, option.label),
+                        ),
+                    ),
+        }),
+        defineMessages: (messages: unknown) => messages,
+        useVIntl: () => ({
+            formatMessage: (message: { id: string; defaultMessage?: string }) =>
+                message.defaultMessage ?? message.id,
+        }),
+    }
+})
+
+const wrappers: Array<{ unmount: () => void }> = []
+beforeEach(() => localStorage.removeItem('axolotl:command-generator:user-presets'))
+afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()))
+
+it('loads and edits advanced NBT without emitting an empty or wrapped replacement on load', async () => {
+    const wrapper = mount(CommandGeneratorNbtAdvanced, { props: { modelValue: '{Health:20f}' } })
+    wrappers.push(wrapper)
+    await flushPromises()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect((wrapper.get('.nbt-name').element as HTMLInputElement).value).toBe('Health')
+    await wrapper.setProps({ modelValue: '{Health:5f}' })
+    expect((wrapper.get('.nbt-value').element as HTMLInputElement).value).toBe('5')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.get('.nbt-value').setValue('10')
+    const output = wrapper.emitted('update:modelValue')!.at(-1)![0] as string
+    expect(NbtTag.fromString(output).equals(NbtTag.fromString('{Health:10f}'))).toBe(true)
+    await wrapper.setProps({ modelValue: '' })
+    expect(wrapper.findAll('.nbt-row')).toHaveLength(0)
+})
+
+it.each(['1.16', '1.21'])('escapes nested JSON in names and lore for %s', async (version) => {
+    const wrapper = mount(CommandGeneratorItemNbt, { props: { version, modelValue: '' } })
+    wrappers.push(wrapper)
+    const text = 'Sword "A" \\ path Bob\'s'
+    await wrapper.get('input.text-input').setValue(text)
+    await wrapper.get('.lore-list .ghost-add').trigger('click')
+    await wrapper.get('.lore-row input').setValue(text)
+    const output = wrapper.emitted('update:modelValue')!.at(-1)![0] as string
+    const parsed = parseNbt(output)
+    const display = parsed.components
+        ? parsed.nodes
+        : parsed.nodes.find((n) => n.name === 'display')!.children!
+    const name = display.find((n) => n.name === (parsed.components ? 'custom_name' : 'Name'))!
+    const lore = display.find((n) => n.name === (parsed.components ? 'lore' : 'Lore'))!.children![0]
+    expect(JSON.parse(String(name.value)).text).toBe(text)
+    expect(JSON.parse(String(lore.value)).text).toBe(text)
+    await wrapper.setProps({ modelValue: output })
+    expect((wrapper.get('input.text-input').element as HTMLInputElement).value).toBe(text)
+})
+
+it.each([
+    ['1.16', '{display:{Name:\'{"text":"Sword"}\'},CustomModelData:123}'],
+    ['1.21', '[custom_name=\'{"text":"Sword"}\',custom_data={test:1b}]'],
+])(
+    'preserves item data when switching between simple and advanced modes for %s',
+    async (version, input) => {
+        const value = ref(input)
+        const host = defineComponent({
+            setup: () => () =>
+                h(CommandGeneratorNbtEditor, {
+                    kind: 'item',
+                    version,
+                    modelValue: value.value,
+                    'onUpdate:modelValue': (next: string) => {
+                        value.value = next
+                    },
+                }),
+        })
+        const wrapper = mount(host)
+        wrappers.push(wrapper)
+        await flushPromises()
+        await wrapper.findAll('.nbt-mode-tab')[1].trigger('click')
+        await flushPromises()
+        expect(value.value).toBe(input)
+        await wrapper.findAll('.nbt-mode-tab')[0].trigger('click')
+        await flushPromises()
+        expect(value.value).toBe(input)
+        expect((wrapper.get('input.text-input').element as HTMLInputElement).value).toBe('Sword')
+        await wrapper.get('input.text-input').setValue('Changed name')
+        const parsed = parseNbt(value.value)
+        expect(
+            parsed.nodes.some(
+                (node) => node.name === (parsed.components ? 'custom_data' : 'CustomModelData'),
+            ),
+        ).toBe(true)
+    },
+)
+
+it.each(['give', 'execute'])(
+    'opens a %s preset from another version and generates the restored command',
+    async (commandId) => {
+        saveUserPreset(
+            'Older preset',
+            commandId,
+            '1.16',
+            { target: '@s', item: 'minecraft:stone', count: 3 },
+            {
+                executeState: {
+                    chain: [{ subcommandId: 'as', values: { target: '@a' } }],
+                    finalCommand: 'say hello',
+                },
+            },
+        )
+        const wrapper = mount(LabCommandGenerator)
+        wrappers.push(wrapper)
+        await flushPromises()
+        await wrapper.get('.global-presets-button').trigger('click')
+        await wrapper.get('.global-preset-item').trigger('click')
+        await flushPromises()
+        expect((wrapper.findAll('select')[0].element as HTMLSelectElement).value).toBe('1.16')
+        expect((wrapper.findAll('select')[3].element as HTMLSelectElement).value).toBe(commandId)
+        await wrapper.get('.action-bar button').trigger('click')
+        expect(wrapper.get('.result-code').text()).toBe(
+            commandId === 'give' ? '/give @s minecraft:stone 3' : '/execute as @a run say hello',
+        )
+    },
+)
+
+it('updates effect fields and output when switching from give to clear', async () => {
+    const wrapper = mount(LabCommandGenerator)
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('select')[3].setValue('effect')
+    const card = (name: string) =>
+        wrapper
+            .findAll('.argument-card')
+            .find((item) => item.text().includes(`arg.effect.${name}.display`))!
+    await card('target').get('input').setValue('@s')
+    await card('effect').get('input').setValue('minecraft:speed')
+    expect(card('duration')).toBeDefined()
+    await card('action').get('select').setValue('clear')
+    expect(card('duration')).toBeUndefined()
+    expect(card('amplifier')).toBeUndefined()
+    await wrapper.get('.action-bar button').trigger('click')
+    expect(wrapper.get('.result-code').text()).toBe('/effect clear @s minecraft:speed')
+})
