@@ -2258,6 +2258,7 @@ pub(crate) async fn get_pending_manual_downloads(
 
 /// Restores membership for legacy pack-owned files without inventing remote
 /// identity or treating their current bytes as the pack's expected artifact.
+/// Entry identity keeps missing and disabled files at the same path distinct.
 pub(crate) async fn repair_pack_members_in_transaction(
     content_set_id: &str,
     tx: &mut Transaction<'_, Sqlite>,
@@ -2267,8 +2268,8 @@ pub(crate) async fn repair_pack_members_in_transaction(
             id, content_set_id, content_entry_id, member_key, project_type,
             expected_relative_path, required, materialization_state,
             override_kind, reconciled, created_at, modified_at
-         ) SELECT 'pack-member:' || entry.id, entry.content_set_id, entry.id,
-            'path:' || lower(file.pack_path), entry.project_type,
+         ) SELECT 'pack-member:entry:' || entry.id, entry.content_set_id, entry.id,
+            'entry:' || entry.id, entry.project_type,
             file.pack_path, 1,
             CASE WHEN file.missing = 1 THEN 'missing' ELSE 'present' END,
             CASE WHEN file.enabled = 0 THEN 'disabled' ELSE 'none' END,
@@ -2285,9 +2286,7 @@ pub(crate) async fn repair_pack_members_in_transaction(
                 SELECT 1 FROM instance_pack_members member
                 WHERE member.content_set_id = entry.content_set_id
                     AND member.content_entry_id = entry.id
-            )
-         ON CONFLICT(content_set_id, member_key) DO UPDATE SET
-            content_entry_id = excluded.content_entry_id",
+            )",
     )
     .bind(content_set_id)
     .execute(&mut **tx)

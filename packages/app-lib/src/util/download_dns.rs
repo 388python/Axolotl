@@ -325,28 +325,29 @@ impl DownloadDnsResolver {
         true
     }
 
-    fn cache_addresses(&self, host: String, addresses: Vec<SocketAddr>) {
+    fn doh_cache_ttl(&self, host: &str, addresses: &[SocketAddr]) -> Duration {
         let now = Instant::now();
-        let resolution_host = self.resolution_host(&host);
-        let ttl = if self.doh_enabled {
-            self.dns_answers
-                .lock()
-                .get(&resolution_host)
-                .into_iter()
-                .flatten()
-                .flat_map(|answer| &answer.addresses)
-                .filter(|address| {
-                    addresses.iter().any(|socket| socket.ip() == address.ip)
-                })
-                .map(|address| {
-                    address.expires_at.saturating_duration_since(now)
-                })
-                .min()
-                .unwrap_or(CACHE_TTL)
-                .min(CACHE_TTL)
-        } else {
-            CACHE_TTL
-        };
+        self.dns_answers
+            .lock()
+            .get(host)
+            .into_iter()
+            .flatten()
+            .flat_map(|answer| &answer.addresses)
+            .filter(|address| {
+                addresses.iter().any(|socket| socket.ip() == address.ip)
+            })
+            .map(|address| address.expires_at.saturating_duration_since(now))
+            .min()
+            .unwrap_or(CACHE_TTL)
+            .min(CACHE_TTL)
+    }
+
+    fn cache_addresses(
+        &self,
+        host: String,
+        addresses: Vec<SocketAddr>,
+        ttl: Duration,
+    ) {
         self.last_resolved.lock().insert(
             host,
             CachedAddresses {
@@ -354,7 +355,7 @@ impl DownloadDnsResolver {
                     .iter()
                     .map(|address| address.ip())
                     .collect(),
-                resolved_at: now,
+                resolved_at: Instant::now(),
                 ttl,
                 consecutive_connection_failures: 0,
             },
@@ -372,7 +373,7 @@ impl DownloadDnsResolver {
     async fn lookup_addresses(
         &self,
         resolution_host: &str,
-    ) -> std::io::Result<Vec<SocketAddr>> {
+    ) -> std::io::Result<(Vec<SocketAddr>, Duration)> {
         #[cfg(test)]
         {
             *self
@@ -396,12 +397,20 @@ impl DownloadDnsResolver {
             if let Some(addresses) =
                 self.test_addresses.lock().get(resolution_host).cloned()
             {
-                return Ok(addresses);
+                let ttl = if self.doh_enabled {
+                    self.doh_cache_ttl(resolution_host, &addresses)
+                } else {
+                    CACHE_TTL
+                };
+                return Ok((addresses, ttl));
             }
         }
         if self.doh_enabled {
             match self.lookup_doh(resolution_host).await {
-                Ok(addresses) => return Ok(addresses),
+                Ok(addresses) => {
+                    let ttl = self.doh_cache_ttl(resolution_host, &addresses);
+                    return Ok((addresses, ttl));
+                }
                 Err(error) => tracing::warn!(
                     host = resolution_host,
                     error = ?error,
@@ -411,7 +420,7 @@ impl DownloadDnsResolver {
         }
         tokio::net::lookup_host((resolution_host, 0))
             .await
-            .map(|addresses| addresses.collect())
+            .map(|addresses| (addresses.collect(), CACHE_TTL))
     }
 
     async fn lookup_doh(&self, host: &str) -> std::io::Result<Vec<SocketAddr>> {
@@ -807,16 +816,16 @@ impl DownloadDnsResolver {
                 format!("DNS lookup for {host} timed out"),
             ))
         })
-        .and_then(|addresses| {
+        .and_then(|(addresses, ttl)| {
             if addresses.is_empty() {
                 Err(std::io::Error::other(
                     DOWNLOAD_DNS_DNS_RESPONSE_CONTAINED_NO_ADDRESSES,
                 ))
             } else {
-                Ok(addresses)
+                Ok((addresses, ttl))
             }
         });
-        let mut addresses = match lookup {
+        let (mut addresses, ttl) = match lookup {
             Ok(addresses) => addresses,
             Err(error) => {
                 self.last_failed.lock().insert(
@@ -832,7 +841,7 @@ impl DownloadDnsResolver {
         };
         addresses = self.order_addresses(&host, addresses);
         let resolved = addresses.iter().map(|address| address.ip()).collect();
-        self.cache_addresses(host, addresses);
+        self.cache_addresses(host, addresses, ttl);
         Ok(resolved)
     }
 
@@ -1216,6 +1225,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn system_dns_fallback_cache_ignores_previous_doh_ttl() {
+        let listener =
+            tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint: Arc<str> = Arc::from(format!(
+            "http://{}/dns-query",
+            listener.local_addr().unwrap()
+        ));
+        drop(listener);
+        let now = Instant::now();
+        for expires_at in [
+            now - Duration::from_secs(1),
+            now,
+            now + Duration::from_secs(60),
+        ] {
+            let mut resolver = DownloadDnsResolver::with_doh(true).unwrap();
+            resolver.doh_endpoints = Arc::new(vec![endpoint.clone()]);
+            resolver.doh_clients = Arc::new(vec![
+                reqwest::Client::builder().no_proxy().build().unwrap(),
+            ]);
+            resolver.remember_answer(
+                "localhost",
+                DnsAnswer {
+                    queried_host: "localhost".into(),
+                    cname_chain: Vec::new(),
+                    addresses: vec![
+                        DnsAddress {
+                            ip: Ipv4Addr::LOCALHOST.into(),
+                            expires_at,
+                        },
+                        DnsAddress {
+                            ip: Ipv6Addr::LOCALHOST.into(),
+                            expires_at,
+                        },
+                    ],
+                    fetched_at: now,
+                    source: DnsSource::Doh(endpoint.clone()),
+                },
+            );
+            let results = futures::future::join_all(
+                (0..8).map(|_| resolver.resolve_host("localhost")),
+            )
+            .await;
+            let addresses = results[0].as_ref().unwrap();
+            assert!(!addresses.is_empty());
+            assert!(
+                results
+                    .iter()
+                    .all(|result| result.as_ref().unwrap() == addresses)
+            );
+            assert_eq!(resolver.resolved_addresses("localhost"), *addresses);
+            assert_eq!(
+                resolver.last_resolved.lock()["localhost"].ttl,
+                CACHE_TTL
+            );
+            assert_eq!(resolver.test_lookup_counts.lock()["localhost"], 1);
+            assert_eq!(
+                resolver.dns_answers.lock()["localhost"][0].addresses[0]
+                    .expires_at,
+                expires_at
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn stalled_doh_leaves_time_for_system_dns_fallback() {
         let listener =
             tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1456,6 +1529,7 @@ mod tests {
         resolver.cache_addresses(
             "cdn.example.com".to_string(),
             vec![slower, faster],
+            CACHE_TTL,
         );
         resolver.record_host_success("cdn.example.com", faster.ip());
 
@@ -1473,6 +1547,7 @@ mod tests {
         resolver.cache_addresses(
             "cdn.example.com".to_string(),
             vec![SocketAddr::new(failed, 0), SocketAddr::new(succeeded, 0)],
+            CACHE_TTL,
         );
 
         resolver.record_host_success("cdn.example.com", succeeded);
@@ -1488,6 +1563,7 @@ mod tests {
         resolver.cache_addresses(
             "expired-success.test".to_string(),
             vec![SocketAddr::new(address, 0)],
+            CACHE_TTL,
         );
         resolver.expire_cache("expired-success.test");
 
@@ -1507,6 +1583,7 @@ mod tests {
         resolver.cache_addresses(
             "late-success.test".to_string(),
             vec![SocketAddr::new(address, 0)],
+            CACHE_TTL,
         );
         assert!(!resolver.record_connection_failure("late-success.test"));
         assert!(resolver.record_connection_failure("late-success.test"));
@@ -1604,12 +1681,16 @@ mod tests {
             DownloadClients::build(&Default::default(), false, false).unwrap();
         let address = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
         for host in ["redirect-origin.test", "redirect-target.test"] {
-            clients
-                .system_dns
-                .cache_addresses(host.into(), vec![address]);
-            clients
-                .direct_dns
-                .cache_addresses(host.into(), vec![address]);
+            clients.system_dns.cache_addresses(
+                host.into(),
+                vec![address],
+                CACHE_TTL,
+            );
+            clients.direct_dns.cache_addresses(
+                host.into(),
+                vec![address],
+                CACHE_TTL,
+            );
         }
         let listener = tokio::net::TcpListener::bind(address).await.unwrap();
         let refused = listener.local_addr().unwrap();
@@ -1769,6 +1850,7 @@ mod tests {
         resolver.cache_addresses(
             "request-host.test".to_string(),
             vec![SocketAddr::from((Ipv4Addr::LOCALHOST, 0))],
+            CACHE_TTL,
         );
 
         resolver.clear_host_override("request-host.test").unwrap();

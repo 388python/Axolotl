@@ -152,7 +152,8 @@ fn ttl_zero_can_return_once_but_cannot_warm_either_cache() {
     };
     let sockets = answer.socket_addresses();
     resolver.remember_answer("cdn.example", answer.clone());
-    resolver.cache_addresses("cdn.example".to_string(), sockets);
+    let ttl = resolver.doh_cache_ttl("cdn.example", &sockets);
+    resolver.cache_addresses("cdn.example".to_string(), sockets, ttl);
     resolver.candidate_snapshots.lock().insert(
         "cdn.example".to_string(),
         CandidateSnapshot {
