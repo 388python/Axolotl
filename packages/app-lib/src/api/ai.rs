@@ -301,8 +301,8 @@ const PROVIDERS: &[AiProviderDefinition] = &[
         "codeflow",
         "CodeFlow",
         Openai,
-        "https://codeflow.asia/v1",
-        "gpt-4o-mini",
+        "https://codeflow.sh/v1",
+        "gpt-6.1-sol",
         true
     ),
     provider!(
