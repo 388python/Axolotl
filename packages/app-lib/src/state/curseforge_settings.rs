@@ -85,7 +85,7 @@ mod tests {
             .await
             .unwrap();
         sqlx::query(include_str!(
-            "../../migrations/20261018100000_curseforge-api-key.sql"
+            "../../migrations/20261022120000_curseforge-api-key.sql"
         ))
         .execute(&pool)
         .await
