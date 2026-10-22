@@ -124,6 +124,10 @@ export function buildCommand(
 export function validateCommand(
     commandId: string,
     values: Record<string, string | number | boolean>,
+    formatError?: (issue: {
+        kind: 'requiredError' | 'enumError' | 'numberError' | 'integerError'
+        argument: CommandArgument
+    }) => string,
 ): string[] {
     const errors: string[] = []
     const def = findCommand(commandId)
@@ -133,22 +137,34 @@ export function validateCommand(
         const value = arg.literal ?? values[arg.name]
 
         if (arg.required && (value === undefined || value === '' || value === null)) {
-            errors.push(`参数 "${arg.displayNameKey}" 为必填项`)
+            errors.push(
+                formatError?.({ kind: 'requiredError', argument: arg }) ??
+                    `参数 "${arg.displayNameKey}" 为必填项`,
+            )
             continue
         }
 
         if (value === undefined || value === '') continue
 
         if (arg.type === 'enum' && arg.enumValues && !arg.enumValues.includes(String(value))) {
-            errors.push(`参数 "${arg.displayNameKey}" 的值 "${value}" 不在允许范围内`)
+            errors.push(
+                formatError?.({ kind: 'enumError', argument: arg }) ??
+                    `参数 "${arg.displayNameKey}" 的值 "${value}" 不在允许范围内`,
+            )
         }
 
         if ((arg.type === 'number' || arg.type === 'integer') && isNaN(Number(value))) {
-            errors.push(`参数 "${arg.displayNameKey}" 必须为数字`)
+            errors.push(
+                formatError?.({ kind: 'numberError', argument: arg }) ??
+                    `参数 "${arg.displayNameKey}" 必须为数字`,
+            )
         }
 
         if (arg.type === 'integer' && !Number.isInteger(Number(value))) {
-            errors.push(`参数 "${arg.displayNameKey}" 必须为整数`)
+            errors.push(
+                formatError?.({ kind: 'integerError', argument: arg }) ??
+                    `参数 "${arg.displayNameKey}" 必须为整数`,
+            )
         }
     }
 

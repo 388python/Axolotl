@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { config, flushPromises, mount } from '@vue/test-utils'
 import { NbtTag } from 'deepslate/nbt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
@@ -18,12 +18,32 @@ vi.mock('@modrinth/ui', async () => {
     const { defineComponent, h } = await import('vue')
     return {
         Button: defineComponent({
+            props: { label: String, iconOnly: Boolean, nativeType: String },
             setup:
-                (_, { slots }) =>
+                (props, { slots }) =>
                 () =>
-                    h('button', slots.default?.()),
+                    h(
+                        'button',
+                        {
+                            'aria-label': props.iconOnly ? props.label : undefined,
+                            type: props.nativeType ?? 'button',
+                        },
+                        slots.default?.(),
+                    ),
         }),
         Toggle: defineComponent({ render: () => null }),
+        StyledInput: defineComponent({
+            props: ['modelValue'],
+            emits: ['update:modelValue'],
+            setup:
+                (props, { emit }) =>
+                () =>
+                    h('input', {
+                        value: props.modelValue,
+                        onInput: (event: Event) =>
+                            emit('update:modelValue', (event.target as HTMLInputElement).value),
+                    }),
+        }),
         Combobox: defineComponent({
             props: ['modelValue', 'options'],
             emits: ['update:modelValue'],
@@ -54,7 +74,10 @@ vi.mock('@modrinth/ui', async () => {
 })
 
 const wrappers: Array<{ unmount: () => void }> = []
-beforeEach(() => localStorage.removeItem('axolotl:command-generator:user-presets'))
+beforeEach(() => {
+    localStorage.removeItem('axolotl:command-generator:user-presets')
+    config.global.directives.tooltip = () => {}
+})
 afterEach(() => wrappers.splice(0).forEach((wrapper) => wrapper.unmount()))
 
 it('loads and edits advanced NBT without emitting an empty or wrapped replacement on load', async () => {
@@ -178,4 +201,29 @@ it('updates effect fields and output when switching from give to clear', async (
     expect(card('amplifier')).toBeUndefined()
     await wrapper.get('.action-bar button').trigger('click')
     expect(wrapper.get('.result-code').text()).toBe('/effect clear @s minecraft:speed')
+})
+
+it('saves and deletes a preset without deleting the current command inputs', async () => {
+    const wrapper = mount(LabCommandGenerator)
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('select')[3].setValue('give')
+    const fields = wrapper.findAll('.argument-card input')
+    await fields[0].setValue('@s')
+    await fields[1].setValue('minecraft:stone')
+    await wrapper
+        .findAll('aside button')
+        .find((button) => button.text().includes('Save as preset'))!
+        .trigger('click')
+    await wrapper.get('form input').setValue('My stone command')
+    await wrapper.get('form').trigger('submit')
+    await wrapper.get('.global-presets-button').trigger('click')
+    expect(wrapper.get('.global-preset-item').text()).toContain('My stone command')
+    await wrapper.get('button[aria-label="Delete preset"]').trigger('click')
+    expect(wrapper.find('.global-preset-item').exists()).toBe(false)
+    expect((fields[1].element as HTMLInputElement).value).toBe('minecraft:stone')
+    await wrapper.get('.action-bar button').trigger('click')
+    expect(wrapper.get('.result-code').text()).toBe('/give @s minecraft:stone 1')
+    await fields[1].setValue('minecraft:diamond')
+    expect(wrapper.find('.result-code').exists()).toBe(false)
 })

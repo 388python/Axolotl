@@ -1,6 +1,68 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const commandGeneratorMessages = defineMessages({
+    copyFailed: {
+        id: 'app.lab.command-generator.copy-failed',
+        defaultMessage: 'Could not copy the command. Select and copy the text manually.',
+    },
+    requiredError: {
+        id: 'app.lab.command-generator.error.required',
+        defaultMessage: 'Enter {name}.',
+    },
+    enumError: {
+        id: 'app.lab.command-generator.error.enum',
+        defaultMessage: 'Choose a valid value for {name}.',
+    },
+    numberError: {
+        id: 'app.lab.command-generator.error.number',
+        defaultMessage: 'Enter a number for {name}.',
+    },
+    integerError: {
+        id: 'app.lab.command-generator.error.integer',
+        defaultMessage: 'Enter a whole number for {name}.',
+    },
+    filters: { id: 'app.lab.command-generator.filters', defaultMessage: 'Filters' },
+    close: { id: 'app.lab.command-generator.close', defaultMessage: 'Close' },
+    save: { id: 'app.lab.command-generator.save', defaultMessage: 'Save' },
+    deletePreset: {
+        id: 'app.lab.command-generator.preset.delete',
+        defaultMessage: 'Delete preset',
+    },
+    startTitle: {
+        id: 'app.lab.command-generator.start-title',
+        defaultMessage: 'Choose a command to get started',
+    },
+    startHint: {
+        id: 'app.lab.command-generator.start-hint',
+        defaultMessage: 'Search by command name, or start with a common command.',
+    },
+    resultHint: {
+        id: 'app.lab.command-generator.result-hint',
+        defaultMessage: 'Fill in the parameters, then generate a command to copy into Minecraft.',
+    },
+    optional: { id: 'app.lab.command-generator.arg.optional', defaultMessage: 'Optional' },
+    moveUp: { id: 'app.lab.command-generator.execute.move-up', defaultMessage: 'Move up' },
+    moveDown: { id: 'app.lab.command-generator.execute.move-down', defaultMessage: 'Move down' },
+    removeStep: {
+        id: 'app.lab.command-generator.execute.remove-step',
+        defaultMessage: 'Remove subcommand',
+    },
+    removeLore: {
+        id: 'app.lab.command-generator.item-nbt.remove-lore',
+        defaultMessage: 'Remove lore line',
+    },
+    removeEnchantment: {
+        id: 'app.lab.command-generator.item-nbt.remove-enchantment',
+        defaultMessage: 'Remove enchantment',
+    },
+    tagName: { id: 'app.lab.command-generator.nbt.tag-name', defaultMessage: 'Tag name' },
+    tagValue: { id: 'app.lab.command-generator.nbt.tag-value', defaultMessage: 'Tag value' },
+    toggleTag: {
+        id: 'app.lab.command-generator.nbt.toggle-tag',
+        defaultMessage: 'Expand or collapse tag',
+    },
+    addTag: { id: 'app.lab.command-generator.nbt.add-tag', defaultMessage: 'Add child tag' },
+    removeTag: { id: 'app.lab.command-generator.nbt.remove-tag', defaultMessage: 'Remove tag' },
     itemTargetType: {
         id: 'app.lab.command-generator.arg.item.targetType.display',
         defaultMessage: 'Target type',

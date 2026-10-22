@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
-import { Combobox, type ComboboxOption, defineMessages, Toggle, useVIntl } from '@modrinth/ui'
+import { PlusIcon, XIcon } from '@modrinth/assets'
+import {
+    Button,
+    Combobox,
+    type ComboboxOption,
+    defineMessages,
+    Toggle,
+    useVIntl,
+} from '@modrinth/ui'
 import { computed, ref, watch } from 'vue'
 
+import { commandGeneratorMessages as commonMessages } from '@/lab/command-generator/i18n/messages.ts'
 import { mergeItemNbt, type NbtTagNode, parseNbt } from '@/lab/command-generator/nbt-tree.ts'
 
 interface EnchantEntry {
@@ -565,352 +573,109 @@ function setEnchantLevel(index: number, level: number) {
 </script>
 
 <template>
-    <div class="item-nbt">
-        <header class="item-nbt-head">
-            <span class="item-nbt-title">
-                <SparklesIcon />
-                {{ formatMessage(messages.title) }}
-            </span>
-            <span v-if="version" class="item-nbt-version">
-                {{ useDataComponents ? '1.20.5+' : version }}
-            </span>
-        </header>
-
-        <div class="field">
-            <label class="field-label">
-                <span>{{ formatMessage(messages.nameLabel) }}</span>
-                <span class="field-hint">{{ formatMessage(messages.nameHint) }}</span>
-            </label>
+    <div class="grid min-w-0 gap-4 md:grid-cols-2">
+        <div class="flex min-w-0 flex-col gap-2">
+            <label class="text-sm font-medium text-[var(--color-text-primary)]">{{
+                formatMessage(messages.nameLabel)
+            }}</label>
             <input
                 v-model="name"
-                class="text-input"
+                class="text-input w-full min-w-0 rounded-xl border-0 bg-surface-4 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:ring-4 focus:ring-brand-shadow"
                 :placeholder="formatMessage(messages.namePlaceholder)"
             />
         </div>
-
-        <div class="field">
-            <label class="field-label">
-                <span>{{ formatMessage(messages.loreLabel) }}</span>
-                <span class="field-hint">{{ formatMessage(messages.loreHint) }}</span>
-            </label>
-            <div class="lore-list">
-                <div v-for="(_, i) in lore" :key="i" class="lore-row">
+        <div class="flex min-w-0 flex-col gap-2">
+            <label class="text-sm font-medium text-[var(--color-text-primary)]">{{
+                formatMessage(messages.loreLabel)
+            }}</label>
+            <div class="lore-list flex min-w-0 flex-col gap-2">
+                <div
+                    v-for="(_, i) in lore"
+                    :key="i"
+                    class="lore-row flex min-w-0 items-center gap-2"
+                >
                     <input
                         v-model="lore[i]"
-                        class="text-input"
+                        class="text-input w-full min-w-0 rounded-xl border-0 bg-surface-4 px-3 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:ring-4 focus:ring-brand-shadow"
                         :placeholder="formatMessage(messages.lorePlaceholder)"
                     />
-                    <button type="button" class="icon-btn icon-btn--danger" @click="removeLore(i)">
-                        <XIcon />
-                    </button>
+                    <Button
+                        v-tooltip="formatMessage(commonMessages.removeLore)"
+                        type="quiet"
+                        size="sm"
+                        icon-only
+                        :label="formatMessage(commonMessages.removeLore)"
+                        @click="removeLore(i)"
+                        ><XIcon
+                    /></Button>
                 </div>
-                <button type="button" class="ghost-add" @click="addLore">
-                    <PlusIcon />
-                    {{ formatMessage(messages.addLore) }}
-                </button>
+                <Button class="ghost-add self-start" type="outlined" size="sm" @click="addLore"
+                    ><PlusIcon />{{ formatMessage(messages.addLore) }}</Button
+                >
             </div>
         </div>
-
-        <div class="field">
-            <label class="field-label">
-                <span>{{ formatMessage(messages.enchLabel) }}</span>
-                <span class="field-hint">{{ formatMessage(messages.enchHint) }}</span>
-            </label>
-            <div class="enchant-list">
-                <div v-if="!enchantments.length" class="enchant-empty">
-                    {{ formatMessage(messages.enchEmpty) }}
-                </div>
-                <div v-for="(ench, i) in enchantments" :key="ench.key" class="enchant-row">
-                    <div class="enchant-select">
-                        <Combobox
-                            :model-value="ench.id"
-                            :options="enchantOptions"
-                            searchable
-                            @update:model-value="setEnchantId(i, $event)"
-                        >
-                            <template #selected="{ label }">
-                                <span class="truncate">
-                                    {{ label ?? enchantLabel(ench.id) }}
-                                </span>
-                            </template>
-                        </Combobox>
-                    </div>
-                    <div class="enchant-level">
-                        <span class="enchant-level-label">
-                            {{ formatMessage(messages.enchLevel) }}
-                        </span>
-                        <input
-                            class="text-input text-input--num"
-                            type="number"
-                            min="1"
-                            :max="enchantById.get(ench.id)?.maxLevel ?? 10"
-                            :value="ench.level"
-                            @input="
-                                setEnchantLevel(
-                                    i,
-                                    Number(($event.target as HTMLInputElement).value),
-                                )
-                            "
-                        />
-                    </div>
-                    <button
-                        type="button"
-                        class="icon-btn icon-btn--danger"
-                        @click="removeEnchant(i)"
-                    >
-                        <XIcon />
-                    </button>
-                </div>
-                <button type="button" class="ghost-add" @click="addEnchant">
-                    <PlusIcon />
-                    {{ formatMessage(messages.enchAdd) }}
-                </button>
+        <section class="flex min-w-0 flex-col gap-3 md:col-span-2">
+            <h3 class="m-0 text-sm font-medium text-[var(--color-text-primary)]">
+                {{ formatMessage(messages.enchLabel) }}
+            </h3>
+            <div
+                v-for="(ench, i) in enchantments"
+                :key="ench.key"
+                class="flex min-w-0 flex-wrap items-center gap-2"
+            >
+                <Combobox
+                    :model-value="ench.id"
+                    :options="enchantOptions"
+                    :aria-label="formatMessage(messages.enchLabel)"
+                    class="min-w-0 flex-1"
+                    searchable
+                    @update:model-value="setEnchantId(i, $event)"
+                />
+                <label class="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]"
+                    >{{ formatMessage(messages.enchLevel)
+                    }}<input
+                        class="text-input w-16 rounded-lg border-0 bg-surface-4 px-2 py-2 text-sm text-[var(--color-text-primary)] outline-none focus:ring-4 focus:ring-brand-shadow"
+                        type="number"
+                        min="1"
+                        :max="enchantById.get(ench.id)?.maxLevel ?? 10"
+                        :value="ench.level"
+                        @input="
+                            setEnchantLevel(i, Number(($event.target as HTMLInputElement).value))
+                        "
+                /></label>
+                <Button
+                    v-tooltip="formatMessage(commonMessages.removeEnchantment)"
+                    type="quiet"
+                    size="sm"
+                    icon-only
+                    :label="formatMessage(commonMessages.removeEnchantment)"
+                    @click="removeEnchant(i)"
+                    ><XIcon
+                /></Button>
             </div>
-        </div>
-
-        <div class="field field--row">
-            <div class="toggle-text">
-                <label class="field-label">
-                    <span>{{ formatMessage(messages.unbreakableLabel) }}</span>
-                    <span class="field-hint">
-                        {{ formatMessage(messages.unbreakableHint) }}
-                    </span>
-                </label>
+            <Button type="outlined" size="sm" class="self-start" @click="addEnchant"
+                ><PlusIcon />{{ formatMessage(messages.enchAdd) }}</Button
+            >
+        </section>
+        <div class="flex items-center justify-between gap-3 md:col-span-2">
+            <div>
+                <label class="text-sm font-medium text-[var(--color-text-primary)]">{{
+                    formatMessage(messages.unbreakableLabel)
+                }}</label>
+                <p class="m-0 mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
+                    {{ formatMessage(messages.unbreakableHint) }}
+                </p>
             </div>
-            <Toggle v-model="unbreakable" />
+            <Toggle v-model="unbreakable" :aria-label="formatMessage(messages.unbreakableLabel)" />
         </div>
-
-        <div class="preview">
-            <span class="preview-label">{{ formatMessage(messages.previewLabel) }}</span>
-            <code v-if="snbt" class="preview-code">{{ snbt }}</code>
-            <span v-else class="preview-empty">{{ formatMessage(messages.previewEmpty) }}</span>
-        </div>
+        <details v-if="snbt" class="min-w-0 md:col-span-2">
+            <summary class="cursor-pointer text-xs text-[var(--color-text-tertiary)]">
+                {{ formatMessage(messages.previewLabel) }}
+            </summary>
+            <code
+                class="mt-2 block max-h-48 overflow-auto break-all rounded-lg bg-surface-3 p-3 text-xs leading-5"
+                >{{ snbt }}</code
+            >
+        </details>
     </div>
 </template>
-
-<style scoped>
-.item-nbt {
-    display: flex;
-    flex-direction: column;
-    gap: 0.8rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: var(--surface-2);
-    padding: 0.9rem 0.95rem;
-}
-
-.item-nbt-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.item-nbt-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.78rem;
-    font-weight: 800;
-    color: var(--color-text-primary);
-}
-
-.item-nbt-title :deep(svg) {
-    width: 0.9rem;
-    height: 0.9rem;
-    color: var(--color-brand);
-}
-
-.item-nbt-version {
-    border-radius: 999px;
-    background: var(--surface-4);
-    padding: 0.15rem 0.5rem;
-    font-size: 0.6rem;
-    font-weight: 700;
-    color: var(--color-text-tertiary);
-}
-
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.field--row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-}
-
-.field-label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    font-size: 0.74rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-}
-
-.field-hint {
-    font-size: 0.63rem;
-    font-weight: 400;
-    color: var(--color-text-tertiary);
-}
-
-.text-input {
-    min-width: 0;
-    flex: 1;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-    padding: 0.45rem 0.65rem;
-    color: var(--color-text-primary);
-    font-size: 0.76rem;
-    outline: none;
-    transition: border-color 0.15s ease;
-}
-
-.text-input:focus {
-    border-color: var(--color-brand);
-}
-
-.text-input--num {
-    flex: 0 0 auto;
-    width: 4.5rem;
-    text-align: center;
-}
-
-.lore-list,
-.enchant-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.lore-row,
-.enchant-row {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-.enchant-select {
-    min-width: 0;
-    flex: 1;
-}
-
-.enchant-level {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    flex: 0 0 auto;
-}
-
-.enchant-level-label {
-    font-size: 0.65rem;
-    color: var(--color-text-tertiary);
-}
-
-.enchant-empty {
-    border: 1px dashed var(--color-divider);
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.65rem;
-    font-size: 0.7rem;
-    color: var(--color-text-tertiary);
-}
-
-.icon-btn {
-    display: inline-flex;
-    width: 1.6rem;
-    height: 1.6rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    transition:
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.icon-btn:hover {
-    background: var(--surface-4);
-}
-
-.icon-btn--danger:hover {
-    color: var(--color-red);
-}
-
-.icon-btn :deep(svg) {
-    width: 0.78rem;
-    height: 0.78rem;
-}
-
-.ghost-add {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    border: 1px dashed var(--color-divider);
-    border-radius: var(--radius-sm);
-    background: transparent;
-    padding: 0.4rem 0.6rem;
-    color: var(--color-text-tertiary);
-    font-size: 0.7rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        color 0.15s ease;
-}
-
-.ghost-add:hover {
-    border-color: var(--color-brand);
-    color: var(--color-brand);
-}
-
-.ghost-add :deep(svg) {
-    width: 0.75rem;
-    height: 0.75rem;
-}
-
-.toggle-text {
-    min-width: 0;
-    flex: 1;
-}
-
-.preview {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    border-top: 1px solid var(--color-divider);
-    padding-top: 0.7rem;
-}
-
-.preview-label {
-    font-size: 0.62rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: var(--color-text-tertiary);
-}
-
-.preview-code {
-    overflow: auto;
-    border-radius: var(--radius-sm);
-    background: var(--surface-1);
-    padding: 0.55rem 0.65rem;
-    color: var(--color-text-tertiary);
-    font-family: var(--mono-font, monospace);
-    font-size: 0.68rem;
-    white-space: pre-wrap;
-    word-break: break-all;
-}
-
-.preview-empty {
-    font-size: 0.68rem;
-    color: var(--color-text-tertiary);
-}
-</style>

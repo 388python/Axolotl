@@ -18826,5 +18826,74 @@
   },
   "app.lab.command-generator.nbt.type.raw": {
     "message": "SNBT 数组"
+  },
+  "app.lab.command-generator.filters": {
+    "message": "筛选"
+  },
+  "app.lab.command-generator.close": {
+    "message": "关闭"
+  },
+  "app.lab.command-generator.save": {
+    "message": "保存"
+  },
+  "app.lab.command-generator.preset.delete": {
+    "message": "删除预设"
+  },
+  "app.lab.command-generator.start-title": {
+    "message": "选择一条命令开始"
+  },
+  "app.lab.command-generator.start-hint": {
+    "message": "搜索命令名称，或从常用命令开始。"
+  },
+  "app.lab.command-generator.result-hint": {
+    "message": "填写参数后生成命令，即可复制到 Minecraft 使用。"
+  },
+  "app.lab.command-generator.arg.optional": {
+    "message": "可选"
+  },
+  "app.lab.command-generator.execute.move-up": {
+    "message": "上移"
+  },
+  "app.lab.command-generator.execute.move-down": {
+    "message": "下移"
+  },
+  "app.lab.command-generator.execute.remove-step": {
+    "message": "移除子命令"
+  },
+  "app.lab.command-generator.item-nbt.remove-lore": {
+    "message": "移除描述行"
+  },
+  "app.lab.command-generator.item-nbt.remove-enchantment": {
+    "message": "移除附魔"
+  },
+  "app.lab.command-generator.nbt.tag-name": {
+    "message": "标签名称"
+  },
+  "app.lab.command-generator.nbt.tag-value": {
+    "message": "标签值"
+  },
+  "app.lab.command-generator.nbt.toggle-tag": {
+    "message": "展开或收起标签"
+  },
+  "app.lab.command-generator.nbt.add-tag": {
+    "message": "添加子标签"
+  },
+  "app.lab.command-generator.nbt.remove-tag": {
+    "message": "移除标签"
+  },
+  "app.lab.command-generator.error.required": {
+    "message": "请填写{name}。"
+  },
+  "app.lab.command-generator.error.enum": {
+    "message": "请为{name}选择有效值。"
+  },
+  "app.lab.command-generator.error.number": {
+    "message": "请为{name}输入数字。"
+  },
+  "app.lab.command-generator.error.integer": {
+    "message": "请为{name}输入整数。"
+  },
+  "app.lab.command-generator.copy-failed": {
+    "message": "复制失败，请选中命令文本手动复制。"
   }
 }

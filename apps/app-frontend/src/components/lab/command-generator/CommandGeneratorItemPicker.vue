@@ -107,13 +107,16 @@ function pick(value: SlotValue) {
         >
             {{ formatMessage(messages.empty) }}
         </div>
-        <div v-else class="item-grid">
+        <div
+            v-else
+            class="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] auto-rows-max gap-2 overflow-y-auto overscroll-contain p-1"
+        >
             <button
                 v-for="entry in visibleEntries"
                 :key="entry.id"
+                v-tooltip="`${formatMessage(messages.pickItem)}: ${entry.name} (${entry.id})`"
                 type="button"
-                class="item-cell"
-                :title="`${formatMessage(messages.pickItem)}: ${entry.name} (${entry.id})`"
+                class="flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-lg border border-solid border-surface-4 bg-surface-3 p-2 text-[var(--color-text-primary)] hover:border-brand focus-visible:outline-brand"
                 :aria-label="`${formatMessage(messages.pickItem)}: ${entry.name}`"
                 @click="pick(entry.value)"
             >
@@ -123,90 +126,14 @@ function pick(value: SlotValue) {
                     :size="34"
                     :show-count="false"
                 />
-                <span class="item-name">{{ entry.name }}</span>
-                <span class="item-id">{{ entry.id }}</span>
+                <span class="w-full truncate text-center text-xs font-medium">{{
+                    entry.name
+                }}</span>
+                <span
+                    class="w-full truncate text-center font-mono text-[0.625rem] text-[var(--color-text-tertiary)]"
+                    >{{ entry.id }}</span
+                >
             </button>
         </div>
     </div>
 </template>
-
-<style scoped>
-.item-picker {
-    min-height: 0;
-}
-
-.item-grid {
-    display: grid;
-    min-height: 0;
-    flex: 1;
-    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-    grid-auto-rows: 5.75rem;
-    gap: 0.4rem;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    /* 给 hover 上浮位移和阴影留出空间，避免被 overflow 裁切 */
-    padding: 0.45rem 0.55rem 0.6rem 0.45rem;
-}
-
-.item-cell {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.15rem;
-    overflow: hidden;
-    border: 1px solid var(--color-surface-5);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-4);
-    padding: 0.2rem 0.1rem;
-    color: var(--color-text-primary);
-    cursor: pointer;
-    transition:
-        background-color 0.15s ease,
-        border-color 0.15s ease,
-        box-shadow 0.15s ease,
-        transform 0.15s ease;
-}
-
-.item-cell:hover,
-.item-cell:focus-visible {
-    border-color: var(--color-brand);
-    background: var(--color-surface-3);
-    /* 品牌色描边环 + 投影，做出"卡片浮起"的观感 */
-    box-shadow:
-        0 0 0 1px var(--color-brand),
-        0 6px 16px rgba(0, 0, 0, 0.28);
-    transform: translateY(-2px);
-    outline: none;
-}
-
-.item-cell:active {
-    transform: translateY(0) scale(0.98);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.24);
-}
-
-.item-name {
-    width: 100%;
-    overflow: hidden;
-    color: var(--color-text-primary);
-    font-size: 0.6rem;
-    line-height: 1.15;
-    text-align: center;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.item-id {
-    width: 100%;
-    overflow: hidden;
-    color: var(--color-text-tertiary);
-    font-family: var(--mono-font, monospace);
-    font-size: 0.5rem;
-    line-height: 1.1;
-    text-align: center;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    opacity: 0.8;
-}
-</style>

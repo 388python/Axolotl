@@ -150,13 +150,15 @@ function removeNodeById(list: NbtTagNode[], id: string): boolean {
 </script>
 
 <template>
-    <div class="nbt-editor">
-        <header class="nbt-head">
-            <span class="nbt-title">
-                <CodeIcon />
+    <div class="flex min-w-0 flex-col gap-4">
+        <header class="flex flex-wrap items-center justify-between gap-2">
+            <span
+                class="flex items-center gap-2 text-sm font-semibold text-[var(--color-text-primary)]"
+            >
+                <CodeIcon class="h-4 w-4" />
                 {{ formatMessage(messages.title) }}
             </span>
-            <div class="nbt-presets">
+            <div class="flex flex-wrap gap-2">
                 <Button
                     v-for="preset in presets"
                     :key="preset.label.id"
@@ -170,7 +172,7 @@ function removeNodeById(list: NbtTagNode[], id: string): boolean {
         </header>
 
         <p v-if="parseError" class="text-sm text-red">{{ parseError }}</p>
-        <div v-else class="nbt-tree">
+        <div v-else class="flex min-w-0 flex-col gap-2">
             <CommandGeneratorNbtNode
                 v-for="node in nodes"
                 :key="node.id"
@@ -180,117 +182,24 @@ function removeNodeById(list: NbtTagNode[], id: string): boolean {
                 @remove="onRemove"
                 @add-child="onAddChild"
             />
-            <button class="nbt-add-root" type="button" @click="addRootNode">
-                <PlusIcon />
+            <button
+                class="mt-1 flex items-center gap-2 self-start rounded-lg bg-surface-3 px-3 py-2 text-sm font-medium hover:bg-surface-4 focus-visible:outline-brand"
+                type="button"
+                @click="addRootNode"
+            >
+                <PlusIcon class="h-4 w-4" />
                 {{ formatMessage(messages.addRoot) }}
             </button>
         </div>
 
-        <div v-if="nodes.length" class="nbt-preview">
-            <span class="nbt-preview-label">{{ formatMessage(messages.snbtPreview) }}</span>
-            <code class="nbt-preview-code">{{ snbtPreview }}</code>
+        <div v-if="nodes.length" class="min-w-0 rounded-lg bg-surface-3 p-3">
+            <span class="mb-2 block text-xs text-[var(--color-text-tertiary)]">{{
+                formatMessage(messages.snbtPreview)
+            }}</span>
+            <code
+                class="block max-h-48 overflow-auto break-all text-xs leading-5 text-[var(--color-text-default)]"
+                >{{ snbtPreview }}</code
+            >
         </div>
     </div>
 </template>
-
-<style scoped>
-.nbt-editor {
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: var(--surface-2);
-    padding: 0.85rem 0.9rem;
-}
-
-.nbt-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-}
-
-.nbt-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.78rem;
-    font-weight: 800;
-    color: var(--color-text-primary);
-}
-
-.nbt-title :deep(svg) {
-    width: 0.9rem;
-    height: 0.9rem;
-    color: var(--color-brand);
-}
-
-.nbt-presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-}
-
-.nbt-tree {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-    padding: 0.55rem 0.6rem;
-}
-
-.nbt-add-root {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    border: 1px dashed var(--color-divider);
-    border-radius: var(--radius-sm);
-    background: transparent;
-    padding: 0.4rem 0.55rem;
-    color: var(--color-text-tertiary);
-    font-size: 0.68rem;
-    cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        color 0.15s ease;
-}
-
-.nbt-add-root:hover {
-    border-color: var(--color-brand);
-    color: var(--color-brand);
-}
-
-.nbt-add-root :deep(svg) {
-    width: 0.75rem;
-    height: 0.75rem;
-}
-
-.nbt-preview {
-    display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
-}
-
-.nbt-preview-label {
-    font-size: 0.62rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: var(--color-text-tertiary);
-}
-
-.nbt-preview-code {
-    overflow: auto;
-    border-radius: var(--radius-sm);
-    background: var(--surface-1);
-    padding: 0.55rem 0.65rem;
-    color: var(--color-text-tertiary);
-    font-family: var(--mono-font, monospace);
-    font-size: 0.68rem;
-    white-space: pre-wrap;
-    word-break: break-all;
-}
-</style>

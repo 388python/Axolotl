@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ChevronDownIcon, ChevronUpIcon, PlusIcon, SparklesIcon, XIcon } from '@modrinth/assets'
-import { useVIntl } from '@modrinth/ui'
+import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XIcon } from '@modrinth/assets'
+import { Button, useVIntl } from '@modrinth/ui'
 import { computed, ref, watch } from 'vue'
 
 import type {
@@ -250,105 +250,102 @@ defineExpose({ getState, setState })
 </script>
 
 <template>
-    <div class="execute-chain">
-        <!-- 快速预设 -->
-        <div class="chain-presets">
-            <span class="chain-presets-label">
-                <SparklesIcon />
+    <div class="flex min-w-0 flex-col gap-5">
+        <details class="rounded-lg border border-solid border-surface-4 p-3">
+            <summary class="cursor-pointer text-sm font-medium text-[var(--color-text-primary)]">
                 {{ formatMessage(messages.executeQuickExamples) }}
-            </span>
-            <div class="chain-preset-list">
-                <button
+            </summary>
+            <div class="mt-3 flex flex-wrap gap-2">
+                <Button
                     v-for="preset in QUICK_PRESETS"
                     :key="preset.labelKey.id"
-                    type="button"
-                    class="preset-btn"
+                    type="outlined"
+                    size="sm"
                     @click="applyQuickPreset(preset)"
+                    >{{ formatMessage(preset.labelKey) }}</Button
                 >
-                    {{ formatMessage(preset.labelKey) }}
-                </button>
-                <button
-                    v-if="chain.length || finalCommand"
-                    type="button"
-                    class="preset-btn preset-btn--clear"
-                    @click="clearChain"
-                >
-                    {{ formatMessage(messages.executeClear) }}
-                </button>
             </div>
-        </div>
-
-        <!-- 已添加的链 -->
-        <div class="chain-section">
-            <div class="chain-section-head">
-                <span class="chain-section-title">
+        </details>
+        <section class="flex min-w-0 flex-col gap-3">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="m-0 text-sm font-semibold text-[var(--color-text-primary)]">
                     {{ formatMessage(messages.executeChainTitle) }}
-                </span>
-                <span class="chain-count">{{ chain.length }}</span>
+                    <span class="ml-1 font-normal text-[var(--color-text-tertiary)]">{{
+                        chain.length
+                    }}</span>
+                </h3>
+                <Button
+                    v-if="chain.length || finalCommand"
+                    type="quiet"
+                    size="sm"
+                    @click="clearChain"
+                    >{{ formatMessage(messages.executeClear) }}</Button
+                >
             </div>
-
-            <p v-if="!chain.length" class="chain-empty">
+            <p
+                v-if="!chain.length"
+                class="m-0 rounded-lg bg-surface-3 p-3 text-sm leading-6 text-[var(--color-text-tertiary)]"
+            >
                 {{ formatMessage(messages.executeChainEmpty) }}
             </p>
-
-            <div v-else class="chain-steps">
-                <div
+            <ol v-else class="m-0 flex min-w-0 list-none flex-col gap-3 p-0">
+                <li
                     v-for="(step, index) in chain"
                     :key="step.id"
-                    class="chain-step"
-                    :class="{ 'chain-step--expanded': step.expanded }"
+                    class="min-w-0 rounded-lg border border-solid border-surface-4 bg-surface-3 p-3"
                 >
-                    <div class="chain-step-head">
-                        <span class="chain-step-index">{{ index + 1 }}</span>
-                        <span class="chain-step-label">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm tabular-nums text-[var(--color-text-tertiary)]"
+                            >{{ index + 1 }}.</span
+                        >
+                        <button
+                            class="min-w-0 flex-1 bg-transparent p-0 text-left text-sm font-semibold text-[var(--color-text-primary)]"
+                            :aria-expanded="step.expanded"
+                            @click="step.expanded = !step.expanded"
+                        >
                             {{
                                 getSubcommand(step.subcommandId)
                                     ? t(getSubcommand(step.subcommandId)!.labelKey)
                                     : step.subcommandId
                             }}
-                        </span>
-                        <div class="chain-step-actions">
-                            <button
-                                type="button"
-                                class="icon-btn"
+                        </button>
+                        <div class="flex items-center gap-1" data-tooltip-group="execute-actions">
+                            <Button
+                                v-tooltip="formatMessage(messages.moveUp)"
+                                type="quiet"
+                                size="sm"
+                                icon-only
+                                :label="formatMessage(messages.moveUp)"
                                 :disabled="index === 0"
                                 @click="moveStep(index, -1)"
-                            >
-                                <ChevronUpIcon />
-                            </button>
-                            <button
-                                type="button"
-                                class="icon-btn"
+                                ><ChevronUpIcon
+                            /></Button>
+                            <Button
+                                v-tooltip="formatMessage(messages.moveDown)"
+                                type="quiet"
+                                size="sm"
+                                icon-only
+                                :label="formatMessage(messages.moveDown)"
                                 :disabled="index === chain.length - 1"
                                 @click="moveStep(index, 1)"
-                            >
-                                <ChevronDownIcon />
-                            </button>
-                            <button
-                                type="button"
-                                class="icon-btn"
-                                @click="step.expanded = !step.expanded"
-                            >
-                                <ChevronDownIcon
-                                    :style="{
-                                        transform: step.expanded ? 'rotate(180deg)' : 'none',
-                                        transition: 'transform 0.15s ease',
-                                    }"
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                class="icon-btn icon-btn--danger"
+                                ><ChevronDownIcon
+                            /></Button>
+                            <Button
+                                v-tooltip="formatMessage(messages.removeStep)"
+                                type="quiet"
+                                size="sm"
+                                icon-only
+                                :label="formatMessage(messages.removeStep)"
                                 @click="removeStep(index)"
-                            >
-                                <XIcon />
-                            </button>
+                                ><XIcon
+                            /></Button>
                         </div>
                     </div>
-                    <div class="chain-step-preview">
-                        <code>{{ renderStep(step) }}</code>
-                    </div>
-                    <div v-if="step.expanded" class="chain-step-body">
+                    <code
+                        class="mt-2 block break-all text-xs leading-5 text-[var(--color-text-tertiary)]"
+                        >{{ renderStep(step) }}</code
+                    >
+                    <div v-if="step.expanded" class="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
                         <CommandGeneratorArgument
                             v-for="arg in getSubcommand(step.subcommandId)?.arguments ?? []"
                             :key="arg.name"
@@ -356,411 +353,59 @@ defineExpose({ getState, setState })
                             :arg="arg"
                         />
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 子命令选择器 -->
-        <div class="chain-section">
-            <div class="chain-section-head">
-                <span class="chain-section-title">
-                    {{ formatMessage(messages.executePickerTitle) }}
-                </span>
-            </div>
-
-            <div class="picker-categories">
-                <div v-for="cat in categories" :key="cat.id" class="picker-category">
-                    <span class="picker-category-label">{{ t(cat.labelKey) }}</span>
-                    <div class="picker-category-grid">
-                        <button
-                            v-for="sub in cat.subcommands"
-                            :key="sub.id"
-                            type="button"
-                            class="picker-btn"
-                            :title="t(sub.descriptionKey)"
-                            @click="addSubcommand(sub)"
-                        >
-                            <PlusIcon />
-                            <span>{{ t(sub.labelKey) }}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 最终执行的命令 -->
-        <div class="chain-section">
-            <div class="chain-section-head">
-                <span class="chain-section-title">
-                    {{ formatMessage(messages.executeFinalTitle) }}
-                </span>
-            </div>
-
-            <div class="quick-commands">
-                <span class="quick-commands-label">
-                    {{ formatMessage(messages.executeCommonCommands) }}
-                </span>
-                <div class="quick-commands-list">
-                    <button
-                        v-for="qc in QUICK_FINAL_COMMANDS"
-                        :key="qc.label"
-                        type="button"
-                        class="quick-command-chip"
-                        @click="applyQuickFinalCommand(qc.label)"
-                    >
-                        /{{ qc.label }}
-                    </button>
-                </div>
-            </div>
-
+                </li>
+            </ol>
+        </section>
+        <section class="flex min-w-0 flex-col gap-2">
+            <label
+                for="execute-final-command"
+                class="text-sm font-semibold text-[var(--color-text-primary)]"
+                >{{ formatMessage(messages.executeFinalTitle) }}</label
+            >
             <input
+                id="execute-final-command"
                 ref="finalInputRef"
                 v-model="finalCommand"
-                class="final-input"
+                class="w-full min-w-0 rounded-xl border-0 bg-surface-4 px-3 py-2 font-mono text-sm text-[var(--color-text-primary)] outline-none focus:ring-4 focus:ring-brand-shadow"
                 :placeholder="formatMessage(messages.executeFinalPlaceholder)"
                 spellcheck="false"
             />
-            <p class="final-hint">{{ formatMessage(messages.executeFinalHint) }}</p>
-        </div>
+            <p class="m-0 text-xs leading-5 text-[var(--color-text-tertiary)]">
+                {{ formatMessage(messages.executeFinalHint) }}
+            </p>
+            <div class="flex flex-wrap gap-1">
+                <Button
+                    v-for="qc in QUICK_FINAL_COMMANDS"
+                    :key="qc.label"
+                    type="quiet"
+                    size="2xs"
+                    @click="applyQuickFinalCommand(qc.label)"
+                    ><code>/{{ qc.label }}</code></Button
+                >
+            </div>
+        </section>
+        <details class="rounded-lg border border-solid border-surface-4 p-3">
+            <summary class="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]">
+                {{ formatMessage(messages.executePickerTitle) }}
+            </summary>
+            <div class="mt-3 flex flex-col gap-4">
+                <div v-for="cat in categories" :key="cat.id">
+                    <p class="m-0 mb-2 text-xs font-medium text-[var(--color-text-tertiary)]">
+                        {{ t(cat.labelKey) }}
+                    </p>
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            v-for="sub in cat.subcommands"
+                            :key="sub.id"
+                            v-tooltip="t(sub.descriptionKey)"
+                            type="outlined"
+                            size="sm"
+                            @click="addSubcommand(sub)"
+                            ><PlusIcon class="h-4 w-4" />{{ t(sub.labelKey) }}</Button
+                        >
+                    </div>
+                </div>
+            </div>
+        </details>
     </div>
 </template>
-
-<style scoped>
-.execute-chain {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.chain-presets {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.chain-presets-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.72rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-brand);
-}
-
-.chain-presets-label :deep(svg) {
-    width: 0.9rem;
-    height: 0.9rem;
-}
-
-.chain-preset-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}
-
-.preset-btn {
-    border: 1px solid var(--color-divider);
-    border-radius: 999px;
-    background: var(--surface-1);
-    padding: 0.35rem 0.8rem;
-    color: var(--color-text-tertiary);
-    font-size: 0.72rem;
-    cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.preset-btn:hover {
-    border-color: var(--color-brand);
-    background: var(--surface-4);
-    color: var(--color-brand);
-}
-
-.preset-btn--clear {
-    border-color: var(--color-red);
-    color: var(--color-red);
-}
-
-.preset-btn--clear:hover {
-    border-color: var(--color-red);
-    color: var(--color-red);
-}
-
-.chain-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-lg);
-    background: var(--surface-3);
-    padding: 1rem 1.1rem;
-}
-
-.chain-section-head {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.chain-section-title {
-    font-size: 0.72rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text-tertiary);
-}
-
-.chain-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.25rem;
-    height: 1.25rem;
-    padding: 0 0.4rem;
-    border-radius: 999px;
-    background: var(--surface-4);
-    color: var(--color-text-tertiary);
-    font-size: 0.65rem;
-    font-weight: 700;
-}
-
-.chain-empty {
-    margin: 0;
-    border: 1px dashed var(--color-divider);
-    border-radius: var(--radius-md);
-    padding: 0.7rem 0.85rem;
-    font-size: 0.72rem;
-    color: var(--color-text-tertiary);
-}
-
-.chain-steps {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.chain-step {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-md);
-    background: var(--surface-2);
-    padding: 0.65rem 0.75rem;
-}
-
-.chain-step--expanded {
-    border-color: var(--color-brand);
-}
-
-.chain-step-head {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.chain-step-index {
-    display: inline-flex;
-    width: 1.35rem;
-    height: 1.35rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: var(--surface-4);
-    font-size: 0.65rem;
-    font-weight: 800;
-    color: var(--color-text-tertiary);
-}
-
-.chain-step-label {
-    flex: 1;
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: var(--color-text-primary);
-}
-
-.chain-step-actions {
-    display: flex;
-    gap: 0.15rem;
-}
-
-.chain-step-preview {
-    border-radius: var(--radius-sm);
-    background: var(--surface-1);
-    padding: 0.35rem 0.6rem;
-}
-
-.chain-step-preview code {
-    font-family: var(--mono-font, monospace);
-    font-size: 0.72rem;
-    color: var(--color-brand);
-}
-
-.chain-step-body {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: 0.5rem;
-    padding-top: 0.35rem;
-    border-top: 1px solid var(--color-divider);
-}
-
-.icon-btn {
-    display: inline-flex;
-    width: 1.5rem;
-    height: 1.5rem;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    transition:
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.icon-btn:hover:not(:disabled) {
-    background: var(--surface-4);
-    color: var(--color-text-primary);
-}
-
-.icon-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-}
-
-.icon-btn--danger:hover:not(:disabled) {
-    color: var(--color-red);
-}
-
-.icon-btn :deep(svg) {
-    width: 0.75rem;
-    height: 0.75rem;
-}
-
-.picker-categories {
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-}
-
-.picker-category {
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-}
-
-.picker-category-label {
-    font-size: 0.68rem;
-    font-weight: 700;
-    color: var(--color-text-tertiary);
-}
-
-.picker-category-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-    gap: 0.4rem;
-}
-
-.picker-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-    padding: 0.45rem 0.7rem;
-    color: var(--color-text-primary);
-    font-size: 0.72rem;
-    text-align: left;
-    cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        background 0.15s ease;
-}
-
-.picker-btn:hover {
-    border-color: var(--color-brand);
-    background: var(--surface-4);
-    color: var(--color-brand);
-}
-
-.picker-btn :deep(svg) {
-    width: 0.7rem;
-    height: 0.7rem;
-    flex: 0 0 auto;
-    color: var(--color-brand);
-}
-
-.picker-btn span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.quick-commands {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.quick-commands-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--color-text-tertiary);
-}
-
-.quick-commands-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-}
-
-.quick-command-chip {
-    border: 1px solid var(--color-divider);
-    border-radius: 999px;
-    background: var(--surface-1);
-    padding: 0.25rem 0.6rem;
-    color: var(--color-text-tertiary);
-    font-family: var(--mono-font, monospace);
-    font-size: 0.68rem;
-    cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.quick-command-chip:hover {
-    border-color: var(--color-brand);
-    background: var(--surface-4);
-    color: var(--color-brand);
-}
-
-.final-input {
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-    padding: 0.6rem 0.8rem;
-    color: var(--color-text-primary);
-    font-family: var(--mono-font, monospace);
-    font-size: 0.82rem;
-    outline: none;
-    transition: border-color 0.15s ease;
-}
-
-.final-input:focus {
-    border-color: var(--color-brand);
-}
-
-.final-hint {
-    margin: 0;
-    font-size: 0.66rem;
-    color: var(--color-text-tertiary);
-}
-</style>

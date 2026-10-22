@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ChevronDownIcon, ChevronUpIcon, PlusIcon, XIcon } from '@modrinth/assets'
-import { Combobox, type ComboboxOption, defineMessages, useVIntl } from '@modrinth/ui'
+import { Button, Combobox, type ComboboxOption, defineMessages, useVIntl } from '@modrinth/ui'
 import { computed, ref } from 'vue'
 
+import { commandGeneratorMessages as commonMessages } from '@/lab/command-generator/i18n/messages.ts'
 import type { NbtTagNode, NbtTagType } from '@/lab/command-generator/nbt-tree.ts'
 
 const props = defineProps<{
@@ -86,27 +87,31 @@ function onTypeChange(value: unknown) {
 </script>
 
 <template>
-    <div class="nbt-node">
-        <div class="nbt-row" :style="{ paddingLeft: `${depth * 16}px` }">
-            <button
+    <div class="flex min-w-0 flex-col gap-2">
+        <div class="nbt-row flex min-w-0 flex-wrap items-center gap-2">
+            <Button
                 v-if="isContainer"
-                type="button"
-                class="nbt-toggle"
+                v-tooltip="formatMessage(commonMessages.toggleTag)"
+                type="quiet"
+                size="sm"
+                icon-only
+                :label="formatMessage(commonMessages.toggleTag)"
                 :aria-expanded="expanded"
                 @click="expanded = !expanded"
             >
                 <ChevronUpIcon v-if="expanded" />
                 <ChevronDownIcon v-else />
-            </button>
-            <span v-else class="nbt-toggle-spacer" />
+            </Button>
+            <span v-else class="w-7 shrink-0" />
 
             <input
-                class="nbt-input nbt-name"
+                class="nbt-name min-w-0 flex-1 rounded-lg border-0 bg-surface-4 px-2 py-2 text-sm outline-none focus:ring-4 focus:ring-brand-shadow"
+                :aria-label="formatMessage(commonMessages.tagName)"
                 :value="node.name"
                 @input="emit('update', node.id, 'name', ($event.target as HTMLInputElement).value)"
             />
 
-            <div class="nbt-type">
+            <div class="min-w-0">
                 <Combobox
                     :model-value="node.type"
                     :options="typeOptions"
@@ -116,26 +121,42 @@ function onTypeChange(value: unknown) {
 
             <input
                 v-if="!isContainer"
-                class="nbt-input nbt-value"
+                class="nbt-value min-w-0 flex-1 rounded-lg border-0 bg-surface-4 px-2 py-2 text-sm outline-none focus:ring-4 focus:ring-brand-shadow"
+                :aria-label="formatMessage(commonMessages.tagValue)"
                 :value="String(node.value)"
                 @input="emit('update', node.id, 'value', ($event.target as HTMLInputElement).value)"
             />
-            <span v-else class="nbt-child-count">{{ childCountLabel }}</span>
+            <span v-else class="text-xs text-[var(--color-text-tertiary)]">{{
+                childCountLabel
+            }}</span>
 
-            <button
+            <Button
                 v-if="isContainer"
-                type="button"
-                class="nbt-action nbt-add"
+                v-tooltip="formatMessage(commonMessages.addTag)"
+                type="quiet"
+                size="sm"
+                icon-only
+                :label="formatMessage(commonMessages.addTag)"
                 @click="emit('add-child', node.id)"
             >
                 <PlusIcon />
-            </button>
-            <button type="button" class="nbt-action nbt-remove" @click="emit('remove', node.id)">
+            </Button>
+            <Button
+                v-tooltip="formatMessage(commonMessages.removeTag)"
+                type="quiet"
+                size="sm"
+                icon-only
+                :label="formatMessage(commonMessages.removeTag)"
+                @click="emit('remove', node.id)"
+            >
                 <XIcon />
-            </button>
+            </Button>
         </div>
 
-        <template v-if="isContainer && expanded">
+        <div
+            v-if="isContainer && expanded"
+            class="ml-3 flex min-w-0 flex-col gap-2 border-0 border-l border-solid border-surface-4 pl-3"
+        >
             <CommandGeneratorNbtNode
                 v-for="child in node.children"
                 :key="child.id"
@@ -145,100 +166,6 @@ function onTypeChange(value: unknown) {
                 @remove="(id) => emit('remove', id)"
                 @add-child="(id) => emit('add-child', id)"
             />
-        </template>
+        </div>
     </div>
 </template>
-
-<style scoped>
-.nbt-node {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.nbt-row {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.nbt-toggle,
-.nbt-action {
-    display: inline-flex;
-    width: 1.35rem;
-    height: 1.35rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    transition:
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.nbt-toggle:hover,
-.nbt-action:hover {
-    background: var(--surface-4);
-    color: var(--color-text-primary);
-}
-
-.nbt-toggle :deep(svg),
-.nbt-action :deep(svg) {
-    width: 0.75rem;
-    height: 0.75rem;
-}
-
-.nbt-toggle-spacer {
-    width: 1.35rem;
-    flex: 0 0 auto;
-}
-
-.nbt-input {
-    border: 1px solid var(--color-divider);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    padding: 0.25rem 0.5rem;
-    color: var(--color-text-primary);
-    font-size: 0.72rem;
-    outline: none;
-    transition: border-color 0.15s ease;
-}
-
-.nbt-input:focus {
-    border-color: var(--color-brand);
-}
-
-.nbt-name {
-    width: 7rem;
-    flex: 0 0 auto;
-}
-
-.nbt-type {
-    width: 8.5rem;
-    flex: 0 0 auto;
-}
-
-.nbt-value {
-    min-width: 0;
-    flex: 1;
-}
-
-.nbt-child-count {
-    flex: 1;
-    font-size: 0.68rem;
-    color: var(--color-text-tertiary);
-}
-
-.nbt-add {
-    color: var(--color-brand);
-}
-
-.nbt-remove {
-    color: var(--color-red);
-}
-</style>

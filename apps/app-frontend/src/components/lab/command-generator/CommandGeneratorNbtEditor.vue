@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { CodeIcon, SparklesIcon } from '@modrinth/assets'
-import { defineMessages, useVIntl } from '@modrinth/ui'
+import { Button, defineMessages, useVIntl } from '@modrinth/ui'
 import { ref, watch } from 'vue'
 
 import type { NbtKind } from '@/lab/command-generator/commands/types.ts'
@@ -37,26 +36,28 @@ watch(
 </script>
 
 <template>
-    <div class="nbt-editor-wrap">
-        <div v-if="kind === 'item'" class="nbt-mode-tabs">
-            <button
-                type="button"
+    <div class="flex min-w-0 flex-col gap-4">
+        <div v-if="kind === 'item'" class="flex flex-wrap gap-1">
+            <Button
+                type="quiet"
+                size="sm"
                 class="nbt-mode-tab"
-                :class="{ 'nbt-mode-tab--active': mode === 'simple' }"
+                :highlighted="mode === 'simple'"
+                :aria-pressed="mode === 'simple'"
                 @click="mode = 'simple'"
             >
-                <SparklesIcon />
                 {{ formatMessage(messages.simple) }}
-            </button>
-            <button
-                type="button"
+            </Button>
+            <Button
+                type="quiet"
+                size="sm"
                 class="nbt-mode-tab"
-                :class="{ 'nbt-mode-tab--active': mode === 'advanced' }"
+                :highlighted="mode === 'advanced'"
+                :aria-pressed="mode === 'advanced'"
                 @click="mode = 'advanced'"
             >
-                <CodeIcon />
                 {{ formatMessage(messages.advanced) }}
-            </button>
+            </Button>
         </div>
 
         <CommandGeneratorItemNbt
@@ -73,51 +74,3 @@ watch(
         />
     </div>
 </template>
-
-<style scoped>
-.nbt-editor-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-}
-
-.nbt-mode-tabs {
-    display: inline-flex;
-    gap: 0.25rem;
-    border-radius: var(--radius-md);
-    background: var(--surface-1);
-    padding: 0.2rem;
-    align-self: flex-start;
-}
-
-.nbt-mode-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    padding: 0.35rem 0.7rem;
-    color: var(--color-text-tertiary);
-    font-size: 0.7rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition:
-        background 0.15s ease,
-        color 0.15s ease;
-}
-
-.nbt-mode-tab:hover {
-    color: var(--color-text-primary);
-}
-
-.nbt-mode-tab--active {
-    background: color-mix(in srgb, var(--color-brand) 14%, var(--surface-4));
-    color: var(--color-brand);
-}
-
-.nbt-mode-tab :deep(svg) {
-    width: 0.78rem;
-    height: 0.78rem;
-}
-</style>
