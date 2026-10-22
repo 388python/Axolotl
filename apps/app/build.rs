@@ -1136,7 +1136,6 @@ fn main() {
                         "servers_install_forge",
                         "servers_install_modpack",
                         "servers_start",
-                        "servers_send_command",
                         "servers_send_console_input",
                         "servers_resize_console",
                         "servers_stop",
@@ -1145,6 +1144,7 @@ fn main() {
                         "servers_port_process",
                         "servers_get_log_buffer",
                         "servers_get_log_delta",
+                        "servers_get_console_delta",
                         "servers_clear_log",
                     ])
                     .default_permission(

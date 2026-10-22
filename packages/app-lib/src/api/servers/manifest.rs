@@ -11,8 +11,6 @@ use crate::state::State;
 use crate::util::io;
 use crate::{ErrorKind, Result};
 
-use super::lifecycle::is_running;
-
 const MANIFEST_FILE: &str = "axolotl-server.json";
 const DEFAULT_JAR_NAME: &str = "server.jar";
 /// Executable launcher jar downloaded from Fabric Meta; must match the
@@ -119,6 +117,8 @@ pub struct ServerInfo {
     pub manifest: ServerManifest,
     pub path: String,
     pub running: bool,
+    pub starting: bool,
+    pub stopping: bool,
     pub eula_exists: bool,
     pub eula_accepted: bool,
     pub port: Option<u16>,
@@ -203,7 +203,9 @@ pub(super) async fn build_server_info(
     ServerInfo {
         manifest: manifest.clone(),
         path: path.to_string_lossy().into_owned(),
-        running: is_running(&manifest.id),
+        running: super::lifecycle::has_process(&manifest.id),
+        starting: super::lifecycle::is_starting(&manifest.id),
+        stopping: super::lifecycle::is_stopping(&manifest.id),
         eula_exists,
         eula_accepted,
         port,

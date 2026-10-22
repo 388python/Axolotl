@@ -54,9 +54,13 @@ pub async fn install_forge(
         .await?;
 
     let java = java_path.clone().unwrap_or_else(|| "java".to_string());
+    let java = java_environment::console_java_executable(&java)?;
 
     log(server_id, "Running Forge installer (this may take a while)").await?;
-    let output = java_environment::tokio_command(&java)
+    let mut command = java_environment::tokio_command(&java);
+    #[cfg(windows)]
+    command.creation_flags(0x0800_0000);
+    let output = command
         .arg("-jar")
         .arg(&installer_path)
         .arg("--installServer")

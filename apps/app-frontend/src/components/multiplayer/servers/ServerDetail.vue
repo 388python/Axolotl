@@ -56,6 +56,7 @@ const multiplayerSession = useMultiplayerSession()
 const { formatMessage } = useVIntl()
 
 const messages = defineMessages({
+    stopping: { id: 'app.servers.action.stopping', defaultMessage: 'Stopping...' },
     console: { id: 'app.servers.detail.console', defaultMessage: 'Console' },
     files: { id: 'app.servers.detail.files', defaultMessage: 'Files' },
     settings: { id: 'app.servers.detail.settings', defaultMessage: 'Settings' },
@@ -265,7 +266,7 @@ const tabLinks = computed(() => [
 
 async function toggleRunning() {
     if (!server.value) return
-    if (server.value.status === 'running') {
+    if (server.value.running || server.value.starting) {
         await stopServer(server.value.id)
     } else {
         await tryStartServer(server.value)
@@ -394,12 +395,16 @@ async function shareOnline() {
 
                 <div class="flex flex-wrap gap-2">
                     <Button
-                        v-if="server.status === 'running'"
+                        v-if="server.running || server.starting"
                         type="outlined"
                         color="red"
+                        :disabled="server.stopping"
                         @click="toggleRunning"
-                        ><StopCircleIcon />
-                        {{ formatMessage(messages.stop) }}
+                        ><LoaderCircleIcon
+                            v-if="server.stopping"
+                            class="animate-spin"
+                        /><StopCircleIcon v-else />
+                        {{ formatMessage(server.stopping ? messages.stopping : messages.stop) }}
                     </Button>
                     <Button v-else-if="setupStatus === 'installing'" type="outlined" disabled
                         ><LoaderCircleIcon class="animate-spin" />

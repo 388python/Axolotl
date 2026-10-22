@@ -20,7 +20,6 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             servers_install_forge,
             servers_install_modpack,
             servers_start,
-            servers_send_command,
             servers_send_console_input,
             servers_resize_console,
             servers_stop,
@@ -29,6 +28,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             servers_port_process,
             servers_get_log_buffer,
             servers_get_log_delta,
+            servers_get_console_delta,
             servers_clear_log,
         ])
         .build()
@@ -203,14 +203,6 @@ pub async fn servers_start(
 }
 
 #[tauri::command]
-pub async fn servers_send_command(
-    server_id: &str,
-    command: &str,
-) -> Result<()> {
-    Ok(servers::send_command(server_id, command).await?)
-}
-
-#[tauri::command]
 pub async fn servers_send_console_input(
     server_id: &str,
     data: &str,
@@ -260,6 +252,14 @@ pub async fn servers_get_log_delta(
     cursor: Option<servers::LogCursor>,
 ) -> Result<servers::LogDelta> {
     Ok(servers::get_log_delta(server_id, cursor))
+}
+
+#[tauri::command]
+pub async fn servers_get_console_delta(
+    server_id: &str,
+    cursor: Option<servers::LogCursor>,
+) -> Result<servers::ConsoleDelta> {
+    Ok(servers::get_console_delta(server_id, cursor))
 }
 
 #[tauri::command]

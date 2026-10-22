@@ -85,7 +85,7 @@ function setDisplayMode(mode: 'standard' | 'cards') {
 }
 
 async function toggleRunning(server: ServerView) {
-    if (server.status === 'running') {
+    if (server.running || server.starting) {
         await stopServer(server.id)
     } else {
         await tryStartServer(server)

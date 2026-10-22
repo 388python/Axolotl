@@ -239,6 +239,7 @@ pub async fn delete(server_id: &str) -> Result<()> {
         .as_error());
     }
     let path = server_path(server_id).await?;
+    super::console::remove_console(server_id);
     remove_log_buffer(server_id);
     tokio::fs::remove_dir_all(&path)
         .await

@@ -30,6 +30,7 @@ const emit = defineEmits<{
 
 const { formatMessage } = useVIntl()
 const messages = defineMessages({
+    stopping: { id: 'app.servers.action.stopping', defaultMessage: 'Stopping...' },
     start: { id: 'app.servers.action.start', defaultMessage: 'Start' },
     stop: { id: 'app.servers.action.stop', defaultMessage: 'Stop' },
     continueDownload: {
@@ -130,7 +131,7 @@ const setupTooltip = computed(() => {
                     ><RefreshCwIcon />
                 </Button>
                 <Button
-                    v-else-if="server.status !== 'running'"
+                    v-else-if="!server.running && !server.starting"
                     v-tooltip="formatMessage(messages.start)"
                     type="colored"
                     color="brand"
@@ -143,7 +144,8 @@ const setupTooltip = computed(() => {
                 </Button>
                 <Button
                     v-else
-                    v-tooltip="formatMessage(messages.stop)"
+                    v-tooltip="formatMessage(server.stopping ? messages.stopping : messages.stop)"
+                    :disabled="server.stopping"
                     type="colored"
                     color="red"
                     size="xl"
@@ -223,7 +225,7 @@ const setupTooltip = computed(() => {
                     ><RefreshCwIcon />
                 </Button>
                 <Button
-                    v-else-if="server.status !== 'running'"
+                    v-else-if="!server.running && !server.starting"
                     v-tooltip="formatMessage(messages.start)"
                     type="colored"
                     color="brand"
@@ -236,7 +238,8 @@ const setupTooltip = computed(() => {
                 </Button>
                 <Button
                     v-else
-                    v-tooltip="formatMessage(messages.stop)"
+                    v-tooltip="formatMessage(server.stopping ? messages.stopping : messages.stop)"
+                    :disabled="server.stopping"
                     type="colored"
                     color="red"
                     size="xl"

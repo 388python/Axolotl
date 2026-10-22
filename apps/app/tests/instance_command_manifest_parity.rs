@@ -79,6 +79,14 @@ fn server_log_delta_is_registered_and_allowed_for_the_main_window() {
     let manifest = manifest_commands(include_str!("../build.rs"), "servers");
     assert!(runtime.contains("servers_get_log_delta"));
     assert!(manifest.contains("servers_get_log_delta"));
+    for command in [
+        "servers_get_console_delta",
+        "servers_send_console_input",
+        "servers_resize_console",
+    ] {
+        assert!(runtime.contains(command));
+        assert!(manifest.contains(command));
+    }
     assert!(runtime.difference(&manifest).next().is_none());
     let capabilities: serde_json::Value =
         serde_json::from_str(include_str!("../capabilities/plugins.json"))

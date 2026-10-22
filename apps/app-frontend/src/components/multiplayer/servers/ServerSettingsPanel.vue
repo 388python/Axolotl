@@ -106,7 +106,7 @@ const requiredJava = computed(() => requiredJavaMajorVersion(props.server.gameVe
 // Same busy boundary as the files panel: a running server holds its
 // configuration in memory and may overwrite external edits, and
 // manifest changes only take effect after a restart anyway.
-const isRunning = computed(() => props.server.running)
+const isRunning = computed(() => props.server.running || props.server.starting)
 
 const baseline = ref({
     name: props.server.name,
@@ -374,7 +374,7 @@ async function confirmDelete() {
                     <Button
                         type="outlined"
                         color="red"
-                        :disabled="server.running"
+                        :disabled="server.running || server.starting"
                         @click="deleteModal?.show()"
                         ><TrashIcon />
                         {{ formatMessage(messages.deleteTitle) }}

@@ -12161,17 +12161,23 @@
   "app.servers.action.stop": {
     "message": "Stop"
   },
+  "app.servers.action.stopping": {
+    "message": "Stopping..."
+  },
   "app.servers.card.port": {
     "message": "Port {port}"
   },
   "app.servers.card.type": {
     "message": "{type} · {version}"
   },
-  "app.servers.console.forge-command-placeholder": {
-    "message": "Send a command - Tab completion supported"
+  "app.servers.console.logs": {
+    "message": "Logs"
   },
   "app.servers.console.not-running": {
     "message": "The server is not running"
+  },
+  "app.servers.console.terminal": {
+    "message": "Terminal"
   },
   "app.servers.count": {
     "message": "{count, plural, =0 {No servers yet} one {# server} other {# servers}}"

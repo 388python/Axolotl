@@ -58,6 +58,7 @@ const { favoriteWorlds, localServers, runningInstanceIds } = runtime
 const { startServer, stopServer } = useServers()
 
 const messages = defineMessages({
+    stopping: { id: 'app.servers.action.stopping', defaultMessage: 'Stopping...' },
     pinnedServers: {
         id: 'app.home.servers.pinned',
         defaultMessage: 'Pinned servers',
@@ -242,8 +243,12 @@ async function joinServer(world: ServerWorld & WorldWithInstance, instance: Game
     try {
         const linked = linkedServer(world)
         if (linked) {
+            if (linked.stopping) {
+                addNotification({ type: 'info', title: formatMessage(messages.stopping) })
+                return
+            }
             if (!(await confirmOnlineModeLaunch(linked))) return
-            if (!linked.running) {
+            if (!linked.running && !linked.starting) {
                 const started = await startServer(linked.id)
                 if (!started) return
             }
@@ -494,19 +499,28 @@ async function unpinLocalServer(serverId: string) {
                         >
                             <Button
                                 v-tooltip="
-                                    formatMessage(server.running ? messages.stop : messages.start)
+                                    formatMessage(
+                                        server.stopping
+                                            ? messages.stopping
+                                            : server.running || server.starting
+                                              ? messages.stop
+                                              : messages.start,
+                                    )
                                 "
                                 type="quiet"
                                 size="2xs"
                                 circular
                                 icon-only
-                                :class="server.running ? '!text-red' : '!text-brand'"
+                                :disabled="server.stopping"
+                                :class="
+                                    server.running || server.starting ? '!text-red' : '!text-brand'
+                                "
                                 @click="
-                                    server.running
+                                    server.running || server.starting
                                         ? stopLocalServer(server.id)
                                         : startLocalServer(server.id)
                                 "
-                                ><StopCircleIcon v-if="server.running" />
+                                ><StopCircleIcon v-if="server.running || server.starting" />
                                 <PlayIcon v-else />
                             </Button>
                             <OverflowMenu
