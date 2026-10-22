@@ -1167,6 +1167,7 @@ pub async fn configured_client() -> crate::Result<reqwest::Client> {
 
 #[derive(Clone)]
 pub(crate) struct DownloadClients {
+    pub(crate) system_proxy_fingerprint: String,
     pub(crate) metadata: reqwest::Client,
     pub(crate) system: reqwest::Client,
     pub(crate) direct: reqwest::Client,
@@ -1184,11 +1185,24 @@ pub(crate) struct DownloadClients {
 }
 
 impl DownloadClients {
+    pub(crate) fn refresh_system_proxy(&self) -> crate::Result<Option<Self>> {
+        if self.proxy.mode != crate::util::proxy::ProxyMode::System
+            || self.system_proxy_fingerprint
+                == crate::util::proxy::system_proxy_fingerprint()
+        {
+            return Ok(None);
+        }
+        Self::build(&self.proxy, self.ignore_ssl_errors, self.doh_enabled)
+            .map(Some)
+    }
+
     pub(crate) fn build(
         proxy: &crate::util::proxy::ProxyConfig,
         ignore_ssl_errors: bool,
         doh_enabled: bool,
     ) -> crate::Result<Self> {
+        let system_proxy_fingerprint =
+            crate::util::proxy::system_proxy_fingerprint();
         let system_dns = Arc::new(DownloadDnsResolver::with_doh_and_proxy(
             doh_enabled,
             Some(proxy),
@@ -1235,6 +1249,7 @@ impl DownloadClients {
             builder.build().map_err(crate::Error::from)
         };
         Ok(Self {
+            system_proxy_fingerprint,
             endpoints:
                 super::download::endpoint_selection::EndpointSelector::new(
                     super::download::proxy_context::fingerprint_with_doh(
@@ -1284,6 +1299,8 @@ impl DownloadClients {
             return clients;
         }
         Self {
+            system_proxy_fingerprint:
+                crate::util::proxy::system_proxy_fingerprint(),
             metadata: system.clone(),
             system: system.clone(),
             direct: direct.clone(),

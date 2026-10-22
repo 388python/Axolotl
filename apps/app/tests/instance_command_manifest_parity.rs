@@ -106,6 +106,7 @@ fn mojang_monitor_commands_are_registered_and_allowed_for_the_main_window() {
     for command in [
         "check_reachable",
         "check_mojang_services",
+        "network_scope",
         "set_mojang_auth_use_mirror",
     ] {
         assert!(runtime.contains(command));

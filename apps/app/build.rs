@@ -323,6 +323,7 @@ fn main() {
                     .commands(&[
                         "check_reachable",
                         "check_mojang_services",
+                        "network_scope",
                         "set_mojang_auth_use_mirror",
                         "mojang_auth_use_mirror",
                         "login",

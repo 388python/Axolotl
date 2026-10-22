@@ -5,6 +5,8 @@ import { computed, onScopeDispose, readonly, type Ref, shallowRef, watch } from 
 import {
     applyMojangAuthSource,
     getMojangAuthConfiguration,
+    getNetworkScope,
+    probeMirrorMojangServices,
     probeOfficialMojangServices,
     probeSelectedMojangSource,
 } from '@/helpers/mojang-auth'
@@ -27,6 +29,7 @@ export function setupMojangAuthMonitor(ready: Ref<boolean>) {
     const monitor = createMojangAuthMonitor({
         configuration: getMojangAuthConfiguration,
         probeOfficial: probeOfficialMojangServices,
+        probeMirror: probeMirrorMojangServices,
         applySource: applyMojangAuthSource,
         probeSelected: probeSelectedMojangSource,
         enabled: () => enabled.value,
@@ -45,6 +48,20 @@ export function setupMojangAuthMonitor(ready: Ref<boolean>) {
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
         networkMode: 'always',
+    })
+    const network = useQuery({
+        queryKey: ['mojang', 'network', 'scope'],
+        queryFn: getNetworkScope,
+        enabled: ready,
+        refetchInterval: 5_000,
+        retry: false,
+        networkMode: 'always',
+        refetchIntervalInBackground: true,
+    })
+    watch(network.data, (scope, previous) => {
+        if (previous === undefined || scope === previous || !enabled.value) return
+        monitor.invalidate()
+        void query.refetch({ cancelRefetch: false })
     })
     watch(browserOffline, () => monitor.invalidate(), { flush: 'sync' })
     watch(query.error, (error) => {

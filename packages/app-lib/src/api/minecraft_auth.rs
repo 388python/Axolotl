@@ -31,19 +31,15 @@ const REACHABILITY_TIMEOUT: Duration = Duration::from_secs(12);
 
 #[tracing::instrument]
 pub async fn check_reachable() -> crate::Result<()> {
-    let url = mojang_service_url(
-        "https://sessionserver.mojang.com/session/minecraft/hasJoined",
-        should_use_mojang_mirror(),
-    );
-    let resp = authentication_client()
-        .get(url.as_ref())
-        .timeout(REACHABILITY_TIMEOUT)
-        .send()
-        .await?;
-    if resp.status() == StatusCode::NO_CONTENT {
-        return Ok(());
+    let statuses =
+        probe_mojang_services(should_use_mojang_mirror(), true).await;
+    if let Some(failed) = statuses.iter().find(|status| !status.reachable) {
+        return Err(crate::ErrorKind::NetworkError(format!(
+            "Mojang {} service is unreachable",
+            failed.service,
+        ))
+        .into());
     }
-    resp.error_for_status()?;
     Ok(())
 }
 
@@ -89,32 +85,66 @@ const MOJANG_SERVICES: [(&str, &str); 4] = [
         "session",
         "https://sessionserver.mojang.com/session/minecraft/hasJoined",
     ),
-    ("services", "https://api.minecraftservices.com/"),
+    ("services", "https://api.minecraftservices.com/publickeys"),
     (
         "profiles",
-        "https://api.mojang.com/users/profiles/minecraft/",
+        "https://api.mojang.com/users/profiles/minecraft/Notch",
     ),
 ];
 
-#[tracing::instrument]
+fn service_response_reachable(service: &str, status: StatusCode) -> bool {
+    if service == "session" {
+        status == StatusCode::NO_CONTENT
+    } else {
+        status.is_success()
+            || service == "account" && status == StatusCode::NOT_FOUND
+    }
+}
+
 pub async fn check_mojang_services() -> Vec<MojangServiceStatus> {
+    check_mojang_services_for(false).await
+}
+
+#[tracing::instrument]
+pub async fn check_mojang_services_for(
+    use_mirror: bool,
+) -> Vec<MojangServiceStatus> {
+    probe_mojang_services(use_mirror, false).await
+}
+
+async fn probe_mojang_services(
+    use_mirror: bool,
+    core_only: bool,
+) -> Vec<MojangServiceStatus> {
     let client = authentication_client();
-    futures::future::join_all(MOJANG_SERVICES.map(|(service, url)| {
-        let client = client.clone();
-        async move {
-            let reachable = client
-                .get(url)
-                .timeout(REACHABILITY_TIMEOUT)
-                .send()
-                .await
-                .is_ok();
-            MojangServiceStatus {
-                service,
-                url,
-                reachable,
-            }
-        }
-    }))
+    futures::future::join_all(
+        MOJANG_SERVICES
+            .into_iter()
+            .filter(|(service, _)| {
+                !core_only || matches!(*service, "session" | "services")
+            })
+            .map(|(service, url)| {
+                let client = client.clone();
+                async move {
+                    let reachable = client
+                        .get(mojang_service_url(url, use_mirror).as_ref())
+                        .timeout(REACHABILITY_TIMEOUT)
+                        .send()
+                        .await
+                        .is_ok_and(|response| {
+                            service_response_reachable(
+                                service,
+                                response.status(),
+                            )
+                        });
+                    MojangServiceStatus {
+                        service,
+                        url,
+                        reachable,
+                    }
+                }
+            }),
+    )
     .await
 }
 
@@ -361,6 +391,26 @@ pub async fn users_with_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reachability_rejects_gateway_errors_and_captive_portal_pages() {
+        for status in [
+            StatusCode::FORBIDDEN,
+            StatusCode::TOO_MANY_REQUESTS,
+            StatusCode::BAD_GATEWAY,
+        ] {
+            for service in ["account", "session", "services", "profiles"] {
+                assert!(!service_response_reachable(service, status));
+            }
+        }
+        assert!(!service_response_reachable("session", StatusCode::OK));
+        assert!(service_response_reachable(
+            "session",
+            StatusCode::NO_CONTENT
+        ));
+        assert!(service_response_reachable("services", StatusCode::OK));
+        assert!(service_response_reachable("account", StatusCode::NOT_FOUND));
+    }
 
     #[test]
     fn mojang_monitor_probes_only_current_required_services() {
