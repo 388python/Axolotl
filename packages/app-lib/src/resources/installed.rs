@@ -433,6 +433,11 @@ async fn refresh_snapshot_with_verification(
         .await?;
         changed = true;
     }
+    changed |= content_rows::repair_pack_members_in_transaction(
+        &scope.content_set_id,
+        &mut tx,
+    )
+    .await?;
     if changed {
         content_rows::bump_content_set_revision_in_transaction(
             &scope.content_set_id,

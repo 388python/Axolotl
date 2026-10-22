@@ -4,6 +4,259 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::sync::Arc;
 
 #[tokio::test]
+async fn pack_overrides_keep_membership_across_reconciliation() {
+    use crate::api::curseforge::{
+        CurseForgePackExpectedContent, CurseForgePackExpectedOverride,
+    };
+    use crate::state::instances::commands::reconcile_curseforge_members;
+
+    let (_temp, state, original, _, _) = fixture().await;
+    let mut tx = state.pool.begin().await.unwrap();
+    crate::state::instances::adapters::sqlite::instance_rows::upsert_instance_link(
+        "instance",
+        &crate::state::InstanceLink::CurseForgeModpack {
+            project_id: "1".into(),
+            version_id: "2".into(),
+        },
+        &mut tx,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let expected = CurseForgePackExpectedContent {
+        members: vec![],
+        overrides: vec![CurseForgePackExpectedOverride {
+            project_type: crate::state::ProjectType::ResourcePack,
+            expected_relative_path: original
+                .relative_path
+                .trim_end_matches(".disabled")
+                .to_owned(),
+        }],
+    };
+    reconcile_curseforge_members("instance", "set", &expected, &state)
+        .await
+        .unwrap();
+    let entries = plans::installed(&state.pool, "instance").await.unwrap();
+    let ResourceOwnership::PackManaged { pack_member_id } =
+        &entries[0].ownership
+    else {
+        panic!("pack override lost its ownership");
+    };
+    let snapshot =
+        crate::state::instances::commands::get_local_content_snapshot(
+            "instance", &state,
+        )
+        .await
+        .unwrap();
+    let pack = snapshot.pack.unwrap();
+    assert!(pack.reconciled && pack.can_update);
+    sqlx::query("UPDATE instance_pack_members SET required = 0, reconciled = 0 WHERE id = ?")
+        .bind(pack_member_id).execute(&state.pool).await.unwrap();
+    reconcile_curseforge_members("instance", "set", &expected, &state)
+        .await
+        .unwrap();
+    let repaired: (String, i64, i64) = sqlx::query_as(
+        "SELECT id, required, reconciled FROM instance_pack_members",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(repaired, (pack_member_id.clone(), 0, 1));
+    // Existing releases used path keys; keep their identity and user choices.
+    sqlx::query("UPDATE instance_pack_members SET member_key = ?, expected_relative_path = ?, override_kind = 'disabled', required = 0, reconciled = 0 WHERE id = ?")
+        .bind(format!("path:{}", expected.overrides[0].expected_relative_path))
+        .bind(original.relative_path.replace('/', "\\").to_ascii_uppercase().replace(".DISABLED", ".disabled"))
+        .bind(pack_member_id).execute(&state.pool).await.unwrap();
+    reconcile_curseforge_members("instance", "set", &expected, &state)
+        .await
+        .unwrap();
+    let member: (String, String, i64, i64) = sqlx::query_as(
+        "SELECT id, override_kind, required, reconciled FROM instance_pack_members",
+    )
+    .fetch_one(&state.pool)
+    .await
+    .unwrap();
+    assert_eq!(member, (pack_member_id.clone(), "disabled".into(), 0, 1));
+    let snapshot =
+        crate::state::instances::commands::get_local_content_snapshot(
+            "instance", &state,
+        )
+        .await
+        .unwrap();
+    assert!(snapshot.pack.unwrap().can_update);
+    plans::installed(&state.pool, "instance").await.unwrap();
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn content_operation_repairs_legacy_pack_entries_without_members() {
+    let (_temp, state, original, _, _) = fixture().await;
+    sqlx::query("UPDATE instance_content_entries SET ownership_kind = 'pack_managed' WHERE id = ?")
+        .bind(original.entry_id.as_str()).execute(&state.pool).await.unwrap();
+    assert!(plans::installed(&state.pool, "instance").await.is_err());
+    let cancel = CancellationToken::new();
+    super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+        .await
+        .unwrap();
+    let entries = plans::installed(&state.pool, "instance").await.unwrap();
+    assert!(matches!(
+        entries[0].ownership,
+        ResourceOwnership::PackManaged { .. }
+    ));
+    let member = content_rows::get_pack_members("set", &state.pool)
+        .await
+        .unwrap()
+        .remove(0);
+    assert!(!member.reconciled);
+    assert!(member.provider.is_none());
+    assert!(member.expected_sha1.is_none() && member.expected_size.is_none());
+    let revision = plans::instance_revision(&state.pool, "instance")
+        .await
+        .unwrap();
+    super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+        .await
+        .unwrap();
+    assert_eq!(
+        plans::instance_revision(&state.pool, "instance")
+            .await
+            .unwrap(),
+        revision
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM instance_pack_members"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        1
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn legacy_pack_path_collisions_keep_all_members_and_stable_revisions() {
+    for existing_member in [false, true] {
+        let (_temp, state, original, _, _) = fixture().await;
+        sqlx::query("UPDATE instance_content_entries SET ownership_kind = 'pack_managed' WHERE id = ?")
+            .bind(original.entry_id.as_str()).execute(&state.pool).await.unwrap();
+        let missing_path = original.relative_path.trim_end_matches(".disabled");
+        let file = content_rows::upsert_instance_file_from_parts(
+            content_rows::UpsertInstanceFile {
+                instance_id: "instance",
+                relative_path: missing_path,
+                file_name: "prefix-old.zip",
+                enabled: true,
+                sha1: "0000000000000000000000000000000000000000",
+                size: 1,
+                missing: true,
+                local_mod_data: None,
+                icon_path: None,
+            },
+            &state.pool,
+        )
+        .await
+        .unwrap();
+        let missing = content_rows::upsert_content_entry_from_parts(
+            content_rows::UpsertContentEntry {
+                instance_id: "instance",
+                content_set_id: "set",
+                file_id: Some(&file.id),
+                project_type: ProjectType::ResourcePack,
+                source_kind: ContentSourceKind::Local,
+                ownership_kind: ContentOwnershipKind::PackManaged,
+                auto_dependency: false,
+                server_requirement: ContentRequirement::Required,
+                client_requirement: ContentRequirement::Required,
+                enabled: true,
+            },
+            &state.pool,
+        )
+        .await
+        .unwrap();
+        let existing_id = format!("pack-member:{}", missing.id);
+        if existing_member {
+            // Reproduce a member already reassigned by an older path repair.
+            sqlx::query("INSERT INTO instance_pack_members(id, content_set_id, content_entry_id, member_key, project_type, expected_relative_path, required, override_kind, expected_sha1, reconciled, created_at, modified_at) VALUES (?, 'set', ?, ?, 'resourcepack', ?, 0, 'disabled', 'expected-hash', 1, 1, 1)")
+                .bind(&existing_id).bind(original.entry_id.as_str())
+                .bind(format!("path:{missing_path}"))
+                .bind(missing_path).execute(&state.pool).await.unwrap();
+        }
+        let cancel = CancellationToken::new();
+        super::installed::refresh_install_snapshot(&state, "instance", &cancel)
+            .await
+            .unwrap();
+        let members = content_rows::get_pack_members("set", &state.pool)
+            .await
+            .unwrap();
+        assert_eq!(members.len(), 2);
+        let associations: std::collections::HashMap<_, _> = members
+            .iter()
+            .map(|member| {
+                (member.content_entry_id.clone().unwrap(), member.id.clone())
+            })
+            .collect();
+        assert_eq!(associations.len(), 2);
+        assert!(associations.contains_key(original.entry_id.as_str()));
+        assert!(associations.contains_key(&missing.id));
+        if existing_member {
+            let member = members
+                .iter()
+                .find(|member| member.id == existing_id)
+                .unwrap();
+            assert_eq!(
+                member.content_entry_id.as_deref(),
+                Some(original.entry_id.as_str())
+            );
+            assert!(!member.required);
+            assert!(member.reconciled);
+            assert_eq!(member.expected_sha1.as_deref(), Some("expected-hash"));
+            assert_eq!(
+                member.override_kind,
+                crate::state::PackMemberOverrideKind::Disabled
+            );
+        }
+        let revision = plans::instance_revision(&state.pool, "instance")
+            .await
+            .unwrap();
+        for _ in 0..3 {
+            super::installed::refresh_install_snapshot(
+                &state, "instance", &cancel,
+            )
+            .await
+            .unwrap();
+            let entries =
+                plans::installed(&state.pool, "instance").await.unwrap();
+            assert_eq!(entries.len(), 2);
+            assert!(entries.iter().all(|entry| matches!(
+                entry.ownership,
+                ResourceOwnership::PackManaged { .. }
+            )));
+            let current: std::collections::HashMap<_, _> =
+                content_rows::get_pack_members("set", &state.pool)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|member| (member.content_entry_id.unwrap(), member.id))
+                    .collect();
+            assert_eq!(current, associations);
+            assert_eq!(
+                plans::instance_revision(&state.pool, "instance")
+                    .await
+                    .unwrap(),
+                revision
+            );
+        }
+        let violations = sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap();
+        assert!(violations.is_empty());
+        state.pool.close().await;
+    }
+}
+
+#[tokio::test]
 async fn install_snapshot_reuses_hashes_and_only_rehashes_changed_files() {
     use crate::util::download::verified_file::track_scans;
     let (_temp, state, original, _, root) = fixture().await;
@@ -1219,6 +1472,7 @@ async fn local_plan(
         local_metadata: Default::default(),
         retained_requirements: Vec::new(),
         resolve_dependencies: true,
+        skip_unwritable_files: false,
         import_files: Default::default(),
         naming: Default::default(),
         plan: plan.clone(),
@@ -1232,6 +1486,189 @@ async fn local_plan(
     };
     sqlx::query("INSERT INTO resource_operation_plans(id, instance_id, revision, payload) VALUES (?, 'instance', 1, ?)").bind(id.as_str()).bind(serde_json::to_string(&draft).unwrap()).execute(&state.pool).await.unwrap();
     plan
+}
+
+#[tokio::test]
+async fn forced_writes_skip_readonly_files_without_changing_their_database_or_history()
+ {
+    for readonly_during_review in [false, true] {
+        let (_temp, state, original, _, root) = fixture().await;
+        std::fs::write(root.join("new.zip"), b"new bytes").unwrap();
+        let target =
+            artifact(SourceId::modrinth(), "root0000", "new", b"new bytes");
+        let plan = local_plan(
+            &state,
+            original.clone(),
+            target.clone(),
+            "new.zip",
+            None,
+        )
+        .await;
+        let mut draft = plans::load(&state.pool, &plan.id, plan.revision)
+            .await
+            .unwrap();
+        let mut added = plan.actions[0].clone();
+        added.entry_id = InstalledEntryId::new("added-entry").unwrap();
+        added.node_id = SelectionId::new("added-root").unwrap();
+        added.kind = ResourceActionKind::Install;
+        added.current = None;
+        added.target =
+            artifact(SourceId::modrinth(), "added000", "new", b"new bytes");
+        added.target_relative_path = "resourcepacks/added.zip".into();
+        let mut node = plan.nodes[0].clone();
+        node.id = added.node_id.clone();
+        node.root_selection_ids = vec![node.id.clone()];
+        node.resource = ResourceRef::Source {
+            project: added.target.reference.release.project.clone(),
+        };
+        node.artifact = Some(added.target.clone());
+        draft.plan.nodes.push(node);
+        draft.plan.active_roots.push(added.node_id.clone());
+        draft
+            .local_files
+            .insert(added.entry_id.clone(), "new.zip".into());
+        draft.plan.actions.push(added);
+        let current_path = root.join(&original.relative_path);
+        let permissions =
+            std::fs::metadata(&current_path).unwrap().permissions();
+        let mut readonly = permissions.clone();
+        readonly.set_readonly(true);
+        if readonly_during_review {
+            std::fs::set_permissions(&current_path, readonly.clone()).unwrap();
+        }
+        super::super::write_access::review_at_root(&mut draft, &root).unwrap();
+        assert_eq!(
+            draft
+                .plan
+                .issues
+                .iter()
+                .any(|issue| issue.code == ResourceIssueCode::FileNotWritable
+                    && issue.blocking),
+            readonly_during_review
+        );
+        draft.skip_unwritable_files = true;
+        super::super::write_access::review_at_root(&mut draft, &root).unwrap();
+        assert_eq!(
+            draft.plan.actions.len(),
+            if readonly_during_review { 1 } else { 2 }
+        );
+        sqlx::query(
+            "UPDATE resource_operation_plans SET payload = ? WHERE id = ?",
+        )
+        .bind(serde_json::to_string(&draft).unwrap())
+        .bind(plan.id.as_str())
+        .execute(&state.pool)
+        .await
+        .unwrap();
+        std::fs::set_permissions(&current_path, readonly).unwrap();
+        let result = execute("instance", &draft.plan, None, &state).await;
+        std::fs::set_permissions(&current_path, permissions).unwrap();
+        result.unwrap();
+        assert_eq!(std::fs::read(&current_path).unwrap(), b"old bytes");
+        assert_eq!(
+            std::fs::read(root.join("resourcepacks/added.zip")).unwrap(),
+            b"new bytes"
+        );
+        let installed =
+            plans::installed(&state.pool, "instance").await.unwrap();
+        assert_eq!(installed.len(), 2);
+        assert_eq!(
+            installed
+                .iter()
+                .find(|entry| entry.entry_id == original.entry_id)
+                .unwrap(),
+            &original
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM resource_history"
+            )
+            .fetch_one(&state.pool)
+            .await
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT completed FROM resource_operation_plans WHERE id = ?"
+            )
+            .bind(plan.id.as_str())
+            .fetch_one(&state.pool)
+            .await
+            .unwrap(),
+            1
+        );
+        let mut invalid = draft.clone();
+        invalid.plan.actions[0].target_relative_path = "../outside.zip".into();
+        super::super::write_access::review_at_root(&mut invalid, &root)
+            .unwrap();
+        assert!(
+            invalid
+                .plan
+                .issues
+                .iter()
+                .any(|issue| issue.code == ResourceIssueCode::InvalidPath
+                    && issue.blocking)
+        );
+        assert!(!root.parent().unwrap().join("outside.zip").exists());
+        assert!(
+            sqlx::query("PRAGMA foreign_key_check")
+                .fetch_all(&state.pool)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        state.pool.close().await;
+    }
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn forced_writes_detect_windows_files_open_without_delete_sharing() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let (_temp, state, original, _, root) = fixture().await;
+    let target =
+        artifact(SourceId::modrinth(), "root0000", "new", b"new bytes");
+    let plan =
+        local_plan(&state, original.clone(), target, "new.zip", None).await;
+    let mut draft = plans::load(&state.pool, &plan.id, plan.revision)
+        .await
+        .unwrap();
+    let locked = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(1)
+        .open(root.join(&original.relative_path))
+        .unwrap();
+    super::super::write_access::review_at_root(&mut draft, &root).unwrap();
+    assert!(
+        draft
+            .plan
+            .issues
+            .iter()
+            .any(|issue| issue.code == ResourceIssueCode::FileNotWritable
+                && issue.blocking)
+    );
+    draft.skip_unwritable_files = true;
+    super::super::write_access::review_at_root(&mut draft, &root).unwrap();
+    assert!(draft.plan.actions.is_empty());
+    assert!(
+        draft
+            .plan
+            .issues
+            .iter()
+            .any(|issue| issue.code == ResourceIssueCode::FileWriteSkipped
+                && !issue.blocking)
+    );
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    drop(locked);
+    assert_eq!(
+        plans::installed(&state.pool, "instance").await.unwrap(),
+        vec![original]
+    );
+    state.pool.close().await;
 }
 
 #[tokio::test]
@@ -2182,6 +2619,139 @@ async fn unlink_task_conflict_and_sql_failure_leave_pack_metadata_intact() {
         plans::installed(&state.pool, "instance").await.unwrap()[0].ownership,
         ResourceOwnership::PackManaged { .. }
     ));
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn explicit_unlink_repairs_legacy_residue_and_deleted_content_does_not_reappear()
+ {
+    let (_temp, state, original, _, root) = fixture().await;
+    pack_fixture(&state, &original).await;
+    let before = crate::state::instances::commands::get_local_content_snapshot(
+        "instance", &state,
+    )
+    .await
+    .unwrap();
+    assert!(before.warnings.is_empty());
+    assert!(before.pack.is_some());
+    assert_eq!(before.items.len(), 2);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM resource_pack_unlinks"
+        )
+        .fetch_one(&state.pool)
+        .await
+        .unwrap(),
+        0
+    );
+
+    crate::state::edit_instance(
+        "instance",
+        crate::state::EditInstance {
+            link: Some(crate::state::InstanceLink::Unmanaged),
+            ..Default::default()
+        },
+        &state.pool,
+    )
+    .await
+    .unwrap();
+    let after = crate::state::instances::commands::get_local_content_snapshot(
+        "instance", &state,
+    )
+    .await
+    .unwrap();
+    assert!(after.warnings.is_empty());
+    assert!(after.pack.is_none());
+    assert_eq!(after.items.len(), 1);
+    assert_eq!(
+        after.items[0].ownership_kind,
+        crate::state::ContentOwnershipKind::UserAdded
+    );
+    assert!(after.items[0].member_id.is_none());
+    assert_eq!(
+        std::fs::read(root.join(&original.relative_path)).unwrap(),
+        b"old bytes"
+    );
+    assert_eq!(
+        plans::installed(&state.pool, "instance").await.unwrap()[0].artifact,
+        original.artifact
+    );
+
+    crate::state::instances::commands::remove_project(
+        "instance",
+        &original.relative_path,
+        &state,
+    )
+    .await
+    .unwrap();
+    let deleted =
+        crate::state::instances::commands::get_local_content_snapshot(
+            "instance", &state,
+        )
+        .await
+        .unwrap();
+    assert!(deleted.items.is_empty());
+    assert!(!root.join(&original.relative_path).exists());
+    assert!(
+        sqlx::query("PRAGMA foreign_key_check")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    state.pool.close().await;
+}
+
+#[tokio::test]
+async fn local_pack_without_unlink_history_stays_managed_without_a_warning() {
+    let (_temp, state, original, _, root) = fixture().await;
+    pack_fixture(&state, &original).await;
+    for link in [
+        crate::state::InstanceLink::Unmanaged,
+        crate::state::InstanceLink::ImportedModpack {
+            project_id: None,
+            version_id: None,
+            name: Some("Local pack".into()),
+            version_number: None,
+            filename: None,
+        },
+    ] {
+        let mut tx = state.pool.begin().await.unwrap();
+        crate::state::instances::adapters::sqlite::instance_rows::upsert_instance_link("instance", &link, &mut tx).await.unwrap();
+        tx.commit().await.unwrap();
+        for _ in 0..2 {
+            let snapshot =
+                crate::state::instances::commands::get_local_content_snapshot(
+                    "instance", &state,
+                )
+                .await
+                .unwrap();
+            assert!(snapshot.warnings.is_empty());
+            assert!(snapshot.pack.is_some());
+            assert_eq!(snapshot.items.len(), 2);
+            assert!(snapshot.items.iter().all(|item| item.ownership_kind
+                == crate::state::ContentOwnershipKind::PackManaged));
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM instance_pack_members"
+                )
+                .fetch_one(&state.pool)
+                .await
+                .unwrap(),
+                2
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM resource_pack_unlinks"
+                )
+                .fetch_one(&state.pool)
+                .await
+                .unwrap(),
+                0
+            );
+            assert!(root.join(&original.relative_path).exists());
+        }
+    }
     state.pool.close().await;
 }
 

@@ -446,7 +446,11 @@ pub(crate) async fn install_resolved_content_plan_with_reporter(
                 Ok::<_, crate::Error>((index, downloaded))
             }
         })
-        .buffer_unordered(state.download_concurrency().clamp(1, 4))
+        .buffer_unordered(
+            state
+                .download_concurrency()
+                .clamp(1, crate::util::download::constants::MAX_PACK_FILE_DOWNLOAD_CONCURRENCY),
+        )
         .try_collect::<Vec<_>>()
         .await?;
     downloads.sort_by_key(|(index, _)| *index);

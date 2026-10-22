@@ -9,6 +9,7 @@ import {
     listContentFavorites,
     removeContentFavorite,
 } from '../helpers/content-favorites.ts'
+import type { SourceProjectMetadata } from '../helpers/resources.ts'
 
 export interface ContentFavoritesApi {
     list: () => Promise<ContentFavorite[]>
@@ -46,11 +47,36 @@ export function createContentFavoritesStore(api: ContentFavoritesApi) {
     const loaded = ref(false)
     const loading = ref(false)
     const pendingKeys = ref(new Set<string>())
+    const metadata = new Map<string, { identity: string; value: SourceProjectMetadata }>()
     let loadPromise: Promise<ContentFavorite[]> | null = null
+
+    function metadataIdentity(favorite: ContentFavorite) {
+        return JSON.stringify([favorite.resource_id, favorite.locator, favorite.projects])
+    }
+
+    function getMetadata(favorite: ContentFavorite) {
+        const entry = metadata.get(contentFavoriteKey(favorite.provider, favorite.project_id))
+        return entry?.identity === metadataIdentity(favorite) ? entry.value : undefined
+    }
+
+    function setMetadata(favorite: ContentFavorite, value: SourceProjectMetadata) {
+        const key = contentFavoriteKey(favorite.provider, favorite.project_id)
+        const current = favorites.value.find(
+            (item) => contentFavoriteKey(item.provider, item.project_id) === key,
+        )
+        if (!current || metadataIdentity(current) !== metadataIdentity(favorite)) return
+        metadata.set(key, { identity: metadataIdentity(favorite), value })
+    }
 
     function setFavorites(values: ContentFavorite[]) {
         const sorted = sortFavorites(values)
         if (!sameFavorites(favorites.value, sorted)) favorites.value = sorted
+        const keys = new Set(
+            sorted.map((item) => contentFavoriteKey(item.provider, item.project_id)),
+        )
+        for (const key of metadata.keys()) {
+            if (!keys.has(key)) metadata.delete(key)
+        }
         return favorites.value
     }
 
@@ -156,6 +182,8 @@ export function createContentFavoritesStore(api: ContentFavoritesApi) {
         loaded,
         loading,
         load,
+        getMetadata,
+        setMetadata,
         isFavorite,
         isPending,
         add,

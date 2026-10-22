@@ -1,4 +1,5 @@
 use super::*;
+use crate::util::download::constants::INSTALL_FILE_REPORTED_ATTEMPTS;
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
@@ -253,7 +254,7 @@ async fn download_prepared_files(
         events.push(InstallJobEventKind::ContentFileQueued {
             path: file.target_relative_path.clone(),
             bytes_total: file.integrity.size,
-            max_attempts: 5,
+            max_attempts: INSTALL_FILE_REPORTED_ATTEMPTS,
         });
         if !file.urls.is_empty() {
             events.push(InstallJobEventKind::ContentFileBrowserOptions {

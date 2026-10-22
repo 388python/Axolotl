@@ -103,6 +103,195 @@ async fn source_confirmation_during_a_switch_resolves_the_installed_identity_red
 mod graph_tests;
 
 #[tokio::test]
+async fn dependency_analysis_failure_does_not_block_installing_valid_roots() {
+    let mut root = release("root0000", "1", 'a');
+    let absent = release("absent00", "1", 'b');
+    requires(&mut root, &absent, ResourceDependencyKind::Required);
+    let (_temp, service) = service(vec![root.clone()]).await;
+    for intent in [
+        ResourceOperationIntent::Install,
+        ResourceOperationIntent::Update,
+    ] {
+        let built = service
+            .build_operation(
+                draft(vec![selection("root", &root, None)], intent),
+                &target(),
+                &[],
+                &CancellationToken::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(built.plan.actions.len(), 1);
+        assert_eq!(
+            built.plan.actions[0].target.reference,
+            root.artifacts[0].reference
+        );
+        assert_eq!(
+            built.plan.issues.iter().any(|issue| issue.blocking),
+            intent != ResourceOperationIntent::Install
+        );
+        if intent == ResourceOperationIntent::Install {
+            assert!(built.plan.issues.iter().any(|issue| issue.code
+                == ResourceIssueCode::DependencyAnalysisFailed));
+        }
+    }
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn dependency_analysis_failure_keeps_root_validation_and_other_resolved_dependencies()
+ {
+    let mut root = release("root0000", "1", 'a');
+    let valid = release("valid000", "1", 'b');
+    let absent = release("absent00", "1", 'c');
+    requires(&mut root, &valid, ResourceDependencyKind::Required);
+    requires(&mut root, &absent, ResourceDependencyKind::Required);
+    let (_temp, service) = service(vec![root.clone(), valid.clone()]).await;
+    let built = service
+        .build_operation(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(built.plan.actions.len(), 2);
+    assert!(!built.plan.issues.iter().any(|issue| issue.blocking));
+    let selected_only = service
+        .revise_operation(
+            built,
+            vec![ResourcePlanDecision::IgnoreDependencies],
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(selected_only.plan.actions.len(), 1);
+    assert_eq!(selected_only.plan.nodes.len(), 1);
+    assert!(selected_only.plan.edges.is_empty());
+    assert!(!selected_only.plan.issues.iter().any(|issue| issue.blocking));
+    assert_eq!(
+        selected_only.plan.actions[0].target.reference,
+        root.artifacts[0].reference
+    );
+    let mut request = draft(
+        vec![selection("root", &absent, None)],
+        ResourceOperationIntent::Install,
+    );
+    request
+        .plan
+        .selections
+        .push(selection("valid", &valid, None));
+    request
+        .plan
+        .active_roots
+        .push(SelectionId::new("valid").unwrap());
+    let failed = service
+        .build_operation(request, &target(), &[], &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(failed.plan.issues.iter().any(|issue| issue.blocking));
+    let forced = service
+        .revise_operation(
+            failed,
+            vec![ResourcePlanDecision::IgnoreDependencies],
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(forced.plan.issues.iter().any(|issue| issue.blocking
+        && issue.code == ResourceIssueCode::SourceUnavailable));
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn dependency_source_lookup_failure_warns_but_keeps_the_root_installable()
+{
+    let mut root = release("root0000", "1", 'a');
+    root.artifacts[0].dependencies.push(ArtifactDependency {
+        target: DependencyTarget::SourceRelease {
+            source: SourceId::modrinth(),
+            release_id: SourceReleaseId::new("unavailable-version").unwrap(),
+        },
+        kind: ResourceDependencyKind::Required,
+        version_constraint: None,
+    });
+    let (_temp, service) = service(vec![root.clone()]).await;
+    let built = service
+        .build_operation(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(built.plan.actions.len(), 1);
+    assert!(!built.plan.issues.iter().any(|issue| issue.blocking));
+    assert!(
+        built
+            .plan
+            .issues
+            .iter()
+            .any(|issue| issue.code
+                == ResourceIssueCode::DependencyAnalysisFailed)
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
+async fn retained_dependency_lookup_failure_does_not_block_a_new_install() {
+    let root = release("root0000", "1", 'a');
+    let offline = release("offline0", "1", 'b');
+    let (_temp, service) = service(vec![root.clone()]).await;
+    let built = service
+        .build_operation(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[installed(&offline, "offline", "mods/offline.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(built.plan.actions.len(), 1);
+    assert!(!built.plan.issues.iter().any(|issue| issue.blocking));
+    assert!(
+        built
+            .plan
+            .issues
+            .iter()
+            .any(|issue| issue.code
+                == ResourceIssueCode::DependencyAnalysisFailed)
+    );
+    let forced = service
+        .revise_operation(
+            built,
+            vec![ResourcePlanDecision::IgnoreDependencies],
+            &target(),
+            &[installed(&offline, "offline", "mods/offline.jar")],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+    assert!(forced.plan.issues.is_empty(), "{:?}", forced.plan.issues);
+    assert!(forced.retained_requirements.is_empty());
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn entry_changes_can_skip_dependency_resolution_without_skipping_artifact_validation()
  {
     let old = release("root0000", "1", 'a');
@@ -977,6 +1166,7 @@ fn draft(
         local_metadata: Default::default(),
         retained_requirements: Vec::new(),
         resolve_dependencies: true,
+        skip_unwritable_files: false,
         import_files: Default::default(),
         naming: Default::default(),
         plan: ResourceOperationPlan {

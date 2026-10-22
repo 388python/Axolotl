@@ -545,6 +545,7 @@ pub async fn retry_job(job_id: Uuid) -> crate::Result<InstallJobSnapshot> {
         &state,
     )
     .await?;
+    InstallProgressReporter::reset_job(job_id);
     emit_install_job(&record.snapshot()).await?;
     lifecycle::spawn_job(job_id);
 

@@ -1,4 +1,16 @@
 //! Theseus state management system
+use crate::util::download::constants::MAX_CONCURRENT_INSTALL_JOBS;
+use crate::util::download::constants::{
+    AUTO_DOWNLOAD_CONCURRENCY_INITIAL, AUTO_DOWNLOAD_CONCURRENCY_MAX,
+    AUTO_DOWNLOAD_CONCURRENCY_MIN, AUTO_DOWNLOAD_CONCURRENCY_STEP,
+    AUTO_DOWNLOAD_EXPANSION_ERROR_RATE, AUTO_DOWNLOAD_PRESSURE_ERROR_RATE,
+    AUTO_DOWNLOAD_PRESSURE_WINDOWS, AUTO_DOWNLOAD_PROBE_COOLDOWN,
+    AUTO_DOWNLOAD_SAMPLE_INTERVAL, AUTO_DOWNLOAD_TRIAL_WINDOWS,
+    AUTO_DOWNLOAD_UTILIZATION_WINDOWS, DOWNLOAD_CONCURRENCY_HARD_MAX,
+};
+use crate::util::download::constants::{
+    AUTO_DOWNLOAD_MIN_GAIN_PERCENT, AUTO_DOWNLOAD_PERCENT_BASE,
+};
 use crate::util::fetch::{FetchSemaphore, IoSemaphore};
 use dashmap::DashMap;
 use parking_lot::RwLock;
@@ -91,16 +103,6 @@ pub mod server_join_log;
 // Global state
 // RwLock on state only has concurrent reads, except for config dir change which takes control of the State
 static LAUNCHER_STATE: OnceCell<Arc<State>> = OnceCell::const_new();
-const MAX_CONCURRENT_INSTALL_JOBS: usize = 1;
-const AUTO_DOWNLOAD_CONCURRENCY_INITIAL: usize = 64;
-const AUTO_DOWNLOAD_CONCURRENCY_MIN: usize = 16;
-const AUTO_DOWNLOAD_CONCURRENCY_MAX: usize = 128;
-const AUTO_DOWNLOAD_CONCURRENCY_STEP: usize = 8;
-/// Number of consecutive pressured sample windows required before the global
-/// download concurrency backs off. Host-level throttling reacts immediately.
-const AUTO_DOWNLOAD_PRESSURE_WINDOWS: usize = 2;
-const AUTO_DOWNLOAD_SAMPLE_INTERVAL: Duration = Duration::from_secs(3);
-const AUTO_DOWNLOAD_PROBE_COOLDOWN: Duration = Duration::from_secs(30);
 
 /// The CurseForge API key set in the launcher, if any. Returns `None` while the
 /// launcher state is still initializing, which lets synchronous callers fall
@@ -513,6 +515,13 @@ async fn shrink_semaphore(
 }
 
 impl AutoConcurrencyController {
+    fn discard_contaminated_sample(&mut self, current: usize) -> usize {
+        self.high_utilization_windows = 0;
+        self.probe
+            .take()
+            .map_or(current, |probe| probe.previous_target)
+    }
+
     fn next_target(
         &mut self,
         now: Instant,
@@ -528,7 +537,8 @@ impl AutoConcurrencyController {
         // A single throttled window is handled by the per-host limiter; the
         // global concurrency only backs off when pressure persists across
         // several samples, and then in small steps instead of a big cut.
-        let pressured = sample.throttles > 0 || error_rate >= 0.05;
+        let pressured = sample.throttles > 0
+            || error_rate >= AUTO_DOWNLOAD_PRESSURE_ERROR_RATE;
         if pressured {
             self.high_utilization_windows = 0;
             self.probe = None;
@@ -549,11 +559,13 @@ impl AutoConcurrencyController {
         if let Some(probe) = &mut self.probe {
             probe.windows += 1;
             probe.throughput = probe.throughput.saturating_add(sample.bytes);
-            if probe.windows >= 2 {
+            if probe.windows >= AUTO_DOWNLOAD_TRIAL_WINDOWS {
                 let average = probe.throughput / probe.windows as u64;
                 let productive = probe.baseline_throughput > 0
-                    && average.saturating_mul(100)
-                        >= probe.baseline_throughput.saturating_mul(105);
+                    && average.saturating_mul(AUTO_DOWNLOAD_PERCENT_BASE)
+                        >= probe
+                            .baseline_throughput
+                            .saturating_mul(AUTO_DOWNLOAD_MIN_GAIN_PERCENT);
                 let previous = probe.previous_target;
                 self.probe = None;
                 if !productive {
@@ -566,7 +578,7 @@ impl AutoConcurrencyController {
         }
 
         if self.cooldown_until.is_some_and(|until| until > now)
-            || error_rate >= 0.02
+            || error_rate >= AUTO_DOWNLOAD_EXPANSION_ERROR_RATE
             || sample.throttles > 0
         {
             self.high_utilization_windows = 0;
@@ -580,7 +592,9 @@ impl AutoConcurrencyController {
         } else {
             self.high_utilization_windows = 0;
         }
-        if self.high_utilization_windows < 2 || current >= ceiling {
+        if self.high_utilization_windows < AUTO_DOWNLOAD_UTILIZATION_WINDOWS
+            || current >= ceiling
+        {
             return current;
         }
 
@@ -767,7 +781,9 @@ impl State {
             settings.doh_enabled,
         )?;
         crate::state::proxy_settings::set(&self.pool, config).await?;
-        *self.configured_http_client.write() = client;
+        let mut current = self.configured_http_client.write();
+        current.endpoints.close();
+        *current = client;
         Ok(())
     }
 
@@ -791,17 +807,40 @@ impl State {
             settings.ignore_ssl_errors,
             settings.doh_enabled,
         )?;
-        *self.configured_http_client.write() = client;
+        let mut current = self.configured_http_client.write();
+        current.endpoints.close();
+        *current = client;
         Ok(())
     }
 
+    pub fn network_scope(&self) -> String {
+        self.download_clients().scope
+    }
+
     pub(crate) fn configured_http_client(&self) -> reqwest::Client {
-        self.configured_http_client.read().metadata.clone()
+        self.download_clients().metadata
     }
 
     pub(crate) fn download_clients(
         &self,
     ) -> crate::util::fetch::DownloadClients {
+        // Try the existing settings-update lock: a concurrent settings writer
+        // owns replacement, while active requests keep their original snapshot.
+        if let Ok(_update) = self.configured_http_client_update.try_lock() {
+            let current = self.configured_http_client.read().clone();
+            match current.refresh_system_proxy() {
+                Ok(Some(rebuilt)) => {
+                    *self.configured_http_client.write() = rebuilt;
+                    tracing::info!(
+                        "Rebuilt network clients after system proxy configuration changed"
+                    );
+                }
+                Ok(None) => {}
+                Err(_) => tracing::warn!(
+                    "Could not rebuild network clients after system proxy configuration changed"
+                ),
+            }
+        }
         self.configured_http_client.read().clone()
     }
 
@@ -884,11 +923,19 @@ impl State {
         let mut interval = tokio::time::interval(AUTO_DOWNLOAD_SAMPLE_INTERVAL);
         interval.tick().await;
         let mut controller = AutoConcurrencyController::default();
+        let mut trial_lease = None;
+        let mut trial_revision =
+            crate::util::download::endpoint_selection::tuning::TRIALS
+                .snapshot(Instant::now())
+                .0;
         loop {
             interval.tick().await;
             crate::util::download::local_resources::sample_cpu().await;
+            crate::util::download::h2_pool::observe_adaptive_connections()
+                .await;
             if !self.auto_concurrent_downloads.load(Ordering::Acquire) {
                 controller = AutoConcurrencyController::default();
+                trial_lease = None;
                 self.download_sample_bytes.swap(0, Ordering::AcqRel);
                 self.download_sample_requests.swap(0, Ordering::AcqRel);
                 self.download_sample_errors.swap(0, Ordering::AcqRel);
@@ -914,12 +961,42 @@ impl State {
                     AUTO_DOWNLOAD_CONCURRENCY_MIN,
                     AUTO_DOWNLOAD_CONCURRENCY_MAX,
                 );
-            let target = controller.next_target(
+            use crate::util::download::endpoint_selection::tuning::{
+                TRIALS, TrialKind,
+            };
+            let now = Instant::now();
+            let (revision, owner) = TRIALS.snapshot(now);
+            if trial_lease.as_ref().is_some_and(|lease: &crate::util::download::endpoint_selection::tuning::TrialLease| !lease.valid(now))
+                || owner.is_some_and(|owner| owner != TrialKind::Files)
+                || (trial_lease.is_none() && revision != trial_revision)
+            {
+                trial_lease = None;
+                let previous = controller.discard_contaminated_sample(current);
+                if previous != current { self.resize_download_concurrency(previous); }
+                trial_revision = TRIALS.snapshot(now).0;
+                continue;
+            }
+            let mut target = controller.next_target(
                 Instant::now(),
                 current,
                 ceiling,
                 sample,
             );
+            if target > current && trial_lease.is_none() {
+                trial_lease = TRIALS.acquire(
+                    TrialKind::Files,
+                    now,
+                    Duration::from_secs(15),
+                );
+                if trial_lease.is_none() {
+                    controller.probe = None;
+                    target = current;
+                }
+            }
+            if controller.probe.is_none() {
+                trial_lease = None;
+            }
+            trial_revision = TRIALS.snapshot(now).0;
             if target != current {
                 tracing::info!(
                     current,
@@ -937,7 +1014,7 @@ impl State {
     }
 
     fn resize_download_concurrency(self: &Arc<Self>, target: usize) {
-        let target = target.clamp(1, 256);
+        let target = target.clamp(1, DOWNLOAD_CONCURRENCY_HARD_MAX);
         self.download_concurrency_target
             .store(target, Ordering::Release);
 
@@ -1250,6 +1327,17 @@ mod auto_concurrency_tests {
             errors: 0,
             throttles: 0,
         }
+    }
+
+    #[test]
+    fn contaminated_trial_restores_previous_target_and_requires_new_baseline() {
+        let now = Instant::now();
+        let mut controller = AutoConcurrencyController::default();
+        controller.next_target(now, 64, 128, healthy(64, 100));
+        assert_eq!(controller.next_target(now, 64, 128, healthy(64, 100)), 72);
+        assert_eq!(controller.discard_contaminated_sample(72), 64);
+        assert!(controller.probe.is_none());
+        assert_eq!(controller.next_target(now, 64, 128, healthy(64, 100)), 64);
     }
 
     #[test]

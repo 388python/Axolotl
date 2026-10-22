@@ -30,6 +30,240 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-1.10.0-beta.5',
+        version: '1.10.0-beta.5',
+        publishedAt: '2026-10-22',
+        title: {
+            'en-US': 'Axolotl Launcher 1.10.0-beta.5',
+            'zh-CN': 'Axolotl Launcher 1.10.0-beta.5',
+        },
+        changes: {
+            added: [
+                {
+                    'en-US':
+                        'Added Command Generator in Lab with version-specific commands, argument editors, item selection, NBT editing, and presets.',
+                    'zh-CN':
+                        '实验室新增命令生成器，支持按游戏版本选择命令、编辑参数、选择物品、编辑 NBT 和使用预设。',
+                },
+                {
+                    'en-US':
+                        'Added Minecraft 26.x command generation and support for item component syntax introduced in Minecraft 1.20.5.',
+                    'zh-CN':
+                        '新增 Minecraft 26.x 命令生成，以及 Minecraft 1.20.5 起的物品组件语法支持。',
+                },
+                {
+                    'en-US': 'Added NeoForge server creation, installation, and management.',
+                    'zh-CN': '新增 NeoForge 服务器创建、安装和管理。',
+                },
+                {
+                    'en-US':
+                        'Added an interactive server terminal with search, output export, and fullscreen controls.',
+                    'zh-CN': '新增交互式服务器终端，支持搜索、导出输出和全屏显示。',
+                },
+                {
+                    'en-US':
+                        'Added configurable server stop commands, including Ctrl+C, with changes taking effect immediately.',
+                    'zh-CN': '新增可配置的服务器停止命令，支持 Ctrl+C，保存后立即生效。',
+                },
+                {
+                    'en-US':
+                        'Added explicit options to install selected content without dependency checks or skip unwritable files.',
+                    'zh-CN':
+                        '新增明确的强制安装选项，支持不检查依赖而仅安装所选内容，或跳过无法写入的文件。',
+                },
+            ],
+            changed: [
+                {
+                    'en-US':
+                        'Improved download throughput and slow-connection recovery with adaptive endpoint selection and coordinated connection limits.',
+                    'zh-CN': '通过自适应下载节点选择和协调连接数量，改善下载吞吐与慢连接恢复。',
+                },
+                {
+                    'en-US': 'Improved server cards, status indicators, and startup controls.',
+                    'zh-CN': '改进服务器卡片、状态标记和启动控制。',
+                },
+                {
+                    'en-US':
+                        'Improved server creation with clearer loader-version loading states, empty results, and retry actions.',
+                    'zh-CN': '改进服务器创建流程，明确显示加载器版本加载状态、空结果和重试操作。',
+                },
+                {
+                    'en-US':
+                        'Improved download file rows to keep source labels, file details, and manual download actions aligned.',
+                    'zh-CN': '改进下载文件列表，使来源标签、文件详情和手动下载操作保持对齐。',
+                },
+                {
+                    'en-US':
+                        'Updated the built-in CodeFlow endpoint to codeflow.sh and refreshed its model list.',
+                    'zh-CN': '将内置 CodeFlow 服务地址更新为 codeflow.sh，并刷新模型列表。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed system proxy changes not being applied consistently to downloads and authentication requests.',
+                    'zh-CN': '修复系统代理变更未一致应用于下载和认证请求的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed connectivity checks incorrectly treating individual authentication-service failures as a complete network outage.',
+                    'zh-CN': '修复连通性检查将个别认证服务失败误判为整体网络不可用的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed proxy tests reporting success without validating the required authentication services.',
+                    'zh-CN': '修复代理测试未验证必需认证服务便报告成功的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed modpack archive progress becoming inconsistent and download progress regressing during file processing.',
+                    'zh-CN': '修复整合包归档下载进度不同步，以及文件处理阶段下载进度回退的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed linked-instance worlds missing from Home lists or being ordered by unrelated timestamps.',
+                    'zh-CN': '修复关联实例的世界未出现在主页列表，或按无关时间排序的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed server console input, startup state transitions, and process cleanup across server types.',
+                    'zh-CN': '修复不同服务器类型的控制台输入、启动状态切换和进程清理问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed modpack content membership repair and related installation configuration handling.',
+                    'zh-CN': '修复整合包内容归属修复及相关安装配置处理问题。',
+                },
+                {
+                    'en-US': 'Fixed loader metadata rejecting additional LWJGL platform names.',
+                    'zh-CN': '修复加载器元数据无法识别部分 LWJGL 平台名称的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed command argument ordering, version-specific syntax, and missing NBT presets.',
+                    'zh-CN': '修复命令参数顺序、版本专用语法和 NBT 预设缺失的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed content operations failing for some installed modpacks and repeatedly asking to refresh.',
+                    'zh-CN': '修复部分已安装整合包的内容操作失败、反复提示刷新重试的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed unavailable DNS-over-HTTPS services blocking requests by falling back to system DNS.',
+                    'zh-CN': '修复 DNS-over-HTTPS 服务不可用时请求失败的问题，现会回退到系统 DNS。',
+                },
+                {
+                    'en-US':
+                        'Fixed HTTP/2 downloads rejecting valid CDN certificates when the system certificate store lacked a public root.',
+                    'zh-CN': '修复系统缺少公共根证书时，HTTP/2 下载错误拒绝 CDN 有效证书的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed Modrinth project pages missing newly published versions until the cache was manually cleared.',
+                    'zh-CN': '修复 Modrinth 项目页需要手动清除缓存才能显示新发布版本的问题。',
+                },
+            ],
+            security: [
+                {
+                    'en-US':
+                        'Updated TLS certificate validation to address the eMudhra certificate authority vulnerability.',
+                    'zh-CN': '更新 TLS 证书校验依赖，修复与 eMudhra 证书颁发机构相关的安全漏洞。',
+                },
+            ],
+        },
+    },
+    {
+        id: 'launcher-1.10.0-beta.4',
+        version: '1.10.0-beta.4',
+        publishedAt: '2026-10-20',
+        title: {
+            'en-US': 'Axolotl Launcher 1.10.0-beta.4',
+            'zh-CN': 'Axolotl Launcher 1.10.0-beta.4',
+        },
+        changes: {
+            changed: [
+                {
+                    'en-US':
+                        'Allowed installation to continue after dependency analysis fails, with a warning that the instance may not work correctly.',
+                    'zh-CN': '允许在依赖分析失败后继续安装，并提示实例可能无法正常运行。',
+                },
+                {
+                    'en-US':
+                        'Improved Favorites loading by displaying cached projects before refreshing their information.',
+                    'zh-CN': '改进收藏夹加载，先显示缓存项目，再刷新项目信息。',
+                },
+                {
+                    'en-US': 'Updated the available AI model list.',
+                    'zh-CN': '更新可用 AI 模型列表。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US':
+                        'Fixed CurseForge modpacks containing world downloads failing to install.',
+                    'zh-CN': '修复包含世界存档下载的 CurseForge 整合包无法安装的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed modpack retries and version changes potentially replacing existing player saves.',
+                    'zh-CN': '修复重试整合包安装或切换版本时可能替换已有玩家存档的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed CurseForge and mrpack installation failures being reported as cancellations instead of displaying the original error.',
+                    'zh-CN':
+                        '修复 CurseForge 和 mrpack 安装失败被误报为取消、未显示原始错误的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed retried installation tasks retaining progress from the previous attempt.',
+                    'zh-CN': '修复重试安装任务时保留上次尝试进度的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed title-bar navigation and instance controls becoming inaccessible in narrow windows or with long instance names.',
+                    'zh-CN': '修复窄窗口或实例名称过长时，标题栏导航和实例操作按钮被挤出的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed Discover tabs, search fields, and toolbar controls overflowing in narrow windows.',
+                    'zh-CN': '修复窄窗口中发现页标签、搜索框和工具栏控件溢出的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed local imported modpacks being treated as unlinked solely because they had no online project association.',
+                    'zh-CN': '修复本地导入整合包仅因没有在线项目关联而被误判为已解除关联的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed the missing Unlink Modpack action for instances that still contained pack-managed content.',
+                    'zh-CN': '修复仍包含整合包管理内容的实例缺少“解除整合包关联”操作的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed log searches disrupting syntax highlighting, including matches spanning highlighted text.',
+                    'zh-CN': '修复日志搜索破坏语法高亮的问题，包括搜索结果跨越不同高亮文本的情况。',
+                },
+                {
+                    'en-US':
+                        'Fixed long crash diagnostics overflowing the console and becoming impossible to scroll.',
+                    'zh-CN': '修复过长的崩溃诊断内容超出控制台且无法滚动查看的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed Favorites showing unavailable projects or changing pages prematurely while refreshing.',
+                    'zh-CN': '修复收藏夹刷新期间错误显示项目不可用或提前切换页码的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed multiplayer tunnel connections remaining active after their listeners closed.',
+                    'zh-CN': '修复多人联机隧道监听关闭后，相关连接仍未释放的问题。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-1.10.0-beta.3',
         version: '1.10.0-beta.3',
         publishedAt: '2026-10-20',

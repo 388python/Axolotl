@@ -21,6 +21,15 @@ use crate::state::{
     CachedEntry, ContentProviderRef, ModrinthHashMatch, ModrinthProjectId,
     ModrinthVersionId, Settings, SideType,
 };
+use crate::util::download::constants::AGGREGATE_FAILURE_PATH_CHAR_LIMIT;
+use crate::util::download::constants::AGGREGATE_FAILURE_PATH_LIMIT;
+use crate::util::download::constants::AUTO_RETRY_PASSES;
+use crate::util::download::constants::CONTENT_DATABASE_BATCH_SIZE;
+use crate::util::download::constants::CONTENT_DATABASE_FLUSH_INTERVAL;
+use crate::util::download::constants::FINALIZE_WAIT_TIMEOUT;
+use crate::util::download::constants::ITEM_FAILURE_REASON_CHAR_LIMIT;
+use crate::util::download::constants::NATIVE_CONTENT_FINALIZE_CONCURRENCY;
+use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::util::fetch::{
     ContentValidation, DownloadMeta, DownloadReason, DownloadRequest,
     Integrity, ResourceClass, download_to_path,
@@ -40,6 +49,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
 };
+#[cfg(test)]
 use std::time::Duration;
 
 use super::install_from::{CreatePack, CreatePackFile, PackFormat};
@@ -53,20 +63,6 @@ use tokio::sync::{Mutex, Semaphore, mpsc};
 type ExtractProgressFn<'a> = dyn FnMut(u64) -> Pin<Box<dyn Future<Output = crate::Result<()>> + Send + 'a>>
     + Send
     + 'a;
-
-const AGGREGATE_FAILURE_PATH_LIMIT: usize = 3;
-const AGGREGATE_FAILURE_PATH_CHAR_LIMIT: usize = 160;
-const ITEM_FAILURE_REASON_CHAR_LIMIT: usize = 1_024;
-/// Batch-level automatic retry passes for failed modpack files, in addition
-/// to the per-file retries inside `download_to_path`. Failed files are retried
-/// over a single connection (no range segmentation) and only after every pass
-/// is exhausted does the install ask the user about missing content.
-const AUTO_RETRY_PASSES: usize = 2;
-const NATIVE_CONTENT_FINALIZE_CONCURRENCY: usize = 4;
-const CONTENT_DATABASE_BATCH_SIZE: usize = 25;
-const CONTENT_DATABASE_FLUSH_INTERVAL: Duration = Duration::from_millis(500);
-const FINALIZE_WAIT_TIMEOUT: Duration = Duration::from_secs(45);
-const OVERRIDE_EXTRACTION_CONCURRENCY: usize = 4;
 
 struct MrpackVerificationTask {
     project: PackFile,
@@ -856,7 +852,8 @@ where
     let mut size = 0;
     let mut buffer = vec![0; 262144];
     let mut pending_progress = 0_u64;
-    const PROGRESS_GRANULARITY: u64 = 1024 * 1024;
+
+    use crate::util::download::constants::PROGRESS_GRANULARITY;
 
     loop {
         let bytes_read =
@@ -1114,7 +1111,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         download_meta,
         pack_version_id: version_id.clone(),
         pack_project_id: project_id.clone(),
-        reporter: reporter.clone(),
+        reporter: reporter.clone().with_pipeline_cancellation(),
         modpack_details: modpack_details.clone(),
         content_progress,
         content_bytes_progress,
@@ -1310,6 +1307,9 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                     )
                     .await;
                 }
+                if let Err(error) = &result {
+                    completion_context.reporter.fail_pipeline(error);
+                }
                 cancellation.cancel();
             }
             result
@@ -1501,6 +1501,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
                     }
                     Ok(())
                 }.await;
+                if let Err(error) = &result { verification_context.reporter.fail_pipeline(error); }
                 result?;
                 Ok(())
                     }
@@ -1508,6 +1509,9 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             )
             .await;
             if result.is_err() {
+                if let Err(error) = &result {
+                    verification_context.reporter.fail_pipeline(error);
+                }
                 cancellation.cancel();
             }
             result
@@ -1780,16 +1784,27 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
     .await?;
         drop(completion_tx);
         drop(verification_tx);
-        verification_worker.await.map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "modpack verification worker failed: {error}"
-            ))
-        })??;
-        completion_worker.await.map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "modpack database worker failed: {error}"
-            ))
-        })??;
+        let verification_result = verification_worker
+            .await
+            .map_err(|error| {
+                crate::Error::from(crate::ErrorKind::OtherError(format!(
+                    "modpack verification worker failed: {error}"
+                )))
+            })
+            .and_then(|result| result);
+        let completion_result = completion_worker
+            .await
+            .map_err(|error| {
+                crate::Error::from(crate::ErrorKind::OtherError(format!(
+                    "modpack database worker failed: {error}"
+                )))
+            })
+            .and_then(|result| result);
+        if let Some(error) = content_context.reporter.pipeline_failure() {
+            return Err(error);
+        }
+        verification_result?;
+        completion_result?;
         required_file_failures = pass_failures;
         if required_file_failures.is_empty() {
             break;

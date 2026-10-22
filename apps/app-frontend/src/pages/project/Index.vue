@@ -1103,8 +1103,8 @@ async function fetchProjectData() {
     translationLoading.value = false
     translations.value = {}
     const [project, projectV3Result] = await Promise.all([
-        get_project(requestedProjectId, 'must_revalidate'),
-        get_project_v3(requestedProjectId, 'must_revalidate').catch(handleError),
+        get_project(requestedProjectId, 'revalidate'),
+        get_project_v3(requestedProjectId, 'revalidate').catch(handleError),
     ])
     if (!isCurrent()) return
     projectV3.value = projectV3Result

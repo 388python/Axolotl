@@ -188,8 +188,11 @@ pub enum ResourceIssueCode {
     ArtifactMismatch,
     InvalidPath,
     MissingDependency,
+    DependencyAnalysisFailed,
     StaleRevision,
     ManualDownloadRequired,
+    FileNotWritable,
+    FileWriteSkipped,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -247,6 +250,8 @@ pub struct ResourceOperationPlan {
     rename_all_fields = "camelCase"
 )]
 pub enum ResourcePlanDecision {
+    IgnoreDependencies,
+    SkipUnwritableFiles,
     AddRequired {
         node_id: SelectionId,
     },
