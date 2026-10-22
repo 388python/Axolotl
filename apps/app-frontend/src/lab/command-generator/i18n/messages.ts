@@ -1,6 +1,295 @@
 import { defineMessages } from '@modrinth/ui'
 
 export const commandGeneratorMessages = defineMessages({
+    v26ArgWaypointActionDisplay: {
+        id: 'app.lab.command-generator.arg.waypoint.action.display',
+        defaultMessage: 'Action',
+    },
+    v26ArgWaypointActionDesc: {
+        id: 'app.lab.command-generator.arg.waypoint.action.desc',
+        defaultMessage: 'Action',
+    },
+    v26ArgWaypointWaypointDisplay: {
+        id: 'app.lab.command-generator.arg.waypoint.waypoint.display',
+        defaultMessage: 'Waypoint entity',
+    },
+    v26ArgWaypointWaypointDesc: {
+        id: 'app.lab.command-generator.arg.waypoint.waypoint.desc',
+        defaultMessage: 'Waypoint entity',
+    },
+    v26ArgWaypointPropertyDisplay: {
+        id: 'app.lab.command-generator.arg.waypoint.property.display',
+        defaultMessage: 'Property',
+    },
+    v26ArgWaypointPropertyDesc: {
+        id: 'app.lab.command-generator.arg.waypoint.property.desc',
+        defaultMessage: 'Property',
+    },
+    v26ArgWaypointValueDisplay: {
+        id: 'app.lab.command-generator.arg.waypoint.value.display',
+        defaultMessage: 'Color or style',
+    },
+    v26ArgWaypointValueDesc: {
+        id: 'app.lab.command-generator.arg.waypoint.value.desc',
+        defaultMessage: 'Color or style',
+    },
+    rangeError: {
+        id: 'app.lab.command-generator.error.range',
+        defaultMessage: 'Enter a value within the allowed range for {name}.',
+    },
+    v26ArgTimeClockDisplay: {
+        id: 'app.lab.command-generator.arg.time.clock.display',
+        defaultMessage: 'World clock',
+    },
+    v26ArgTimeClockDesc: {
+        id: 'app.lab.command-generator.arg.time.clock.desc',
+        defaultMessage: 'Leave empty to use the dimension’s default clock.',
+    },
+    v26ArgTimeRateDisplay: {
+        id: 'app.lab.command-generator.arg.time.rate.display',
+        defaultMessage: 'Clock rate',
+    },
+    v26ArgTimeRateDesc: {
+        id: 'app.lab.command-generator.arg.time.rate.desc',
+        defaultMessage: 'A multiplier greater than 0 and at most 1000.',
+    },
+    v26PresetTimeClockTime: {
+        id: 'app.lab.command-generator.preset.time.clock-time',
+        defaultMessage: 'Clock ticks',
+    },
+    v26PresetTimeGameTime: {
+        id: 'app.lab.command-generator.preset.time.game-time',
+        defaultMessage: 'Elapsed game ticks',
+    },
+    v26PresetTimeDayCycles: {
+        id: 'app.lab.command-generator.preset.time.day-cycles',
+        defaultMessage: 'Day cycles',
+    },
+    v26ArgTimeQueryDisplay: {
+        id: 'app.lab.command-generator.arg.time.query.display',
+        defaultMessage: 'Query',
+    },
+    v26ArgTimeQueryDesc: {
+        id: 'app.lab.command-generator.arg.time.query.desc',
+        defaultMessage: 'Use time, gametime, or a timeline ID; append repetition to count cycles.',
+    },
+    v26PresetGameruleFireRadius: {
+        id: 'app.lab.command-generator.preset.gamerule.fire-radius',
+        defaultMessage: 'Fire spread radius',
+    },
+    v26ArgGameruleValueDesc26: {
+        id: 'app.lab.command-generator.arg.gamerule.value.desc.26',
+        defaultMessage:
+            'A boolean or integer, depending on the game rule. Fire spread radius 0 disables spread.',
+    },
+    v26ArgDialogActionDisplay: {
+        id: 'app.lab.command-generator.arg.dialog.action.display',
+        defaultMessage: 'Action',
+    },
+    v26ArgDialogActionDesc: {
+        id: 'app.lab.command-generator.arg.dialog.action.desc',
+        defaultMessage: 'Show or clear a dialog.',
+    },
+    v26ArgFetchprofileSourceDisplay: {
+        id: 'app.lab.command-generator.arg.fetchprofile.source.display',
+        defaultMessage: 'Profile source',
+    },
+    v26ArgFetchprofileSourceDesc: {
+        id: 'app.lab.command-generator.arg.fetchprofile.source.desc',
+        defaultMessage: 'Fetch by player name, UUID, or entity.',
+    },
+    v26ArgFetchprofileProfileDisplay: {
+        id: 'app.lab.command-generator.arg.fetchprofile.profile.display',
+        defaultMessage: 'Name, UUID or selector',
+    },
+    v26ArgFetchprofileProfileDesc: {
+        id: 'app.lab.command-generator.arg.fetchprofile.profile.desc',
+        defaultMessage: 'Enter a player name, UUID, or a single entity selector.',
+    },
+    v26CmdFetchprofileDesc: {
+        id: 'app.lab.command-generator.cmd.fetchprofile.desc',
+        defaultMessage: 'Fetch a player profile.',
+    },
+    v26CmdUnpublishDesc: {
+        id: 'app.lab.command-generator.cmd.unpublish.desc',
+        defaultMessage: 'Stop sharing the single-player world.',
+    },
+    v26ArgComputeContextDisplay: {
+        id: 'app.lab.command-generator.arg.compute.context.display',
+        defaultMessage: 'Context',
+    },
+    v26ArgComputeContextDesc: {
+        id: 'app.lab.command-generator.arg.compute.context.desc',
+        defaultMessage: 'Choose the context in which to evaluate the provider.',
+    },
+    v26ArgComputePosDisplay: {
+        id: 'app.lab.command-generator.arg.compute.pos.display',
+        defaultMessage: 'Block position',
+    },
+    v26ArgComputePosDesc: {
+        id: 'app.lab.command-generator.arg.compute.pos.desc',
+        defaultMessage: 'Block position',
+    },
+    v26ArgComputeTargetDisplay: {
+        id: 'app.lab.command-generator.arg.compute.target.display',
+        defaultMessage: 'Entity',
+    },
+    v26ArgComputeTargetDesc: {
+        id: 'app.lab.command-generator.arg.compute.target.desc',
+        defaultMessage: 'Select one entity.',
+    },
+    v26ArgComputeTypeDisplay: {
+        id: 'app.lab.command-generator.arg.compute.type.display',
+        defaultMessage: 'Result type',
+    },
+    v26ArgComputeTypeDesc: {
+        id: 'app.lab.command-generator.arg.compute.type.desc',
+        defaultMessage: 'Result type',
+    },
+    v26ArgComputeProviderDisplay: {
+        id: 'app.lab.command-generator.arg.compute.provider.display',
+        defaultMessage: 'Number provider',
+    },
+    v26ArgComputeProviderDesc: {
+        id: 'app.lab.command-generator.arg.compute.provider.desc',
+        defaultMessage: 'Enter an inline number provider or a namespaced registry ID.',
+    },
+    v26ArgComputeScaleDisplay: {
+        id: 'app.lab.command-generator.arg.compute.scale.display',
+        defaultMessage: 'Scale',
+    },
+    v26ArgComputeScaleDesc: {
+        id: 'app.lab.command-generator.arg.compute.scale.desc',
+        defaultMessage: 'Scale the float result before returning an integer.',
+    },
+    v26CmdComputeDesc: {
+        id: 'app.lab.command-generator.cmd.compute.desc',
+        defaultMessage: 'Evaluate a number provider.',
+    },
+    v26ArgPosteffectActionDisplay: {
+        id: 'app.lab.command-generator.arg.posteffect.action.display',
+        defaultMessage: 'Action',
+    },
+    v26ArgPosteffectActionDesc: {
+        id: 'app.lab.command-generator.arg.posteffect.action.desc',
+        defaultMessage: 'Action',
+    },
+    v26ArgPosteffectTargetDisplay: {
+        id: 'app.lab.command-generator.arg.posteffect.target.display',
+        defaultMessage: 'Players',
+    },
+    v26ArgPosteffectTargetDesc: {
+        id: 'app.lab.command-generator.arg.posteffect.target.desc',
+        defaultMessage: 'Players',
+    },
+    v26ArgPosteffectEffectDisplay: {
+        id: 'app.lab.command-generator.arg.posteffect.effect.display',
+        defaultMessage: 'Post effect',
+    },
+    v26ArgPosteffectEffectDesc: {
+        id: 'app.lab.command-generator.arg.posteffect.effect.desc',
+        defaultMessage: 'Resource ID of a client-side postprocessing effect.',
+    },
+    v26CmdPosteffectDesc: {
+        id: 'app.lab.command-generator.cmd.posteffect.desc',
+        defaultMessage: 'Manage screen postprocessing effects.',
+    },
+    v26ArgSwingAnimationDisplay: {
+        id: 'app.lab.command-generator.arg.swing.animation.display',
+        defaultMessage: 'Animation',
+    },
+    v26ArgSwingAnimationDesc: {
+        id: 'app.lab.command-generator.arg.swing.animation.desc',
+        defaultMessage: 'Animation',
+    },
+    v26ArgSwingDurationDisplay: {
+        id: 'app.lab.command-generator.arg.swing.duration.display',
+        defaultMessage: 'Animation duration',
+    },
+    v26ArgSwingDurationDesc: {
+        id: 'app.lab.command-generator.arg.swing.duration.desc',
+        defaultMessage: 'Positive duration in ticks, seconds (s), or days (d).',
+    },
+    v26ArgItemSlotDesc26: {
+        id: 'app.lab.command-generator.arg.item.slot.desc.26',
+        defaultMessage: 'Slot range, inline slot source, or namespaced slot-source ID.',
+    },
+    v26ArgDataMethodDisplay: {
+        id: 'app.lab.command-generator.arg.data.method.display',
+        defaultMessage: 'Modification',
+    },
+    v26ArgDataMethodDesc: {
+        id: 'app.lab.command-generator.arg.data.method.desc',
+        defaultMessage: 'Modification',
+    },
+    v26ArgDataSourceDisplay: {
+        id: 'app.lab.command-generator.arg.data.source.display',
+        defaultMessage: 'Value source',
+    },
+    v26ArgDataSourceDesc: {
+        id: 'app.lab.command-generator.arg.data.source.desc',
+        defaultMessage: 'Value source',
+    },
+    v26ArgDataIndexDisplay: {
+        id: 'app.lab.command-generator.arg.data.index.display',
+        defaultMessage: 'Insert index',
+    },
+    v26ArgDataIndexDesc: {
+        id: 'app.lab.command-generator.arg.data.index.desc',
+        defaultMessage: 'Insert index',
+    },
+    v26ArgDataLiteralValueDisplay: {
+        id: 'app.lab.command-generator.arg.data.literalValue.display',
+        defaultMessage: 'SNBT value',
+    },
+    v26ArgDataLiteralValueDesc: {
+        id: 'app.lab.command-generator.arg.data.literalValue.desc',
+        defaultMessage: 'SNBT value',
+    },
+    v26ExecuteIfSlotsLabel: {
+        id: 'app.lab.command-generator.execute.if-slots.label',
+        defaultMessage: 'if slots',
+    },
+    v26ExecuteIfSlotsDesc: {
+        id: 'app.lab.command-generator.execute.if-slots.desc',
+        defaultMessage: 'Test slots on a block or entity using a slot source.',
+    },
+    v26ArgExecuteSourceDisplay: {
+        id: 'app.lab.command-generator.arg.execute.source.display',
+        defaultMessage: 'Source type',
+    },
+    v26ArgExecuteSourceDesc: {
+        id: 'app.lab.command-generator.arg.execute.source.desc',
+        defaultMessage: 'Source type',
+    },
+    v26ArgExecuteTargetDisplay: {
+        id: 'app.lab.command-generator.arg.execute.target.display',
+        defaultMessage: 'Entity or position',
+    },
+    v26ArgExecuteTargetDesc: {
+        id: 'app.lab.command-generator.arg.execute.target.desc',
+        defaultMessage: 'Entity or position',
+    },
+    v26ArgExecuteSlotsDisplay: {
+        id: 'app.lab.command-generator.arg.execute.slots.display',
+        defaultMessage: 'Slot source',
+    },
+    v26ArgExecuteSlotsDesc: {
+        id: 'app.lab.command-generator.arg.execute.slots.desc',
+        defaultMessage: 'A slot range, inline slot source or namespaced ID.',
+    },
+    v26ExecuteUnlessSlotsLabel: {
+        id: 'app.lab.command-generator.execute.unless-slots.label',
+        defaultMessage: 'unless slots',
+    },
+    v26ExecuteUnlessSlotsDesc: {
+        id: 'app.lab.command-generator.execute.unless-slots.desc',
+        defaultMessage: 'Test slots on a block or entity using a slot source.',
+    },
+    v26ArgExecuteSlotDesc26: {
+        id: 'app.lab.command-generator.arg.execute.slot.desc.26',
+        defaultMessage: 'Slot range or slot source.',
+    },
     copyFailed: {
         id: 'app.lab.command-generator.copy-failed',
         defaultMessage: 'Could not copy the command. Select and copy the text manually.',

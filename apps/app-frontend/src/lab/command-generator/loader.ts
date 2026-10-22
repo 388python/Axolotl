@@ -12,6 +12,9 @@ import v118Data from './data/v1.18.json' with { type: 'json' }
 import v119Data from './data/v1.19.json' with { type: 'json' }
 import v120Data from './data/v1.20.json' with { type: 'json' }
 import v121Data from './data/v1.21.json' with { type: 'json' }
+import v261Data from './data/v26.1.json' with { type: 'json' }
+import v262Data from './data/v26.2.json' with { type: 'json' }
+import v263Data from './data/v26.3.json' with { type: 'json' }
 
 const dataMap: Record<string, CommandDataFile> = {
     'v1.16.json': v116Data as unknown as CommandDataFile,
@@ -20,6 +23,9 @@ const dataMap: Record<string, CommandDataFile> = {
     'v1.19.json': v119Data as unknown as CommandDataFile,
     'v1.20.json': v120Data as unknown as CommandDataFile,
     'v1.21.json': v121Data as unknown as CommandDataFile,
+    'v26.1.json': v261Data as unknown as CommandDataFile,
+    'v26.2.json': v262Data as unknown as CommandDataFile,
+    'v26.3.json': v263Data as unknown as CommandDataFile,
 }
 
 let manifestCache: VersionManifest | null = null
@@ -108,7 +114,22 @@ function applyPatch(base: CommandDefinition[], patch: PatchDataFile): CommandDef
         }
     }
 
-    return result
+    return result.map((command) => {
+        const chainPatch = patch.chainPatches?.[command.id]
+        if (!chainPatch || !command.chainCategories) return command
+        return {
+            ...command,
+            chainCategories: command.chainCategories.map((category) => ({
+                ...category,
+                subcommands: category.subcommands
+                    .map((subcommand) => ({
+                        ...subcommand,
+                        ...chainPatch.patched?.[subcommand.id],
+                    }))
+                    .concat(category.id === chainPatch.categoryId ? (chainPatch.added ?? []) : []),
+            })),
+        }
+    })
 }
 
 function mergeCommand(

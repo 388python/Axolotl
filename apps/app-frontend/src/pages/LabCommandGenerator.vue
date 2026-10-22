@@ -161,7 +161,9 @@ const currentCommand = computed(() =>
 )
 
 const currentGuide = computed(() =>
-    selectedCommandId.value ? (findGuide(selectedCommandId.value) ?? null) : null,
+    selectedCommandId.value
+        ? (findGuide(selectedCommandId.value, selectedVersion.value) ?? null)
+        : null,
 )
 
 /**

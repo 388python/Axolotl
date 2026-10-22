@@ -15,6 +15,9 @@ import CommandGeneratorNbtNode from './CommandGeneratorNbtNode.vue'
 
 const props = defineProps<{
     modelValue?: string
+    kind?: 'item' | 'entity' | 'generic'
+    version?: string
+    forceDataComponents?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -51,15 +54,29 @@ const components = ref(false)
 const parseError = ref('')
 let lastOutput = props.modelValue ?? ''
 
+const itemFormat = computed(() => {
+    if (props.kind !== 'item') return 'legacy'
+    if ((props.version ?? '1.21').localeCompare('1.21.5', undefined, { numeric: true }) >= 0)
+        return 'inline'
+    if (
+        props.forceDataComponents ??
+        (props.version ?? '1.21').localeCompare('1.20', undefined, { numeric: true }) >= 0
+    )
+        return 'components'
+    return 'legacy'
+})
 const presets = [
-    { label: messages.presetEnchanted, factory: () => createItemNbtTree() },
+    { label: messages.presetEnchanted, factory: () => createItemNbtTree(itemFormat.value) },
     {
         label: messages.presetCustomName,
-        factory: () => [
-            createNbtTag('display', 'compound', '', [
-                createNbtTag('Name', 'string', '{"text":"我的物品"}'),
-            ]),
-        ],
+        factory: () =>
+            itemFormat.value !== 'legacy'
+                ? createItemNbtTree(itemFormat.value).slice(0, 1)
+                : [
+                      createNbtTag('display', 'compound', '', [
+                          createNbtTag('Name', 'string', '{"text":"我的物品"}'),
+                      ]),
+                  ],
     },
 ]
 
@@ -73,7 +90,7 @@ watch(
         try {
             const parsed = parseNbt(lastOutput)
             nodes.value = parsed.nodes
-            components.value = parsed.components
+            components.value = parsed.components || (!val && itemFormat.value !== 'legacy')
             parseError.value = ''
         } catch (error) {
             parseError.value = error instanceof Error ? error.message : String(error)
@@ -89,7 +106,7 @@ function publish() {
 }
 
 function applyPreset(preset: (typeof presets)[number]) {
-    components.value = false
+    components.value = itemFormat.value !== 'legacy'
     parseError.value = ''
     nodes.value = preset.factory()
     publish()

@@ -170,7 +170,23 @@ export function mergeItemNbt(original: string, edited: string, components: boole
     return result.length ? serializeNbtDocument(result, components) : ''
 }
 
-export function createItemNbtTree(): NbtTagNode[] {
+export function createItemNbtTree(
+    format: 'legacy' | 'components' | 'inline' = 'legacy',
+): NbtTagNode[] {
+    if (format !== 'legacy') {
+        const text = (name: string, value: string) =>
+            format === 'inline'
+                ? createNbtTag(name, 'compound', '', [createNbtTag('text', 'string', value)])
+                : createNbtTag(name, 'string', JSON.stringify({ text: value }))
+        return [
+            text('custom_name', '自定义名称'),
+            createNbtTag('lore', 'list', '', [text('0', '第一行描述')]),
+            createNbtTag('enchantments', 'compound', '', [
+                createNbtTag('minecraft:sharpness', 'int', 5),
+            ]),
+            createNbtTag('unbreakable', 'compound', '', []),
+        ]
+    }
     return [
         createNbtTag('display', 'compound', '', [
             createNbtTag('Name', 'string', '{"text":"自定义名称","color":"gold"}'),

@@ -4,52 +4,6 @@
   "generatedAt": "2026-10-15",
   "added": [
     {
-      "id": "swing",
-      "name": "swing",
-      "descriptionKey": "app.lab.command-generator.cmd.swing.desc",
-      "category": "entity",
-      "permissionLevel": 2,
-      "arguments": [
-        {
-          "name": "target",
-          "displayNameKey": "app.lab.command-generator.arg.swing.target.display",
-          "type": "entity-selector",
-          "required": true,
-          "descriptionKey": "app.lab.command-generator.arg.swing.target.desc",
-          "selector": true,
-          "placeholder": "@s",
-          "presets": [
-            {
-              "labelKey": "app.lab.command-generator.preset.common.self",
-              "value": "@s"
-            },
-            {
-              "labelKey": "app.lab.command-generator.preset.common.all-players",
-              "value": "@a"
-            }
-          ]
-        },
-        {
-          "name": "hand",
-          "displayNameKey": "app.lab.command-generator.arg.swing.hand.display",
-          "type": "enum",
-          "required": false,
-          "descriptionKey": "app.lab.command-generator.arg.swing.hand.desc",
-          "enumValues": ["mainhand", "offhand"],
-          "presets": [
-            {
-              "labelKey": "app.lab.command-generator.preset.hand.mainhand",
-              "value": "mainhand"
-            },
-            {
-              "labelKey": "app.lab.command-generator.preset.hand.offhand",
-              "value": "offhand"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "waypoint",
       "name": "waypoint",
       "descriptionKey": "app.lab.command-generator.cmd.waypoint.desc",

@@ -48,10 +48,15 @@ export interface CommandArgument {
     presets?: ArgumentPreset[]
     /** Only include this argument when all named values match. */
     when?: Record<string, Array<string | number | boolean>>
+    unless?: Record<string, Array<string | number | boolean>>
     /** A boolean switch such as /list uuids, rather than a boolean value. */
     booleanKeyword?: string
     /** Fixed syntax emitted by the generator without an editable form field. */
     literal?: string
+    prefix?: string
+    min?: number
+    max?: number
+    exclusiveMin?: number
     /**
      * 为 true 时，该参数渲染后直接追加到前一个参数尾部，**不加空格**。
      *
@@ -108,6 +113,15 @@ export interface PatchDataFile {
     added?: CommandDefinition[]
     removed?: string[]
     patched?: Record<string, Partial<CommandDefinition>>
+    chainPatches?: Record<
+        string,
+        {
+            categoryId: string
+            added?: ExecuteChainSubcommand[]
+            patched?: Record<string, Partial<ExecuteChainSubcommand>>
+        }
+    >
+    sources?: string[]
 }
 
 export type CommandDataFile = BaseDataFile | PatchDataFile

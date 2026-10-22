@@ -166,7 +166,8 @@ const mergedPresets = computed<ArgumentPreset[]>(() => {
             ? ENTITY_SELECTOR_DEFAULT_PRESETS
             : props.arg.type === 'advancement'
               ? ADVANCEMENT_DEFAULT_PRESETS
-              : props.arg.type === 'gamerule'
+              : props.arg.type === 'gamerule' &&
+                  Number((props.version ?? getCurrentVersion()).split('.')[0]) < 26
                 ? GAMERULE_DEFAULT_PRESETS
                 : null
 
@@ -293,6 +294,8 @@ function onItemPicked(id: string) {
             :type="isNumber ? 'number' : 'text'"
             :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
             :step="arg.type === 'integer' ? 1 : undefined"
+            :min="arg.min"
+            :max="arg.max"
             class="w-full"
             :spellcheck="false"
             @update:model-value="onTextInput(String($event ?? ''))"

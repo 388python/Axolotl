@@ -70,6 +70,9 @@ watch(
         <CommandGeneratorNbtAdvanced
             v-else
             :model-value="modelValue"
+            :kind="kind"
+            :version="version"
+            :force-data-components="forceDataComponents"
             @update:model-value="emit('update:modelValue', $event)"
         />
     </div>

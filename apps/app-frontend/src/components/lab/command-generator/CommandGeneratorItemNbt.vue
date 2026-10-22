@@ -11,7 +11,12 @@ import {
 import { computed, ref, watch } from 'vue'
 
 import { commandGeneratorMessages as commonMessages } from '@/lab/command-generator/i18n/messages.ts'
-import { mergeItemNbt, type NbtTagNode, parseNbt } from '@/lab/command-generator/nbt-tree.ts'
+import {
+    mergeItemNbt,
+    type NbtTagNode,
+    parseNbt,
+    quoteSnbt,
+} from '@/lab/command-generator/nbt-tree.ts'
 
 interface EnchantEntry {
     key: number
@@ -351,6 +356,10 @@ const useDataComponents = computed(() => {
     return false
 })
 
+const useInlineText = computed(
+    () => (props.version ?? '1.21').localeCompare('1.21.5', undefined, { numeric: true }) >= 0,
+)
+
 // ============ 序列化 ============
 
 /**
@@ -411,12 +420,20 @@ function serializeDataComponents(): string {
     const parts: string[] = []
 
     if (name.value.trim()) {
-        parts.push(`custom_name='${escapeSnbt(JSON.stringify({ text: name.value }), "'")}'`)
+        parts.push(
+            useInlineText.value
+                ? `custom_name={text:${quoteSnbt(name.value)}}`
+                : `custom_name='${escapeSnbt(JSON.stringify({ text: name.value }), "'")}'`,
+        )
     }
     const cleanLore = lore.value.map((l) => l.trim()).filter(Boolean)
     if (cleanLore.length) {
         const loreItems = cleanLore
-            .map((l) => `'${escapeSnbt(JSON.stringify({ text: l }), "'")}'`)
+            .map((l) =>
+                useInlineText.value
+                    ? `{text:${quoteSnbt(l)}}`
+                    : `'${escapeSnbt(JSON.stringify({ text: l }), "'")}'`,
+            )
             .join(',')
         parts.push(`lore=[${loreItems}]`)
     }
@@ -498,6 +515,8 @@ function parseSnbt(snbtStr: string): void {
         const find = (list: NbtTagNode[], key: string) =>
             list.find((node) => node.name.replace(/^minecraft:/, '') === key)
         const readText = (node?: NbtTagNode): string => {
+            if (node?.type === 'compound')
+                return String(find(node.children ?? [], 'text')?.value ?? '')
             if (!node || node.type !== 'string') return ''
             try {
                 const parsed = JSON.parse(String(node.value))
@@ -507,7 +526,7 @@ function parseSnbt(snbtStr: string): void {
                       ? parsed.text
                       : ''
             } catch {
-                return ''
+                return useInlineText.value ? String(node.value) : ''
             }
         }
         const display = components ? nodes : (find(nodes, 'display')?.children ?? [])

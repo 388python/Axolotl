@@ -227,3 +227,76 @@ it('saves and deletes a preset without deleting the current command inputs', asy
     await fields[1].setValue('minecraft:diamond')
     expect(wrapper.find('.result-code').exists()).toBe(false)
 })
+
+it.each(['26.1', '26.2', '26.3'])(
+    'round trips inline item names and lore for %s',
+    async (version) => {
+        const name = 'Sword "A" \\ path Bob\'s'
+        const input = `[custom_name={text:"Original"},custom_data={test:1b}]`
+        const wrapper = mount(CommandGeneratorItemNbt, { props: { version, modelValue: input } })
+        wrappers.push(wrapper)
+        await wrapper.get('input.text-input').setValue(name)
+        await wrapper.get('.lore-list .ghost-add').trigger('click')
+        await wrapper.get('.lore-row input').setValue(name)
+        const output = wrapper.emitted('update:modelValue')!.at(-1)![0] as string
+        const nodes = parseNbt(output).nodes
+        expect(nodes.find((node) => node.name === 'custom_name')!.children![0].value).toBe(name)
+        expect(nodes.find((node) => node.name === 'lore')!.children![0].children![0].value).toBe(
+            name,
+        )
+        expect(nodes.find((node) => node.name === 'custom_data')).toBeDefined()
+        await wrapper.setProps({ modelValue: output })
+        expect((wrapper.get('input.text-input').element as HTMLInputElement).value).toBe(name)
+    },
+)
+
+it('restores a 26.3 preset and exposes the new compute form', async () => {
+    saveUserPreset('Computed value', 'compute', '26.3', {
+        context: 'default',
+        type: 'integer',
+        provider: '5',
+    })
+    const wrapper = mount(LabCommandGenerator)
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.get('.global-presets-button').trigger('click')
+    await wrapper.get('.global-preset-item').trigger('click')
+    await flushPromises()
+    expect((wrapper.findAll('select')[0].element as HTMLSelectElement).value).toBe('26.3')
+    await wrapper.get('.action-bar button').trigger('click')
+    expect(wrapper.get('.result-code').text()).toBe('/compute default integer 5')
+})
+
+it('offers modern gamerule presets without legacy camelCase choices for 26.x', async () => {
+    const wrapper = mount(LabCommandGenerator)
+    wrappers.push(wrapper)
+    await flushPromises()
+    await wrapper.findAll('select')[0].setValue('26.1')
+    await wrapper.findAll('select')[3].setValue('gamerule')
+    const rule = wrapper.findAll('.argument-card')[0]
+    await rule.findAll('button')[0].trigger('click')
+    expect((rule.get('input').element as HTMLInputElement).value).toBe('minecraft:keep_inventory')
+    await wrapper.findAll('.argument-card')[1].get('input').setValue('true')
+    await wrapper.get('.action-bar button').trigger('click')
+    expect(wrapper.get('.result-code').text()).toBe('/gamerule minecraft:keep_inventory true')
+})
+
+it('uses component syntax when adding tags or applying advanced item presets in 26.3', async () => {
+    const wrapper = mount(CommandGeneratorNbtAdvanced, {
+        props: { kind: 'item', version: '26.3', modelValue: '' },
+    })
+    wrappers.push(wrapper)
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Add root tag')!
+        .trigger('click')
+    expect(String(wrapper.emitted('update:modelValue')!.at(-1)![0])).toMatch(/^\[/)
+    await wrapper
+        .findAll('button')
+        .find((button) => button.text() === 'Enchanted item')!
+        .trigger('click')
+    const output = String(wrapper.emitted('update:modelValue')!.at(-1)![0])
+    expect(parseNbt(output).nodes.find((node) => node.name === 'custom_name')!.type).toBe(
+        'compound',
+    )
+})

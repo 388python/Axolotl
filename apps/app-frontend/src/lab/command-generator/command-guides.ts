@@ -166,6 +166,21 @@ export const COMMAND_GUIDES: CommandGuideEntry[] = [
     },
 ]
 
-export function findGuide(commandId: string): CommandGuideEntry | undefined {
-    return COMMAND_GUIDES.find((g) => g.commandId === commandId)
+export function findGuide(commandId: string, version = '1.21'): CommandGuideEntry | undefined {
+    const guide = COMMAND_GUIDES.find((g) => g.commandId === commandId)
+    if (guide && commandId === 'give' && Number(version.split('.')[0]) >= 26) {
+        return {
+            ...guide,
+            examples: guide.examples.map((example, index) =>
+                index === 1
+                    ? {
+                          ...example,
+                          command:
+                              '/give @p minecraft:diamond_sword[enchantments={"minecraft:sharpness":5}] 1',
+                      }
+                    : example,
+            ),
+        }
+    }
+    return guide
 }

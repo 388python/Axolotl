@@ -5,12 +5,17 @@ export function getActiveArguments(
     def: CommandDefinition,
     values: Record<string, string | number | boolean>,
 ): CommandArgument[] {
-    return def.arguments.filter((arg) =>
-        Object.entries(arg.when ?? {}).every(([name, allowed]) =>
-            allowed.includes(
-                values[name] ?? def.arguments.find((a) => a.name === name)?.defaultValue ?? '',
-            ),
-        ),
+    const argumentValue = (name: string) =>
+        values[name] ?? def.arguments.find((arg) => arg.name === name)?.defaultValue ?? ''
+    return def.arguments.filter(
+        (arg) =>
+            Object.entries(arg.when ?? {}).every(([name, allowed]) =>
+                allowed.includes(argumentValue(name)),
+            ) &&
+            (!arg.unless ||
+                !Object.entries(arg.unless).every(([name, allowed]) =>
+                    allowed.includes(argumentValue(name)),
+                )),
     )
 }
 
@@ -100,7 +105,7 @@ export function buildCommand(
             continue
         }
 
-        const formatted = formatArgument(arg, value)
+        const formatted = `${arg.prefix ? arg.prefix + ' ' : ''}${formatArgument(arg, value)}`
 
         // nbt 紧贴：仅当上一个实际写入的参数是 item / block 时
         if (
@@ -125,7 +130,7 @@ export function validateCommand(
     commandId: string,
     values: Record<string, string | number | boolean>,
     formatError?: (issue: {
-        kind: 'requiredError' | 'enumError' | 'numberError' | 'integerError'
+        kind: 'requiredError' | 'enumError' | 'numberError' | 'integerError' | 'rangeError'
         argument: CommandArgument
     }) => string,
 ): string[] {
@@ -157,6 +162,18 @@ export function validateCommand(
             errors.push(
                 formatError?.({ kind: 'numberError', argument: arg }) ??
                     `参数 "${arg.displayNameKey}" 必须为数字`,
+            )
+        }
+
+        if (
+            (arg.type === 'number' || arg.type === 'integer') &&
+            ((arg.min !== undefined && Number(value) < arg.min) ||
+                (arg.max !== undefined && Number(value) > arg.max) ||
+                (arg.exclusiveMin !== undefined && Number(value) <= arg.exclusiveMin))
+        ) {
+            errors.push(
+                formatError?.({ kind: 'rangeError', argument: arg }) ??
+                    `参数 "${arg.displayNameKey}" 不在允许范围内`,
             )
         }
 
