@@ -23,7 +23,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # A release run and a push run target the same branch, so key the group by
+  # that branch instead of by the ref that triggered the run.
+  group: ${{ github.workflow }}-${{ (github.event_name == 'release' || github.ref_type == 'tag') && github.event.repository.default_branch || github.ref_name }}
   # Every run commits into the branch it updates, so queue instead of cancelling.
   cancel-in-progress: false
 
@@ -34,6 +36,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       branch: ${{ steps.branch.outputs.name }}
+      sha: ${{ steps.base.outputs.sha }}
       flake: ${{ steps.flake-inputs.outputs.changed }}
       hash: ${{ steps.pnpm-deps.outputs.changed }}
       gradle: ${{ steps.gradle-deps.outputs.changed }}
@@ -66,6 +69,12 @@ jobs:
 
       - name: Install Nix
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+
+      - name: Record the refreshed base commit
+        id: base
+        # The commit job only applies the artifacts if this commit still holds
+        # the inputs they were derived from.
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Update flake inputs
         id: flake-inputs
@@ -142,7 +151,7 @@ jobs:
           if-no-files-found: error
 
   commit:
-    name: Commit the refreshed nix locks
+    name: Commit the refreshed nix inputs
     needs: refresh
     if: needs.refresh.outputs.flake == 'true' || needs.refresh.outputs.hash == 'true' || needs.refresh.outputs.gradle == 'true'
     runs-on: ubuntu-latest
@@ -159,6 +168,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Require the refreshed inputs to still be current
+        id: base
+        # The artifacts were derived from the refresh job's checkout, so a
+        # branch that moved on those inputs makes them stale.
+        env:
+          BASE: ${{ needs.refresh.outputs.sha }}
+          TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
+        run: |
+          if [ -z "$BASE" ]; then
+            echo "error: the refresh job did not report its base commit" >&2
+            exit 1
+          fi
+          current=true
+          if ! git merge-base --is-ancestor "$BASE" HEAD; then
+            echo "::warning::${BASE} is not an ancestor of ${TARGET_BRANCH}; a newer run supersedes this refresh"
+            current=false
+          elif ! git diff --quiet "$BASE" HEAD -- flake.lock pnpm-lock.yaml nix packages/app-lib/java; then
+            echo "::warning::${TARGET_BRANCH} moved on the refreshed inputs after ${BASE}; the run triggered by that push redoes the refresh"
+            current=false
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
       - name: Download the refreshed lock file
         if: needs.refresh.outputs.flake == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -167,7 +198,7 @@ jobs:
           path: refreshed
 
       - name: Apply the refreshed lock file
-        if: needs.refresh.outputs.flake == 'true'
+        if: steps.base.outputs.current == 'true' && needs.refresh.outputs.flake == 'true'
         # Only the expected file with the expected structure crosses the job
         # boundary; anything else the refresh job produced is dropped.
         run: |
@@ -186,33 +217,8 @@ jobs:
           ' "$lock_file"
           install -m 644 "$lock_file" flake.lock
 
-      - name: Commit the refreshed lock file
-        if: needs.refresh.outputs.flake == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          gh auth setup-git
-          git add flake.lock
-          git commit -m "chore(nix): update flake inputs [skip ci]"
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
-              exit 0
-            fi
-            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
-            git fetch origin "${TARGET_BRANCH}"
-            git rebase FETCH_HEAD || {
-              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
-              exit 1
-            }
-          done
-          echo "error: could not push the updated flake inputs after 3 attempts" >&2
-          exit 1
-
       - name: Apply the recomputed pnpm dependency hash
-        if: needs.refresh.outputs.hash == 'true'
+        if: steps.base.outputs.current == 'true' && needs.refresh.outputs.hash == 'true'
         env:
           OLD_HASH: ${{ needs.refresh.outputs.old-hash }}
           NEW_HASH: ${{ needs.refresh.outputs.new-hash }}
@@ -236,31 +242,6 @@ jobs:
           sed -i "s|hash = \"$OLD_HASH\";|hash = \"$NEW_HASH\";|" nix/axolotl.nix
           grep -qF "hash = \"$NEW_HASH\";" nix/axolotl.nix
 
-      - name: Commit the recomputed pnpm dependency hash
-        if: needs.refresh.outputs.hash == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          gh auth setup-git
-          git add nix/axolotl.nix
-          git commit -m "chore(nix): update pnpm dependency hash [skip ci]"
-          for attempt in 1 2 3; do
-            if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
-              exit 0
-            fi
-            echo "push was rejected (attempt $attempt); rebasing onto the updated ${TARGET_BRANCH}"
-            git fetch origin "${TARGET_BRANCH}"
-            git rebase FETCH_HEAD || {
-              echo "error: cannot rebase onto ${TARGET_BRANCH}; the next triggered run will retry" >&2
-              exit 1
-            }
-          done
-          echo "error: could not push the updated pnpm dependency hash after 3 attempts" >&2
-          exit 1
-
       - name: Download the refreshed gradle dependency cache
         if: needs.refresh.outputs.gradle == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -269,7 +250,7 @@ jobs:
           path: refreshed
 
       - name: Apply the refreshed gradle dependency cache
-        if: needs.refresh.outputs.gradle == 'true'
+        if: steps.base.outputs.current == 'true' && needs.refresh.outputs.gradle == 'true'
         # Same boundary rule as the lock file: only the expected file and its
         # structure are accepted.
         run: |
@@ -289,17 +270,23 @@ jobs:
           ' "$cache_file"
           install -m 644 "$cache_file" nix/mitmCache.json
 
-      - name: Commit the refreshed gradle dependency cache
-        if: needs.refresh.outputs.gradle == 'true'
+      - name: Commit the refreshed nix inputs
+        if: steps.base.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TARGET_BRANCH: ${{ needs.refresh.outputs.branch }}
+        # One commit for every refreshed file: a lock without the dependency
+        # metadata derived from it would leave the branch broken.
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- flake.lock nix/axolotl.nix nix/mitmCache.json
+          if git diff --cached --quiet; then
+            echo "the refreshed nix inputs already match ${TARGET_BRANCH}"
+            exit 0
+          fi
+          git commit -m "chore(nix): refresh the nix inputs and dependency metadata [skip ci]"
           gh auth setup-git
-          git add nix/mitmCache.json
-          git commit -m "chore(nix): update the gradle dependency cache [skip ci]"
           for attempt in 1 2 3; do
             if git push origin "HEAD:refs/heads/${TARGET_BRANCH}"; then
               exit 0
@@ -311,5 +298,5 @@ jobs:
               exit 1
             }
           done
-          echo "error: could not push the refreshed gradle dependency cache after 3 attempts" >&2
+          echo "error: could not push the refreshed nix inputs after 3 attempts" >&2
           exit 1
