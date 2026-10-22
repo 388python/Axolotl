@@ -10,6 +10,8 @@ import {
     StyledInput,
     useVIntl,
 } from '@modrinth/ui'
+import { save } from '@tauri-apps/plugin-dialog'
+import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
@@ -35,6 +37,8 @@ const messages = defineMessages({
 })
 
 const host = ref<HTMLElement>()
+const terminalHost = ref<HTMLElement>()
+const exporting = ref(false)
 const fullscreen = ref(false)
 const query = ref('')
 let terminal: Terminal | undefined
@@ -175,24 +179,29 @@ function find(previous = false) {
     else search?.findNext(query.value)
 }
 
-function download() {
-    if (!terminal) return
+async function download() {
+    if (!terminal || exporting.value) return
     const buffer = terminal.buffer.active
     const lines: string[] = []
     for (let index = 0; index < buffer.length; index++) {
         const line = buffer.getLine(index)
         if (!line) continue
-        if (line.isWrapped && lines.length) lines[lines.length - 1] += line.translateToString(true)
-        else lines.push(line.translateToString(true))
+        const text = line.translateToString(!buffer.getLine(index + 1)?.isWrapped)
+        if (line.isWrapped && lines.length) lines[lines.length - 1] += text
+        else lines.push(text)
     }
-    const url = URL.createObjectURL(
-        new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }),
-    )
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${props.server.id}-console.txt`
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 0)
+    const text = lines.join('\n').trimEnd() + '\n'
+    exporting.value = true
+    try {
+        const path = await save({
+            defaultPath: `${props.server.id}-console.txt`,
+        })
+        if (path && !disposed) await writeTextFile(path, text)
+    } catch (error) {
+        if (!disposed) handleError(error)
+    } finally {
+        exporting.value = false
+    }
 }
 
 function bindSession() {
@@ -252,7 +261,7 @@ onMounted(() => {
     terminal.loadAddon(search)
     terminal.loadAddon(new Unicode11Addon())
     terminal.unicode.activeVersion = '11'
-    terminal.open(host.value!)
+    terminal.open(terminalHost.value!)
     updateTheme()
     disposables.push(terminal.onData((data) => sendBytes(encoder.encode(data))))
     disposables.push(
@@ -301,45 +310,60 @@ onBeforeUnmount(() => {
             :class="fullscreen ? 'fixed inset-0 z-[150] bg-surface-1 p-6 pt-12' : ''"
         >
             <div v-if="fullscreen" data-tauri-drag-region class="absolute inset-x-0 top-0 h-10" />
-            <div class="flex shrink-0 flex-wrap items-center gap-2">
-                <Button
-                    :type="view === 'terminal' ? 'chip' : 'quiet'"
-                    :aria-pressed="view === 'terminal'"
-                    @click="emit('update:view', 'terminal')"
-                >
-                    {{ formatMessage(messages.terminal) }}
-                </Button>
-                <Button
-                    :type="view === 'logs' ? 'chip' : 'quiet'"
-                    :aria-pressed="view === 'logs'"
-                    @click="emit('update:view', 'logs')"
-                >
-                    {{ formatMessage(messages.logs) }}
-                </Button>
+            <div class="flex shrink-0 flex-wrap items-center gap-3">
+                <div class="flex shrink-0 items-center gap-1 rounded-xl bg-surface-2 p-1">
+                    <Button
+                        :type="view === 'terminal' ? 'chip' : 'quiet'"
+                        :aria-pressed="view === 'terminal'"
+                        @click="emit('update:view', 'terminal')"
+                    >
+                        {{ formatMessage(messages.terminal) }}
+                    </Button>
+                    <Button
+                        :type="view === 'logs' ? 'chip' : 'quiet'"
+                        :aria-pressed="view === 'logs'"
+                        @click="emit('update:view', 'logs')"
+                    >
+                        {{ formatMessage(messages.logs) }}
+                    </Button>
+                </div>
                 <template v-if="view === 'terminal'">
                     <StyledInput
                         v-model="query"
                         :icon="SearchIcon"
                         :placeholder="formatMessage(commonMessages.searchPlaceholder)"
-                        wrapper-class="min-w-0 flex-1"
+                        wrapper-class="min-w-0 flex-1 sm:max-w-sm sm:ml-auto"
                         clearable
                         @keydown.enter="find($event.shiftKey)"
                     />
-                    <Button type="quiet" @click="download"
-                        ><DownloadIcon />{{ formatMessage(commonMessages.downloadButton) }}</Button
-                    >
+                    <Button
+                        v-tooltip="formatMessage(commonMessages.downloadButton)"
+                        type="quiet"
+                        icon-only
+                        :label="formatMessage(commonMessages.downloadButton)"
+                        :loading="exporting"
+                        @click="download"
+                        ><DownloadIcon
+                    /></Button>
                 </template>
-                <Button type="quiet" class="ml-auto" @click="fullscreen = !fullscreen">
+                <Button
+                    v-tooltip="formatMessage(fullscreen ? messages.collapse : messages.expand)"
+                    type="quiet"
+                    icon-only
+                    :label="formatMessage(fullscreen ? messages.collapse : messages.expand)"
+                    @click="fullscreen = !fullscreen"
+                >
                     <ContractIcon v-if="fullscreen" /><ExpandIcon v-else />
-                    {{ formatMessage(fullscreen ? messages.collapse : messages.expand) }}
                 </Button>
             </div>
             <div v-show="view === 'terminal'" class="flex min-h-0 flex-1 flex-col gap-2">
                 <div
                     ref="host"
-                    class="min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl bg-surface-2 p-3"
+                    class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-surface-2 p-3"
                     :aria-label="formatMessage(messages.terminal)"
-                />
+                >
+                    <div ref="terminalHost" class="min-h-0 min-w-0 flex-1" />
+                </div>
                 <span
                     v-if="!server.running && !server.starting"
                     class="text-sm text-[var(--color-text-tertiary)]"

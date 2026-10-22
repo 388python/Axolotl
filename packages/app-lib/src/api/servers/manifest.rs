@@ -13,6 +13,28 @@ use crate::{ErrorKind, Result};
 
 const MANIFEST_FILE: &str = "axolotl-server.json";
 const DEFAULT_JAR_NAME: &str = "server.jar";
+
+pub(super) fn default_stop_command() -> String {
+    "stop".to_string()
+}
+
+pub(super) fn normalize_stop_command(command: &str) -> Result<String> {
+    let command = command.trim();
+    if command.contains(['\r', '\n', '\0']) || command.len() >= 64 * 1024 {
+        return Err(ErrorKind::InputError(
+            "Stop command must be a single line shorter than 64 KiB"
+                .to_string(),
+        )
+        .as_error());
+    }
+    Ok(if command.is_empty() {
+        default_stop_command()
+    } else if command.eq_ignore_ascii_case("^c") {
+        "^C".to_string()
+    } else {
+        command.to_string()
+    })
+}
 /// Executable launcher jar downloaded from Fabric Meta; must match the
 /// filename used by the frontend's `resolveServerJar('fabric')`.
 const FABRIC_SERVER_JAR_NAME: &str = "fabric-server.jar";
@@ -65,6 +87,8 @@ pub struct ServerManifest {
     pub jvm_args: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pre_launch_hook: Option<String>,
+    #[serde(default = "default_stop_command")]
+    pub stop_command: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_pinned_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -275,6 +299,7 @@ mod tests {
             install_error: None,
             jvm_args: Vec::new(),
             pre_launch_hook: None,
+            stop_command: default_stop_command(),
             home_pinned_at: None,
             linked_world: None,
             created_at: Utc::now(),
@@ -285,6 +310,15 @@ mod tests {
         let parsed: ServerManifest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, manifest.id);
         assert_eq!(parsed.name, manifest.name);
+        assert_eq!(parsed.stop_command, "stop");
+        let mut legacy = serde_json::to_value(&manifest).unwrap();
+        legacy.as_object_mut().unwrap().remove("stopCommand");
+        assert_eq!(
+            serde_json::from_value::<ServerManifest>(legacy)
+                .unwrap()
+                .stop_command,
+            "stop"
+        );
     }
 
     #[test]
@@ -304,6 +338,7 @@ mod tests {
             install_error: None,
             jvm_args: Vec::new(),
             pre_launch_hook: None,
+            stop_command: default_stop_command(),
             home_pinned_at: None,
             linked_world: None,
             created_at: Utc::now(),

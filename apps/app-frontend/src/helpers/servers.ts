@@ -47,6 +47,7 @@ export interface ServerManifestData {
     memoryMb?: number
     jvmArgs: string[]
     preLaunchHook?: string
+    stopCommand?: string
     homePinnedAt?: string
     linkedWorld?: LinkedWorldData | null
     createdAt: string
@@ -114,6 +115,7 @@ export const servers = {
             memoryMb?: number
             jvmArgs?: string[]
             preLaunchHook?: string
+            stopCommand?: string
             homePinned?: boolean
         },
     ) => invoke<ServerManifestData>(command('servers_update_settings'), { serverId, ...options }),

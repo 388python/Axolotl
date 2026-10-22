@@ -73,6 +73,7 @@ pub async fn servers_update_settings(
     jvm_args: Option<Vec<String>>,
     pre_launch_hook: Option<String>,
     home_pinned: Option<bool>,
+    stop_command: Option<String>,
 ) -> Result<servers::ServerManifest> {
     Ok(servers::update_settings(
         server_id,
@@ -82,6 +83,7 @@ pub async fn servers_update_settings(
         jvm_args,
         pre_launch_hook,
         home_pinned,
+        stop_command,
     )
     .await?)
 }

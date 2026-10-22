@@ -27,6 +27,7 @@ import { useHomeDashboardRuntime } from '@/components/home/home-dashboard-runtim
 import HomeLocalServerPickerModal from '@/components/home/HomeLocalServerPickerModal.vue'
 import OnlineModeWarningModal from '@/components/multiplayer/servers/OnlineModeWarningModal.vue'
 import ManagedServerIcon from '@/components/multiplayer/servers/ServerIcon.vue'
+import ServerTerminateButton from '@/components/multiplayer/servers/ServerTerminateButton.vue'
 import { useMinecraftLaunchError } from '@/composables/useMinecraftLaunchError'
 import { useOnlineModeWarning } from '@/composables/useOnlineModeWarning'
 import { useServers } from '@/composables/useServers'
@@ -523,6 +524,11 @@ async function unpinLocalServer(serverId: string) {
                                 ><StopCircleIcon v-if="server.running || server.starting" />
                                 <PlayIcon v-else />
                             </Button>
+                            <ServerTerminateButton
+                                v-if="server.stopping"
+                                :server-id="server.id"
+                                size="2xs"
+                            />
                             <OverflowMenu
                                 class="home-server-menu relative inline-flex size-6 min-w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-solid border-transparent bg-transparent p-0 text-[var(--color-text-default)] transition-[background-color,color,filter,transform] duration-150 hover:bg-surface-4 hover:brightness-[--hover-brightness] active:scale-[0.97] [&>svg]:size-4"
                                 :options="[

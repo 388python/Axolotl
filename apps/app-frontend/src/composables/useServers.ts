@@ -146,7 +146,9 @@ export function useServers() {
     }
 
     async function killServer(serverId: string) {
-        return run(() => servers.kill(serverId))
+        const ok = await run(() => servers.kill(serverId))
+        if (ok) await refreshList()
+        return ok
     }
 
     async function deleteServer(serverId: string) {

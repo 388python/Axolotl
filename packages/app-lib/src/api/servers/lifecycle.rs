@@ -37,6 +37,7 @@ struct ServerProcess {
     pty_master: tokio::sync::Mutex<Box<dyn MasterPty + Send>>,
     stop_requested: AtomicBool,
     ready: AtomicBool,
+    stop_command: parking_lot::RwLock<String>,
 }
 
 static SERVER_PROCESSES: LazyLock<DashMap<String, Arc<ServerProcess>>> =
@@ -289,6 +290,7 @@ async fn start_inner(
         pty_master: tokio::sync::Mutex::new(pair.master),
         stop_requested: AtomicBool::new(false),
         ready: AtomicBool::new(false),
+        stop_command: parking_lot::RwLock::new(manifest.stop_command.clone()),
     });
     SERVER_PROCESSES.insert(server_id.to_string(), process.clone());
 
@@ -374,6 +376,21 @@ fn command_bytes(command: &str) -> Vec<u8> {
     format!("{}\r", command.trim_end_matches(['\r', '\n'])).into_bytes()
 }
 
+fn stop_command_bytes(command: &str) -> Result<Vec<u8>> {
+    let command = super::manifest::normalize_stop_command(command)?;
+    Ok(if command == "^C" {
+        vec![0x03]
+    } else {
+        command_bytes(&command)
+    })
+}
+
+pub(super) fn update_stop_command(server_id: &str, command: &str) {
+    if let Some(process) = SERVER_PROCESSES.get(server_id) {
+        *process.stop_command.write() = command.to_string();
+    }
+}
+
 pub async fn send_console_input(server_id: &str, data: &str) -> Result<()> {
     let process = SERVER_PROCESSES
         .get(server_id)
@@ -453,13 +470,15 @@ pub async fn stop(server_id: &str) -> Result<()> {
         return Err(ErrorKind::InputError("Server is not running".to_string())
             .as_error());
     };
+    let command = process.stop_command.read().clone();
+    let bytes = stop_command_bytes(&command)?;
     if process.stop_requested.swap(true, Ordering::SeqCst) {
         return Ok(());
     }
     emit_server(server_id, ServerPayloadType::Stopping)
         .await
         .ok();
-    if !process.ready.load(Ordering::SeqCst) {
+    if !process.ready.load(Ordering::SeqCst) && command == "stop" {
         // A bootstrapper cannot read Minecraft commands before the server starts.
         process.child.lock().await.kill()?;
         return Ok(());
@@ -481,10 +500,7 @@ pub async fn stop(server_id: &str) -> Result<()> {
     });
     tokio::spawn(async move {
         // Raw editing controls (such as Ctrl+U) become literal input on cooked consoles.
-        if write_console(process.clone(), command_bytes("stop"))
-            .await
-            .is_err()
-        {
+        if write_console(process.clone(), bytes).await.is_err() {
             let _ = process.child.lock().await.kill();
         }
     });
@@ -492,16 +508,36 @@ pub async fn stop(server_id: &str) -> Result<()> {
 }
 
 pub async fn kill(server_id: &str) -> Result<()> {
+    let cancelled = if let Some(starting) = SERVER_STARTING.get(server_id) {
+        starting.cancel();
+        true
+    } else {
+        false
+    };
     let process = SERVER_PROCESSES
         .get(server_id)
-        .map(|entry| entry.value().clone())
-        .ok_or_else(|| {
-            ErrorKind::InputError("Server is not running".to_string())
-                .as_error()
-        })?;
+        .map(|entry| entry.value().clone());
+    let Some(process) = process else {
+        if cancelled {
+            return Ok(());
+        }
+        return Err(ErrorKind::InputError("Server is not running".to_string())
+            .as_error());
+    };
     process.stop_requested.store(true, Ordering::SeqCst);
+    emit_server(server_id, ServerPayloadType::Stopping)
+        .await
+        .ok();
+    // A blocked input pipe must never prevent a forced termination.
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_millis(250),
+        write_console(process.clone(), vec![0x03]),
+    )
+    .await;
     let mut child = process.child.lock().await;
-    child.kill()?;
+    if child.try_wait()?.is_none() {
+        child.kill()?;
+    }
     Ok(())
 }
 
@@ -692,6 +728,7 @@ class ConsoleProbe {
             pty_master: tokio::sync::Mutex::new(pair.master),
             stop_requested: AtomicBool::new(false),
             ready: AtomicBool::new(false),
+            stop_command: parking_lot::RwLock::new("stop".to_string()),
         });
         let id = "test-java-pty-stdio";
         SERVER_PROCESSES.insert(id.to_string(), process.clone());
@@ -843,6 +880,7 @@ class ConsoleProbe {
             pty_master: tokio::sync::Mutex::new(pair.master),
             stop_requested: AtomicBool::new(false),
             ready: AtomicBool::new(ready),
+            stop_command: parking_lot::RwLock::new("stop".to_string()),
         });
         SERVER_PROCESSES.insert(id.to_string(), process.clone());
         (process, child, bytes)
@@ -1004,5 +1042,67 @@ class ConsoleProbe {
     fn whole_line_commands_use_terminal_enter_without_duplicate_terminators() {
         assert_eq!(command_bytes("say hello"), b"say hello\r");
         assert_eq!(command_bytes("say hello\r\n"), b"say hello\r");
+    }
+
+    #[test]
+    fn stop_commands_support_literal_commands_and_case_insensitive_ctrl_c() {
+        assert_eq!(
+            stop_command_bytes("shutdown now").unwrap(),
+            b"shutdown now\r"
+        );
+        for value in ["^C", "^c", " ^c "] {
+            assert_eq!(stop_command_bytes(value).unwrap(), b"\x03");
+        }
+        assert_eq!(stop_command_bytes("").unwrap(), b"stop\r");
+        assert!(stop_command_bytes("stop\nkill").is_err());
+    }
+
+    #[tokio::test]
+    async fn configured_stop_command_updates_the_running_process_and_sends_ctrl_c()
+     {
+        let id = "test-custom-stop";
+        let (process, child, bytes) = tracked_process(id, false, false);
+        update_stop_command(id, "^c");
+        stop(id).await.unwrap();
+        let result =
+            tokio::time::timeout(std::time::Duration::from_secs(2), async {
+                while bytes.lock().unwrap().is_empty() {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await;
+        SERVER_PROCESSES.remove(id);
+        result.unwrap();
+        assert_eq!(*bytes.lock().unwrap(), b"\x03");
+        assert!(!child.killed.load(Ordering::SeqCst));
+        assert!(process.stop_requested.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn terminate_sends_ctrl_c_before_killing_the_process() {
+        let id = "test-force-terminate";
+        let (_, child, bytes) = tracked_process(id, true, false);
+        let result = kill(id).await;
+        SERVER_PROCESSES.remove(id);
+        result.unwrap();
+        assert_eq!(*bytes.lock().unwrap(), b"\x03");
+        assert!(child.killed.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn terminate_cannot_be_blocked_by_a_stuck_pty_write() {
+        let id = "test-force-backpressure";
+        let (_, child, _) = tracked_process(id, true, true);
+        let result =
+            tokio::time::timeout(std::time::Duration::from_secs(2), kill(id))
+                .await;
+        if result.is_err() {
+            use portable_pty::ChildKiller;
+            let mut child = child.clone();
+            child.kill().unwrap();
+        }
+        SERVER_PROCESSES.remove(id);
+        result.unwrap().unwrap();
+        assert!(child.killed.load(Ordering::SeqCst));
     }
 }
