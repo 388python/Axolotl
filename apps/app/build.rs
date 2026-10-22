@@ -243,6 +243,9 @@ fn build_seed_map_engine() {
                     // Tauri watches the bundled DLL. Keep identical builds
                     // byte-for-byte stable so syncing it preserves its mtime.
                     "-Wl,--no-insert-timestamp",
+                    // MinGW's automatic base depends on the output path, which
+                    // differs between Cargo configurations. ASLR stays enabled.
+                    "-Wl,--image-base,0x180000000",
                     "-Ivendor/cubiomes",
                 ])
                 .arg("-include")
