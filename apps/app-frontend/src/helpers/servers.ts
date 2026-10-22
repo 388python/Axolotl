@@ -85,8 +85,8 @@ export interface PortProcessInfoData {
 export interface InstallModpackOptions {
     mrpackUrl: string
     mrpackSha1?: string
-    jarUrl: string
-    jarFilename: string
+    jarUrl?: string
+    jarFilename?: string
     jarSha1?: string
     modpackProjectId?: string
     modpackVersionId?: string
@@ -143,6 +143,8 @@ export const servers = {
         invoke<void>(command('servers_install_modpack'), { serverId, ...options }),
     installForge: (serverId: string, mcVersion: string, build: string, javaPath?: string) =>
         invoke<void>(command('servers_install_forge'), { serverId, mcVersion, build, javaPath }),
+    installNeoForge: (serverId: string, mcVersion: string, build: string, javaPath?: string) =>
+        invoke<void>(command('servers_install_neoforge'), { serverId, mcVersion, build, javaPath }),
     start: (
         serverId: string,
         options?: { javaPath?: string; memoryMb?: number; jvmArgs?: string[] },

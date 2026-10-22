@@ -85,6 +85,8 @@ fn server_log_delta_is_registered_and_allowed_for_the_main_window() {
         "servers_resize_console",
         "servers_kill",
         "servers_update_settings",
+        "servers_install_neoforge",
+        "servers_install_modpack",
     ] {
         assert!(runtime.contains(command));
         assert!(manifest.contains(command));

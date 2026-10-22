@@ -1134,6 +1134,7 @@ fn main() {
                         "servers_write_file",
                         "servers_download_file",
                         "servers_install_forge",
+                        "servers_install_neoforge",
                         "servers_install_modpack",
                         "servers_start",
                         "servers_send_console_input",

@@ -12695,6 +12695,9 @@
   "app.servers.type.forge": {
     "message": "Forge"
   },
+  "app.servers.type.neoforge": {
+    "message": "NeoForge"
+  },
   "app.servers.type.paper": {
     "message": "Paper"
   },
@@ -12739,6 +12742,12 @@
   },
   "app.servers.wizard.java-too-old": {
     "message": "Java {selected} cannot run this game version; Java {required} or newer is required."
+  },
+  "app.servers.wizard.loading-versions": {
+    "message": "Loading versions…"
+  },
+  "app.servers.wizard.no-loader-versions": {
+    "message": "No loader versions are available for this game version."
   },
   "app.servers.wizard.loader-version": {
     "message": "Loader version"

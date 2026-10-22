@@ -16,7 +16,7 @@ mod ports;
 
 pub use self::console::{ConsoleDelta, get_console_delta};
 pub use self::files::{download_file, read_file, write_file};
-pub use self::forge::install_forge;
+pub use self::forge::{install_forge, install_neoforge};
 pub use self::lifecycle::{
     kill, resize_console, send_console_input, start, stop,
 };

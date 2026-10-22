@@ -151,6 +151,12 @@ async fn start_inner(
     let mut manifest = read_manifest(&dir).await?;
     let launch_args = if manifest.server_type == "forge" {
         forge_launch_args(&dir)?
+    } else if manifest.server_type == "neoforge" {
+        neoforge_launch_args(
+            &dir,
+            &manifest.game_version,
+            manifest.loader_version.as_deref(),
+        )?
     } else {
         let jar_name = resolve_jar_name(&manifest);
         let jar_path = safe_relative_join(&dir, &jar_name)?;
@@ -631,6 +637,48 @@ fn forge_launch_args(dir: &Path) -> Result<Vec<String>> {
     .as_error())
 }
 
+/// Use the recorded build, rather than whichever version directory is found first.
+pub(super) fn neoforge_launch_args(
+    dir: &Path,
+    game_version: &str,
+    loader_version: Option<&str>,
+) -> Result<Vec<String>> {
+    let build = loader_version.ok_or_else(|| {
+        ErrorKind::LauncherError(
+            "NeoForge version is missing. Reinstall the server.".to_string(),
+        )
+        .as_error()
+    })?;
+    let (artifact, version) = if game_version == "1.20.1" {
+        ("forge", format!("{game_version}-{build}"))
+    } else {
+        ("neoforge", build.to_string())
+    };
+    let relative = format!(
+        "libraries/net/neoforged/{artifact}/{version}/{}",
+        if cfg!(windows) {
+            "win_args.txt"
+        } else {
+            "unix_args.txt"
+        }
+    );
+    let candidate = safe_relative_join(dir, &relative)?;
+    if !candidate.is_file() {
+        return Err(ErrorKind::LauncherError(
+            "NeoForge server files are missing. Reinstall the server."
+                .to_string(),
+        )
+        .as_error());
+    }
+    let mut args = Vec::new();
+    if dir.join("user_jvm_args.txt").is_file() {
+        args.push("@user_jvm_args.txt".to_string());
+    }
+    args.push(format!("@{relative}"));
+    args.push("nogui".to_string());
+    Ok(args)
+}
+
 fn find_forge_jar(dir: &Path) -> Option<String> {
     let entry = std::fs::read_dir(dir).ok()?.flatten().find(|e| {
         e.file_name().to_string_lossy().starts_with("forge-")
@@ -675,6 +723,50 @@ pub(super) async fn log_server_step(server_id: &str, message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn neoforge_launches_only_the_recorded_build() {
+        let temp = tempfile::tempdir().unwrap();
+        let args_file = if cfg!(windows) {
+            "win_args.txt"
+        } else {
+            "unix_args.txt"
+        };
+        for (game, build, relative) in [
+            (
+                "1.21.1",
+                "21.1.172",
+                "libraries/net/neoforged/neoforge/21.1.172",
+            ),
+            (
+                "1.20.1",
+                "47.1.106",
+                "libraries/net/neoforged/forge/1.20.1-47.1.106",
+            ),
+        ] {
+            let path = temp.path().join(relative);
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(path.join(args_file), "MainClass").unwrap();
+            std::fs::write(
+                temp.path().join("user_jvm_args.txt"),
+                "-Dtest=true",
+            )
+            .unwrap();
+            assert_eq!(
+                neoforge_launch_args(temp.path(), game, Some(build)).unwrap(),
+                vec![
+                    "@user_jvm_args.txt".to_string(),
+                    format!("@{relative}/{args_file}"),
+                    "nogui".to_string(),
+                ]
+            );
+        }
+        assert!(
+            neoforge_launch_args(temp.path(), "1.21.1", Some("21.1.999"))
+                .is_err()
+        );
+        assert!(neoforge_launch_args(temp.path(), "1.21.1", None).is_err());
+    }
 
     #[cfg(windows)]
     #[tokio::test]

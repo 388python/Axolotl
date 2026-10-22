@@ -11108,6 +11108,9 @@
   "app.servers.type.forge": {
     "message": "Forge"
   },
+  "app.servers.type.neoforge": {
+    "message": "NeoForge"
+  },
   "app.servers.type.paper": {
     "message": "Paper"
   },
@@ -11152,6 +11155,12 @@
   },
   "app.servers.wizard.java-too-old": {
     "message": "Java {selected} 无法运行此游戏版本；需要 Java {required} 或更高版本。"
+  },
+  "app.servers.wizard.loading-versions": {
+    "message": "正在加载版本…"
+  },
+  "app.servers.wizard.no-loader-versions": {
+    "message": "该游戏版本暂无可用的加载器版本。"
   },
   "app.servers.wizard.loader-version": {
     "message": "加载器版本"
