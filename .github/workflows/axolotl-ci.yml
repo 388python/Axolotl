@@ -83,6 +83,10 @@ jobs:
         run: node scripts/axolotl/check-scoped-styles.mjs
       - name: Check retired UI
         run: node scripts/axolotl/check-retired-ui.mjs
+      - name: Check dead colours
+        run: node scripts/axolotl/check-dead-colours.mjs
+      - name: Check dead colours (tests)
+        run: node scripts/axolotl/check-dead-colours.test.mjs
       - name: Check downgrade for app database
         run: node scripts/axolotl/downgrade-app-db.test.mjs
       - name: Check release notes
