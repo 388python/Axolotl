@@ -470,10 +470,8 @@
             <EmptyState
                 class="my-auto"
                 :type="query ? 'no-search-result' : 'no-tasks'"
-                :heading="formatMessage(query ? messages.noResultsTitle : messages.emptyTitle)"
-                :description="
-                    formatMessage(query ? messages.noResultsDescription : messages.emptyDescription)
-                "
+                :heading="formatMessage(emptyState.title)"
+                :description="formatMessage(emptyState.description)"
             />
         </Card>
     </div>
@@ -770,6 +768,15 @@ const messages = defineMessages({
         id: 'app.downloads.empty-description',
         defaultMessage: 'New downloads and installation progress will appear here.',
     },
+    historyEmptyTitle: {
+        id: 'app.downloads.history-empty-title',
+        defaultMessage: 'No download history',
+    },
+    historyEmptyDescription: {
+        id: 'app.downloads.history-empty-description',
+        defaultMessage:
+            'Records of completed, failed, interrupted, and canceled downloads will appear here.',
+    },
     noResultsTitle: {
         id: 'app.downloads.no-results-title',
         defaultMessage: 'No matching downloads',
@@ -949,6 +956,18 @@ const providerOptions = [
     'local',
 ]
 const historyStatusOptions = ['all', 'succeeded', 'failed', 'interrupted', 'canceled']
+const emptyState = computed(() => {
+    if (query.value) {
+        return { title: messages.noResultsTitle, description: messages.noResultsDescription }
+    }
+    if (tab.value === 'history') {
+        return {
+            title: messages.historyEmptyTitle,
+            description: messages.historyEmptyDescription,
+        }
+    }
+    return { title: messages.emptyTitle, description: messages.emptyDescription }
+})
 const downloadTabs = computed(() => [
     {
         href: 'active',
