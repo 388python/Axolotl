@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { BoxIcon } from '@modrinth/assets'
 import { defineMessages, StyledInput, useVIntl } from '@modrinth/ui'
 import Fuse from 'fuse.js'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -11,7 +12,7 @@ import type { SlotValue } from '@/lab/recipe-generator/types'
 export type CommandItemEntry = {
     id: string
     name: string
-    display: SlotDisplay
+    display?: SlotDisplay
     value: SlotValue
 }
 
@@ -49,7 +50,6 @@ const messages = defineMessages({
 const search = ref('')
 const debouncedSearch = ref('')
 
-// 修复：使用 ReturnType<typeof setTimeout> 而非 window.setTimeout，避免 SSR/类型环境差异
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 watch(search, (value) => {
@@ -59,7 +59,6 @@ watch(search, (value) => {
     }, 120)
 })
 
-// 修复：组件卸载时清理挂起的 timer
 onBeforeUnmount(() => {
     if (searchTimer) {
         clearTimeout(searchTimer)
@@ -121,11 +120,20 @@ function pick(value: SlotValue) {
                 @click="pick(entry.value)"
             >
                 <RecipeItemIcon
+                    v-if="entry.display"
                     :display="entry.display"
                     :atlas="atlas"
                     :size="34"
                     :show-count="false"
                 />
+                <!-- 这里的 v-else 现在可以正常生效了，因为特殊方块的 display 被强制置空了 -->
+                <div
+                    v-else
+                    class="flex items-center justify-center rounded-lg bg-surface-4"
+                    style="width: 34px; height: 34px"
+                >
+                    <BoxIcon class="h-5 w-5 text-[var(--color-text-tertiary)]" />
+                </div>
                 <span class="w-full truncate text-center text-xs font-medium">{{
                     entry.name
                 }}</span>

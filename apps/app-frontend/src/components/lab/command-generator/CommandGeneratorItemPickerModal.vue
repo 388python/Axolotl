@@ -16,6 +16,7 @@ import CommandGeneratorItemPicker, { type CommandItemEntry } from './CommandGene
 
 const props = defineProps<{
     version: string
+    kind?: 'item' | 'block'
 }>()
 
 const emit = defineEmits<{
@@ -30,11 +31,98 @@ const cachedLocale = ref('')
 const atlas: TextureAtlas = TEXTURE_ATLAS
 
 const messages = defineMessages({
-    title: {
+    titleItem: {
         id: 'app.lab.command-generator.item-picker.title',
         defaultMessage: 'Pick an item',
     },
+    titleBlock: {
+        id: 'app.lab.command-generator.block-picker.title',
+        defaultMessage: 'Pick a block',
+    },
 })
+
+/**
+ * 无物品形态的特殊方块元数据。
+ * 已移除 frost_ice 和 light。
+ */
+const EXTRA_BLOCKS_META = [
+    { id: 'minecraft:air', nameKey: 'app.lab.command-generator.block.air' },
+    { id: 'minecraft:cave_air', nameKey: 'app.lab.command-generator.block.cave_air' },
+    { id: 'minecraft:void_air', nameKey: 'app.lab.command-generator.block.void_air' },
+    { id: 'minecraft:water', nameKey: 'app.lab.command-generator.block.water' },
+    { id: 'minecraft:lava', nameKey: 'app.lab.command-generator.block.lava' },
+    { id: 'minecraft:fire', nameKey: 'app.lab.command-generator.block.fire' },
+    { id: 'minecraft:nether_portal', nameKey: 'app.lab.command-generator.block.nether_portal' },
+    { id: 'minecraft:end_portal', nameKey: 'app.lab.command-generator.block.end_portal' },
+    { id: 'minecraft:end_gateway', nameKey: 'app.lab.command-generator.block.end_gateway' },
+    { id: 'minecraft:bubble_column', nameKey: 'app.lab.command-generator.block.bubble_column' },
+    { id: 'minecraft:moving_piston', nameKey: 'app.lab.command-generator.block.moving_piston' },
+    { id: 'minecraft:piston_head', nameKey: 'app.lab.command-generator.block.piston_head' },
+]
+
+function isNonBlockItem(rawId: string): boolean {
+    const name = rawId.includes(':') ? rawId.split(':')[1] : rawId
+    if (!name) return true
+
+    const ACTUAL_BLOCKS = new Set([
+        'kelp', 'bamboo', 'sugar_cane', 'turtle_egg', 'frogspawn', 'sculk_vein', 'cocoa',
+        'nether_wart', 'chorus_flower', 'sea_pickle', 'tall_grass', 'short_grass', 'fern',
+        'large_fern', 'dead_bush', 'sweet_berry_bush', 'crimson_roots', 'warped_roots',
+        'nether_sprouts', 'chorus_plant', 'weeping_vines', 'twisting_vines', 'vine',
+        'glow_lichen', 'hanging_roots', 'big_dripleaf', 'small_dripleaf', 'spore_blossom',
+        'azalea', 'flowering_azalea', 'mangrove_propagule', 'pink_petals', 'torchflower_seeds'
+    ])
+    if (ACTUAL_BLOCKS.has(name)) return false
+
+    if (name.endsWith('_spawn_egg') || name === 'spawn_egg') return true
+    if (name.endsWith('_bucket') || name === 'bucket') return true
+    if (name.endsWith('_horse_armor') || name === 'wolf_armor') return true
+    if (name.endsWith('_boat') || name.endsWith('_chest_boat')) return true
+    if (name.endsWith('_raft') || name.endsWith('_chest_raft')) return true
+    if (name.endsWith('_minecart')) return true
+    if (name.startsWith('music_disc_')) return true
+    if (name.endsWith('_pottery_sherd')) return true
+    if (name.endsWith('_smithing_template')) return true
+    if (name.endsWith('_banner_pattern')) return true
+    if (name.includes('potion') || name.includes('tipped_arrow') || name === 'arrow' || name === 'spectral_arrow') return true
+    if (/(_sword|_pickaxe|_shovel|_hoe|_axe|_helmet|_chestplate|_leggings|_boots)$/.test(name)) return true
+    if (/(_ingot|_nugget|_dust|_dye|_seeds|_shard|_scute|_sherd|_fragment)$/.test(name)) return true
+
+    const NON_BLOCKS = new Set([
+        'apple', 'golden_apple', 'enchanted_golden_apple', 'bread', 'beef', 'cooked_beef',
+        'porkchop', 'cooked_porkchop', 'chicken', 'cooked_chicken', 'mutton', 'cooked_mutton',
+        'rabbit', 'cooked_rabbit', 'cod', 'cooked_cod', 'salmon', 'cooked_salmon',
+        'tropical_fish', 'pufferfish', 'potato', 'baked_potato', 'poisonous_potato',
+        'carrot', 'golden_carrot', 'beetroot', 'beetroot_soup', 'wheat', 'sugar',
+        'melon_slice', 'cookie', 'cake', 'pumpkin_pie', 'chorus_fruit', 'popped_chorus_fruit',
+        'honey_bottle', 'mushroom_stew', 'rabbit_stew', 'suspicious_stew',
+        'rotten_flesh', 'spider_eye', 'fermented_spider_eye', 'dried_kelp',
+        'glistering_melon_slice', 'sweet_berries', 'glow_berries',
+        'stick', 'coal', 'charcoal', 'diamond', 'emerald', 'lapis_lazuli', 'quartz',
+        'amethyst_shard', 'echo_shard', 'netherite_scrap', 'brick', 'nether_brick',
+        'clay_ball', 'flint', 'feather', 'leather', 'rabbit_hide', 'string',
+        'slime_ball', 'magma_cream', 'blaze_rod', 'breeze_rod', 'blaze_powder',
+        'gunpowder', 'fire_charge', 'ink_sac', 'glow_ink_sac', 'bone', 'bone_meal',
+        'nautilus_shell', 'shulker_shell', 'prismarine_shard', 'prismarine_crystals',
+        'phantom_membrane', 'dragon_breath', 'glowstone_dust', 'redstone', 'paper',
+        'book', 'writable_book', 'written_book', 'name_tag', 'lead',
+        'item_frame', 'glow_item_frame', 'painting', 'armor_stand',
+        'experience_bottle', 'firework_rocket', 'firework_star', 'nether_star',
+        'heart_of_the_sea', 'disc_fragment_5', 'trial_key', 'ominous_trial_key',
+        'armadillo_scute', 'turtle_scute', 'wind_charge', 'raw_iron', 'raw_gold',
+        'raw_copper', 'bundle', 'spyglass', 'brush', 'goat_horn',
+        'map', 'filled_map', 'compass', 'recovery_compass', 'clock',
+        'honeycomb', 'knowledge_book', 'ender_pearl', 'ender_eye',
+        'saddle', 'snowball', 'egg', 'ominous_bottle', 'heavy_core',
+        'glass_bottle', 'rabbit_foot', 'ghast_tear', 'enchanted_book', 'bowl',
+        'totem_of_undying', 'debug_stick', 'command_block_minecart',
+        'shield', 'bow', 'crossbow', 'trident', 'mace', 'shears',
+        'fishing_rod', 'flint_and_steel', 'carrot_on_a_stick',
+        'warped_fungus_on_a_stick', 'elytra',
+    ])
+
+    return NON_BLOCKS.has(name)
+}
 
 async function show() {
     modal.value?.show()
@@ -46,14 +134,51 @@ async function show() {
         const resources = await loadVersionResources(version)
         const ctx = buildSlotContext([], [], resources)
         const currentLocale = locale.value
-        entries.value = resources.items.map((item) => {
+
+        let sourceItems: any[] = resources.items
+        let extraBlocks: any[] = []
+
+        if (props.kind === 'block') {
+            sourceItems = resources.items.filter((item) => {
+                return !isNonBlockItem(item.id || item.name || '')
+            })
+
+            extraBlocks = EXTRA_BLOCKS_META.map((meta) => {
+                return { id: meta.id, __extraMeta: meta }
+            })
+
+            sourceItems = [...sourceItems, ...extraBlocks]
+        }
+
+        entries.value = sourceItems.map((item) => {
             const value: SlotValue = { kind: 'item', id: item.id }
-            const display = getSlotDisplay(value, ctx)!
-            const localizedName = resolveRecipeItemName(item.id, currentLocale, item.name)
+            let display = undefined
+
+            // 只有非特殊硬编码方块，才去请求渲染资源
+            if (!item.__extraMeta) {
+                display = getSlotDisplay(value, ctx)
+                if (!display) {
+                    display = getSlotDisplay({ kind: 'block', id: item.id } as any, ctx)
+                }
+            }
+
+            let localizedName = resolveRecipeItemName(
+                item.id,
+                currentLocale,
+                item.name || item.id.replace('minecraft:', ''),
+            )
+
+            if (item.__extraMeta) {
+                localizedName = formatMessage({
+                    id: item.__extraMeta.nameKey,
+                    defaultMessage: item.id.split(':')[1]
+                })
+            }
+
             return {
                 id: item.id,
                 name: localizedName,
-                display,
+                display: display || undefined,
                 value,
             }
         })
@@ -64,9 +189,11 @@ async function show() {
 }
 
 function onPick(value: SlotValue) {
-    if (value.kind !== 'item') return
-    emit('select', value.id)
-    modal.value?.hide()
+    const id = 'id' in value ? value.id : (value as any).uid
+    if (id) {
+        emit('select', id)
+        modal.value?.hide()
+    }
 }
 
 defineExpose({ show })
@@ -75,7 +202,7 @@ defineExpose({ show })
 <template>
     <NewModal
         ref="modal"
-        :header="formatMessage(messages.title)"
+        :header="formatMessage(kind === 'block' ? messages.titleBlock : messages.titleItem)"
         width="min(640px, calc(100vw - 2rem))"
         max-width="640px"
         scrollable

@@ -7775,6 +7775,54 @@
   "app.lab.command-generator.item-picker.button": {
     "message": "Pick item"
   },
+  "app.lab.command-generator.block-picker.button": {
+    "message": "Pick block"
+  },
+  "app.lab.command-generator.block-picker.title": {
+    "message": "Pick a block"
+  },
+  "app.lab.command-generator.block.air": {
+    "message": "Air"
+  },
+  "app.lab.command-generator.block.cave_air": {
+    "message": "Cave Air"
+  },
+  "app.lab.command-generator.block.void_air": {
+    "message": "Void Air"
+  },
+  "app.lab.command-generator.block.water": {
+    "message": "Water"
+  },
+  "app.lab.command-generator.block.lava": {
+    "message": "Lava"
+  },
+  "app.lab.command-generator.block.fire": {
+    "message": "Fire"
+  },
+  "app.lab.command-generator.block.nether_portal": {
+    "message": "Nether Portal"
+  },
+  "app.lab.command-generator.block.end_portal": {
+    "message": "End Portal"
+  },
+  "app.lab.command-generator.block.end_gateway": {
+    "message": "End Gateway"
+  },
+  "app.lab.command-generator.block.frosted_ice": {
+    "message": "Frosted Ice"
+  },
+  "app.lab.command-generator.block.bubble_column": {
+    "message": "Bubble Column"
+  },
+  "app.lab.command-generator.block.moving_piston": {
+    "message": "Moving Piston"
+  },
+  "app.lab.command-generator.block.piston_head": {
+    "message": "Piston Head"
+  },
+  "app.lab.command-generator.block.light": {
+    "message": "Light"
+  },
   "app.lab.command-generator.item-picker.search-placeholder": {
     "message": "Search items by name or ID"
   },

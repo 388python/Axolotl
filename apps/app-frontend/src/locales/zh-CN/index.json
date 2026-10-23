@@ -6746,6 +6746,54 @@
   "app.lab.command-generator.item-picker.button": {
     "message": "选择物品"
   },
+  "app.lab.command-generator.block-picker.button": {
+    "message": "选择方块"
+  },
+  "app.lab.command-generator.block-picker.title": {
+    "message": "选择一个方块"
+  },
+  "app.lab.command-generator.block.air": {
+    "message": "空气"
+  },
+  "app.lab.command-generator.block.cave_air": {
+    "message": "洞穴空气"
+  },
+  "app.lab.command-generator.block.void_air": {
+    "message": "虚空空气"
+  },
+  "app.lab.command-generator.block.water": {
+    "message": "水"
+  },
+  "app.lab.command-generator.block.lava": {
+    "message": "熔岩"
+  },
+  "app.lab.command-generator.block.fire": {
+    "message": "火"
+  },
+  "app.lab.command-generator.block.nether_portal": {
+    "message": "下界传送门"
+  },
+  "app.lab.command-generator.block.end_portal": {
+    "message": "末地传送门"
+  },
+  "app.lab.command-generator.block.end_gateway": {
+    "message": "末地折跃门"
+  },
+  "app.lab.command-generator.block.frosted_ice": {
+    "message": "霜冰"
+  },
+  "app.lab.command-generator.block.bubble_column": {
+    "message": "气泡柱"
+  },
+  "app.lab.command-generator.block.moving_piston": {
+    "message": "移动的活塞"
+  },
+  "app.lab.command-generator.block.piston_head": {
+    "message": "活塞头"
+  },
+  "app.lab.command-generator.block.light": {
+    "message": "光源方块"
+  },
   "app.lab.command-generator.item-picker.search-placeholder": {
     "message": "按名称或 ID 搜索物品"
   },

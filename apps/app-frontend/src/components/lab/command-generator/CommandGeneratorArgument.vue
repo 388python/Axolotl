@@ -129,6 +129,7 @@ const GAMERULE_DEFAULT_PRESETS: ArgumentPreset[] = [
 const isNumber = computed(() => props.arg.type === 'number' || props.arg.type === 'integer')
 const isNbt = computed(() => props.arg.supportsNbtEditor === true)
 const isItem = computed(() => props.arg.type === 'item')
+const isBlock = computed(() => props.arg.type === 'block')
 
 // 是否为坐标，或者既可以是坐标又可以是实体的混合类型
 const isCoordinates = computed(
@@ -196,6 +197,7 @@ const showPresets = computed(
         !isEnumDropdown.value &&
         !isNbt.value &&
         !isItem.value &&
+        !isBlock.value &&
         !isCoordinates.value &&
         mergedPresets.value.length > 0,
 )
@@ -421,7 +423,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             :aria-label="t(arg.displayNameKey)"
             @update:model-value="onCheckboxChange"
         />
-        <div v-else-if="isItem" class="flex min-w-0 flex-wrap gap-2">
+        <div v-else-if="isItem || isBlock" class="flex min-w-0 flex-wrap gap-2">
             <StyledInput
                 :id="fieldId"
                 :model-value="String(modelValue ?? '')"
@@ -430,9 +432,15 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                 :spellcheck="false"
                 @update:model-value="onTextInput(String($event ?? ''))"
             />
-            <Button type="outlined" @click="openItemPicker">{{
-                t('app.lab.command-generator.item-picker.button')
-            }}</Button>
+            <Button type="outlined" @click="openItemPicker">
+                {{
+                    t(
+                        isBlock
+                            ? 'app.lab.command-generator.block-picker.button'
+                            : 'app.lab.command-generator.item-picker.button',
+                    )
+                }}
+            </Button>
         </div>
         <StyledInput
             v-else-if="isMixedCoordinates && mixedAsEntity"
@@ -505,9 +513,10 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             >
         </div>
         <CommandGeneratorItemPickerModal
-            v-if="isItem"
+            v-if="isItem || isBlock"
             ref="itemPickerRef"
             :version="getCurrentVersion()"
+            :kind="isBlock ? 'block' : 'item'"
             @select="onItemPicked"
         />
     </div>

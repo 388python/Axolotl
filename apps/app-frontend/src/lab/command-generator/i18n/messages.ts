@@ -677,4 +677,12 @@ export const commandGeneratorMessages = defineMessages({
         id: 'app.lab.command-generator.item-nbt.preview-empty',
         defaultMessage: 'Empty — no NBT will be applied.',
     },
+    blockPicker: {
+        id: 'app.lab.command-generator.block-picker.button',
+        defaultMessage: 'Pick block',
+    },
+    blockPickerIitle: {
+        id: 'app.lab.command-generator.block-picker.title',
+        defaultMessage: 'Pick a block',
+    },
 })
