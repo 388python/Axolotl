@@ -752,7 +752,9 @@ const hasOutdatedProjects = computed(() => {
 //  Deletion
 const pendingDeletionItems = ref<ContentItem[]>([])
 const pendingDeletionContentType = computed(() => {
-    const types = new Set(pendingDeletionItems.value.map((item) => item.project_type))
+    const types = new Set(
+        pendingDeletionItems.value.map((item) => normalizeProjectType(item.project_type)),
+    )
     return types.size === 1 ? [...types][0] : undefined
 })
 const confirmDeletionModal = ref<InstanceType<typeof ConfirmDeletionModal>>()
