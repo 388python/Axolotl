@@ -563,10 +563,7 @@ async function jumpToPreset(preset: UserPreset) {
                                         >
                                             <span class="font-mono">/{{ alias }}</span>
                                             <span>{{
-                                                t(
-                                                    'app.lab.command-generator.alias-hint',
-                                                    'Alias',
-                                                )
+                                                t('app.lab.command-generator.alias-hint', 'Alias')
                                             }}</span>
                                         </span>
                                     </span>
@@ -733,11 +730,7 @@ async function jumpToPreset(preset: UserPreset) {
                         >
                             <BookmarkIcon />{{ formatMessage(messages.savePreset) }}
                         </Button>
-                        <Button
-                            type="quiet"
-                            size="sm"
-                            @click="openWiki"
-                        >
+                        <Button type="quiet" size="sm" @click="openWiki">
                             <BookIcon class="h-4 w-4" />
                             {{ t('app.lab.command-generator.view-on-wiki', 'View on Wiki') }}
                         </Button>

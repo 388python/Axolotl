@@ -96,10 +96,14 @@ const visibleEntries = computed(() => {
 
 const actionText = computed(() => {
     switch (props.kind) {
-        case 'block': return formatMessage(messages.pickBlock)
-        case 'effect': return formatMessage(messages.pickEffect)
-        case 'advancement': return formatMessage(messages.pickAdvancement)
-        default: return formatMessage(messages.pickItem)
+        case 'block':
+            return formatMessage(messages.pickBlock)
+        case 'effect':
+            return formatMessage(messages.pickEffect)
+        case 'advancement':
+            return formatMessage(messages.pickAdvancement)
+        default:
+            return formatMessage(messages.pickItem)
     }
 })
 

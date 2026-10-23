@@ -15,10 +15,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.advancement.action.desc",
-          "enumValues": [
-            "grant",
-            "revoke"
-          ],
+          "enumValues": ["grant", "revoke"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.advancement.action.0",
@@ -59,13 +56,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.advancement.mode.desc",
-          "enumValues": [
-            "only",
-            "from",
-            "through",
-            "until",
-            "everything"
-          ],
+          "enumValues": ["only", "from", "through", "until", "everything"],
           "defaultValue": "only"
         },
         {
@@ -110,12 +101,7 @@
             }
           ],
           "when": {
-            "mode": [
-              "only",
-              "from",
-              "through",
-              "until"
-            ]
+            "mode": ["only", "from", "through", "until"]
           }
         },
         {
@@ -126,9 +112,7 @@
           "descriptionKey": "app.lab.command-generator.arg.advancement.criterion.desc",
           "placeholder": "*",
           "when": {
-            "mode": [
-              "only"
-            ]
+            "mode": ["only"]
           }
         }
       ]
@@ -187,11 +171,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.attribute.action.desc",
-          "enumValues": [
-            "get",
-            "base",
-            "value"
-          ],
+          "enumValues": ["get", "base", "value"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.attribute.action.get",
@@ -277,10 +257,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.banlist.type.desc",
-          "enumValues": [
-            "players",
-            "ips"
-          ],
+          "enumValues": ["players", "ips"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.banlist.type.0",
@@ -307,13 +284,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.bossbar.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "get",
-            "set",
-            "list"
-          ]
+          "enumValues": ["add", "remove", "get", "set", "list"]
         },
         {
           "name": "id",
@@ -329,15 +300,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.bossbar.property.desc",
-          "enumValues": [
-            "name",
-            "color",
-            "style",
-            "value",
-            "max",
-            "visible",
-            "players"
-          ]
+          "enumValues": ["name", "color", "style", "value", "max", "visible", "players"]
         },
         {
           "name": "value",
@@ -425,11 +388,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.clone.maskMode.desc",
-          "enumValues": [
-            "filtered",
-            "replace",
-            "masked"
-          ]
+          "enumValues": ["filtered", "replace", "masked"]
         }
       ]
     },
@@ -446,12 +405,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.data.action.desc",
-          "enumValues": [
-            "get",
-            "merge",
-            "modify",
-            "remove"
-          ]
+          "enumValues": ["get", "merge", "modify", "remove"]
         },
         {
           "name": "targetType",
@@ -459,11 +413,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.data.targetType.desc",
-          "enumValues": [
-            "block",
-            "entity",
-            "storage"
-          ]
+          "enumValues": ["block", "entity", "storage"]
         },
         {
           "name": "target",
@@ -507,11 +457,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.datapack.action.desc",
-          "enumValues": [
-            "enable",
-            "disable",
-            "list"
-          ]
+          "enumValues": ["enable", "disable", "list"]
         },
         {
           "name": "name",
@@ -535,11 +481,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.debug.action.desc",
-          "enumValues": [
-            "start",
-            "stop",
-            "function"
-          ]
+          "enumValues": ["start", "stop", "function"]
         }
       ]
     },
@@ -556,12 +498,7 @@
           "type": "gamemode",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.defaultgamemode.mode.desc",
-          "enumValues": [
-            "survival",
-            "creative",
-            "adventure",
-            "spectator"
-          ],
+          "enumValues": ["survival", "creative", "adventure", "spectator"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.gamemode.survival",
@@ -613,12 +550,7 @@
           "type": "difficulty",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.difficulty.difficulty.desc",
-          "enumValues": [
-            "peaceful",
-            "easy",
-            "normal",
-            "hard"
-          ],
+          "enumValues": ["peaceful", "easy", "normal", "hard"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.difficulty.peaceful",
@@ -653,10 +585,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.effect.action.desc",
-          "enumValues": [
-            "give",
-            "clear"
-          ],
+          "enumValues": ["give", "clear"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.effect.action.0",
@@ -748,9 +677,7 @@
             }
           ],
           "when": {
-            "action": [
-              "give"
-            ]
+            "action": ["give"]
           }
         },
         {
@@ -761,9 +688,7 @@
           "descriptionKey": "app.lab.command-generator.arg.effect.amplifier.desc",
           "defaultValue": 0,
           "when": {
-            "action": [
-              "give"
-            ]
+            "action": ["give"]
           }
         },
         {
@@ -773,9 +698,7 @@
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.effect.hideParticles.desc",
           "when": {
-            "action": [
-              "give"
-            ]
+            "action": ["give"]
           },
           "defaultValue": false
         }
@@ -1050,10 +973,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.facing-entity.anchor.desc",
-                  "enumValues": [
-                    "eyes",
-                    "feet"
-                  ],
+                  "enumValues": ["eyes", "feet"],
                   "defaultValue": "eyes"
                 }
               ]
@@ -1104,10 +1024,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.anchored.anchor.desc",
-                  "enumValues": [
-                    "eyes",
-                    "feet"
-                  ],
+                  "enumValues": ["eyes", "feet"],
                   "defaultValue": "eyes"
                 }
               ]
@@ -1124,15 +1041,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.align.axes.desc",
-                  "enumValues": [
-                    "x",
-                    "y",
-                    "z",
-                    "xy",
-                    "xz",
-                    "yz",
-                    "xyz"
-                  ],
+                  "enumValues": ["x", "y", "z", "xy", "xz", "yz", "xyz"],
                   "defaultValue": "xyz"
                 }
               ]
@@ -1232,10 +1141,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.if-blocks.mode.desc",
-                  "enumValues": [
-                    "all",
-                    "masked"
-                  ],
+                  "enumValues": ["all", "masked"],
                   "defaultValue": "all"
                 }
               ]
@@ -1268,13 +1174,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.if-score.operator.desc",
-                  "enumValues": [
-                    "<",
-                    "<=",
-                    "=",
-                    ">=",
-                    ">"
-                  ],
+                  "enumValues": ["<", "<=", "=", ">=", ">"],
                   "defaultValue": "="
                 },
                 {
@@ -1382,11 +1282,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.if-data.targetType.desc",
-                  "enumValues": [
-                    "block",
-                    "entity",
-                    "storage"
-                  ],
+                  "enumValues": ["block", "entity", "storage"],
                   "defaultValue": "entity"
                 },
                 {
@@ -1460,13 +1356,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.unless-score.operator.desc",
-                  "enumValues": [
-                    "<",
-                    "<=",
-                    "=",
-                    ">=",
-                    ">"
-                  ],
+                  "enumValues": ["<", "<=", "=", ">=", ">"],
                   "defaultValue": "="
                 },
                 {
@@ -1560,10 +1450,7 @@
                   "type": "enum",
                   "required": true,
                   "descriptionKey": "app.lab.command-generator.arg.execute.store-result-bossbar.valueOrMax.desc",
-                  "enumValues": [
-                    "value",
-                    "max"
-                  ],
+                  "enumValues": ["value", "max"],
                   "defaultValue": "value"
                 }
               ]
@@ -1578,9 +1465,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.experience.desc",
       "category": "player",
       "permissionLevel": 2,
-      "aliases": [
-        "xp"
-      ],
+      "aliases": ["xp"],
       "arguments": [
         {
           "name": "action",
@@ -1588,10 +1473,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.experience.action.desc",
-          "enumValues": [
-            "add",
-            "set"
-          ],
+          "enumValues": ["add", "set"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.action.add",
@@ -1639,10 +1521,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.experience.unit.desc",
-          "enumValues": [
-            "points",
-            "levels"
-          ],
+          "enumValues": ["points", "levels"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.unit.levels",
@@ -1709,13 +1588,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.fill.mode.desc",
-          "enumValues": [
-            "replace",
-            "keep",
-            "outline",
-            "hollow",
-            "destroy"
-          ],
+          "enumValues": ["replace", "keep", "outline", "hollow", "destroy"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.fill-mode.replace",
@@ -1754,11 +1627,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.forceload.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "query"
-          ]
+          "enumValues": ["add", "remove", "query"]
         },
         {
           "name": "from",
@@ -1801,9 +1670,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.gamemode.desc",
       "category": "player",
       "permissionLevel": 2,
-      "aliases": [
-        "gm"
-      ],
+      "aliases": ["gm"],
       "arguments": [
         {
           "name": "mode",
@@ -1811,12 +1678,7 @@
           "type": "gamemode",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.gamemode.mode.desc",
-          "enumValues": [
-            "survival",
-            "creative",
-            "adventure",
-            "spectator"
-          ],
+          "enumValues": ["survival", "creative", "adventure", "spectator"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.gamemode.survival",
@@ -1926,9 +1788,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.give.desc",
       "category": "item",
       "permissionLevel": 2,
-      "aliases": [
-        "g"
-      ],
+      "aliases": ["g"],
       "arguments": [
         {
           "name": "target",
@@ -2128,11 +1988,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.loot.action.desc",
-          "enumValues": [
-            "give",
-            "insert",
-            "spawn"
-          ]
+          "enumValues": ["give", "insert", "spawn"]
         },
         {
           "name": "target",
@@ -2175,10 +2031,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.msg.desc",
       "category": "communication",
       "permissionLevel": 0,
-      "aliases": [
-        "tell",
-        "w"
-      ],
+      "aliases": ["tell", "w"],
       "arguments": [
         {
           "name": "target",
@@ -2330,10 +2183,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.particle.mode.desc",
-          "enumValues": [
-            "normal",
-            "force"
-          ]
+          "enumValues": ["normal", "force"]
         }
       ]
     },
@@ -2450,12 +2300,7 @@
           "type": "gamemode",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.publish.gamemode.desc",
-          "enumValues": [
-            "survival",
-            "creative",
-            "adventure",
-            "spectator"
-          ]
+          "enumValues": ["survival", "creative", "adventure", "spectator"]
         }
       ]
     },
@@ -2472,10 +2317,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.recipe.action.desc",
-          "enumValues": [
-            "give",
-            "take"
-          ]
+          "enumValues": ["give", "take"]
         },
         {
           "name": "target",
@@ -2584,10 +2426,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.schedule.action.desc",
-          "enumValues": [
-            "clear",
-            "function"
-          ]
+          "enumValues": ["clear", "function"]
         },
         {
           "name": "name",
@@ -2637,10 +2476,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.scoreboard.category.desc",
-          "enumValues": [
-            "objectives",
-            "players"
-          ],
+          "enumValues": ["objectives", "players"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.scoreboard.category.objectives",
@@ -2658,15 +2494,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.scoreboard.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "list",
-            "set",
-            "get",
-            "reset",
-            "operation"
-          ]
+          "enumValues": ["add", "remove", "list", "set", "get", "reset", "operation"]
         },
         {
           "name": "objective",
@@ -2727,11 +2555,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.setblock.mode.desc",
-          "enumValues": [
-            "replace",
-            "keep",
-            "destroy"
-          ]
+          "enumValues": ["replace", "keep", "destroy"]
         }
       ]
     },
@@ -3060,11 +2884,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.tag.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "list"
-          ],
+          "enumValues": ["add", "remove", "list"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.tag-action.add",
@@ -3102,15 +2922,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.team.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "empty",
-            "join",
-            "leave",
-            "list",
-            "modify"
-          ]
+          "enumValues": ["add", "remove", "empty", "join", "leave", "list", "modify"]
         },
         {
           "name": "team",
@@ -3136,9 +2948,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.teammsg.desc",
       "category": "communication",
       "permissionLevel": 0,
-      "aliases": [
-        "tm"
-      ],
+      "aliases": ["tm"],
       "arguments": [
         {
           "name": "message",
@@ -3155,9 +2965,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.teleport.desc",
       "category": "entity",
       "permissionLevel": 2,
-      "aliases": [
-        "tp"
-      ],
+      "aliases": ["tp"],
       "arguments": [
         {
           "name": "target",
@@ -3203,10 +3011,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.tell.desc",
       "category": "communication",
       "permissionLevel": 0,
-      "aliases": [
-        "msg",
-        "w"
-      ],
+      "aliases": ["msg", "w"],
       "arguments": [
         {
           "name": "target",
@@ -3265,11 +3070,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.time.action.desc",
-          "enumValues": [
-            "set",
-            "add",
-            "query"
-          ],
+          "enumValues": ["set", "add", "query"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.time-action.set",
@@ -3335,13 +3136,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.title.action.desc",
-          "enumValues": [
-            "title",
-            "subtitle",
-            "actionbar",
-            "times",
-            "reset"
-          ]
+          "enumValues": ["title", "subtitle", "actionbar", "times", "reset"]
         },
         {
           "name": "value",
@@ -3389,11 +3184,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.weather.type.desc",
-          "enumValues": [
-            "clear",
-            "rain",
-            "thunder"
-          ],
+          "enumValues": ["clear", "rain", "thunder"],
           "presets": [
             {
               "labelKey": "app.lab.command-generator.preset.weather.clear",
@@ -3445,14 +3236,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.whitelist.action.desc",
-          "enumValues": [
-            "add",
-            "remove",
-            "list",
-            "on",
-            "off",
-            "reload"
-          ]
+          "enumValues": ["add", "remove", "list", "on", "off", "reload"]
         },
         {
           "name": "target",
@@ -3476,14 +3260,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.worldborder.action.desc",
-          "enumValues": [
-            "add",
-            "set",
-            "center",
-            "damage",
-            "get",
-            "warning"
-          ]
+          "enumValues": ["add", "set", "center", "damage", "get", "warning"]
         },
         {
           "name": "value",
@@ -3500,9 +3277,7 @@
       "descriptionKey": "app.lab.command-generator.cmd.xp.desc",
       "category": "player",
       "permissionLevel": 2,
-      "aliases": [
-        "experience"
-      ],
+      "aliases": ["experience"],
       "arguments": [
         {
           "name": "action",
@@ -3510,10 +3285,7 @@
           "type": "enum",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.xp.action.desc",
-          "enumValues": [
-            "add",
-            "set"
-          ]
+          "enumValues": ["add", "set"]
         },
         {
           "name": "target",
@@ -3537,10 +3309,7 @@
           "type": "enum",
           "required": false,
           "descriptionKey": "app.lab.command-generator.arg.xp.unit.desc",
-          "enumValues": [
-            "points",
-            "levels"
-          ]
+          "enumValues": ["points", "levels"]
         }
       ]
     },

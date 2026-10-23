@@ -435,7 +435,7 @@ export const commandGeneratorMessages = defineMessages({
     },
     filterAll: { id: 'app.lab.command-generator.filter.all', defaultMessage: 'All' },
 
-        // ===== 权限等级 =====
+    // ===== 权限等级 =====
     perm0: { id: 'app.lab.command-generator.perm.0', defaultMessage: 'All' },
     perm1: { id: 'app.lab.command-generator.perm.1', defaultMessage: 'Moderator' },
     perm2: { id: 'app.lab.command-generator.perm.2', defaultMessage: 'Gamemaster' },
@@ -466,8 +466,8 @@ export const commandGeneratorMessages = defineMessages({
         defaultMessage: 'In multiplayer, /seed requires permission level 2.',
     },
     aliasOf: {
-    id: 'app.lab.command-generator.alias-of',
-    defaultMessage: "{command}'s alias",
+        id: 'app.lab.command-generator.alias-of',
+        defaultMessage: "{command}'s alias",
     },
 
     coordinateRelative: {

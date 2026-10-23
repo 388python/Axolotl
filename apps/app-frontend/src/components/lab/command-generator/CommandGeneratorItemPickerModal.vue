@@ -2,8 +2,8 @@
 import { defineMessages, NewModal, useVIntl } from '@modrinth/ui'
 import { ref, useTemplateRef } from 'vue'
 
-import effectsData from '@/lab/command-generator/data/effects.json'
 import advancementsData from '@/lab/command-generator/data/advancements.json'
+import effectsData from '@/lab/command-generator/data/effects.json'
 import { getSlotDisplay } from '@/lab/recipe-generator/display'
 import { resolveRecipeItemName } from '@/lab/recipe-generator/item-names.ts'
 import {
@@ -56,7 +56,10 @@ const cachedLocale = ref('')
 const atlas: TextureAtlas = TEXTURE_ATLAS
 
 const messages = defineMessages({
-    titleItem: { id: 'app.lab.command-generator.item-picker.title', defaultMessage: 'Pick an item' },
+    titleItem: {
+        id: 'app.lab.command-generator.item-picker.title',
+        defaultMessage: 'Pick an item',
+    },
     titleBlock: {
         id: 'app.lab.command-generator.block-picker.title',
         defaultMessage: 'Pick a block',
@@ -146,8 +149,7 @@ function isNonBlockItem(rawId: string): boolean {
         return true
     if (/(_sword|_pickaxe|_shovel|_hoe|_axe|_helmet|_chestplate|_leggings|_boots)$/.test(name))
         return true
-    if (/(_ingot|_nugget|_dust|_dye|_seeds|_shard|_scute|_sherd|_fragment)$/.test(name))
-        return true
+    if (/(_ingot|_nugget|_dust|_dye|_seeds|_shard|_scute|_sherd|_fragment)$/.test(name)) return true
 
     const NON_BLOCKS = new Set([
         'apple',

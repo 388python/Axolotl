@@ -266,7 +266,7 @@ function onItemPicked(id: string) {
 
 // ===== 物品/方块/效果/成就 图标实时渲染 =====
 const inputDisplay = ref<SlotDisplay | undefined>(undefined)
-let itemCtx: any = null
+let itemCtx: ReturnType<typeof buildSlotContext> | null = null
 let resourcesLoaded = false
 
 const FORCE_MISSING_ICONS = new Set([
@@ -312,12 +312,12 @@ watch(
             const iconItem = effectData?.icon || 'potion'
             let display = getSlotDisplay(
                 { kind: 'item', id: `minecraft:${iconItem}` } as unknown as SlotValue,
-                itemCtx,
+                itemCtx!,
             )
             if (!display)
                 display = getSlotDisplay(
                     { kind: 'item', id: 'minecraft:potion' } as unknown as SlotValue,
-                    itemCtx,
+                    itemCtx!,
                 )
             inputDisplay.value = display || undefined
             return
@@ -338,12 +338,12 @@ watch(
             const iconItem = adv?.icon || 'book'
             let display = getSlotDisplay(
                 { kind: 'item', id: `minecraft:${iconItem}` } as unknown as SlotValue,
-                itemCtx,
+                itemCtx!,
             )
             if (!display)
                 display = getSlotDisplay(
                     { kind: 'item', id: 'minecraft:book' } as unknown as SlotValue,
-                    itemCtx,
+                    itemCtx!,
                 )
             inputDisplay.value = display || undefined
             return
@@ -367,9 +367,9 @@ watch(
             }
         }
 
-        let display = getSlotDisplay({ kind: 'item', id }, itemCtx)
+        let display = getSlotDisplay({ kind: 'item', id }, itemCtx!)
         if (!display) {
-            display = getSlotDisplay({ kind: 'block', id } as unknown as SlotValue, itemCtx)
+            display = getSlotDisplay({ kind: 'block', id } as unknown as SlotValue, itemCtx!)
         }
         inputDisplay.value = display || undefined
     },
@@ -399,7 +399,10 @@ const mixedAsEntity = ref(
 )
 
 function parseCoordinates(raw: string, dims: number): CoordinatePart[] {
-    const parts = raw.trim().split(/\s+/).filter((p) => p.length > 0)
+    const parts = raw
+        .trim()
+        .split(/\s+/)
+        .filter((p) => p.length > 0)
     const result: CoordinatePart[] = []
     for (let i = 0; i < dims; i++) {
         const part = parts[i] ?? ''
@@ -504,9 +507,11 @@ function coordinateModeLabel(mode: CoordinateMode): string {
     <div class="argument-card flex min-w-0 flex-col gap-2" :class="{ 'md:col-span-2': isNbt }">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
-                <label :for="fieldId" class="text-sm font-semibold text-[var(--color-text-primary)]">{{
-                    t(arg.displayNameKey)
-                }}</label>
+                <label
+                    :for="fieldId"
+                    class="text-sm font-semibold text-[var(--color-text-primary)]"
+                    >{{ t(arg.displayNameKey) }}</label
+                >
                 <span v-if="arg.required" class="text-xs text-[var(--color-text-tertiary)]">{{
                     formatMessage(messages.argRequired)
                 }}</span>
