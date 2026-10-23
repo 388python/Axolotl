@@ -329,23 +329,6 @@
       }
     },
     {
-      "id": "launcher-1.9.9",
-      "version": "1.9.9",
-      "publishedAt": "2026-10-20",
-      "title": {
-        "en-US": "Axolotl Launcher 1.9.9",
-        "zh-CN": "Axolotl Launcher 1.9.9"
-      },
-      "changes": {
-        "security": [
-          {
-            "en-US": "Fixed a path traversal vulnerability in mrpack installation paths, preventing attackers from writing arbitrary files to the user's system via maliciously crafted mrpacks.",
-            "zh-CN": "修复了整合包安装路径逃逸漏洞，防止攻击者通过恶意构造的整合包向用户系统写入任意文件。"
-          }
-        ]
-      }
-    },
-    {
       "id": "launcher-1.9.8",
       "version": "1.9.8",
       "publishedAt": "2026-10-13",
