@@ -19428,7 +19428,7 @@
     "message": "寄生"
   },
   "advancement.minecraft:story/root.title": {
-    "message": "Minecraft"
+    "message": "我的世界"
   },
   "advancement.minecraft:story/mine_stone.title": {
     "message": "石器时代"
@@ -19446,7 +19446,7 @@
     "message": "热腾腾的"
   },
   "advancement.minecraft:story/iron_tools.title": {
-    "message": "Isn't It Iron Pick"
+    "message": "这不是铁镐么？"
   },
   "advancement.minecraft:story/deflect_arrow.title": {
     "message": "不吃这套，谢谢"
