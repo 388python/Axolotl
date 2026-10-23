@@ -7250,6 +7250,15 @@
   "app.lab.command-generator.alias-of": {
     "message": "{command}'s alias"
   },
+  "app.lab.command-generator.coordinate.relative": {
+    "message": "Relative (~)"
+  },
+  "app.lab.command-generator.coordinate.local": {
+    "message": "Local (^)"
+  },
+  "app.lab.command-generator.coordinate.absolute": {
+    "message": "Absolute"
+  },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "Grant or revoke player advancements"
   },

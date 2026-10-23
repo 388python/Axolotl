@@ -470,6 +470,19 @@ export const commandGeneratorMessages = defineMessages({
     defaultMessage: "{command}'s alias",
     },
 
+    coordinateRelative: {
+        id: 'app.lab.command-generator.coordinate.relative',
+        defaultMessage: 'Relative (~)',
+    },
+    coordinateLocal: {
+        id: 'app.lab.command-generator.coordinate.local',
+        defaultMessage: 'Local (^)',
+    },
+    coordinateAbsolute: {
+        id: 'app.lab.command-generator.coordinate.absolute',
+        defaultMessage: 'Absolute',
+    },
+
     // ===== 预设 =====
     savePreset: { id: 'app.lab.command-generator.preset.save', defaultMessage: 'Save as preset' },
     presetName: { id: 'app.lab.command-generator.preset.name', defaultMessage: 'Preset name' },

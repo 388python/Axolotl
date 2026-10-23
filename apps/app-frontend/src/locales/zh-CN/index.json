@@ -6221,6 +6221,15 @@
   "app.lab.command-generator.alias-of": {
     "message": "{command} 的缩写"
   },
+  "app.lab.command-generator.coordinate.relative": {
+    "message": "相对坐标（~）"
+  },
+  "app.lab.command-generator.coordinate.local": {
+    "message": "局部坐标（^）"
+  },
+  "app.lab.command-generator.coordinate.absolute": {
+    "message": "绝对坐标"
+  },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "给予或移除玩家的进度"
   },

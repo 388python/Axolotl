@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Button, Combobox, type ComboboxOption, StyledInput, Toggle, useVIntl } from '@modrinth/ui'
-import { computed, ref, useId, useTemplateRef } from 'vue'
+import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
 import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
 import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
@@ -12,13 +12,7 @@ import CommandGeneratorNbtEditor from './CommandGeneratorNbtEditor.vue'
 const props = defineProps<{
     arg: CommandArgument
     modelValue: string | number | boolean | undefined
-    /** 当前选中的游戏版本，用于 NBT 序列化分支 */
     version?: string
-    /**
-     * 是否强制使用 1.20.5+ 数据组件格式。
-     * - undefined：由 NBT 编辑器内部根据 version 自动判定
-     * - true / false：仅在 1.20.x 下由用户显式切换时传入
-     */
     forceDataComponents?: boolean
 }>()
 
@@ -136,10 +130,12 @@ const isNumber = computed(() => props.arg.type === 'number' || props.arg.type ==
 const isNbt = computed(() => props.arg.supportsNbtEditor === true)
 const isItem = computed(() => props.arg.type === 'item')
 
-/**
- * 这三种类型统一走「普通 input + 下方预设 chip」的路径，
- * 显式排除出 Combobox 分支，避免被 enumValues 抢占。
- */
+// 是否为坐标，或者既可以是坐标又可以是实体的混合类型
+const isCoordinates = computed(
+    () => props.arg.type === 'coordinates' || (props.arg as any).coordinatesOptionalTarget,
+)
+const isMixedCoordinates = computed(() => (props.arg as any).coordinatesOptionalTarget === true)
+
 const hasInlinePresets = computed(
     () =>
         props.arg.type === 'entity-selector' ||
@@ -196,7 +192,12 @@ const mergedPresets = computed<ArgumentPreset[]>(() => {
 })
 
 const showPresets = computed(
-    () => !isEnumDropdown.value && !isNbt.value && !isItem.value && mergedPresets.value.length > 0,
+    () =>
+        !isEnumDropdown.value &&
+        !isNbt.value &&
+        !isItem.value &&
+        !isCoordinates.value &&
+        mergedPresets.value.length > 0,
 )
 
 const VISIBLE_PRESET_COUNT = 4
@@ -238,17 +239,163 @@ function openItemPicker() {
 function onItemPicked(id: string) {
     emit('update:modelValue', id)
 }
+
+// ===== 坐标编辑器 =====
+
+type CoordinateMode = 'relative' | 'local' | 'absolute'
+
+interface CoordinatePart {
+    mode: CoordinateMode
+    value: string
+}
+
+const coordinateDimensions = computed<2 | 3>(() => props.arg.coordinatesDimensions ?? 3)
+
+const COORDINATE_AXES_3D = ['x', 'y', 'z'] as const
+const COORDINATE_AXES_2D = ['x', 'z'] as const
+const coordinateAxes = computed<readonly string[]>(() =>
+    coordinateDimensions.value === 2 ? COORDINATE_AXES_2D : COORDINATE_AXES_3D,
+)
+
+// 混合模式（如 teleport）：如果是实体，就整体显示文本；否则显示坐标框
+const mixedAsEntity = ref(
+    isMixedCoordinates.value && props.modelValue
+        ? !/^[~^0-9.\- ]+$/.test(String(props.modelValue))
+        : false,
+)
+
+function parseCoordinates(raw: string, dims: number): CoordinatePart[] {
+    const parts = raw.trim().split(/\s+/).filter((p) => p.length > 0)
+    const result: CoordinatePart[] = []
+    for (let i = 0; i < dims; i++) {
+        const part = parts[i] ?? ''
+        if (!part || part === '~') {
+            result.push({ mode: 'relative', value: '' })
+        } else if (part.startsWith('~')) {
+            result.push({ mode: 'relative', value: part.slice(1) })
+        } else if (part === '^') {
+            result.push({ mode: 'local', value: '' })
+        } else if (part.startsWith('^')) {
+            result.push({ mode: 'local', value: part.slice(1) })
+        } else {
+            result.push({ mode: 'absolute', value: part })
+        }
+    }
+    return result
+}
+
+function serializeCoordinates(parts: CoordinatePart[]): string {
+    return parts
+        .map((part) => {
+            if (part.mode === 'relative') return `~${part.value}`
+            if (part.mode === 'local') return `^${part.value}`
+            return part.value
+        })
+        .join(' ')
+}
+
+const coordinateParts = ref<CoordinatePart[]>(
+    isCoordinates.value
+        ? parseCoordinates(String(props.modelValue ?? ''), coordinateDimensions.value)
+        : [],
+)
+
+watch(
+    () => props.modelValue,
+    (val) => {
+        if (!isCoordinates.value || mixedAsEntity.value) return
+        const current = serializeCoordinates(coordinateParts.value)
+        const next = String(val ?? '')
+        if (next === current) return
+        coordinateParts.value = parseCoordinates(next, coordinateDimensions.value)
+    },
+)
+
+function emitCoordinates() {
+    if (mixedAsEntity.value) return
+    emit('update:modelValue', serializeCoordinates(coordinateParts.value))
+}
+
+function cycleCoordinateMode(index: number) {
+    const order: CoordinateMode[] = ['relative', 'local', 'absolute']
+    const part = coordinateParts.value[index]
+    if (!part) return
+    part.mode = order[(order.indexOf(part.mode) + 1) % order.length]
+    if (part.mode === 'absolute' && part.value === '') {
+        part.value = '0'
+    }
+    emitCoordinates()
+}
+
+function setCoordinateValue(index: number, value: string) {
+    const part = coordinateParts.value[index]
+    if (!part) return
+    part.value = value.replace(/[^0-9.\-]/g, '')
+    emitCoordinates()
+}
+
+function switchMixedMode(toEntity: boolean) {
+    mixedAsEntity.value = toEntity
+    const val = String(props.modelValue ?? '')
+    const isCoordString = /^[~^0-9.\- ]*$/.test(val)
+
+    if (toEntity) {
+        if (!val || isCoordString) emit('update:modelValue', '@p')
+    } else {
+        if (val && !isCoordString) {
+            coordinateParts.value = parseCoordinates('', coordinateDimensions.value)
+        }
+        emitCoordinates()
+    }
+}
+
+function coordinateModeSymbol(mode: CoordinateMode): string {
+    if (mode === 'relative') return '~'
+    if (mode === 'local') return '^'
+    return '='
+}
+
+function coordinateModeLabel(mode: CoordinateMode): string {
+    if (mode === 'relative') {
+        return t('app.lab.command-generator.coordinate.relative', 'Relative (~)')
+    }
+    if (mode === 'local') {
+        return t('app.lab.command-generator.coordinate.local', 'Local (^)')
+    }
+    return t('app.lab.command-generator.coordinate.absolute', 'Absolute')
+}
 </script>
 
 <template>
     <div class="argument-card flex min-w-0 flex-col gap-2" :class="{ 'md:col-span-2': isNbt }">
-        <div class="flex flex-wrap items-center gap-2">
-            <label :for="fieldId" class="text-sm font-semibold text-[var(--color-text-primary)]">{{
-                t(arg.displayNameKey)
-            }}</label>
-            <span v-if="arg.required" class="text-xs text-[var(--color-text-tertiary)]">{{
-                formatMessage(messages.argRequired)
-            }}</span>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+                <label :for="fieldId" class="text-sm font-semibold text-[var(--color-text-primary)]">{{
+                    t(arg.displayNameKey)
+                }}</label>
+                <span v-if="arg.required" class="text-xs text-[var(--color-text-tertiary)]">{{
+                    formatMessage(messages.argRequired)
+                }}</span>
+            </div>
+            <!-- 混合类型（坐标/实体）的切换开关 -->
+            <div v-if="isMixedCoordinates" class="flex items-center gap-1">
+                <button
+                    type="button"
+                    class="rounded-md px-2 py-0.5 text-xs transition-colors"
+                    :class="!mixedAsEntity ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'"
+                    @click="switchMixedMode(false)"
+                >
+                    {{ t('app.lab.command-generator.coordinate.use-coords', '坐标') }}
+                </button>
+                <button
+                    type="button"
+                    class="rounded-md px-2 py-0.5 text-xs transition-colors"
+                    :class="mixedAsEntity ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'"
+                    @click="switchMixedMode(true)"
+                >
+                    {{ t('app.lab.command-generator.coordinate.use-entity', '实体') }}
+                </button>
+            </div>
         </div>
         <CommandGeneratorNbtEditor
             v-if="isNbt"
@@ -286,6 +433,42 @@ function onItemPicked(id: string) {
             <Button type="outlined" @click="openItemPicker">{{
                 t('app.lab.command-generator.item-picker.button')
             }}</Button>
+        </div>
+        <StyledInput
+            v-else-if="isMixedCoordinates && mixedAsEntity"
+            :id="fieldId"
+            :model-value="String(modelValue ?? '')"
+            :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+            class="w-full"
+            :spellcheck="false"
+            @update:model-value="onTextInput(String($event ?? ''))"
+        />
+        <div v-else-if="isCoordinates" class="flex min-w-0 flex-col gap-2">
+            <div class="flex min-w-0 flex-wrap items-center gap-2">
+                <div
+                    v-for="(part, index) in coordinateParts"
+                    :key="index"
+                    class="flex min-w-0 items-center gap-1"
+                >
+                    <button
+                        v-tooltip="coordinateModeLabel(part.mode)"
+                        type="button"
+                        class="coordinate-mode flex shrink-0 items-center justify-center rounded-lg border border-solid border-surface-4 bg-surface-3 px-2 py-2 font-mono text-sm leading-none text-[var(--color-text-primary)] hover:border-brand focus-visible:outline-brand"
+                        :aria-label="coordinateModeLabel(part.mode)"
+                        @click="cycleCoordinateMode(index)"
+                    >
+                        {{ coordinateModeSymbol(part.mode) }}
+                    </button>
+                    <StyledInput
+                        :model-value="part.value"
+                        :aria-label="`${coordinateAxes[index] ?? '0'} coordinate`"
+                        :placeholder="coordinateAxes[index] ?? '0'"
+                        style="width: 4.5rem"
+                        :spellcheck="false"
+                        @update:model-value="setCoordinateValue(index, String($event ?? ''))"
+                    />
+                </div>
+            </div>
         </div>
         <StyledInput
             v-else
