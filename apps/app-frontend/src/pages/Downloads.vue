@@ -469,7 +469,7 @@
         <Card v-else role="tabpanel" :aria-labelledby="'nav-tab-' + tab" class="flex flex-1">
             <EmptyState
                 class="my-auto"
-                :type="query ? 'no-search-result' : 'no-tasks'"
+                :type="emptyState.type"
                 :heading="formatMessage(emptyState.title)"
                 :description="formatMessage(emptyState.description)"
             />
@@ -956,18 +956,6 @@ const providerOptions = [
     'local',
 ]
 const historyStatusOptions = ['all', 'succeeded', 'failed', 'interrupted', 'canceled']
-const emptyState = computed(() => {
-    if (query.value) {
-        return { title: messages.noResultsTitle, description: messages.noResultsDescription }
-    }
-    if (tab.value === 'history') {
-        return {
-            title: messages.historyEmptyTitle,
-            description: messages.historyEmptyDescription,
-        }
-    }
-    return { title: messages.emptyTitle, description: messages.emptyDescription }
-})
 const downloadTabs = computed(() => [
     {
         href: 'active',
@@ -1002,6 +990,31 @@ const visibleJobs = computed(() => {
             job.job_id.includes(normalized)
         )
     })
+})
+const emptyState = computed(() => {
+    const narrowedByFilter =
+        provider.value !== 'all' || (tab.value === 'history' && historyStatus.value !== 'all')
+    // A search always explains an empty list; a filter only does when it could
+    // have hidden records that exist on the other side of the filter.
+    if (query.value.trim() || (narrowedByFilter && sourceJobs.value.length > 0)) {
+        return {
+            type: 'no-search-result' as const,
+            title: messages.noResultsTitle,
+            description: messages.noResultsDescription,
+        }
+    }
+    if (tab.value === 'history') {
+        return {
+            type: 'no-tasks' as const,
+            title: messages.historyEmptyTitle,
+            description: messages.historyEmptyDescription,
+        }
+    }
+    return {
+        type: 'no-tasks' as const,
+        title: messages.emptyTitle,
+        description: messages.emptyDescription,
+    }
 })
 function jobTitle(job: InstallJobSnapshot) {
     return (
