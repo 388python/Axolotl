@@ -465,6 +465,10 @@ export const commandGeneratorMessages = defineMessages({
         id: 'app.lab.command-generator.perm.seed.multiplayer-note',
         defaultMessage: 'In multiplayer, /seed requires permission level 2.',
     },
+    aliasOf: {
+    id: 'app.lab.command-generator.alias-of',
+    defaultMessage: "{command}'s alias",
+    },
 
     // ===== 预设 =====
     savePreset: { id: 'app.lab.command-generator.preset.save', defaultMessage: 'Save as preset' },

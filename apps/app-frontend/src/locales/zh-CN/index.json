@@ -6218,6 +6218,9 @@
   "app.lab.command-generator.perm.seed.multiplayer-note": {
     "message": "多人游戏下 /seed 需要 2 级权限"
   },
+  "app.lab.command-generator.alias-of": {
+    "message": "{command} 的缩写"
+  },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "给予或移除玩家的进度"
   },

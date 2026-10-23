@@ -19,9 +19,6 @@ import {
     getAllCommands,
     getCurrentVersion,
     initializeRegistry,
-    PERMISSION_DESC_KEYS,
-    PERMISSION_DESCRIPTIONS,
-    PERMISSION_LABELS,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
 import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
@@ -47,9 +44,36 @@ function t(key: string, fallback?: string): string {
     return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
+// ===== 权限等级常量（内联，避免依赖 registry.ts 的新增导出） =====
+const PERMISSION_LABELS: Record<number, string> = {
+    0: 'All',
+    1: 'Moderator',
+    2: 'Gamemaster',
+    3: 'Admin',
+    4: 'Owner',
+}
+const PERMISSION_DESCRIPTIONS: Record<number, string> = {
+    0: 'No special permission required.',
+    1: 'Can bypass spawn protection.',
+    2: 'Most gameplay commands, command blocks and functions.',
+    3: 'Multiplayer management commands.',
+    4: 'Server management commands.',
+}
+
+function permissionLabel(level: number): string {
+    return PERMISSION_LABELS[level] ?? String(level)
+}
+function permissionDescription(level: number): string {
+    return t(`app.lab.command-generator.perm.${level}.desc`, PERMISSION_DESCRIPTIONS[level])
+}
+
 type CommandComboboxOption = ComboboxOption<string> & {
     description: string
     category: string
+    /** 该条目是否为别名条目 */
+    isAlias: boolean
+    /** 别名对应的主命令名，仅 isAlias 时有意义 */
+    aliasOf: string
 }
 
 function asCommandOption(item: ComboboxOption<string>): CommandComboboxOption {
@@ -74,10 +98,6 @@ const showGlobalPresets = ref(false)
 
 const userPresets = ref<UserPreset[]>([])
 
-/**
- * 1.20.x 下用户可选择是否使用 1.20.5+ 数据组件语法。
- * 其它版本不显示该开关。
- */
 const useDataComponents = ref(true)
 
 function isAtLeast(a: string, b: string): boolean {
@@ -92,7 +112,6 @@ function isAtLeast(a: string, b: string): boolean {
     return true
 }
 
-// 仅 1.20.x（不含 1.20.5+）显示切换开关
 const showDataComponentsToggle = computed(() => {
     const v = selectedVersion.value
     if (!v) return false
@@ -100,9 +119,6 @@ const showDataComponentsToggle = computed(() => {
     return !isAtLeast(v, '1.20.5')
 })
 
-// 传递给 NBT 编辑器的 forceDataComponents：
-// - 未显示开关时传 undefined，让组件根据 version 自动判定
-// - 显示开关时传用户选择
 const forceDataComponents = computed<boolean | undefined>(() => {
     if (!showDataComponentsToggle.value) return undefined
     return useDataComponents.value
@@ -116,19 +132,10 @@ const categoryOptions = computed<ComboboxOption<string>[]>(() => [
     })),
 ])
 
-/**
- * 权限筛选项。
- * 语义：选择 “N” 表示“当前等级为 N 的玩家可以使用的全部命令”，
- * 因为高权限等级继承低等级的全部命令。过滤逻辑用 permissionLevel <= N。
- * 没有“全部”选项：4 级已经覆盖所有命令。
- */
 const permissionOptions = computed<ComboboxOption<string>[]>(() =>
     ([0, 1, 2, 3, 4] as const).map((level) => ({
         value: String(level),
-        label: `${level} · ${PERMISSION_LABELS[level]} — ${t(
-            PERMISSION_DESC_KEYS[level],
-            PERMISSION_DESCRIPTIONS[level],
-        )}`,
+        label: `${level} · ${permissionLabel(level)} — ${permissionDescription(level)}`,
     })),
 )
 
@@ -147,24 +154,47 @@ const filteredCommands = computed(() => {
     }
     const maxLevel = Number(filterPermission.value)
     if (!Number.isNaN(maxLevel)) {
-        list = list.filter((c) => c.permissionLevel <= maxLevel)
+        list = list.filter((c) => (c.permissionLevel ?? 0) <= maxLevel)
     }
     return list
 })
 
-const commandOptions = computed<CommandComboboxOption[]>(() =>
-    filteredCommands.value.map((cmd) => ({
-        value: cmd.id,
-        label: cmd.name,
-        description: t(cmd.descriptionKey),
-        category: t(CATEGORY_KEYS[cmd.category]),
-        searchTerms: [
-            t(cmd.descriptionKey),
-            t(CATEGORY_KEYS[cmd.category]),
-            ...(cmd.aliases ?? []),
-        ],
-    })),
-)
+/**
+ * 命令下拉框选项。
+ * 每个命令生成一条主条目；每个别名再生成一条独立条目。
+ * 别名条目的 value 用 `alias:<commandId>:<alias>` 编码，
+ * onCommandChange 时会解析回主命令 id。
+ */
+const commandOptions = computed<CommandComboboxOption[]>(() => {
+    const list: CommandComboboxOption[] = []
+    for (const cmd of filteredCommands.value) {
+        const categoryLabel = t(CATEGORY_KEYS[cmd.category])
+        const description = t(cmd.descriptionKey)
+
+        list.push({
+            value: cmd.id,
+            label: cmd.name,
+            description,
+            category: categoryLabel,
+            isAlias: false,
+            aliasOf: '',
+            searchTerms: [description, categoryLabel],
+        })
+
+        for (const alias of cmd.aliases ?? []) {
+            list.push({
+                value: `alias:${cmd.id}:${alias}`,
+                label: alias,
+                description,
+                category: categoryLabel,
+                isAlias: true,
+                aliasOf: cmd.name,
+                searchTerms: [cmd.name, description, categoryLabel],
+            })
+        }
+    }
+    return list
+})
 
 const currentCommand = computed(() =>
     selectedCommandId.value ? (findCommand(selectedCommandId.value) ?? null) : null,
@@ -176,11 +206,6 @@ const currentGuide = computed(() =>
         : null,
 )
 
-/**
- * UI 上用于渲染的参数卡片顺序。
- * 把 nbt 类型的参数统一挪到末尾，与 JSON 中参数的位置无关。
- * 生成命令时的顺序由 generator.ts 的 orderArguments 另行处理。
- */
 const uiArguments = computed<CommandArgument[]>(() => {
     const args = currentCommand.value ? getActiveArguments(currentCommand.value, values.value) : []
     const nonNbt: CommandArgument[] = []
@@ -196,19 +221,18 @@ const uiArguments = computed<CommandArgument[]>(() => {
 const permissionName = computed(() => {
     if (!currentCommand.value) return ''
     const level = currentCommand.value.permissionLevel
-    return `${PERMISSION_LABELS[level] ?? level} (${level})`
+    return `${permissionLabel(level)} (${level})`
 })
 
-/** 命令卡片右上角权限标签的 tooltip 文案 */
 const permissionTooltip = computed(() => {
     if (!currentCommand.value) return undefined
     if (currentCommand.value.id === 'seed') {
-        return formatMessage(messages.seedMultiplayerNote)
+        return t(
+            'app.lab.command-generator.perm.seed.multiplayer-note',
+            'In multiplayer, /seed requires permission level 2.',
+        )
     }
-    return t(
-        PERMISSION_DESC_KEYS[currentCommand.value.permissionLevel],
-        PERMISSION_DESCRIPTIONS[currentCommand.value.permissionLevel],
-    )
+    return permissionDescription(currentCommand.value.permissionLevel)
 })
 
 const isChainCommand = computed(() => currentCommand.value?.isChainCommand === true)
@@ -236,7 +260,6 @@ watch(selectedVersion, (versionId) => {
     values.value = {}
     executeChainOutput.value = ''
     result.value = ''
-    // 切换版本时重置数据组件开关
     useDataComponents.value = true
 })
 
@@ -260,8 +283,18 @@ watch(
     { deep: true },
 )
 
+/** 解析别名 value，回落到主命令 id */
+function resolveCommandId(raw: unknown): string {
+    const value = String(raw ?? '')
+    if (value.startsWith('alias:')) {
+        const parts = value.split(':')
+        return parts[1] ?? ''
+    }
+    return value
+}
+
 function onCommandChange(id: unknown) {
-    selectedCommandId.value = String(id)
+    selectedCommandId.value = resolveCommandId(id)
     copied.value = false
     executeChainOutput.value = ''
     if (!selectedCommandId.value) {
@@ -544,14 +577,32 @@ async function jumpToPreset(preset: UserPreset) {
                             searchable
                             @update:model-value="onCommandChange"
                         >
-                            <template #option="{ item }"
-                                ><div class="flex min-w-0 flex-col gap-1">
-                                    <span class="font-mono font-semibold">/{{ item.value }}</span
-                                    ><span class="text-xs text-[var(--color-text-tertiary)]">{{
+                            <template #option="{ item }">
+                                <div class="flex min-w-0 flex-col gap-1">
+                                    <span class="flex flex-wrap items-baseline gap-1.5">
+                                        <span class="font-mono font-semibold"
+                                            >/{{ item.label }}</span
+                                        >
+                                        <span
+                                            v-if="asCommandOption(item).isAlias"
+                                            class="inline-flex items-center rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
+                                        >
+                                            {{
+                                                formatMessage(
+                                                    {
+                                                        id: 'app.lab.command-generator.alias-of',
+                                                        defaultMessage: "{command}'s alias",
+                                                    },
+                                                    { command: asCommandOption(item).aliasOf },
+                                                )
+                                            }}
+                                        </span>
+                                    </span>
+                                    <span class="text-xs text-[var(--color-text-tertiary)]">{{
                                         asCommandOption(item).description
                                     }}</span>
-                                </div></template
-                            >
+                                </div>
+                            </template>
                         </Combobox>
                     </div>
                     <div

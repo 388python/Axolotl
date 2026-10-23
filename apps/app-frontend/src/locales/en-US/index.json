@@ -7247,6 +7247,9 @@
   "app.lab.command-generator.perm.seed.multiplayer-note": {
     "message": "In multiplayer, /seed requires permission level 2"
   },
+  "app.lab.command-generator.alias-of": {
+    "message": "{command}'s alias"
+  },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "Grant or revoke player advancements"
   },
