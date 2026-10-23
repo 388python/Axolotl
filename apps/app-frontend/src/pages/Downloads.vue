@@ -576,6 +576,7 @@ import { listPendingCurseForgeManualDownloads } from '@/helpers/curseforge'
 import type { CurseForgeManualDownloadItem } from '@/helpers/curseforge-manual'
 import { resolveDownloadUrl } from '@/helpers/download-url'
 import { retiredDownloadMessage } from '@/helpers/download-url-messages'
+import { selectDownloadEmptyState } from '@/helpers/downloads-empty-state'
 import {
     download_job_support_details,
     type InstallJobSnapshot,
@@ -992,18 +993,23 @@ const visibleJobs = computed(() => {
     })
 })
 const emptyState = computed(() => {
-    const narrowedByFilter =
-        provider.value !== 'all' || (tab.value === 'history' && historyStatus.value !== 'all')
-    // A search always explains an empty list; a filter only does when it could
-    // have hidden records that exist on the other side of the filter.
-    if (query.value.trim() || (narrowedByFilter && sourceJobs.value.length > 0)) {
+    const kind = selectDownloadEmptyState({
+        query: query.value,
+        tab: tab.value,
+        providerFiltered: provider.value !== 'all',
+        historyStatusFiltered: historyStatus.value !== 'all',
+        sourceJobCount: sourceJobs.value.length,
+    })
+    // The wording differs from the illustration: a narrowed list is a search
+    // result, while a genuinely empty tab keeps the "no tasks" illustration.
+    if (kind === 'no-search-result') {
         return {
             type: 'no-search-result' as const,
             title: messages.noResultsTitle,
             description: messages.noResultsDescription,
         }
     }
-    if (tab.value === 'history') {
+    if (kind === 'no-download-history') {
         return {
             type: 'no-tasks' as const,
             title: messages.historyEmptyTitle,
