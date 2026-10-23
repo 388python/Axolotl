@@ -115,6 +115,7 @@ impl LightweightMode {
                     .to_string(),
             );
         }
+        let idle = state.running_processes == 0;
         drop(state);
         create_lightweight_host_window(app)?;
         let mut state = self.0.lock().map_err(|error| error.to_string())?;
@@ -126,14 +127,21 @@ impl LightweightMode {
 
         state.active = true;
         state.frontend_ready = false;
+        if let Some(theseus_state) = theseus::State::get_if_initialized() {
+            theseus_state.pause_background_services();
+        }
         drop(state);
         if let Err(error) = destroy_main_window(app) {
             if let Ok(mut state) = self.0.lock() {
                 state.active = false;
             }
+            if let Some(theseus_state) = theseus::State::get_if_initialized() {
+                theseus_state.resume_background_services();
+            }
             destroy_lightweight_host_window(app);
             return Err(error);
         }
+        schedule_lightweight_maintenance(idle);
         schedule_tray_menu_update(app);
         Ok(())
     }
@@ -159,6 +167,9 @@ impl LightweightMode {
         destroy_lightweight_host_window(app);
         if let Ok(mut state) = self.0.lock() {
             state.active = false;
+            if let Some(theseus_state) = theseus::State::get_if_initialized() {
+                theseus_state.resume_background_services();
+            }
         }
         schedule_tray_menu_update(app);
         Ok(())
@@ -233,17 +244,41 @@ impl LightweightMode {
                     } else {
                         show_main_window(&app)
                     };
-                    if let Err(error) = result {
-                        if was_lightweight {
-                            if let Ok(mut state) =
-                                app.state::<LightweightMode>().0.lock()
+                    match result {
+                        Ok(()) => {
+                            if was_lightweight
+                                && let Ok(state) =
+                                    app.state::<LightweightMode>().0.lock()
                             {
-                                state.restoring = false;
+                                // A concurrent enter may have re-activated
+                                // lightweight mode; only resume the gate when
+                                // it still matches a non-lightweight state.
+                                if !state.active {
+                                    if let Some(theseus_state) =
+                                        theseus::State::get_if_initialized()
+                                    {
+                                        theseus_state
+                                            .resume_background_services();
+                                    }
+                                }
                             }
                         }
-                        tracing::error!(
-                            "Failed to restore launcher after Minecraft exited: {error}"
-                        );
+                        Err(error) => {
+                            if was_lightweight {
+                                // Keep the lightweight-mode invariant so the
+                                // tray can retry; the gate must stay paused to
+                                // match `active`.
+                                if let Ok(mut state) =
+                                    app.state::<LightweightMode>().0.lock()
+                                {
+                                    state.active = true;
+                                    state.restoring = false;
+                                }
+                            }
+                            tracing::error!(
+                                "Failed to restore launcher after Minecraft exited: {error}"
+                            );
+                        }
                     }
                 });
             }
@@ -253,6 +288,19 @@ impl LightweightMode {
                     if payload.maximize_window {
                         maximize_minecraft_window(
                             payload.pid,
+                            payload.launch_preparation_timeout,
+                        )
+                        .await;
+                    }
+                    if let Some(title) = payload
+                        .window_title
+                        .as_ref()
+                        .map(|value| value.trim())
+                        .filter(|value| !value.is_empty())
+                    {
+                        rename_minecraft_window(
+                            payload.pid,
+                            title,
                             payload.launch_preparation_timeout,
                         )
                         .await;
@@ -289,10 +337,10 @@ impl LightweightMode {
     }
 
     fn set_route(&self, route: String) {
-        if route.starts_with('/') {
-            if let Ok(mut state) = self.0.lock() {
-                state.route = route;
-            }
+        if route.starts_with('/')
+            && let Ok(mut state) = self.0.lock()
+        {
+            state.route = route;
         }
     }
 
@@ -328,6 +376,29 @@ impl LightweightMode {
     }
 }
 
+/// Runs the post-enter maintenance work off the caller's thread: stop idle
+/// multiplayer tunnels, then trim the launcher's working set once the
+/// destroyed webview's processes had a moment to exit.
+fn schedule_lightweight_maintenance(idle: bool) {
+    tauri::async_runtime::spawn(async move {
+        if idle && let Err(error) = theseus::multiplayer::stop().await {
+            tracing::debug!(
+                "Failed to stop multiplayer tunnels entering lightweight mode: {error}"
+            );
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if let Some((before, after)) =
+            theseus::memory::trim_launcher_working_set().await
+        {
+            tracing::info!(
+                before_bytes = before,
+                after_bytes = after,
+                "Trimmed the launcher working set for lightweight mode"
+            );
+        }
+    });
+}
+
 #[derive(serde::Deserialize)]
 struct ProcessEventPayload {
     instance_id: String,
@@ -336,6 +407,8 @@ struct ProcessEventPayload {
     pid: u32,
     #[serde(default)]
     maximize_window: bool,
+    #[serde(default)]
+    window_title: Option<String>,
     #[serde(default)]
     launch_preparation_timeout: Option<u64>,
     event: String,
@@ -394,7 +467,7 @@ unsafe extern "system" fn maximize_if_owned_by_process(
     }
 
     let mut window_pid = 0;
-    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut window_pid)) };
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut window_pid)) };
     if window_pid == MAXIMIZE_PROCESS_ID.load(Ordering::Relaxed)
         && unsafe { IsWindowVisible(hwnd).as_bool() }
     {
@@ -451,6 +524,77 @@ async fn maximize_minecraft_window(
 #[cfg(not(target_os = "windows"))]
 async fn maximize_minecraft_window(
     _pid: u32,
+    _launch_preparation_timeout: Option<u64>,
+) {
+}
+
+#[cfg(target_os = "windows")]
+async fn rename_minecraft_window(
+    pid: u32,
+    title: &str,
+    launch_preparation_timeout: Option<u64>,
+) {
+    if pid == 0 || title.is_empty() {
+        return;
+    }
+
+    // PCL keeps re-applying the title: FML/Quilt and some mods reset it
+    // while the game boots, so a one-shot rename is not enough.
+    let timeout = std::time::Duration::from_secs(
+        launch_preparation_timeout.unwrap_or(60),
+    );
+    let deadline = tokio::time::Instant::now() + timeout;
+    let title = title.to_string();
+    let mut applied = false;
+    let mut hold_until: Option<tokio::time::Instant> = None;
+    loop {
+        let found = {
+            let _guard = MAXIMIZE_WINDOW_ENUMERATION.lock();
+            MAXIMIZE_PROCESS_ID.store(pid, Ordering::Relaxed);
+            MAXIMIZE_WINDOW_HANDLE.store(0, Ordering::Relaxed);
+            unsafe {
+                use windows::Win32::Foundation::LPARAM;
+                use windows::Win32::UI::WindowsAndMessaging::EnumWindows;
+                let _ =
+                    EnumWindows(Some(maximize_if_owned_by_process), LPARAM(0));
+            }
+            MAXIMIZE_WINDOW_HANDLE.load(Ordering::Relaxed)
+        };
+        if found != 0 {
+            let hwnd = windows::Win32::Foundation::HWND(found as *mut _);
+            let wide: Vec<u16> = title.encode_utf16().chain(Some(0)).collect();
+            unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::SetWindowTextW;
+                let _ =
+                    SetWindowTextW(hwnd, windows::core::PCWSTR(wide.as_ptr()));
+            }
+            if !applied {
+                applied = true;
+                // Keep watching for a bit after the first success so loader
+                // splash windows cannot leave the default title behind.
+                hold_until = Some(
+                    tokio::time::Instant::now()
+                        + std::time::Duration::from_secs(45),
+                );
+            }
+        }
+        let now = tokio::time::Instant::now();
+        if let Some(hold) = hold_until
+            && now >= hold
+        {
+            return;
+        }
+        if hold_until.is_none() && now >= deadline {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn rename_minecraft_window(
+    _pid: u32,
+    _title: &str,
     _launch_preparation_timeout: Option<u64>,
 ) {
 }
@@ -530,8 +674,6 @@ fn destroy_lightweight_host_window(app: &AppHandle) {
 
 fn create_main_window(app: &AppHandle, route: &str) -> Result<(), String> {
     if app.get_webview_window(MAIN_WINDOW_LABEL).is_none() {
-        // Only reassigned on non-macOS platforms to strip window decorations.
-        #[cfg_attr(target_os = "macos", allow(unused_mut))]
         let mut builder = WebviewWindowBuilder::new(
             app,
             MAIN_WINDOW_LABEL,
@@ -547,6 +689,15 @@ fn create_main_window(app: &AppHandle, route: &str) -> Result<(), String> {
         #[cfg(not(target_os = "macos"))]
         {
             builder = builder.decorations(false);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            builder = builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .traffic_light_position(tauri::LogicalPosition::new(
+                    15.0, 22.0,
+                ));
         }
         builder.build().map_err(|error| error.to_string())?;
     }

@@ -24,6 +24,9 @@ pub struct DirectoryInfo {
 }
 
 impl DirectoryInfo {
+    pub(crate) fn synced_options_dir(&self) -> std::path::PathBuf {
+        self.config_dir.join("synced-options")
+    }
     pub fn global_handle_if_ready() -> Option<&'static Self> {
         LAUNCHER_STATE.get().map(|x| &x.directories)
     }
@@ -169,8 +172,8 @@ impl DirectoryInfo {
 
     /// Gets the directory of a managed dedicated server by id
     #[inline]
-    pub fn server_dir(&self, server_id: &str) -> PathBuf {
-        self.servers_dir().join(server_id)
+    pub fn server_dir(&self, server_id: &str) -> crate::Result<PathBuf> {
+        crate::util::io::safe_relative_join(&self.servers_dir(), server_id)
     }
 
     #[inline]
@@ -289,6 +292,24 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
+    pub fn resource_cache_db(&self, channel: &str) -> crate::Result<PathBuf> {
+        if !matches!(channel, "release" | "beta") {
+            return Err(crate::ErrorKind::InputError(
+                "Invalid resource cache channel".into(),
+            )
+            .into());
+        }
+        Ok(self
+            .caches_dir()
+            .join("resources")
+            .join(channel)
+            .join("resource-cache.db"))
+    }
+
+    pub fn content_store_dir(&self) -> PathBuf {
+        self.caches_dir().join("content-store")
+    }
+
     /// Get path from environment variable
     #[inline]
     fn env_path(name: &str) -> Option<PathBuf> {
@@ -303,7 +324,9 @@ impl DirectoryInfo {
         app_identifier: &str,
     ) -> crate::Result<()>
     where
-        E: sqlx::Executor<'a, Database = sqlx::Sqlite> + Copy,
+        E: sqlx::Executor<'a, Database = sqlx::Sqlite>
+            + sqlx::Acquire<'a, Database = sqlx::Sqlite>
+            + Copy,
     {
         let app_dir = DirectoryInfo::initial_settings_dir_path(app_identifier)
             .ok_or(crate::ErrorKind::FSError(
@@ -366,6 +389,28 @@ impl DirectoryInfo {
 
                 if !is_dir_writable(&move_dir).await? {
                     return Err(crate::ErrorKind::DirectoryMoveError(format!("Cannot move directory to {}: directory is not writable", move_dir.display())).into());
+                }
+
+                if settings.backup_repository_path.is_none() {
+                    let old_repository =
+                        prev_dir.join("Backups").join("instances");
+                    let new_repository =
+                        move_dir.join("Backups").join("instances");
+                    if let Some(path) = crate::api::instance::move_default_repository_for_launcher_directory(
+                        &old_repository,
+                        &new_repository,
+                    )
+                    .await?
+                    {
+                        sqlx::query(
+                            "INSERT INTO pending_backup_repository_cleanups (path, created_at)
+                             VALUES (?, unixepoch('subsec') * 1000)
+                             ON CONFLICT(path) DO UPDATE SET created_at = excluded.created_at",
+                        )
+                        .bind(path.to_string_lossy().to_string())
+                        .execute(exec)
+                        .await?;
+                    }
                 }
 
                 const MOVE_DIRS: &[&str] = &[
@@ -677,6 +722,28 @@ mod resolve_game_dir_tests {
             settings_dir: PathBuf::from(r"C:\launcher\settings"),
             config_dir: PathBuf::from(r"C:\launcher"),
             app_identifier: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn server_directory_rejects_absolute_and_windows_alias_paths() {
+        let dirs = dirs();
+        assert_eq!(
+            dirs.server_dir("server-1234").unwrap(),
+            dirs.servers_dir().join("server-1234")
+        );
+        for id in [
+            "../outside",
+            "C:outside",
+            "C:/outside",
+            r"\outside",
+            r"\\server\share",
+            ".",
+            "NUL",
+            "server:stream",
+            "server.",
+        ] {
+            assert!(dirs.server_dir(id).is_err(), "{id:?}");
         }
     }
 

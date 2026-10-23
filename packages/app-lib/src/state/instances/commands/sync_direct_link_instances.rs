@@ -8,7 +8,7 @@ use crate::launcher::ExternalGameDirMode;
 use crate::state::instances::{
     CreateDirectLinkInstance, EditInstance, adapters::sqlite::instance_rows,
 };
-use crate::state::{AppliedContentSetPatch, State};
+use crate::state::{AppliedContentSetPatch, InstanceInstallStage, State};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -21,8 +21,7 @@ pub struct ExternalMinecraftRoot {
 }
 
 fn default_external_root_mode() -> ExternalGameDirMode {
-    // Existing string-only Settings entries used version isolation exclusively.
-    ExternalGameDirMode::Isolated
+    ExternalGameDirMode::Automatic
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -43,8 +42,10 @@ pub(crate) async fn sync_direct_link_instances(
     roots: Vec<ExternalMinecraftRoot>,
     state: &State,
 ) -> crate::Result<DirectLinkSyncReport> {
+    tracing::debug!(roots = ?roots, "starting direct-link game directory sync");
     let mut report = DirectLinkSyncReport::default();
     let mut canonical_roots = Vec::new();
+    let mut unavailable_roots = Vec::new();
     for root in &roots {
         match crate::util::io::canonicalize(&root.path) {
             Ok(path) if path.is_dir() => {
@@ -60,6 +61,8 @@ pub(crate) async fn sync_direct_link_instances(
             Err(error) => {
                 if error.kind() == std::io::ErrorKind::NotFound {
                     report.missing += 1;
+                } else {
+                    unavailable_roots.push(root.path.clone());
                 }
                 report
                     .errors
@@ -108,6 +111,7 @@ pub(crate) async fn sync_direct_link_instances(
             if !has_minecraft_version_manifest(&folder) {
                 continue;
             }
+            tracing::debug!(root = %root.display(), version_dir = %folder.display(), mode = %mode.key(), "attempting direct-link instance sync");
             let folder_name = entry.file_name().to_string_lossy().to_string();
             let instance_folder = Path::new("versions").join(&folder_name);
             let source = detect_direct_link_source(root, &folder);
@@ -146,6 +150,24 @@ pub(crate) async fn sync_direct_link_instances(
 
             if let Some(metadata) = existing_instance {
                 let instance = &metadata.instance;
+                if instance.symlink_target.is_some() {
+                    // Symlink imports can point at the same external version,
+                    // but they are ordinary managed instances rather than
+                    // records owned by direct-link reconciliation.
+                    continue;
+                }
+                if !instance.is_direct_linked()
+                    && !is_unpromoted_direct_link_candidate(
+                        instance.install_stage,
+                        instance.symlink_target.as_deref(),
+                    )
+                {
+                    // An import can temporarily have the same isolated
+                    // game-dir override before its symlink metadata is
+                    // persisted. Reserve the external version for that import
+                    // without promoting, duplicating, or deleting its record.
+                    continue;
+                }
                 let fields_changed = instance.linked_version_id.as_deref()
                     != Some(resolved.version_id.as_str())
                     || instance.linked_launcher.as_deref()
@@ -272,6 +294,12 @@ pub(crate) async fn sync_direct_link_instances(
         if metadata.instance.linked_dot_minecraft.is_some() {
             continue;
         }
+        if !is_unpromoted_direct_link_candidate(
+            metadata.instance.install_stage,
+            metadata.instance.symlink_target.as_deref(),
+        ) {
+            continue;
+        }
         let Some(game_dir_override) =
             metadata.instance.game_dir_override.as_deref()
         else {
@@ -280,12 +308,13 @@ pub(crate) async fn sync_direct_link_instances(
         let Some(root) = version_isolated_root(game_dir_override) else {
             continue;
         };
-        if configured_root_matches(&root, &canonical_roots, &roots) {
+        if configured_root_matches(&root, &canonical_roots, &unavailable_roots)
+        {
             continue;
         }
-        instance_rows::delete_instance_by_id(
+        crate::state::remove_instance_preserving_external_files(
             &metadata.instance.id,
-            &state.pool,
+            state,
         )
         .await?;
         let _ =
@@ -295,6 +324,9 @@ pub(crate) async fn sync_direct_link_instances(
     }
 
     for metadata in existing {
+        if metadata.instance.symlink_target.is_some() {
+            continue;
+        }
         let Some(json_path) =
             metadata.instance.linked_version_json_path.as_deref()
         else {
@@ -304,12 +336,16 @@ pub(crate) async fn sync_direct_link_instances(
         else {
             continue;
         };
-        if !configured_root_matches(Path::new(root), &canonical_roots, &roots) {
+        if !configured_root_matches(
+            Path::new(root),
+            &canonical_roots,
+            &unavailable_roots,
+        ) {
             // Configured roots are authoritative. Removing a root from Settings
             // only drops Axolotl's association; the external files remain intact.
-            instance_rows::delete_instance_by_id(
+            crate::state::remove_instance_preserving_external_files(
                 &metadata.instance.id,
-                &state.pool,
+                state,
             )
             .await?;
             let _ = emit_instance(
@@ -326,9 +362,9 @@ pub(crate) async fn sync_direct_link_instances(
         {
             // External deletion is authoritative, but there is nothing left
             // to delete on disk. Only remove the stale Axolotl record.
-            instance_rows::delete_instance_by_id(
+            crate::state::remove_instance_preserving_external_files(
                 &metadata.instance.id,
-                &state.pool,
+                state,
             )
             .await?;
             let _ = emit_instance(
@@ -340,7 +376,15 @@ pub(crate) async fn sync_direct_link_instances(
         }
     }
 
+    tracing::debug!(report = ?report, "direct-link game directory sync finished");
     Ok(report)
+}
+
+fn is_unpromoted_direct_link_candidate(
+    install_stage: InstanceInstallStage,
+    symlink_target: Option<&str>,
+) -> bool {
+    install_stage == InstanceInstallStage::Installed && symlink_target.is_none()
 }
 
 fn version_isolated_root(path: &str) -> Option<PathBuf> {
@@ -356,21 +400,19 @@ fn version_isolated_root(path: &str) -> Option<PathBuf> {
     version_dir.parent()?.parent().map(Path::to_path_buf)
 }
 
-/// A root that remains in Settings must retain its associated records even
-/// when it cannot currently be opened (for example, a disconnected drive or
-/// a transient permission failure). Only removing the root from Settings may
-/// drop all of its associations.
+/// A configured root with a transient access error retains its records, while
+/// a root that is confirmed missing is no longer authoritative.
 fn configured_root_matches(
     root: &Path,
     canonical_roots: &[(PathBuf, ExternalGameDirMode)],
-    configured_roots: &[ExternalMinecraftRoot],
+    unavailable_roots: &[PathBuf],
 ) -> bool {
     canonical_roots
         .iter()
         .any(|(candidate, _)| candidate == root)
-        || configured_roots
+        || unavailable_roots
             .iter()
-            .any(|candidate| paths_match(&candidate.path, root))
+            .any(|candidate| paths_match(candidate, root))
 }
 
 fn paths_match(left: &Path, right: &Path) -> bool {
@@ -393,29 +435,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn configured_but_unavailable_root_keeps_its_association() {
+    fn transiently_unavailable_root_keeps_its_association() {
         let root = PathBuf::from("minecraft-root");
         let equivalent = PathBuf::from("minecraft-root").join(".");
 
-        assert!(configured_root_matches(
-            &equivalent,
+        assert!(configured_root_matches(&equivalent, &[], &[root],));
+    }
+
+    #[test]
+    fn missing_root_does_not_keep_its_association() {
+        assert!(!configured_root_matches(
+            Path::new("minecraft-root"),
             &[],
-            &[ExternalMinecraftRoot {
-                path: root,
-                mode: ExternalGameDirMode::Isolated,
-            }],
+            &[],
         ));
     }
 
     #[test]
-    fn removed_root_does_not_keep_its_association() {
-        assert!(!configured_root_matches(
-            Path::new("minecraft-root"),
-            &[],
-            &[ExternalMinecraftRoot {
-                path: PathBuf::from("other-root"),
-                mode: ExternalGameDirMode::Isolated,
-            }],
+    fn installing_override_is_not_treated_as_an_orphaned_direct_link() {
+        assert!(!is_unpromoted_direct_link_candidate(
+            InstanceInstallStage::NotInstalled,
+            None,
+        ));
+        assert!(!is_unpromoted_direct_link_candidate(
+            InstanceInstallStage::MinecraftInstalling,
+            None,
+        ));
+    }
+
+    #[test]
+    fn completed_symlink_import_is_not_treated_as_an_orphaned_direct_link() {
+        assert!(!is_unpromoted_direct_link_candidate(
+            InstanceInstallStage::Installed,
+            Some(r"D:\Minecraft\.minecraft\versions\1.20.1"),
+        ));
+    }
+
+    #[test]
+    fn installed_unpromoted_direct_link_remains_eligible_for_cleanup() {
+        assert!(is_unpromoted_direct_link_candidate(
+            InstanceInstallStage::Installed,
+            None,
         ));
     }
 }

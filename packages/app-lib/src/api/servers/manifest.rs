@@ -11,10 +11,30 @@ use crate::state::State;
 use crate::util::io;
 use crate::{ErrorKind, Result};
 
-use super::lifecycle::is_running;
-
 const MANIFEST_FILE: &str = "axolotl-server.json";
 const DEFAULT_JAR_NAME: &str = "server.jar";
+
+pub(super) fn default_stop_command() -> String {
+    "stop".to_string()
+}
+
+pub(super) fn normalize_stop_command(command: &str) -> Result<String> {
+    let command = command.trim();
+    if command.contains(['\r', '\n', '\0']) || command.len() >= 64 * 1024 {
+        return Err(ErrorKind::InputError(
+            "Stop command must be a single line shorter than 64 KiB"
+                .to_string(),
+        )
+        .as_error());
+    }
+    Ok(if command.is_empty() {
+        default_stop_command()
+    } else if command.eq_ignore_ascii_case("^c") {
+        "^C".to_string()
+    } else {
+        command.to_string()
+    })
+}
 /// Executable launcher jar downloaded from Fabric Meta; must match the
 /// filename used by the frontend's `resolveServerJar('fabric')`.
 const FABRIC_SERVER_JAR_NAME: &str = "fabric-server.jar";
@@ -65,11 +85,30 @@ pub struct ServerManifest {
     pub install_error: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub jvm_args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_launch_hook: Option<String>,
+    #[serde(default = "default_stop_command")]
+    pub stop_command: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_pinned_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_world: Option<LinkedWorld>,
     pub created_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_started_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub last_exit_crashed: bool,
+}
+
+/// Links a managed server to a saved multiplayer entry (an instance's server
+/// list entry) whose address points back at this machine. When set, launching
+/// that entry from the home pinned-servers widget first starts this server and
+/// waits until it accepts connections.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedWorld {
+    pub instance_id: String,
+    pub address: String,
 }
 
 /// Tracks whether a modpack server has finished materializing. `Incomplete`
@@ -102,9 +141,15 @@ pub struct ServerInfo {
     pub manifest: ServerManifest,
     pub path: String,
     pub running: bool,
+    pub starting: bool,
+    pub stopping: bool,
     pub eula_exists: bool,
     pub eula_accepted: bool,
     pub port: Option<u16>,
+    /// `online-mode` from `server.properties`. `None` when the file does not
+    /// set it, which means the vanilla default of `true`.
+    #[serde(rename = "onlineMode")]
+    pub online_mode: Option<bool>,
 }
 
 pub(super) async fn server_path(server_id: &str) -> Result<PathBuf> {
@@ -118,7 +163,7 @@ pub(super) async fn server_path(server_id: &str) -> Result<PathBuf> {
         .as_error());
     }
     let state = State::get().await?;
-    let path = state.directories.server_dir(server_id);
+    let path = state.directories.server_dir(server_id)?;
     if !path.is_dir() {
         return Err(ErrorKind::InputError(format!(
             "Unknown server: {server_id}"
@@ -177,24 +222,53 @@ pub(super) async fn build_server_info(
         .find_map(|line| line.split_once('='))
         .filter(|(key, _)| key.trim() == "eula")
         .is_some_and(|(_, value)| value.trim().eq_ignore_ascii_case("true"));
-    let port = tokio::fs::read_to_string(path.join("server.properties"))
+    let port = read_server_port(path).await;
+    let online_mode = read_online_mode(path).await;
+    ServerInfo {
+        manifest: manifest.clone(),
+        path: path.to_string_lossy().into_owned(),
+        running: super::lifecycle::has_process(&manifest.id),
+        starting: super::lifecycle::is_starting(&manifest.id),
+        stopping: super::lifecycle::is_stopping(&manifest.id),
+        eula_exists,
+        eula_accepted,
+        port,
+        online_mode,
+    }
+}
+
+/// Reads `server-port` from the server's `server.properties`, if present.
+pub(super) async fn read_server_port(path: &Path) -> Option<u16> {
+    read_server_property_value(path, "server-port")
+        .await
+        .and_then(|value| value.parse::<u16>().ok())
+}
+
+/// Reads `online-mode`. `None` means the file does not set it.
+pub(super) async fn read_online_mode(path: &Path) -> Option<bool> {
+    read_server_property_value(path, "online-mode")
+        .await
+        .map(|value| value.eq_ignore_ascii_case("true"))
+}
+
+/// Reads `server-ip`, the address the server binds to. Empty values mean the
+/// server listens on every interface.
+pub(super) async fn read_server_ip(path: &Path) -> Option<String> {
+    read_server_property_value(path, "server-ip")
+        .await
+        .filter(|value| !value.trim().is_empty())
+}
+
+async fn read_server_property_value(path: &Path, key: &str) -> Option<String> {
+    tokio::fs::read_to_string(path.join("server.properties"))
         .await
         .ok()
         .and_then(|text| {
             text.lines().find_map(|line| {
-                let (key, value) = line.split_once('=')?;
-                (key.trim() == "server-port")
-                    .then(|| value.trim().parse::<u16>().ok())?
+                let (name, value) = line.split_once('=')?;
+                (name.trim() == key).then(|| value.trim().to_string())
             })
-        });
-    ServerInfo {
-        manifest: manifest.clone(),
-        path: path.to_string_lossy().into_owned(),
-        running: is_running(&manifest.id),
-        eula_exists,
-        eula_accepted,
-        port,
-    }
+        })
 }
 
 #[cfg(test)]
@@ -224,6 +298,10 @@ mod tests {
             install_state: None,
             install_error: None,
             jvm_args: Vec::new(),
+            pre_launch_hook: None,
+            stop_command: default_stop_command(),
+            home_pinned_at: None,
+            linked_world: None,
             created_at: Utc::now(),
             last_started_at: None,
             last_exit_crashed: false,
@@ -232,6 +310,15 @@ mod tests {
         let parsed: ServerManifest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.id, manifest.id);
         assert_eq!(parsed.name, manifest.name);
+        assert_eq!(parsed.stop_command, "stop");
+        let mut legacy = serde_json::to_value(&manifest).unwrap();
+        legacy.as_object_mut().unwrap().remove("stopCommand");
+        assert_eq!(
+            serde_json::from_value::<ServerManifest>(legacy)
+                .unwrap()
+                .stop_command,
+            "stop"
+        );
     }
 
     #[test]
@@ -250,6 +337,10 @@ mod tests {
             install_state: None,
             install_error: None,
             jvm_args: Vec::new(),
+            pre_launch_hook: None,
+            stop_command: default_stop_command(),
+            home_pinned_at: None,
+            linked_world: None,
             created_at: Utc::now(),
             last_started_at: None,
             last_exit_crashed: false,

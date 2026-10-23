@@ -155,26 +155,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "Tidak ada versi tersedia yang cocok untuk {compatibilityLabel}. Anda tetap dapat memilih versi yang akan dipasang. Dependensi tidak akan dipasang secara otomatis."
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Masukkan deskripsi paket mod..."
-  },
   "app.export-modal.export-button": {
     "message": "Ekspor"
-  },
-  "app.export-modal.header": {
-    "message": "Ekspor paket mod"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Nama Paket Mod"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Nama paket mod"
-  },
   "app.export-modal.version-number-label": {
     "message": "Nomor versi"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "Semua data dari instans Anda akan dihapus secara permanen, termasuk dunia, konfigurasi, dan konten terpasang Anda."
@@ -244,42 +232,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "Cari {count} dunia..."
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "Konten diperlukan"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "Pasang untuk memainkan"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "Pasang"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, other {# mod}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "Paket mod yang diperlukan"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "Mod diperlukan untuk bermain di server ini. Klik pasang untuk menyiapkan berkas-berkas yang diperlukan dari Modrinth, kemudian luncurkan langsung sari server."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "Instans terbagi"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "Instans server terbagi"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "Lihat konten"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "Perbarui untuk memainkan"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "Perlu diperbarui"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "{name} perlu diperbarui sebelum dimainkan. Mohon perbarui ke versi terkini untuk meluncurkan permainan."
   },
   "app.project.install-button.already-installed": {
     "message": "Proyek ini sudah terpasang"
@@ -439,9 +391,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} telah selesai mengunduh. Muat ulang untuk memperbarui sekarang, atau secara otomatis saat Anda menutup Axolotl Launcher."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} tersedia. Gunakan pengelola paket Anda untuk memperbarui dan mendapatkan fitur-fitur dan perbaikan terbaru!"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} sudah tersedia! Karena Anda saat ini sedang berada dalam jaringan terukur, kami tidak mengunduhnya secara otomatis."
@@ -859,5 +808,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Peringatan berkas tidak dikenal"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

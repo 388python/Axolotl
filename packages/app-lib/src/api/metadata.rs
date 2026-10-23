@@ -5,7 +5,29 @@ pub use daedalus::modded::Manifest;
 
 #[tracing::instrument]
 pub async fn get_minecraft_versions() -> crate::Result<VersionManifest> {
-    get_minecraft_versions_with_cache(None).await
+    match get_minecraft_versions_with_cache(Some(
+        CacheBehaviour::MustRevalidate,
+    ))
+    .await
+    {
+        Ok(manifest) => Ok(manifest),
+        Err(refresh_error) => {
+            match get_minecraft_versions_with_cache(Some(
+                CacheBehaviour::CacheOnly,
+            ))
+            .await
+            {
+                Ok(manifest) => {
+                    tracing::warn!(
+                        error = %refresh_error,
+                        "Minecraft manifest refresh failed; serving cached data"
+                    );
+                    Ok(manifest)
+                }
+                Err(_) => Err(refresh_error),
+            }
+        }
+    }
 }
 
 pub async fn get_minecraft_versions_with_cache(
@@ -29,7 +51,7 @@ pub async fn get_minecraft_versions_with_cache(
 pub async fn get_loader_versions(loader: &str) -> crate::Result<Manifest> {
     match get_loader_versions_with_cache(
         loader,
-        Some(CacheBehaviour::MustRevalidate),
+        Some(CacheBehaviour::StaleWhileRevalidate),
     )
     .await
     {
@@ -83,7 +105,7 @@ pub async fn get_loader_versions_for_game(
     match get_loader_versions_for_game_with_cache(
         loader,
         game_version,
-        Some(CacheBehaviour::MustRevalidate),
+        Some(CacheBehaviour::StaleWhileRevalidate),
     )
     .await
     {

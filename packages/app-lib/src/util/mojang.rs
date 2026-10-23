@@ -26,10 +26,8 @@ pub fn fallen_proxy_url(original: &str) -> Option<String> {
 }
 
 pub fn mojang_service_url(original: &str, use_mirror: bool) -> Cow<'_, str> {
-    if use_mirror {
-        if let Some(mirror) = fallen_proxy_url(original) {
-            return Cow::Owned(mirror);
-        }
+    if use_mirror && let Some(mirror) = fallen_proxy_url(original) {
+        return Cow::Owned(mirror);
     }
     Cow::Borrowed(original)
 }
@@ -37,6 +35,21 @@ pub fn mojang_service_url(original: &str, use_mirror: bool) -> Cow<'_, str> {
 pub fn should_use_mojang_mirror() -> bool {
     crate::State::get_if_initialized()
         .is_some_and(|state| state.mojang_auth_use_mirror())
+}
+
+pub(crate) fn auth_proxy_java_args(
+    args: &[String],
+    use_mirror: bool,
+) -> Vec<String> {
+    let proxy_args = ["auth", "account", "session", "services", "profiles"]
+        .map(|service| format!("-Dminecraft.api.{service}.host=https://{service}.msp.fallenbreath.me"));
+    let mut result = if use_mirror {
+        proxy_args.to_vec()
+    } else {
+        Vec::new()
+    };
+    result.extend(args.iter().filter(|arg| !proxy_args.contains(arg)).cloned());
+    result
 }
 
 #[cfg(test)]

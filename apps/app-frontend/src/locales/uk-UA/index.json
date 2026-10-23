@@ -155,26 +155,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "Жодна доступна версія не сумісна з {compatibilityLabel}. Виберіть версію, щоб усе одно її встановити. Залежності не встановлюватимуться автоматично."
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Уведіть опис збірки…"
-  },
   "app.export-modal.export-button": {
     "message": "Експортувати"
-  },
-  "app.export-modal.header": {
-    "message": "Експортувати збірку"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Назва збірки"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Назва збірки"
-  },
   "app.export-modal.version-number-label": {
     "message": "Номер версії"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "Усі дані вашого профілю будуть видалені назавжди, включно з вашими світами, налаштуваннями та всім установленим умістом."
@@ -244,42 +232,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "Пошук {count} світів…"
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "Потрібний уміст"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "Установлення для гри"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "Установити"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, one {# мод} few {# мода} other {# модів}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "Потрібна збірка"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "Для гри на цьому сервері потрібні моди. Натисніть «Установити», щоб налаштувати необхідні файли з Modrinth, а потім запустіть безпосередньо на сервері."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "Профіль"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "Серверний профіль"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "Дивитися вміст"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "Оновлення для гри"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "Необхідне оновлення"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "«{name}» потребує оновлення, щоб грати. Будь ласка, оновіть до останньої версії, щоб запустити гру."
   },
   "app.project.install-button.already-installed": {
     "message": "Проєкт уже встановлено"
@@ -439,9 +391,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} завантажено. Перезапустіть, щоб оновити зараз, або це відбудеться автоматично після закриття застосунку."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} вже доступно. Скористайтеся менеджером пакетів, щоб отримати найновіші функції та виправлення!"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} вже доступно! Оскільки ви використовуєте лімітне підключення, ми не завантажили його автоматично."
@@ -859,5 +808,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Попередження про невідомий файл"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

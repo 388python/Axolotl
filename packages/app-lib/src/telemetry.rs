@@ -28,29 +28,36 @@ pub(crate) fn start(state: Arc<State>) {
 
     let (wake_tx, mut wake_rx) = tokio::sync::mpsc::channel(1);
     let _ = WAKE_TX.set(wake_tx);
-    tokio::spawn(async move {
-        loop {
-            let client = match crate::util::fetch::configured_client().await {
-                Ok(client) => client,
-                Err(error) => {
-                    tracing::debug!(target: "theseus::telemetry", %error, "Telemetry client configuration failed");
-                    tokio::time::sleep(Duration::from_secs(60)).await;
-                    continue;
+    let task = tokio::spawn({
+        let state = Arc::clone(&state);
+        async move {
+            loop {
+                state.maintenance_gate.wait_until_resumed().await;
+                let client = match crate::util::fetch::configured_client().await
+                {
+                    Ok(client) => client,
+                    Err(error) => {
+                        tracing::debug!(target: "theseus::telemetry", %error, "Telemetry client configuration failed");
+                        tokio::time::sleep(Duration::from_secs(60)).await;
+                        continue;
+                    }
+                };
+                if let Err(error) = run_cycle(&state, &client).await {
+                    tracing::debug!(target: "theseus::telemetry", %error, "Telemetry cycle failed");
                 }
-            };
-            if let Err(error) = run_cycle(&state, &client).await {
-                tracing::debug!(target: "theseus::telemetry", %error, "Telemetry cycle failed");
-            }
 
-            tokio::select! {
-                _ = tokio::time::sleep(Duration::from_secs(60)) => {},
-                _ = wake_rx.recv() => {},
+                tokio::select! {
+                    _ = tokio::time::sleep(Duration::from_secs(60)) => {},
+                    _ = wake_rx.recv() => {},
+                }
             }
         }
     });
+    state.background_tasks.lock().push(task);
 }
 
 pub async fn set_enabled(state: &State, enabled: bool) -> crate::Result<()> {
+    let _database_permit = state.acquire_install_db_permit().await?;
     sqlx::query("DELETE FROM telemetry_outbox")
         .execute(&state.pool)
         .await?;
@@ -72,20 +79,26 @@ async fn run_cycle(
     client: &reqwest::Client,
 ) -> crate::Result<()> {
     if !is_enabled(state).await? {
+        let _database_permit = state.acquire_install_db_permit().await?;
         sqlx::query("DELETE FROM telemetry_outbox")
             .execute(&state.pool)
             .await?;
         return Ok(());
     }
 
-    ensure_identity(&state.pool).await?;
-    // Error events were supported by older clients. Drop any that remain in
-    // the local queue before selecting uploadable events.
-    sqlx::query("DELETE FROM telemetry_outbox WHERE event_type <> 'heartbeat'")
+    {
+        let _database_permit = state.acquire_install_db_permit().await?;
+        ensure_identity(&state.pool).await?;
+        // Error events were supported by older clients. Drop any that remain
+        // in the local queue before selecting uploadable events.
+        sqlx::query(
+            "DELETE FROM telemetry_outbox WHERE event_type <> 'heartbeat'",
+        )
         .execute(&state.pool)
         .await?;
-    enqueue_heartbeat(state).await?;
-    cleanup_outbox(state).await?;
+        enqueue_heartbeat(state).await?;
+        cleanup_outbox(state).await?;
+    }
     upload_next_batch(state, client).await?;
     Ok(())
 }
@@ -259,7 +272,10 @@ async fn upload_next_batch(
         event_ids.push(row.get::<String, _>("event_id"));
     }
 
-    let installation_id = ensure_identity(&state.pool).await?;
+    let installation_id = {
+        let _database_permit = state.acquire_install_db_permit().await?;
+        ensure_identity(&state.pool).await?
+    };
     let batch_id = stable_batch_id(&event_ids);
     let body = json!({
         "schema_version": 1,
@@ -295,6 +311,7 @@ async fn delete_events(
     state: &State,
     event_ids: &[String],
 ) -> crate::Result<()> {
+    let _database_permit = state.acquire_install_db_permit().await?;
     for event_id in event_ids {
         sqlx::query("DELETE FROM telemetry_outbox WHERE event_id = ?")
             .bind(event_id)
@@ -308,6 +325,7 @@ async fn schedule_retry(
     state: &State,
     event_ids: &[String],
 ) -> crate::Result<()> {
+    let _database_permit = state.acquire_install_db_permit().await?;
     for event_id in event_ids {
         let row = sqlx::query(
             "SELECT attempts FROM telemetry_outbox WHERE event_id = ?",

@@ -5,27 +5,34 @@ import { ref } from 'vue'
 import { get_game_versions, get_loaders } from '@/helpers/tags'
 
 export function setupTagsProvider(
-	notificationManager: AbstractWebNotificationManager,
-	stateInitialization: Promise<void>,
+    notificationManager: AbstractWebNotificationManager,
+    stateInitialization: Promise<void>,
 ) {
-	const { handleError } = notificationManager
+    const { handleError } = notificationManager
 
-	const gameVersions = ref([])
-	const loaders = ref([])
-	stateInitialization
-		.then(() => {
-			get_game_versions()
-				.then((v) => {
-					gameVersions.value = v
-				})
-				.catch(handleError)
-			get_loaders()
-				.then((v) => {
-					loaders.value = v
-				})
-				.catch(handleError)
-		})
-		.catch(() => {})
+    const gameVersions = ref([])
+    const loaders = ref([])
 
-	provideTags({ gameVersions, loaders })
+    async function refreshGameVersions() {
+        try {
+            gameVersions.value = await get_game_versions()
+        } catch (error) {
+            handleError(error)
+        }
+    }
+
+    stateInitialization
+        .then(async () => {
+            await Promise.all([
+                refreshGameVersions(),
+                get_loaders()
+                    .then((v) => {
+                        loaders.value = v
+                    })
+                    .catch(handleError),
+            ])
+        })
+        .catch(() => {})
+
+    provideTags({ gameVersions, loaders, refreshGameVersions })
 }

@@ -13,7 +13,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 use tauri::{
-    Listener, Manager,
+    Emitter, Listener, Manager,
     http::{Response, StatusCode, header},
 };
 use tauri_plugin_fs::FsExt;
@@ -25,6 +25,7 @@ mod lightweight_mode;
 mod mod_translation;
 mod portable;
 mod seed_map;
+mod window_frame;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -123,7 +124,7 @@ fn is_allowed_blockbench_skin_request(
 ) -> bool {
     if !matches!(
         request.uri().host(),
-        Some("localhost") | Some("axolotl-skin.localhost")
+        Some("localhost" | "axolotl-skin.localhost")
     ) {
         return false;
     }
@@ -205,25 +206,83 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
 
     tracing::info!("Initializing app state...");
     State::init(app.config().identifier.clone()).await?;
+    let anti_piracy_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let status = theseus::anti_piracy::check_region().await;
+        if let Err(error) =
+            anti_piracy_app.emit("anti-piracy-status-changed", status)
+        {
+            tracing::warn!(%error, "Could not notify frontend of offline account eligibility");
+        }
+    });
+    // A recreated webview must not recover or interrupt backup operations a second time.
+    static BACKUP_STARTUP: tokio::sync::OnceCell<()> =
+        tokio::sync::OnceCell::const_new();
+    BACKUP_STARTUP.get_or_try_init(|| async {
+        theseus::instance::recover_backup_repository().await?;
+        tauri::async_runtime::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if let Some(state) = State::get_if_initialized()
+                && let Err(error) = state.maintain_database_backups().await
+            {
+                tracing::warn!(%error, "Failed to prune old database backups");
+            }
+            if let Err(error) = theseus::instance::maintain_backup_repository().await {
+                tracing::warn!(%error, "Failed to maintain the instance backup repository");
+            }
+        });
+        Ok::<(), theseus::Error>(())
+    }).await?;
 
     // The logger starts before the database is available, so the stored level
-    // is applied here once settings can be read. RUST_LOG keeps overriding the
-    // initial filter, exactly as it does when the logger starts.
-    if std::env::var_os("RUST_LOG").is_none() {
-        match theseus::settings::get().await {
-            Ok(settings) => {
-                if let Err(error) = theseus::set_log_level(&settings.log_level)
-                {
-                    tracing::warn!("Keeping the default log level: {error}");
+    // is applied here once settings can be read. Beta keeps enough detail for
+    // diagnostics by requiring DEBUG or TRACE.
+    match theseus::settings::get().await {
+        Ok(mut settings) => {
+            match resolve_update_channel(&app).await {
+                Ok(channel) => {
+                    let log_level = api::settings::log_level_for_channel(
+                        &channel,
+                        &settings.log_level,
+                    );
+                    if log_level != settings.log_level {
+                        settings.log_level = log_level;
+                        if let Err(error) = theseus::settings::patch(
+                                serde_json::json!({ "log_level": settings.log_level }),
+                        )
+                        .await
+                        {
+                            tracing::warn!(
+                                "Could not save the Beta log level: {error}"
+                            );
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        "Could not resolve the update channel: {error}"
+                    );
                 }
             }
-            Err(error) => {
-                tracing::warn!("Could not read the stored log level: {error}");
+
+            if std::env::var_os("RUST_LOG").is_none()
+                && let Err(error) = theseus::set_log_level(&settings.log_level)
+            {
+                tracing::warn!("Keeping the default log level: {error}");
             }
+        }
+        Err(error) => {
+            tracing::warn!("Could not read the stored log level: {error}");
         }
     }
 
     let state = State::get().await?;
+    // Do not start accepting group writes until the legacy import succeeds.
+    // The JSON store becomes authoritative after the first write; swallowing
+    // this error would let a fallback Favorites-only store overwrite groups
+    // that still exist in SQLite.
+    theseus::state::instance_groups::ensure_imported(&state).await?;
+
     app.asset_protocol_scope()
         .allow_directory(state.directories.caches_dir(), true)?;
     app.asset_protocol_scope()
@@ -244,7 +303,13 @@ async fn initialize_state(app: tauri::AppHandle) -> api::Result<()> {
 
 #[tauri::command]
 async fn get_update_channel(app: tauri::AppHandle) -> api::Result<String> {
-    let settings_dir = update_channel_settings_dir(&app)?;
+    resolve_update_channel(&app).await
+}
+
+async fn resolve_update_channel<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> api::Result<String> {
+    let settings_dir = update_channel_settings_dir(app)?;
     let state = theseus::read_update_channel_state(&settings_dir).await?;
     let channel = state
         .active_channel
@@ -318,7 +383,9 @@ async fn set_update_preferences(
     write_update_channel_state(&app, &state)
 }
 
-fn update_channel_settings_dir(app: &tauri::AppHandle) -> api::Result<PathBuf> {
+fn update_channel_settings_dir<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> api::Result<PathBuf> {
     theseus::DirectoryInfo::initial_settings_dir_path(&app.config().identifier)
         .ok_or_else(|| {
             theseus::Error::from(theseus::ErrorKind::FSError(
@@ -417,54 +484,11 @@ fn show_window(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn set_transparent_window_frame(
+async fn set_transparent_window_frame(
     enabled: bool,
     window: tauri::Window,
-) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        use windows::Win32::Graphics::Dwm::{
-            DWMWA_BORDER_COLOR, DWMWA_COLOR_DEFAULT, DWMWA_COLOR_NONE,
-            DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DEFAULT, DWMWCP_ROUND,
-            DwmSetWindowAttribute,
-        };
-
-        window.set_shadow(true).map_err(|error| error.to_string())?;
-
-        let hwnd = window.hwnd().map_err(|error| error.to_string())?;
-        let corner_preference = if enabled {
-            DWMWCP_ROUND
-        } else {
-            DWMWCP_DEFAULT
-        };
-        let border_color = if enabled {
-            DWMWA_COLOR_NONE
-        } else {
-            DWMWA_COLOR_DEFAULT
-        };
-
-        unsafe {
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_WINDOW_CORNER_PREFERENCE,
-                std::ptr::from_ref(&corner_preference).cast(),
-                std::mem::size_of_val(&corner_preference) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-            DwmSetWindowAttribute(
-                hwnd,
-                DWMWA_BORDER_COLOR,
-                std::ptr::from_ref(&border_color).cast(),
-                std::mem::size_of_val(&border_color) as u32,
-            )
-            .map_err(|error| error.to_string())?;
-        }
-    }
-
-    #[cfg(not(windows))]
-    let _ = (enabled, window);
-
-    Ok(())
+) -> Result<window_frame::FrameResult, String> {
+    window_frame::apply_frame(enabled, &window).await
 }
 
 #[tauri::command]
@@ -495,13 +519,40 @@ async fn toggle_decorations(b: bool, window: tauri::Window) -> api::Result<()> {
 }
 
 #[tauri::command]
-fn restart_app(app: tauri::AppHandle) {
-    app.restart();
+async fn restart_app(app: tauri::AppHandle) -> api::Result<()> {
+    if theseus::State::initialized()
+        && theseus::instance::has_active_backup_operations().await?
+    {
+        return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+            "Backup operations are still running".to_string(),
+        ))
+        .into());
+    }
+    app.restart()
 }
 
 #[tauri::command]
-fn exit_app(app: tauri::AppHandle) {
+async fn exit_app(app: tauri::AppHandle, force: bool) -> api::Result<()> {
+    if theseus::State::initialized()
+        && theseus::instance::has_active_backup_operations().await?
+    {
+        if !force {
+            return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+                "Backup operations are still running".to_string(),
+            ))
+            .into());
+        }
+        if theseus::instance::has_active_backup_repository_move().await? {
+            return Err(theseus::Error::from(theseus::ErrorKind::InputError(
+                "The launcher cannot force exit while the backup repository is being moved"
+                    .to_string(),
+            ))
+            .into());
+        }
+        theseus::instance::interrupt_active_backup_operations().await?;
+    }
     app.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -621,11 +672,11 @@ fn main() {
 
     // Workaround: NVIDIA's proprietary EGL driver crashes WebKitGTK's DMA-BUF renderer
     #[cfg(target_os = "linux")]
-    if env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+    if env::var_os("__NV_DISABLE_EXPLICIT_SYNC").is_none()
         && std::path::Path::new("/proc/driver/nvidia/version").exists()
     {
         // SAFETY: This is called before any threads are spawned in main()
-        unsafe { env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") }
+        unsafe { env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1") }
     }
 
     /*
@@ -663,7 +714,7 @@ fn main() {
     std::mem::forget(rt);
     tauri::async_runtime::set(handle);
 
-    let tauri_context = tauri::generate_context!();
+    let tauri_context = tauri::tauri_build_context!();
 
     let _log_guard = theseus::start_logger(&tauri_context.config().identifier);
 
@@ -750,7 +801,7 @@ fn main() {
             window_state_builder.build()
         })
         .setup(|app| {
-            lightweight_mode::init(&app.handle());
+            lightweight_mode::init(app.handle());
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 macos::traffic_lights::install(&window)?;
@@ -804,7 +855,7 @@ fn main() {
                 ));
             });
 
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(target_os = "macos")]
             if let Some(window) = app.get_window("main")
                 && let Err(e) = window.set_shadow(true)
             {
@@ -842,10 +893,12 @@ fn main() {
         .plugin(api::cache::init())
         .plugin(api::content_favorites::init())
         .plugin(api::content_search::init())
+        .plugin(api::resources::init())
         .plugin(api::curseforge::init())
         .plugin(api::datapacks::init())
         .plugin(api::drop::init())
         .plugin(api::files::init())
+        .plugin(api::fonts::init())
         .plugin(api::friends::init())
         .plugin(api::worlds::init())
         .plugin(api::terracotta::init())
@@ -918,6 +971,20 @@ fn main() {
                     );
                 }
 
+                if matches!(&event, tauri::RunEvent::ExitRequested { .. }) {
+                    tauri::async_runtime::block_on(async {
+                        let killed = theseus::servers::shutdown_all().await;
+                        if killed > 0 {
+                            tracing::info!(
+                                "Killed {killed} dedicated server process(es) after the shutdown budget"
+                            );
+                        }
+                        if let Some(state) = State::get_if_initialized() {
+                            state.shutdown().await;
+                        }
+                    });
+                }
+
                 #[cfg(feature = "updater")]
                 if matches!(&event, tauri::RunEvent::Exit) {
                     let update_data = app.state::<PendingUpdateData>().inner();
@@ -930,9 +997,7 @@ fn main() {
                     {
                         fn set_changelog_toast(version: Option<String>) {
                             let toast_result: theseus::Result<()> = tauri::async_runtime::block_on(async move {
-                                let mut settings = settings::get().await?;
-                                settings.pending_update_toast_for_version = version;
-                                settings::set(settings).await?;
+                                settings::patch(serde_json::json!({ "pending_update_toast_for_version": version })).await?;
                                 Ok(())
                             });
                             if let Err(e) = toast_result {
@@ -999,6 +1064,12 @@ fn main() {
                             }
                         }
                     }
+                }
+                if matches!(&event, tauri::RunEvent::Exit)
+                    && let Some(state) = State::get_if_initialized()
+                    && let Err(error) = tauri::async_runtime::block_on(state.finish_database_session())
+                {
+                    tracing::warn!(%error, "Could not record a clean database shutdown");
                 }
                 #[cfg(target_os = "macos")]
                 if let tauri::RunEvent::Opened { urls } = event {

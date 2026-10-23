@@ -1,8 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { isExcludedRelease } from './release-policy.mjs'
+import { githubRepository } from './release-utils.mjs'
 
 const migrationsDirectory = 'packages/app-lib/migrations'
-const repository = process.env.GITHUB_REPOSITORY ?? 'Mystic-Stars/Axolotl'
+const repository = githubRepository()
 // v1.7.5 is the canonical snapshot immediately before the v1.7.6 incident.
 const canonicalBootstrap = {
 	ref: '7ddbfb8e57db4b0044a04cf28f25fb29e08c3279',
@@ -131,24 +133,29 @@ function compareVersions(left, right) {
 }
 
 function publishedReleases() {
-	const args = [
-		'release',
-		'list',
-		'--limit',
-		'1000',
-		'--json',
-		'tagName,isDraft,publishedAt',
-		'--repo',
-		repository,
-	]
-	const releases = JSON.parse(execFileSync('gh', args, { encoding: 'utf8' }))
-	const bootstrapVersion = parseVersion(canonicalBootstrap.tag)
+    const args = [
+        'release',
+        'list',
+        '--limit',
+        '1000',
+        '--json',
+        'tagName,isDraft,publishedAt',
+        '--repo',
+        repository,
+    ]
+    const releases = JSON.parse(execFileSync('gh', args, { encoding: 'utf8' }))
+    for (const release of releases) {
+        if (isExcludedRelease(release.tagName)) {
+            console.warn(`Migration guard notice: ignoring temporary test release ${release.tagName}`)
+        }
+    }
+    const bootstrapVersion = parseVersion(canonicalBootstrap.tag)
 
-	return releases
-		.filter((release) => !release.isDraft)
-		.map((release) => ({ ...release, version: parseVersion(release.tagName) }))
-		.filter((release) => release.version && compareVersions(release.version, bootstrapVersion) >= 0)
-		.sort((left, right) => Date.parse(left.publishedAt) - Date.parse(right.publishedAt))
+    return releases
+        .filter((release) => !release.isDraft && !isExcludedRelease(release.tagName))
+        .map((release) => ({ ...release, version: parseVersion(release.tagName) }))
+        .filter((release) => release.version && compareVersions(release.version, bootstrapVersion) >= 0)
+        .sort((left, right) => Date.parse(left.publishedAt) - Date.parse(right.publishedAt))
 }
 
 function auditPublishedReleases(currentRef) {

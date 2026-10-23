@@ -1,5 +1,9 @@
 //! Persisted route reputation for the native download engine.
 
+use crate::util::download::constants::{
+    NATIVE_REPUTATION_DISABLE_FAILURES, NATIVE_REPUTATION_DISABLE_SECS,
+    NATIVE_REPUTATION_EWMA_ALPHA, NATIVE_REPUTATION_TMP,
+};
 use crate::util::fetch::ProxyPolicy;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -7,14 +11,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{LazyLock, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-const FILE_NAME: &str = "native-download-reputation.json";
-const SCHEMA_VERSION: u32 = 1;
-const MAX_ENTRIES: usize = 256;
-const MAX_AGE_SECS: u64 = 7 * 24 * 60 * 60;
-const WRITE_DELAY: Duration = Duration::from_secs(5);
-
+use crate::util::download::constants::{
+    NATIVE_REPUTATION_FILE_NAME as FILE_NAME,
+    NATIVE_REPUTATION_MAX_AGE_SECS as MAX_AGE_SECS,
+    NATIVE_REPUTATION_MAX_ENTRIES as MAX_ENTRIES,
+    NATIVE_REPUTATION_SCHEMA_VERSION as SCHEMA_VERSION,
+    NATIVE_REPUTATION_WRITE_DELAY as WRITE_DELAY,
+};
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum NativeTransport {
@@ -62,6 +67,12 @@ struct PersistedRoute {
 pub(crate) struct NativeTransportReputation {
     pub(crate) success_samples: u32,
     pub(crate) throughput_bps: Option<f64>,
+    #[serde(default)]
+    pub(crate) failure_samples: u32,
+    #[serde(default)]
+    pub(crate) consecutive_failures: u32,
+    #[serde(default)]
+    disabled_until: u64,
     updated_at: u64,
 }
 
@@ -150,7 +161,7 @@ pub(crate) fn get_transport(
     TRANSPORT_REPUTATION
         .lock()
         .get(&TransportKey {
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
             transport,
         })
@@ -169,15 +180,50 @@ pub(crate) fn record_transport_success(
     let mut reputation = TRANSPORT_REPUTATION.lock();
     let entry = reputation
         .entry(TransportKey {
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
             transport,
         })
         .or_default();
     entry.success_samples = entry.success_samples.saturating_add(1);
+    entry.consecutive_failures = 0;
+    entry.disabled_until = 0;
     entry.throughput_bps =
         Some(update_ewma(entry.throughput_bps, throughput_bps));
     entry.updated_at = now_secs();
+    drop(reputation);
+    schedule_write();
+}
+
+pub(crate) fn transport_enabled(
+    authority: &str,
+    proxy: ProxyPolicy,
+    transport: NativeTransport,
+) -> bool {
+    get_transport(authority, proxy, transport)
+        .is_none_or(|health| health.disabled_until <= now_secs())
+}
+
+pub(crate) fn record_transport_failure(
+    authority: &str,
+    proxy: ProxyPolicy,
+    transport: NativeTransport,
+) {
+    let mut reputation = TRANSPORT_REPUTATION.lock();
+    let entry = reputation
+        .entry(TransportKey {
+            authority: super::proxy_context::authority_key(authority, proxy),
+            proxy,
+            transport,
+        })
+        .or_default();
+    entry.failure_samples = entry.failure_samples.saturating_add(1);
+    entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+    entry.updated_at = now_secs();
+    if entry.consecutive_failures >= NATIVE_REPUTATION_DISABLE_FAILURES {
+        entry.disabled_until =
+            now_secs().saturating_add(NATIVE_REPUTATION_DISABLE_SECS);
+    }
     drop(reputation);
     schedule_write();
 }
@@ -191,7 +237,7 @@ pub(crate) fn get(
         .lock()
         .get(&ReputationKey {
             family: family.to_string(),
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
         })
         .copied()
@@ -208,7 +254,7 @@ pub(crate) fn record_success(
     let entry = reputation
         .entry(ReputationKey {
             family: family.to_string(),
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
         })
         .or_default();
@@ -237,7 +283,7 @@ pub(crate) fn record_transfer_success(
     let entry = reputation
         .entry(ReputationKey {
             family: family.to_string(),
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
         })
         .or_default();
@@ -259,7 +305,7 @@ pub(crate) fn record_failure(
     let entry = reputation
         .entry(ReputationKey {
             family: family.to_string(),
-            authority: authority.to_string(),
+            authority: super::proxy_context::authority_key(authority, proxy),
             proxy,
         })
         .or_default();
@@ -271,7 +317,10 @@ pub(crate) fn record_failure(
 }
 
 fn update_ewma(current: Option<f64>, sample: f64) -> f64 {
-    current.map_or(sample, |current| current * 0.75 + sample * 0.25)
+    current.map_or(sample, |current| {
+        current * (1.0 - NATIVE_REPUTATION_EWMA_ALPHA)
+            + sample * NATIVE_REPUTATION_EWMA_ALPHA
+    })
 }
 
 fn schedule_write() {
@@ -362,7 +411,7 @@ fn reputation_path() -> Option<PathBuf> {
 
 fn temporary_path(path: &Path) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(".tmp");
+    name.push(NATIVE_REPUTATION_TMP);
     path.with_file_name(name)
 }
 
@@ -376,6 +425,39 @@ fn now_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_failures_disable_only_range_transport_until_success() {
+        let authority = "range-failure-memory.invalid:443";
+        for _ in 0..3 {
+            record_transport_failure(
+                authority,
+                ProxyPolicy::Direct,
+                NativeTransport::H2MultiRange,
+            );
+        }
+        assert!(!transport_enabled(
+            authority,
+            ProxyPolicy::Direct,
+            NativeTransport::H2MultiRange
+        ));
+        assert!(transport_enabled(
+            authority,
+            ProxyPolicy::Direct,
+            NativeTransport::H2Single
+        ));
+        record_transport_success(
+            authority,
+            ProxyPolicy::Direct,
+            NativeTransport::H2MultiRange,
+            1024.0,
+        );
+        assert!(transport_enabled(
+            authority,
+            ProxyPolicy::Direct,
+            NativeTransport::H2MultiRange
+        ));
+    }
 
     #[test]
     fn transport_reputation_is_independent() {

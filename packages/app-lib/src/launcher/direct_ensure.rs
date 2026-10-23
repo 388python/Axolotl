@@ -32,8 +32,8 @@ use futures::prelude::*;
 
 use super::direct_link::{DirectLinkedLaunch, is_native_only_library};
 use super::download::{
-    LIBRARIES_MAVEN, legacy_library_download_urls, legacy_library_sha1,
-    minecraft_library_mirrors,
+    LIBRARIES_MAVEN, MinecraftDownloadProgress, legacy_library_download_urls,
+    legacy_library_sha1, minecraft_library_mirrors,
 };
 use super::local_version::LinkedLibrary;
 use crate::instance::QuickPlayType;
@@ -70,10 +70,11 @@ fn non_empty(value: &str) -> Option<String> {
 
 /// Rejects relative artifact paths that would escape the target directory
 /// (absolute paths, backslashes, or `..`/empty segments).
-fn safe_maven_relative_path(relative: &str) -> bool {
+pub(crate) fn safe_maven_relative_path(relative: &str) -> bool {
     !relative.is_empty()
         && !relative.starts_with('/')
         && !relative.contains('\\')
+        && !relative.contains(':')
         && relative.split('/').all(|segment| {
             !segment.is_empty() && segment != "." && segment != ".."
         })
@@ -297,7 +298,7 @@ pub(crate) fn linked_native_plan(
 /// SHA1 is authoritative when declared; otherwise a declared size still
 /// protects against accepting a partial or truncated file. An unreadable file
 /// counts as not current so it gets replaced.
-async fn file_is_current(
+pub(crate) async fn file_is_current(
     path: &std::path::Path,
     expected_sha1: Option<&str>,
     expected_size: Option<u64>,
@@ -318,6 +319,36 @@ async fn file_is_current(
         },
         None => true,
     }
+}
+
+/// Validates locally supplied runtime artifacts without fetching them from Maven.
+pub(crate) async fn validate_local_runtime_library(
+    direct: &DirectLinkedLaunch,
+    library: &LinkedLibrary,
+    java_arch: &str,
+) -> crate::Result<()> {
+    let mut plans = Vec::new();
+    if library.library.include_in_classpath
+        && let Some(plan) = linked_classpath_plan(direct, library)?
+    {
+        plans.push(plan);
+    }
+    if let Some(plan) = linked_native_plan(direct, library, java_arch)? {
+        plans.push(plan);
+    }
+    for plan in plans {
+        if !file_is_current(&plan.destination, plan.sha1.as_deref(), plan.size)
+            .await
+        {
+            return Err(crate::ErrorKind::LauncherError(format!(
+                "Missing or invalid required runtime artifact {} at {}",
+                plan.label,
+                plan.destination.display()
+            ))
+            .into());
+        }
+    }
+    Ok(())
 }
 
 /// Makes sure one planned file exists in the linked installation. Returns
@@ -379,12 +410,13 @@ pub(crate) async fn ensure_linked_assets(
     asset_index: &AssetIndex,
     with_legacy: bool,
 ) -> crate::Result<()> {
-    ensure_linked_assets_from(
+    ensure_linked_assets_from_with_progress(
         st,
         direct,
         asset_index,
         MINECRAFT_RESOURCES_BASE,
         with_legacy,
+        None,
     )
     .await
 }
@@ -395,6 +427,25 @@ pub(crate) async fn ensure_linked_assets_from(
     asset_index: &AssetIndex,
     resources_base: &str,
     with_legacy: bool,
+) -> crate::Result<()> {
+    ensure_linked_assets_from_with_progress(
+        st,
+        direct,
+        asset_index,
+        resources_base,
+        with_legacy,
+        None,
+    )
+    .await
+}
+
+async fn ensure_linked_assets_from_with_progress(
+    st: &State,
+    direct: &DirectLinkedLaunch,
+    asset_index: &AssetIndex,
+    resources_base: &str,
+    with_legacy: bool,
+    progress: Option<&MinecraftDownloadProgress>,
 ) -> crate::Result<()> {
     let Some(index_id) = non_empty(&asset_index.id) else {
         return Ok(());
@@ -433,6 +484,9 @@ pub(crate) async fn ensure_linked_assets_from(
                 content: ContentValidation::Json,
                 ..Integrity::default()
             });
+        if let Some(progress) = progress {
+            progress.add_total(asset_index.size as u64).await?;
+        }
         fetch::download_to_path(
             request,
             &index_path,
@@ -447,6 +501,9 @@ pub(crate) async fn ensure_linked_assets_from(
                  {index_url}: {error}"
             ))
         })?;
+        if let Some(progress) = progress {
+            progress.add_bytes(asset_index.size as u64).await?;
+        }
     }
 
     let bytes = match io::read(&index_path).await {
@@ -475,27 +532,42 @@ pub(crate) async fn ensure_linked_assets_from(
     };
 
     let objects_dir = direct.assets_dir().join("objects");
-    let mut missing = Vec::new();
-    for asset in index.objects.values() {
-        let hash = &asset.hash;
-        if hash.len() < 2 {
-            continue;
-        }
-        let destination = objects_dir.join(&hash[..2]).join(hash);
-        let size = u64::from(asset.size);
-        if !file_is_current(&destination, Some(hash), Some(size)).await {
-            missing.push((hash.clone(), size, destination));
-        }
-    }
+    let limit = download_util::task_concurrency_limit(st)
+        .unwrap_or(FALLBACK_CONCURRENCY);
+    let asset_plans = index
+        .objects
+        .values()
+        .filter_map(|asset| {
+            let hash = &asset.hash;
+            (hash.len() >= 2).then(|| {
+                (
+                    hash.clone(),
+                    u64::from(asset.size),
+                    objects_dir.join(&hash[..2]).join(hash),
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    let missing = stream::iter(asset_plans)
+        .map(|(hash, size, destination)| async move {
+            (!file_is_current(&destination, Some(&hash), Some(size)).await)
+                .then_some((hash, size, destination))
+        })
+        .buffer_unordered(limit)
+        .filter_map(|item| async move { item })
+        .collect::<Vec<_>>()
+        .await;
     if !missing.is_empty() {
         tracing::info!(
             count = missing.len(),
             "Downloading missing Minecraft assets into the linked installation"
         );
+        if let Some(progress) = progress {
+            progress
+                .add_total(missing.iter().map(|(_, size, _)| *size).sum())
+                .await?;
+        }
 
-        let limit = download_util::task_concurrency_limit(st)
-            .map(|limit| limit.saturating_mul(2))
-            .unwrap_or(FALLBACK_CONCURRENCY);
         stream::iter(missing)
             .map(Ok::<_, crate::Error>)
             .try_for_each_concurrent(
@@ -521,6 +593,9 @@ pub(crate) async fn ensure_linked_assets_from(
                              {url}: {error}"
                         ))
                     })?;
+                    if let Some(progress) = progress {
+                        progress.add_bytes(size).await?;
+                    }
                     Ok(())
                 },
             )
@@ -540,6 +615,10 @@ pub(crate) async fn ensure_linked_assets_from(
                     io::create_dir_all(parent).await?;
                 }
                 fetch::copy(&object, &legacy, &st.io_semaphore).await?;
+                if let Some(progress) = progress {
+                    progress.add_total(asset.size as u64).await?;
+                    progress.add_bytes(asset.size as u64).await?;
+                }
             }
         }
     }
@@ -620,6 +699,27 @@ pub(crate) async fn ensure_direct_launch_dependencies(
     java_arch: &str,
     minecraft_updated: bool,
 ) -> crate::Result<()> {
+    ensure_direct_launch_dependencies_with_progress(
+        st,
+        direct,
+        libraries,
+        version_info,
+        java_arch,
+        minecraft_updated,
+        None,
+    )
+    .await
+}
+
+pub(crate) async fn ensure_direct_launch_dependencies_with_progress(
+    st: &State,
+    direct: &DirectLinkedLaunch,
+    libraries: &[LinkedLibrary],
+    version_info: &VersionInfo,
+    java_arch: &str,
+    minecraft_updated: bool,
+    progress: Option<&MinecraftDownloadProgress>,
+) -> crate::Result<()> {
     let mut plans = Vec::new();
     if let Some(plan) = linked_client_plan(direct, version_info) {
         plans.push(plan);
@@ -636,9 +736,12 @@ pub(crate) async fn ensure_direct_launch_dependencies(
             continue;
         }
         if !library.library.downloadable {
+            validate_local_runtime_library(direct, library, java_arch).await?;
             continue;
         }
-        if let Some(plan) = linked_classpath_plan(direct, library)? {
+        if library.library.include_in_classpath
+            && let Some(plan) = linked_classpath_plan(direct, library)?
+        {
             plans.push(plan);
         }
         if let Some(plan) = linked_native_plan(direct, library, java_arch)? {
@@ -648,22 +751,27 @@ pub(crate) async fn ensure_direct_launch_dependencies(
 
     // Only fetch what is actually missing so a healthy installation performs
     // zero network requests.
-    let mut pending = Vec::new();
-    for plan in plans {
-        if !file_is_current(&plan.destination, plan.sha1.as_deref(), plan.size)
-            .await
-        {
-            pending.push(plan);
-        }
-    }
+    let limit = download_util::task_concurrency_limit(st)
+        .unwrap_or(FALLBACK_CONCURRENCY);
+    let pending = stream::iter(plans)
+        .map(|plan| async move {
+            (!file_is_current(
+                &plan.destination,
+                plan.sha1.as_deref(),
+                plan.size,
+            )
+            .await)
+                .then_some(plan)
+        })
+        .buffer_unordered(limit)
+        .filter_map(|plan| async move { plan })
+        .collect::<Vec<_>>()
+        .await;
     if !pending.is_empty() {
         tracing::info!(
             count = pending.len(),
             "Completing missing dependencies in the linked installation"
         );
-        let limit = download_util::task_concurrency_limit(st)
-            .map(|limit| limit.saturating_mul(2))
-            .unwrap_or(FALLBACK_CONCURRENCY);
         stream::iter(pending)
             .map(Ok::<_, crate::Error>)
             .try_for_each_concurrent(limit, |plan| async move {
@@ -672,11 +780,13 @@ pub(crate) async fn ensure_direct_launch_dependencies(
             .await?;
     }
 
-    ensure_linked_assets(
+    ensure_linked_assets_from_with_progress(
         st,
         direct,
         &version_info.asset_index,
+        MINECRAFT_RESOURCES_BASE,
         version_info.assets == "legacy",
+        progress,
     )
     .await?;
     ensure_linked_log_config(st, direct, version_info.logging.as_ref()).await?;
@@ -959,16 +1069,17 @@ mod tests {
     fn unsafe_artifact_paths_are_rejected() {
         let root = tempdir().unwrap();
         let direct = direct_for(root.path());
-        let library = linked_library(json!({
-            "name": "evil:escape:1",
-            "downloads": {"artifact": {
-                "path": "../escape.jar", "sha1": "", "size": 0,
-                "url": "https://libraries.minecraft.net/evil/escape/1/escape-1.jar"
-            }}
-        }));
-
-        let error = linked_classpath_plan(&direct, &library).unwrap_err();
-        assert!(error.to_string().contains("evil:escape:1"));
+        for path in ["../escape.jar", "C:/escape.jar", "artifact.jar:stream"] {
+            let library = linked_library(json!({
+                "name": "evil:escape:1",
+                "downloads": {"artifact": {
+                    "path": path, "sha1": "", "size": 0,
+                    "url": "https://libraries.minecraft.net/evil/escape/1/escape-1.jar"
+                }}
+            }));
+            let error = linked_classpath_plan(&direct, &library).unwrap_err();
+            assert!(error.to_string().contains("evil:escape:1"));
+        }
     }
 
     #[test]
@@ -1107,12 +1218,19 @@ mod tests {
                 "org.lwjgl.lwjgl:lwjgl-platform:2.9.4-nightly-20150209:{classifier}"
             )
         );
-        assert!(
-            plan.destination
-                .to_string_lossy()
-                .ends_with(format!("{classifier}.jar").as_str())
+        let declared = &library
+            .library
+            .downloads
+            .as_ref()
+            .unwrap()
+            .classifiers
+            .as_ref()
+            .unwrap()[&classifier];
+        assert_eq!(
+            plan.destination,
+            direct.libraries_dir().join(declared.path.as_ref().unwrap())
         );
-        assert_eq!(plan.sha1.as_deref(), Some("aaa"));
+        assert_eq!(plan.sha1.as_deref(), Some(declared.sha1.as_str()));
     }
 
     #[test]
@@ -1336,6 +1454,43 @@ mod tests {
             hits.lock().unwrap().values().sum::<usize>() == 0,
             "no download may be attempted for a current file"
         );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn generated_library_must_be_supplied_locally_without_maven_requests()
+    {
+        let (_state_temp, state) = ensure_test_state().await;
+        let root = tempdir().unwrap();
+        let direct = direct_for(root.path());
+        let (base, hits, server) = spawn_fixture_server(HashMap::new()).await;
+        let library = linked_library(json!({
+            "name": "net.minecraftforge:forge:1.20.1-47.4.0:client",
+            "downloadable": false,
+            "downloads": {"artifact": {
+                "path": "generated/forge-client.jar", "sha1": "", "size": 0,
+                "url": format!("{base}/never-download.jar")
+            }}
+        }));
+        let info = minimal_version_info();
+        let ensure = || {
+            ensure_direct_launch_dependencies(
+                &state,
+                &direct,
+                std::slice::from_ref(&library),
+                &info,
+                std::env::consts::ARCH,
+                true,
+            )
+        };
+        let error = ensure().await.unwrap_err().to_string();
+        assert!(error.contains(&library.library.name), "{error}");
+        assert!(error.contains("forge-client.jar"), "{error}");
+        let destination = direct.library_path(&library).unwrap();
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::write(&destination, b"generated locally").unwrap();
+        ensure().await.unwrap();
+        assert!(hits.lock().unwrap().is_empty());
         server.abort();
     }
 
@@ -1698,9 +1853,9 @@ mod tests {
             spawn_fixture_server(HashMap::new()).await;
         let (mojang_base, mojang_hits, mojang_server) =
             spawn_fixture_server(HashMap::new()).await;
-        let central_path = format!(
+        let central_path =
             "/net/java/jinput/jinput-platform/2.0.5/jinput-platform-2.0.5.jar"
-        );
+                .to_string();
         let (central_base, central_hits, central_server) =
             spawn_fixture_server(HashMap::from([(
                 central_path.clone(),

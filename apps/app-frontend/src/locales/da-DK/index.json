@@ -149,26 +149,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "Ingen tilgængelige versioner passer til {compatibilityLabel}. Vælg en version for at installere. Afhængigheder bliver ikke installeret automatisk."
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Indtast modpack beskrivelse..."
-  },
   "app.export-modal.export-button": {
     "message": "Eksporter"
-  },
-  "app.export-modal.header": {
-    "message": "Eksporter modpack"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Modpack Navn"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Modpack navn"
-  },
   "app.export-modal.version-number-label": {
     "message": "Versionsnummer"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "Al' data for din instance vil blive permanent slettet, dette inkludere dine verdener, konfigurationer, og alt installeret indhold."
@@ -238,42 +226,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "Søg {count} verdener..."
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "Indhold krævet"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "Installer for at spille"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "Installer"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, one {# mod} other {# mods}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "Modpack krævet"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "Denne server kræver mods for at spille. Tryk på installer for at sætte de krævet filler fra modrinth op, så lancer direkte til serveren."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "Delt instance"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "Delt server instance"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "Vis indhold"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "Opdater for at spille"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "Opdatering krævet"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "En opdatering er krævet for at spille {name}. Venligst opdater til den seneste version for at køre spillet."
   },
   "app.project.install-button.already-installed": {
     "message": "Dette projekt er allerede installeret"
@@ -418,9 +370,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} er færdig med at download. Genindlæs for at opdatere nu, eller automatisk når du lukker Axolotl Launcher."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} er nu tilgængelig. Brug din pakke-manager til at opdatere for de nyeste features og fejlrettelser!"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} er nu tilgængelig! Siden du er på et begrænset netværk, vi downloadede den ikke automatisk."
@@ -793,5 +742,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Ukendt fil advarsel"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

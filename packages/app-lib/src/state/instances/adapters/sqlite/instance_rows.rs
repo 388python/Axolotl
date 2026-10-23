@@ -11,7 +11,37 @@ use crate::state::{
 use chrono::{DateTime, TimeZone, Utc};
 use serde::de::DeserializeOwned;
 use sqlx::{Executor, Sqlite, SqlitePool, Transaction};
+use std::collections::HashMap;
 use uuid::Uuid;
+
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub(crate) struct InstanceScreenshotSource {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+}
+
+pub(crate) async fn get_instance_screenshot_source(
+    instance_id: &str,
+    pool: &SqlitePool,
+) -> crate::Result<Option<InstanceScreenshotSource>> {
+    Ok(sqlx::query_as::<_, InstanceScreenshotSource>(
+        "SELECT id, name, path FROM instances WHERE id = ?",
+    )
+    .bind(instance_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
+pub(crate) async fn list_screenshot_sources(
+    pool: &SqlitePool,
+) -> crate::Result<Vec<InstanceScreenshotSource>> {
+    Ok(sqlx::query_as::<_, InstanceScreenshotSource>(
+        "SELECT id, name, path FROM instances ORDER BY name, id",
+    )
+    .fetch_all(pool)
+    .await?)
+}
 
 #[derive(Debug, sqlx::FromRow)]
 pub(crate) struct InstanceRow {
@@ -1268,6 +1298,12 @@ pub(crate) async fn upsert_instance_link(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> crate::Result<()> {
     let columns = instance_link_columns(link)?;
+    if !matches!(link, InstanceLink::Unmanaged) {
+        sqlx::query("DELETE FROM resource_pack_unlinks WHERE instance_id = ?")
+            .bind(instance_id)
+            .execute(&mut **tx)
+            .await?;
+    }
     let modrinth_project_id = columns.modrinth_project_id.as_deref();
     let modrinth_version_id = columns.modrinth_version_id.as_deref();
     let server_project_id = columns.server_project_id.as_deref();
@@ -1410,6 +1446,83 @@ pub(crate) async fn delete_instance_by_id(
     .await?;
 
     Ok(())
+}
+
+pub(crate) async fn set_instance_sync_preference(
+    instance_id: &str,
+    option: crate::state::SyncedOption,
+    enabled: bool,
+    pool: &SqlitePool,
+) -> crate::Result<()> {
+    sqlx::query(
+        "INSERT INTO instance_sync_preferences (instance_id, feature, enabled)
+         VALUES (?, ?, ?)
+         ON CONFLICT(instance_id, feature) DO UPDATE SET enabled = excluded.enabled",
+    )
+    .bind(instance_id)
+    .bind(option.as_str())
+    .bind(enabled)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub(crate) async fn get_instance_synced_options(
+    instance_id: &str,
+    pool: &SqlitePool,
+) -> crate::Result<crate::state::InstanceSyncedOptions> {
+    let rows = sqlx::query("SELECT feature, enabled FROM instance_sync_preferences WHERE instance_id = ?")
+        .bind(instance_id).fetch_all(pool).await?;
+    let mut options = crate::state::InstanceSyncedOptions::default();
+    for row in rows {
+        let feature: String = sqlx::Row::get(&row, "feature");
+        let enabled: bool = sqlx::Row::get(&row, "enabled");
+        apply_sync_preference(&mut options, &feature, enabled);
+    }
+    Ok(options)
+}
+
+pub(crate) async fn get_instance_synced_options_many(
+    instance_ids: &[&str],
+    pool: &SqlitePool,
+) -> crate::Result<HashMap<String, crate::state::InstanceSyncedOptions>> {
+    use sqlx::Row;
+    let rows = sqlx::query(
+        "SELECT instance_id, feature, enabled FROM instance_sync_preferences
+         WHERE instance_id IN (SELECT value FROM json_each(?))",
+    )
+    .bind(serde_json::to_string(instance_ids)?)
+    .fetch_all(pool)
+    .await?;
+    let mut grouped = HashMap::new();
+    for row in rows {
+        let id: String = row.try_get("instance_id")?;
+        let feature: String = row.try_get("feature")?;
+        let enabled: bool = row.try_get("enabled")?;
+        apply_sync_preference(
+            grouped.entry(id).or_default(),
+            &feature,
+            enabled,
+        );
+    }
+    Ok(grouped)
+}
+
+fn apply_sync_preference(
+    options: &mut crate::state::InstanceSyncedOptions,
+    feature: &str,
+    enabled: bool,
+) {
+    match feature {
+        "game_options" => options.game_options = enabled,
+        "command_history" => options.command_history = enabled,
+        "multiplayer_servers" => options.multiplayer_servers = enabled,
+        "creative_hotbars" => options.creative_hotbars = enabled,
+        "screenshots" => options.screenshots = enabled,
+        "resource_packs" => options.resource_packs = enabled,
+        "data_packs" => options.data_packs = enabled,
+        _ => {}
+    }
 }
 
 struct InstanceLinkColumns {

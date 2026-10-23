@@ -1,14 +1,14 @@
 use super::{FriendPayload, LoadingBarId};
 use crate::event::{
-    CommandPayload, EventError, InstanceBulkUpdateProgressPayload,
-    InstancePayloadType, LoadingBar, LoadingBarType, ProcessPayloadType,
-    ServerPayloadType,
+    CommandPayload, EventError, InstanceBackupProgressPayload,
+    InstanceBulkUpdateProgressPayload, InstancePayloadType, LoadingBar,
+    LoadingBarType, ProcessPayloadType, ServerPayloadType,
 };
 #[cfg(feature = "tauri")]
 use crate::event::{
-    InstancePayload, JavaDiscoveryPayload, JavaDownloadConfirmationPayload,
-    LoadingPayload, LogShareAiEventPayload, ProcessPayload, ServerPayload,
-    WarningPayload,
+    InstanceGroupsChangedPayload, InstancePayload, JavaDiscoveryPayload,
+    JavaDownloadConfirmationPayload, LoadingPayload, ProcessPayload,
+    ServerPayload, WarningPayload,
 };
 use futures::prelude::*;
 use serde_json::Value;
@@ -300,6 +300,21 @@ pub async fn emit_instance_bulk_update_progress(
     Ok(())
 }
 
+#[allow(unused_variables)]
+pub async fn emit_instance_backup_progress(
+    payload: InstanceBackupProgressPayload,
+) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit("instance_backup_progress", payload)
+            .map_err(EventError::from)?;
+    }
+    Ok(())
+}
+
 // emit_command(CommandPayload::Something { something })
 // ie: installing a pack, opening an .mrpack, etc
 // Generally used for url deep links and file opens that we want to handle in the frontend
@@ -327,6 +342,7 @@ pub async fn emit_process(
     uuid: Uuid,
     pid: u32,
     maximize_window: bool,
+    window_title: Option<String>,
     launch_preparation_timeout: Option<u64>,
     event: ProcessPayloadType,
     message: &str,
@@ -344,6 +360,7 @@ pub async fn emit_process(
                     uuid,
                     pid,
                     maximize_window,
+                    window_title,
                     launch_preparation_timeout,
                     event,
                     message: message.to_string(),
@@ -416,6 +433,26 @@ pub async fn emit_friend(payload: FriendPayload) -> crate::Result<()> {
 }
 
 #[allow(unused_variables)]
+pub async fn emit_instance_groups_changed(
+    instance_ids: &[String],
+) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit(
+                "instance_groups_changed",
+                InstanceGroupsChangedPayload {
+                    instance_ids: instance_ids.to_vec(),
+                },
+            )
+            .map_err(EventError::from)?;
+    }
+    Ok(())
+}
+
+#[allow(unused_variables)]
 pub async fn emit_notification(payload: Value) -> crate::Result<()> {
     #[cfg(feature = "tauri")]
     {
@@ -426,30 +463,6 @@ pub async fn emit_notification(payload: Value) -> crate::Result<()> {
             .map_err(EventError::from)?;
     }
 
-    Ok(())
-}
-
-#[allow(unused_variables)]
-pub async fn emit_logshare_ai_event(
-    instance_id: &str,
-    event_type: &str,
-    data: Value,
-) -> crate::Result<()> {
-    #[cfg(feature = "tauri")]
-    {
-        let event_state = crate::EventState::get()?;
-        event_state
-            .app
-            .emit(
-                "logshare_ai",
-                LogShareAiEventPayload {
-                    instance_id: instance_id.to_string(),
-                    event_type: event_type.to_string(),
-                    data,
-                },
-            )
-            .map_err(EventError::from)?;
-    }
     Ok(())
 }
 

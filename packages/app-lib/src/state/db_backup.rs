@@ -4,9 +4,16 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod startup;
+pub(crate) use startup::{mark_clean_shutdown, prepare_app_db};
+
+static SNAPSHOT_WRITE: tokio::sync::Mutex<()> =
+    tokio::sync::Mutex::const_new(());
+
 const CURRENT_APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 const REQUIRED_APP_DB_TABLES: &[&str] =
     &["_sqlx_migrations", "instances", "settings"];
+const MAX_APP_DB_BACKUPS: usize = 3;
 
 enum IntegrityStatus {
     Healthy,
@@ -305,6 +312,7 @@ async fn cleanup_staged_database(db_path: &Path) {
 pub(crate) async fn maybe_backup_existing_app_db(
     db_path: &Path,
 ) -> crate::Result<()> {
+    let _guard = SNAPSHOT_WRITE.lock().await;
     if !db_path.try_exists()? {
         tracing::debug!(
             "Skipping pre-migration app database backup because {} does not exist",
@@ -394,7 +402,9 @@ pub(crate) async fn maybe_backup_existing_app_db(
         backup_path.display()
     );
 
-    if let Err(err) = create_sqlite_snapshot(&mut conn, &backup_path).await {
+    if let Err(err) =
+        create_verified_sqlite_snapshot(&mut conn, &backup_path).await
+    {
         tracing::error!(
             "Failed to create pre-migration app database backup at {}: {err}",
             backup_path.display()
@@ -414,6 +424,7 @@ pub(crate) async fn backup_app_db_for_update(
     db_path: &Path,
     target_version: &str,
 ) -> crate::Result<PathBuf> {
+    let _guard = SNAPSHOT_WRITE.lock().await;
     if !db_path.try_exists()? {
         return Err(crate::ErrorKind::FSError(format!(
             "Cannot back up missing app database {}",
@@ -427,19 +438,12 @@ pub(crate) async fn backup_app_db_for_update(
         .and_then(Path::file_name)
         .and_then(|name| name.to_str())
         .unwrap_or("release");
-    let settings_dir =
-        db_path.parent().and_then(Path::parent).ok_or_else(|| {
-            crate::ErrorKind::FSError(format!(
-                "App database path {} has no settings directory",
-                db_path.display()
-            ))
-        })?;
-    let backup_dir = settings_dir.join("Backups").join("app-db").join(channel);
+    let backup_dir = app_db_backup_dir_for(db_path)?;
     crate::util::io::create_dir_all(&backup_dir).await?;
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
+        .as_nanos();
     let backup_path = backup_dir.join(format!(
         "app-db-before-update-{}-{}-{timestamp}.db",
         sanitize_version_for_filename(channel),
@@ -447,19 +451,8 @@ pub(crate) async fn backup_app_db_for_update(
     ));
 
     let mut conn = open_read_only_db(db_path).await?;
-    create_sqlite_snapshot(&mut conn, &backup_path).await?;
+    create_verified_sqlite_snapshot(&mut conn, &backup_path).await?;
     conn.close().await?;
-    if !matches!(
-        check_database_integrity(&backup_path).await?,
-        IntegrityStatus::Healthy
-    ) {
-        let _ = tokio::fs::remove_file(&backup_path).await;
-        return Err(crate::ErrorKind::FSError(format!(
-            "Update database backup {} failed its integrity check",
-            backup_path.display()
-        ))
-        .into());
-    }
 
     tracing::info!(
         database = %db_path.display(),
@@ -468,6 +461,13 @@ pub(crate) async fn backup_app_db_for_update(
         "Created app database backup before update"
     );
     Ok(backup_path)
+}
+
+pub(crate) async fn maintain_app_db_backups(
+    database: &Path,
+) -> crate::Result<()> {
+    let _guard = SNAPSHOT_WRITE.lock().await;
+    prune_app_db_backups(&app_db_backup_dir_for(database)?).await
 }
 
 async fn open_read_only_db(db_path: &Path) -> crate::Result<SqliteConnection> {
@@ -504,24 +504,23 @@ pub fn app_db_backup_dir() -> crate::Result<PathBuf> {
 }
 
 fn app_db_backup_dir_for(db_path: &Path) -> crate::Result<PathBuf> {
-    if let Some(path) = std::env::var_os("THESEUS_DB_BACKUP_DIR") {
-        return Ok(PathBuf::from(path));
-    }
+    let settings_dir =
+        db_path.parent().and_then(Path::parent).ok_or_else(|| {
+            crate::ErrorKind::FSError(format!(
+                "App database path {} has no settings directory",
+                db_path.display()
+            ))
+        })?;
 
-    let base = db_path.parent().ok_or_else(|| {
-        crate::ErrorKind::FSError(format!(
-            "App database path {} has no parent directory",
-            db_path.display()
-        ))
-    })?;
-
-    let backup_dir = base.join("Backups").join("app-db");
+    let backup_dir = std::env::var_os("THESEUS_DB_BACKUP_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| settings_dir.join("Backups").join("app-db"));
     match db_path
         .parent()
         .and_then(Path::file_name)
         .and_then(|name| name.to_str())
     {
-        Some("beta") | Some("release") => Ok(backup_dir.join(
+        Some("beta" | "release") => Ok(backup_dir.join(
             db_path
                 .parent()
                 .and_then(Path::file_name)
@@ -529,6 +528,70 @@ fn app_db_backup_dir_for(db_path: &Path) -> crate::Result<PathBuf> {
         )),
         _ => Ok(backup_dir),
     }
+}
+
+async fn prune_app_db_backups(backup_dir: &Path) -> crate::Result<()> {
+    let mut candidates = Vec::new();
+    let mut entries = match tokio::fs::read_dir(backup_dir).await {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name.starts_with("app-db-before-")
+            && path.extension().and_then(|extension| extension.to_str())
+                == Some("db")
+        {
+            let modified =
+                entry.metadata().await?.modified().unwrap_or(UNIX_EPOCH);
+            candidates.push((modified, path));
+        }
+    }
+
+    candidates.sort_by(|left, right| right.0.cmp(&left.0));
+    let protected_prefix = format!(
+        "app-db-before-{}-from-",
+        sanitize_version_for_filename(CURRENT_APP_VERSION)
+    );
+    let protected = candidates
+        .iter()
+        .find(|(_, path)| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(&protected_prefix))
+        })
+        .map(|(_, path)| path.clone());
+    let mut retained = candidates
+        .iter()
+        .take(MAX_APP_DB_BACKUPS)
+        .map(|(_, path)| path.clone())
+        .collect::<Vec<_>>();
+    if let Some(protected) = protected
+        && !retained.contains(&protected)
+    {
+        if retained.len() == MAX_APP_DB_BACKUPS {
+            retained.pop();
+        }
+        retained.push(protected);
+    }
+    for (_, path) in candidates
+        .into_iter()
+        .filter(|(_, path)| !retained.contains(path))
+    {
+        if let Err(error) = tokio::fs::remove_file(&path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(error.into());
+        }
+    }
+    Ok(())
 }
 
 async fn has_user_tables(conn: &mut SqliteConnection) -> crate::Result<bool> {
@@ -649,9 +712,180 @@ async fn create_sqlite_snapshot(
     Ok(())
 }
 
+async fn create_verified_sqlite_snapshot(
+    conn: &mut SqliteConnection,
+    backup_path: &Path,
+) -> crate::Result<()> {
+    let staging =
+        backup_path.with_extension(format!("{}.partial", uuid::Uuid::new_v4()));
+    let result = async {
+        create_sqlite_snapshot(conn, &staging).await?;
+        if !matches!(
+            check_database_integrity(&staging).await?,
+            IntegrityStatus::Healthy
+        ) {
+            return Err(crate::ErrorKind::FSError(
+                "Database backup failed its integrity check".to_string(),
+            )
+            .into());
+        }
+        tokio::fs::OpenOptions::new()
+            .write(true)
+            .open(&staging)
+            .await?
+            .sync_all()
+            .await?;
+        tokio::fs::rename(&staging, backup_path).await?;
+        Ok(())
+    }
+    .await;
+    if result.is_err() {
+        cleanup_staged_database(&staging).await;
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn set_app_version(path: &Path, version: &str) {
+        let mut conn = SqliteConnectOptions::new()
+            .filename(path)
+            .connect()
+            .await
+            .unwrap();
+        sqlx::query("CREATE TABLE IF NOT EXISTS app_metadata(key TEXT PRIMARY KEY, value TEXT)").execute(&mut conn).await.unwrap();
+        sqlx::query(
+            "INSERT OR REPLACE INTO app_metadata VALUES ('app_version', ?)",
+        )
+        .bind(version)
+        .execute(&mut conn)
+        .await
+        .unwrap();
+        conn.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn pre_migration_backup_is_triggered_by_software_version_and_preserves_the_old_database()
+     {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("release").join("app.db");
+        tokio::fs::create_dir_all(database.parent().unwrap())
+            .await
+            .unwrap();
+        create_test_app_db(&database, "before-migration").await;
+        set_app_version(&database, "previous-software-version").await;
+        maybe_backup_existing_app_db(&database).await.unwrap();
+        let backup_dir = app_db_backup_dir_for(&database).unwrap();
+        let backup = latest_healthy_app_db_backup(&backup_dir)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(read_marker(&backup).await, "before-migration");
+        let mut source = SqliteConnectOptions::new()
+            .filename(&database)
+            .connect()
+            .await
+            .unwrap();
+        sqlx::query("UPDATE recovery_marker SET value = 'after-migration'")
+            .execute(&mut source)
+            .await
+            .unwrap();
+        source.close().await.unwrap();
+        set_app_version(&database, CURRENT_APP_VERSION).await;
+        maybe_backup_existing_app_db(&database).await.unwrap();
+        assert_eq!(read_marker(&backup).await, "before-migration");
+        let mut files = tokio::fs::read_dir(&backup_dir).await.unwrap();
+        let mut count = 0;
+        while files.next_entry().await.unwrap().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 1);
+    }
+
+    #[tokio::test]
+    async fn snapshot_failure_cannot_publish_a_backup_or_modify_the_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("app.db");
+        create_test_app_db(&database, "unchanged").await;
+        let target = temp.path().join("missing-directory").join("snapshot.db");
+        let mut source = open_read_only_db(&database).await.unwrap();
+        assert!(
+            create_verified_sqlite_snapshot(&mut source, &target)
+                .await
+                .is_err()
+        );
+        source.close().await.unwrap();
+        assert!(!target.exists());
+        assert_eq!(read_marker(&database).await, "unchanged");
+    }
+
+    #[tokio::test]
+    async fn verified_snapshots_include_committed_wal_changes_without_copying_the_live_database_file()
+     {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("release").join("app.db");
+        tokio::fs::create_dir_all(database.parent().unwrap())
+            .await
+            .unwrap();
+        create_test_app_db(&database, "before-wal").await;
+        let mut writer = SqliteConnectOptions::new()
+            .filename(&database)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
+            .pragma("wal_autocheckpoint", "0")
+            .connect()
+            .await
+            .unwrap();
+        sqlx::query("UPDATE recovery_marker SET value = 'committed-in-wal'")
+            .execute(&mut writer)
+            .await
+            .unwrap();
+        let snapshot = backup_app_db_for_update(&database, "test-update")
+            .await
+            .unwrap();
+        assert_eq!(read_marker(&snapshot).await, "committed-in-wal");
+        writer.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn housekeeping_protects_the_current_versions_pre_migration_snapshot()
+    {
+        let temp = tempfile::tempdir().unwrap();
+        let database = temp.path().join("beta").join("app.db");
+        tokio::fs::create_dir_all(database.parent().unwrap())
+            .await
+            .unwrap();
+        create_test_app_db(&database, "current").await;
+        let directory = app_db_backup_dir_for(&database).unwrap();
+        tokio::fs::create_dir_all(&directory).await.unwrap();
+        let anchor = directory.join(format!(
+            "app-db-before-{}-from-old.db",
+            sanitize_version_for_filename(CURRENT_APP_VERSION)
+        ));
+        create_test_app_db(&anchor, "downgrade-point").await;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&anchor)
+            .unwrap()
+            .set_modified(UNIX_EPOCH + Duration::from_secs(1))
+            .unwrap();
+        for index in 0..MAX_APP_DB_BACKUPS {
+            create_test_app_db(
+                &directory.join(format!("app-db-before-update-{index}.db")),
+                "newer",
+            )
+            .await;
+        }
+        maintain_app_db_backups(&database).await.unwrap();
+        assert_eq!(read_marker(&anchor).await, "downgrade-point");
+        let mut files = tokio::fs::read_dir(directory).await.unwrap();
+        let mut count = 0;
+        while files.next_entry().await.unwrap().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, MAX_APP_DB_BACKUPS);
+    }
 
     async fn create_test_app_db(path: &Path, marker: &str) {
         let options = SqliteConnectOptions::new()
@@ -765,10 +999,58 @@ mod tests {
             backup_app_db_for_update(&db_path, "1.10.0").await.unwrap();
 
         assert!(backup_path.exists());
+        assert_eq!(
+            backup_path.parent().unwrap(),
+            temp.path().join("Backups").join("app-db").join("release")
+        );
         assert_eq!(read_marker(&backup_path).await, "release");
         assert!(matches!(
             check_database_integrity(&backup_path).await.unwrap(),
             IntegrityStatus::Healthy
         ));
+    }
+
+    #[tokio::test]
+    async fn update_backup_defers_pruning_until_background_maintenance() {
+        let temp = tempfile::tempdir().unwrap();
+        let db_path = temp.path().join("release").join("app.db");
+        tokio::fs::create_dir_all(db_path.parent().unwrap())
+            .await
+            .unwrap();
+        create_test_app_db(&db_path, "release").await;
+
+        let backup_dir =
+            temp.path().join("Backups").join("app-db").join("release");
+        tokio::fs::create_dir_all(&backup_dir).await.unwrap();
+        for index in 0..3 {
+            create_test_app_db(
+                &backup_dir.join(format!("app-db-before-old-{index}.db")),
+                "old",
+            )
+            .await;
+        }
+
+        backup_app_db_for_update(&db_path, "1.10.0").await.unwrap();
+
+        let mut before = tokio::fs::read_dir(&backup_dir).await.unwrap();
+        let mut count = 0;
+        while before.next_entry().await.unwrap().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, MAX_APP_DB_BACKUPS + 1);
+        maintain_app_db_backups(&db_path).await.unwrap();
+
+        let mut entries = tokio::fs::read_dir(&backup_dir).await.unwrap();
+        let mut snapshots = 0;
+        while let Some(entry) = entries.next_entry().await.unwrap() {
+            if entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.starts_with("app-db-before-"))
+            {
+                snapshots += 1;
+            }
+        }
+        assert_eq!(snapshots, MAX_APP_DB_BACKUPS);
     }
 }

@@ -183,9 +183,42 @@ impl DirectLinkedLaunch {
         else {
             return Ok(None);
         };
-        let Some(mut direct) = Self::from_external_version_dir(&version_dir)?
-        else {
-            return Ok(None);
+        let has_version_json = version_dir
+            .read_dir()
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .any(|entry| {
+                entry.path().extension().and_then(|ext| ext.to_str())
+                    == Some("json")
+            });
+        let mut direct = match Self::from_external_version_dir(&version_dir) {
+            Ok(Some(direct)) => direct,
+            Ok(None) => return Ok(None),
+            Err(error) if has_version_json => return Err(error),
+            Err(_) => {
+                let Some(version_id) =
+                    version_dir.file_name().and_then(|name| name.to_str())
+                else {
+                    return Ok(None);
+                };
+                let Some(dot_minecraft) =
+                    version_dir.parent().and_then(Path::parent)
+                else {
+                    return Ok(None);
+                };
+                Self {
+                    dot_minecraft: crate::util::io::canonicalize(
+                        dot_minecraft,
+                    )?,
+                    launcher_root: None,
+                    version_id: version_id.to_string(),
+                    version_json: None,
+                    dialect: LinkedLauncherDialect::Generic,
+                    game_dir_mode: Some(game_dir_mode),
+                }
+            }
         };
         direct.game_dir_mode = Some(game_dir_mode);
         Ok(Some(direct))
@@ -345,7 +378,7 @@ impl DirectLinkedLaunch {
             self.version_id,
             self.version_json
                 .as_deref()
-                .unwrap_or_else(|| self.dot_minecraft.as_path())
+                .unwrap_or(self.dot_minecraft.as_path())
                 .display()
         );
         format!(
@@ -388,6 +421,7 @@ fn resolve_content_game_dir(
         "shaderpacks",
         "datapacks",
         "schematics",
+        "screenshots",
     ] {
         let path = version_dir.join(name);
         if path.is_dir() {
@@ -534,7 +568,7 @@ pub(crate) fn conservative_launch_facts(
     let modern = merged
         .java_version
         .as_ref()
-        .map_or(true, |java| java.major_version >= 17);
+        .is_none_or(|java| java.major_version >= 17);
     (
         modern,
         super::QuickPlayVersion {
@@ -1956,13 +1990,57 @@ mod tests {
         assert_eq!(
             direct.version_json,
             Some(
-                version_dir
-                    .join("1.20.1-fabric.json")
-                    .canonicalize()
-                    .unwrap()
+                crate::util::io::canonicalize(
+                    version_dir.join("1.20.1-fabric.json")
+                )
+                .unwrap()
             )
         );
-        assert_eq!(direct.dot_minecraft, root.path().canonicalize().unwrap());
+        assert_eq!(
+            direct.dot_minecraft,
+            crate::util::io::canonicalize(root.path()).unwrap()
+        );
+    }
+
+    #[test]
+    fn external_version_override_can_resolve_before_minecraft_is_installed() {
+        let root = tempfile::tempdir().unwrap();
+        let version_dir = root.path().join("versions").join("New Instance");
+        std::fs::create_dir_all(&version_dir).unwrap();
+        let now = chrono::Utc::now();
+        let instance = Instance {
+            id: "local:test".to_string(),
+            path: "managed".to_string(),
+            applied_content_set_id: None,
+            install_stage: crate::state::InstanceInstallStage::NotInstalled,
+            launcher_feature_version:
+                crate::state::LauncherFeatureVersion::MOST_RECENT,
+            update_channel: crate::state::ReleaseChannel::Release,
+            name: "New Instance".to_string(),
+            icon_path: None,
+            symlink_target: None,
+            linked_launcher: None,
+            linked_launcher_root: None,
+            linked_dot_minecraft: None,
+            linked_version_id: None,
+            linked_version_json_path: None,
+            linked_game_dir_mode: None,
+            game_dir_override: Some(version_dir.to_string_lossy().into_owned()),
+            created: now,
+            modified: now,
+            last_played: None,
+            pinned_at: None,
+            submitted_time_played: 0,
+            recent_time_played: 0,
+        };
+
+        let direct = DirectLinkedLaunch::from_game_dir_override(&instance)
+            .unwrap()
+            .expect("external version directory should be resolvable");
+
+        assert_eq!(direct.version_id, "New Instance");
+        assert_eq!(direct.version_json, None);
+        assert_eq!(direct.version_dir(), version_dir);
     }
 
     #[test]
@@ -2014,10 +2092,27 @@ mod tests {
     }
 
     #[test]
+    fn screenshots_folder_marks_version_as_isolated_game_dir() {
+        let root = tempfile::tempdir().unwrap();
+        let version = root.path().join("versions/demo");
+        std::fs::create_dir_all(version.join("screenshots")).unwrap();
+
+        assert_eq!(
+            resolve_content_game_dir(root.path(), &version).unwrap(),
+            version
+        );
+    }
+
+    #[test]
     fn generic_version_isolated_even_without_content_folders() {
         let root = tempfile::tempdir().unwrap();
         let version = root.path().join("versions/demo");
         std::fs::create_dir_all(&version).unwrap();
+        std::fs::write(
+            version.join("demo.json"),
+            br#"{"id":"demo","mainClass":"net.minecraft.client.main.Main"}"#,
+        )
+        .unwrap();
 
         assert_eq!(
             resolve_content_game_dir(root.path(), &version).unwrap(),
@@ -2485,7 +2580,13 @@ mod tests {
         );
         assert_eq!(
             candidates,
-            vec![launcher.path().join("runtime/jdk17/bin/java")]
+            vec![launcher.path().join("runtime/jdk17").join(
+                if cfg!(windows) {
+                    "bin/java.exe"
+                } else {
+                    "bin/java"
+                }
+            )]
         );
 
         // A relative path escaping the launcher directory degrades to the
@@ -3451,7 +3552,7 @@ mod tests {
         let mut merged = minimal_merged();
         merged.libraries = vec![lwjgl3_library, lwjgl2_library];
         normalize_merged_loader_libraries(ModLoader::Cleanroom, &mut merged);
-        let normalized = merged.libraries.iter().cloned().collect::<Vec<_>>();
+        let normalized = merged.libraries.to_vec();
         assert_eq!(normalized.len(), 1);
         let target = root.path().join("normalized");
         extract_linked_natives(

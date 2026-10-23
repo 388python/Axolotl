@@ -1,10 +1,9 @@
-use super::io;
+use super::{io, java_environment};
 use crate::state::JavaVersion;
 use futures::prelude::*;
 use std::collections::VecDeque;
 use std::env;
 use std::path::PathBuf;
-use std::process::Command;
 use std::{collections::HashSet, path::Path};
 use tokio::task::JoinError;
 
@@ -688,17 +687,23 @@ async fn get_all_autoinstalled_jre_path() -> Result<HashSet<PathBuf>, JREError>
             && let Ok(dir) = std::fs::read_dir(base_path)
         {
             for entry in dir.flatten() {
-                let file_path = entry.path().join("bin");
+                let root = entry.path();
 
-                if let Ok(contents) = std::fs::read_to_string(file_path.clone())
+                #[cfg(target_os = "macos")]
                 {
-                    let entry = entry.path().join(contents);
-                    jre_paths.insert(entry);
-                } else {
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        let file_path = file_path.join(JAVA_BIN);
-                        jre_paths.insert(file_path);
+                    jre_paths.insert(root.join("Contents/Home/bin/java"));
+                    jre_paths
+                        .insert(root.join("jre.bundle/Contents/Home/bin/java"));
+                    continue;
+                }
+
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let bin = root.join("bin");
+                    if let Ok(contents) = std::fs::read_to_string(bin.clone()) {
+                        jre_paths.insert(root.join(contents.trim()));
+                    } else {
+                        jre_paths.insert(bin.join(JAVA_BIN));
                     }
                 }
             }
@@ -772,11 +777,10 @@ pub async fn check_java_at_filepath(path: &Path) -> crate::Result<JavaVersion> {
     let (_temp, file_path) =
         get_resource_file!(env "JAVA_JARS_DIR" / "theseus.jar")?;
 
-    let output = Command::new(&java)
+    let output = java_environment::command(&java)
         .arg("-cp")
         .arg(file_path)
         .arg("com.modrinth.theseus.JavaInfo")
-        .env_remove("_JAVA_OPTIONS")
         .output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);

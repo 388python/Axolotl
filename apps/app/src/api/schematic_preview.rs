@@ -82,6 +82,19 @@ impl PreviewBlockState {
     }
 }
 
+fn replacement_state(
+    source: &PreviewBlockState,
+    target: &PreviewBlockState,
+) -> PreviewBlockState {
+    let mut state = target.clone();
+    for (key, value) in &source.properties {
+        if state.properties.contains_key(key) {
+            state.properties.insert(key.clone(), value.clone());
+        }
+    }
+    state
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewChunkDescriptor {
@@ -166,6 +179,7 @@ pub struct PreviewChangedChunk {
 pub struct PreviewEditResult {
     pub manifest: PreviewManifest,
     pub changed_chunks: Vec<PreviewChangedChunk>,
+    pub applied_palette_indices: Vec<u32>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -179,7 +193,8 @@ pub enum PreviewTransform {
 
 #[derive(Clone)]
 struct PreviewChunk {
-    blocks: Box<[u32]>,
+    // Transactional session clones share unchanged chunks; edits detach only touched data.
+    blocks: Arc<Vec<u32>>,
     non_air_blocks: u32,
 }
 
@@ -294,7 +309,7 @@ pub async fn schematic_preview_read_chunk(
     output.extend_from_slice(b"SPC1");
     output.extend_from_slice(&(CHUNK_VOLUME as u32).to_le_bytes());
     if let Some(chunk) = region.chunks.get(&position) {
-        for value in &chunk.blocks {
+        for value in chunk.blocks.iter() {
             output.extend_from_slice(&value.to_le_bytes());
         }
     } else {
@@ -347,29 +362,59 @@ pub fn schematic_preview_apply_edits(
             "The schematic preview session has expired".to_string()
         })?;
     let mut session = (*active[session_index]).clone();
-    let target_palette_index = if let Some(mut state) = target_state {
+    let target_state = target_state.map(|mut state| {
         state.name = normalize_block_name(&state.name);
-        let key = state.key();
-        if let Some(index) = session
-            .manifest
-            .palette
-            .iter()
-            .position(|candidate| candidate.key() == key)
-        {
-            Some(index as u32)
-        } else {
-            validate_palette_size(session.manifest.palette.len() + 1)?;
-            let index = session.manifest.palette.len() as u32;
-            session.manifest.palette.push(state);
-            Some(index)
-        }
-    } else {
-        None
-    };
+        state
+    });
     let mut changed = BTreeSet::<(String, [i32; 3])>::new();
+    let mut applied_palette_indices = Vec::with_capacity(edits.len());
     for edit in edits {
-        let requested_palette_index =
-            target_palette_index.unwrap_or(edit.palette_index);
+        let source_palette_index = {
+            let region = session
+                .regions
+                .iter()
+                .find(|region| region.manifest.id == edit.region_id)
+                .ok_or_else(|| "Unknown schematic region".to_string())?;
+            let chunk_position =
+                edit.position.map(|value| value.div_euclid(CHUNK_SIZE));
+            let local = edit
+                .position
+                .map(|value| value.rem_euclid(CHUNK_SIZE) as usize);
+            let block_index = local[1] * 256 + local[2] * 16 + local[0];
+            region
+                .chunks
+                .get(&chunk_position)
+                .map(|chunk| chunk.blocks[block_index])
+                .unwrap_or(0)
+        };
+        let requested_palette_index = if let Some(target) = &target_state {
+            let source = session
+                .manifest
+                .palette
+                .get(source_palette_index as usize)
+                .ok_or_else(|| {
+                    format!(
+                        "Unknown schematic palette entry {source_palette_index}"
+                    )
+                })?;
+            let state = replacement_state(source, target);
+            let key = state.key();
+            if let Some(index) = session
+                .manifest
+                .palette
+                .iter()
+                .position(|candidate| candidate.key() == key)
+            {
+                index as u32
+            } else {
+                validate_palette_size(session.manifest.palette.len() + 1)?;
+                let index = session.manifest.palette.len() as u32;
+                session.manifest.palette.push(state);
+                index
+            }
+        } else {
+            edit.palette_index
+        };
         let palette_index = session
             .manifest
             .palette
@@ -386,6 +431,7 @@ pub fn schematic_preview_apply_edits(
                     requested_palette_index
                 }
             })?;
+        applied_palette_indices.push(palette_index);
         let region = session
             .regions
             .iter_mut()
@@ -415,6 +461,7 @@ pub fn schematic_preview_apply_edits(
                 position,
             })
             .collect(),
+        applied_palette_indices,
     };
     active[session_index] = Arc::new(session);
     Ok(result)
@@ -1111,13 +1158,13 @@ impl SessionRegion {
             self.chunks
                 .entry(chunk_position)
                 .or_insert_with(|| PreviewChunk {
-                    blocks: vec![0; CHUNK_VOLUME].into_boxed_slice(),
+                    blocks: Arc::new(vec![0; CHUNK_VOLUME]),
                     non_air_blocks: 0,
                 });
         if chunk.blocks[index] == 0 {
             chunk.non_air_blocks += 1;
         }
-        chunk.blocks[index] = palette_index;
+        Arc::make_mut(&mut chunk.blocks)[index] = palette_index;
     }
 
     fn block_at(&self, position: [i32; 3]) -> u32 {
@@ -1141,7 +1188,7 @@ impl SessionRegion {
             if chunk.blocks[index] == 0 {
                 return false;
             }
-            chunk.blocks[index] = 0;
+            Arc::make_mut(&mut chunk.blocks)[index] = 0;
             chunk.non_air_blocks = chunk.non_air_blocks.saturating_sub(1);
             if chunk.non_air_blocks == 0 {
                 self.chunks.remove(&chunk_position);
@@ -1152,7 +1199,7 @@ impl SessionRegion {
             self.chunks
                 .entry(chunk_position)
                 .or_insert_with(|| PreviewChunk {
-                    blocks: vec![0; CHUNK_VOLUME].into_boxed_slice(),
+                    blocks: Arc::new(vec![0; CHUNK_VOLUME]),
                     non_air_blocks: 0,
                 });
         if chunk.blocks[index] == palette_index {
@@ -1161,7 +1208,7 @@ impl SessionRegion {
         if chunk.blocks[index] == 0 {
             chunk.non_air_blocks += 1;
         }
-        chunk.blocks[index] = palette_index;
+        Arc::make_mut(&mut chunk.blocks)[index] = palette_index;
         true
     }
 }
@@ -2015,6 +2062,21 @@ mod tests {
     }
 
     #[test]
+    fn replacement_states_preserve_properties_supported_by_the_target() {
+        let source = parse_state_string(
+            "minecraft:oak_slab[type=top,waterlogged=true,custom=source]",
+        );
+        let target = parse_state_string(
+            "minecraft:stone_slab[type=bottom,waterlogged=false]",
+        );
+
+        assert_eq!(
+            replacement_state(&source, &target).key(),
+            "minecraft:stone_slab[type=top,waterlogged=true]"
+        );
+    }
+
+    #[test]
     fn varints_decode_palette_values() {
         let bytes = [0xac, 0x02];
         let mut slice = bytes.as_slice();
@@ -2051,6 +2113,43 @@ mod tests {
             .unwrap();
         region.put_block([-1, -1, -1], 1);
         assert_eq!(region.chunks[&[-1, -1, -1]].blocks[4095], 1);
+    }
+
+    #[test]
+    fn cloned_schematic_regions_copy_only_edited_chunk_data() {
+        let builder = SessionBuilder::new();
+        let mut original = builder
+            .new_region(
+                "region".to_string(),
+                "Region".to_string(),
+                [0, 0, 0],
+                [32, 1, 1],
+                [0, 0, 0],
+            )
+            .unwrap();
+        original.put_block([0, 0, 0], 1);
+        original.put_block([16, 0, 0], 1);
+        let mut edited = original.clone();
+        for position in [[0, 0, 0], [1, 0, 0]] {
+            assert!(Arc::ptr_eq(
+                &original.chunks[&position].blocks,
+                &edited.chunks[&position].blocks
+            ));
+        }
+        assert!(edited.set_block([0, 0, 0], 2));
+        assert_eq!(original.block_at([0, 0, 0]), 1);
+        assert_eq!(edited.block_at([0, 0, 0]), 2);
+        assert!(!Arc::ptr_eq(
+            &original.chunks[&[0, 0, 0]].blocks,
+            &edited.chunks[&[0, 0, 0]].blocks
+        ));
+        assert!(Arc::ptr_eq(
+            &original.chunks[&[1, 0, 0]].blocks,
+            &edited.chunks[&[1, 0, 0]].blocks
+        ));
+        assert!(edited.set_block([16, 0, 0], 0));
+        assert_eq!(original.block_at([16, 0, 0]), 1);
+        assert_eq!(edited.block_at([16, 0, 0]), 0);
     }
 
     #[test]
@@ -2266,6 +2365,63 @@ mod tests {
             palette_at(&exported, 0, [-3, 8, 2]).name,
             "minecraft:stone"
         );
+    }
+
+    #[test]
+    fn current_and_snapshot_schematics_keep_their_original_data_version_on_export()
+     {
+        for data_version in [3700, 5005, 5023] {
+            let mut fixture = sponge_fixture(3);
+            let schematic =
+                fixture.get_mut::<_, &mut NbtCompound>("Schematic").unwrap();
+            schematic.insert("DataVersion", data_version);
+            let palette = schematic
+                .get_mut::<_, &mut NbtCompound>("Blocks")
+                .unwrap()
+                .get_mut::<_, &mut NbtCompound>("Palette")
+                .unwrap();
+            palette.inner_mut().remove("minecraft:stone");
+            palette.insert("minecraft:cinnabar", 1i32);
+            let mut session = parse_sponge(
+                fixture,
+                "test.schem".into(),
+                "test.schem".into(),
+                None,
+                None,
+            )
+            .unwrap();
+            session.regions[0].set_block([-3, 8, 2], 1);
+            session.refresh_manifest();
+            for (bytes, litematic) in [
+                (export_sponge_v3(&session).unwrap(), false),
+                (export_litematic(&session).unwrap(), true),
+            ] {
+                let root = read_root(&bytes).unwrap();
+                let exported = if litematic {
+                    parse_litematic(
+                        root,
+                        "test.litematic".into(),
+                        "test.litematic".into(),
+                        None,
+                        None,
+                    )
+                } else {
+                    parse_sponge(
+                        root,
+                        "test.schem".into(),
+                        "test.schem".into(),
+                        None,
+                        None,
+                    )
+                }
+                .unwrap();
+                assert_eq!(exported.manifest.data_version, Some(data_version));
+                assert_eq!(
+                    palette_at(&exported, 0, [-3, 8, 2]).name,
+                    "minecraft:cinnabar"
+                );
+            }
+        }
     }
 
     #[test]

@@ -211,15 +211,6 @@ pub struct JavaDiscoveryPayload {
 
 #[derive(Serialize, Clone)]
 #[cfg(feature = "tauri")]
-#[serde(rename_all = "snake_case")]
-pub struct LogShareAiEventPayload {
-    pub instance_id: String,
-    pub event_type: String,
-    pub data: serde_json::Value,
-}
-
-#[derive(Serialize, Clone)]
-#[cfg(feature = "tauri")]
 #[serde(rename_all = "camelCase")]
 pub struct JavaDownloadConfirmationPayload {
     pub request_id: Uuid,
@@ -241,6 +232,57 @@ pub enum InstanceBulkUpdateProgressStage {
     ResolvingVersions,
     Downloading,
     Finishing,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceBackupProgressPayload {
+    pub operation_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
+    pub operation_type: InstanceBackupOperationType,
+    pub stage: InstanceBackupProgressStage,
+    pub processed_bytes: u64,
+    pub total_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub final_state: Option<InstanceBackupOperationFinalState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum InstanceBackupOperationType {
+    Create,
+    Restore,
+    Delete,
+    RepositoryMove,
+    RestorePreview,
+}
+
+#[derive(Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum InstanceBackupOperationFinalState {
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub enum InstanceBackupProgressStage {
+    Scanning,
+    Hashing,
+    Saving,
+    Validating,
+    Copying,
+    Restoring,
+    Deleting,
+    Completed,
+    Cancelled,
+    Failed,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -267,10 +309,29 @@ pub enum CommandPayload {
         // run or install .mrpack
         path: PathBuf,
     },
-    OpenSeedMap {
-        // URL query string describing the shared seed-map state
-        query: String,
+    OpenRoute {
+        path: String,
+        query: Option<String>,
     },
+    OpenSettings {
+        tab: Option<String>,
+        entry: Option<String>,
+    },
+    // 特权动作：仅生成载荷，执行须前端确认弹窗
+    UpdateSettings {
+        changes: Vec<SettingChange>,
+        source: String,
+    },
+    StopInstance {
+        instance_id: String,
+        source: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SettingChange {
+    pub key: String,
+    pub value: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -280,6 +341,8 @@ pub struct ProcessPayload {
     pub uuid: Uuid,
     pub pid: u32,
     pub maximize_window: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_title: Option<String>,
     #[serde(default)]
     pub launch_preparation_timeout: Option<u64>,
     pub event: ProcessPayloadType,
@@ -327,6 +390,8 @@ pub enum ServerPayloadType {
         #[serde(skip_serializing_if = "Option::is_none")]
         total: Option<u64>,
     },
+    Starting,
+    Stopping,
     Started,
     Stopped {
         crashed: bool,
@@ -357,6 +422,7 @@ pub enum InstancePayloadType {
         revision: u64,
     },
     ServersUpdated,
+    ScreenshotsUpdated,
     WorldUpdated {
         world: String,
     },
@@ -376,6 +442,11 @@ pub enum InstancePayloadType {
         message: String,
     },
     Removed,
+}
+
+#[derive(Serialize, Clone)]
+pub struct InstanceGroupsChangedPayload {
+    pub instance_ids: Vec<String>,
 }
 
 #[derive(Serialize, Clone)]

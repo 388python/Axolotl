@@ -47,14 +47,32 @@
   "badge.release": {
     "defaultMessage": "Release"
   },
+  "browse.clear-search": {
+    "defaultMessage": "Clear search"
+  },
   "browse.filter-results": {
     "defaultMessage": "Filter results..."
+  },
+  "browse.loading-results": {
+    "defaultMessage": "Loading results…"
   },
   "browse.no-results": {
     "defaultMessage": "No results found for your query!"
   },
+  "browse.no-results.heading": {
+    "defaultMessage": "Nothing here yet"
+  },
   "browse.offline": {
     "defaultMessage": "You are currently offline. Connect to the internet to browse Modrinth!"
+  },
+  "browse.offline.heading": {
+    "defaultMessage": "No connection"
+  },
+  "browse.retry": {
+    "defaultMessage": "Try again"
+  },
+  "browse.search.failed": {
+    "defaultMessage": "The search could not be completed. Check your connection or filters and try again."
   },
   "browse.search.placeholder": {
     "defaultMessage": "Search {projectType}..."
@@ -95,11 +113,26 @@
   "browse.sort.downloads": {
     "defaultMessage": "Downloads"
   },
+  "browse.sort.first-release": {
+    "defaultMessage": "First release published"
+  },
   "browse.sort.followers": {
     "defaultMessage": "Followers"
   },
+  "browse.sort.latest-release": {
+    "defaultMessage": "Latest release published"
+  },
   "browse.sort.players": {
     "defaultMessage": "Players"
+  },
+  "browse.sort.project-created": {
+    "defaultMessage": "Project created"
+  },
+  "browse.sort.project-modified": {
+    "defaultMessage": "Project modified"
+  },
+  "browse.sort.project-published": {
+    "defaultMessage": "Project first published"
   },
   "browse.sort.relevance": {
     "defaultMessage": "Relevance"
@@ -136,6 +169,9 @@
   },
   "button.close": {
     "defaultMessage": "Close"
+  },
+  "button.confirm": {
+    "defaultMessage": "Confirm"
   },
   "button.continue": {
     "defaultMessage": "Continue"
@@ -305,6 +341,12 @@
   "console.action.share": {
     "defaultMessage": "Share"
   },
+  "console.command-completions.no-results": {
+    "defaultMessage": "No matching completions"
+  },
+  "console.command-completions.search": {
+    "defaultMessage": "Search command completions"
+  },
   "console.command.disabled-placeholder": {
     "defaultMessage": "Command input disabled"
   },
@@ -313,12 +355,6 @@
   },
   "console.command.server-not-running-placeholder": {
     "defaultMessage": "Server is not running"
-  },
-  "console.command-completions.no-results": {
-    "defaultMessage": "No matching completions"
-  },
-  "console.command-completions.search": {
-    "defaultMessage": "Search command completions"
   },
   "console.crash.export-context": {
     "defaultMessage": "Export crash context"
@@ -695,6 +731,9 @@
   "console.filter.warn": {
     "defaultMessage": "Warn"
   },
+  "console.log-viewport.scroll-to-bottom": {
+    "defaultMessage": "Scroll to bottom"
+  },
   "console.log.toggle-wrap": {
     "defaultMessage": "Toggle line wrapping"
   },
@@ -724,6 +763,9 @@
   },
   "content-type.item.lowercase": {
     "defaultMessage": "{count, plural, one {item} other {items}}"
+  },
+  "content.actions.update-all": {
+    "defaultMessage": "Update all"
   },
   "content.card.dependency-badge": {
     "defaultMessage": "Dependency"
@@ -770,6 +812,9 @@
   "content.confirm-deletion.delete-button": {
     "defaultMessage": "Delete {count, number} {itemType}"
   },
+  "content.confirm-deletion.failed": {
+    "defaultMessage": "The selected content could not be deleted. Try again."
+  },
   "content.confirm-deletion.header": {
     "defaultMessage": "Delete {itemType}"
   },
@@ -814,6 +859,9 @@
   },
   "content.dependency-warning.delete-anyway-button": {
     "defaultMessage": "Delete anyway"
+  },
+  "content.dependency-warning.delete-failed": {
+    "defaultMessage": "The selected content and dependencies could not be deleted. Try again."
   },
   "content.dependency-warning.delete-many-anyway-button": {
     "defaultMessage": "Delete {count, number} {itemType} anyway"
@@ -872,9 +920,6 @@
   "content.filter.updates": {
     "defaultMessage": "Update available"
   },
-  "content.filter.warnings": {
-    "defaultMessage": "Warnings"
-  },
   "content.metadata-filter.author": {
     "defaultMessage": "Author"
   },
@@ -904,6 +949,9 @@
   },
   "content.metadata-filter.external.linked": {
     "defaultMessage": "Online project"
+  },
+  "content.metadata-filter.installed-source": {
+    "defaultMessage": "Installation source"
   },
   "content.metadata-filter.loader": {
     "defaultMessage": "Loader"
@@ -935,41 +983,35 @@
   "content.metadata-filter.open-source.open": {
     "defaultMessage": "Open source"
   },
+  "content.metadata-filter.ownership": {
+    "defaultMessage": "Content ownership"
+  },
+  "content.metadata-filter.ownership.local-discovered": {
+    "defaultMessage": "Locally discovered"
+  },
+  "content.metadata-filter.ownership.pack-managed": {
+    "defaultMessage": "Pack managed"
+  },
+  "content.metadata-filter.ownership.user-added": {
+    "defaultMessage": "User added"
+  },
   "content.metadata-filter.search": {
     "defaultMessage": "Search..."
   },
   "content.metadata-filter.select-all": {
     "defaultMessage": "Select all"
   },
-  "content.metadata-filter.source": {
-    "defaultMessage": "Source"
-  },
   "content.metadata-filter.source.curseforge": {
     "defaultMessage": "CurseForge"
   },
-  "content.metadata-filter.source.imported-modpack": {
-    "defaultMessage": "Imported modpack"
+  "content.metadata-filter.source.mcarchive": {
+    "defaultMessage": "MCArchive"
   },
-  "content.metadata-filter.source.local": {
-    "defaultMessage": "Local"
+  "content.metadata-filter.source.modrinth": {
+    "defaultMessage": "Modrinth"
   },
-  "content.metadata-filter.source.modrinth-modpack": {
-    "defaultMessage": "Modrinth modpack"
-  },
-  "content.metadata-filter.source.server-project": {
-    "defaultMessage": "Server project"
-  },
-  "content.metadata-filter.source.shared-instance": {
-    "defaultMessage": "Shared instance"
-  },
-  "content.metadata-filter.state": {
-    "defaultMessage": "Status"
-  },
-  "content.metadata-filter.state.disabled": {
-    "defaultMessage": "Disabled"
-  },
-  "content.metadata-filter.state.enabled": {
-    "defaultMessage": "Enabled"
+  "content.metadata-filter.source.planet-minecraft": {
+    "defaultMessage": "Planet Minecraft"
   },
   "content.metadata-filter.toggle": {
     "defaultMessage": "Filter"
@@ -980,17 +1022,14 @@
   "content.metadata-filter.unknown": {
     "defaultMessage": "Unknown"
   },
-  "content.metadata-filter.update.available": {
-    "defaultMessage": "Update available"
-  },
-  "content.metadata-filter.update.up-to-date": {
-    "defaultMessage": "Up to date"
-  },
-  "content.metadata-filter.updates": {
-    "defaultMessage": "Updates"
-  },
   "content.page-layout.browse-content": {
     "defaultMessage": "Browse content"
+  },
+  "content.page-layout.dependency-disable-failed": {
+    "defaultMessage": "Dependent content could not be disabled. Retry to finish the deletion."
+  },
+  "content.page-layout.duplicate-status": {
+    "defaultMessage": "{visible} matching · All copies: {updates} updates · {disabled} disabled · {missing} missing · {installing} in progress"
   },
   "content.page-layout.empty.hint": {
     "defaultMessage": "Browse or upload {contentType} to get started"
@@ -1009,6 +1048,9 @@
   },
   "content.page-layout.reset-view": {
     "defaultMessage": "Reset view"
+  },
+  "content.page-layout.scroll-to-top": {
+    "defaultMessage": "Scroll to top"
   },
   "content.page-layout.search-placeholder": {
     "defaultMessage": "Search {count, number} {contentType}..."
@@ -1057,6 +1099,9 @@
   },
   "content.page-layout.update-all": {
     "defaultMessage": "Update all"
+  },
+  "content.page-layout.update-duplicate-group": {
+    "defaultMessage": "Review updates for all {count, number} copies"
   },
   "content.page-layout.view-dependencies": {
     "defaultMessage": "View dependencies"
@@ -1787,6 +1832,9 @@
   "files.layout.extraction-started-title": {
     "defaultMessage": "Extraction started"
   },
+  "files.layout.no-matches": {
+    "defaultMessage": "No files match this view"
+  },
   "files.layout.selected-count": {
     "defaultMessage": "{count} selected"
   },
@@ -1855,6 +1903,9 @@
   },
   "files.row.parent-folder": {
     "defaultMessage": "Parent folder"
+  },
+  "files.select-view": {
+    "defaultMessage": "Select all files in this view"
   },
   "files.table-header.created": {
     "defaultMessage": "Created"
@@ -2063,17 +2114,110 @@
   "header.category.resolutions": {
     "defaultMessage": "Resolution"
   },
-  "icon-select.edit": {
-    "defaultMessage": "Edit icon"
+  "image-viewer.close": {
+    "defaultMessage": "Close"
   },
-  "icon-select.remove": {
-    "defaultMessage": "Remove icon"
+  "image-viewer.edit": {
+    "defaultMessage": "Edit"
   },
-  "icon-select.replace": {
-    "defaultMessage": "Replace icon"
+  "image-viewer.editor.colour": {
+    "defaultMessage": "Colour"
   },
-  "icon-select.select": {
-    "defaultMessage": "Select icon"
+  "image-viewer.editor.crop.dimensions": {
+    "defaultMessage": "{width} × {height} px"
+  },
+  "image-viewer.editor.crop.reset": {
+    "defaultMessage": "Reset crop"
+  },
+  "image-viewer.editor.delete-selection": {
+    "defaultMessage": "Delete selected annotation"
+  },
+  "image-viewer.editor.eraser.area": {
+    "defaultMessage": "Area"
+  },
+  "image-viewer.editor.eraser.element": {
+    "defaultMessage": "Element"
+  },
+  "image-viewer.editor.eraser.mode": {
+    "defaultMessage": "Eraser mode"
+  },
+  "image-viewer.editor.image-editing-tools": {
+    "defaultMessage": "Image editing tools"
+  },
+  "image-viewer.editor.more-save-options": {
+    "defaultMessage": "More save options"
+  },
+  "image-viewer.editor.overwrite": {
+    "defaultMessage": "Overwrite"
+  },
+  "image-viewer.editor.redo": {
+    "defaultMessage": "Redo"
+  },
+  "image-viewer.editor.save-as-new": {
+    "defaultMessage": "Save copy"
+  },
+  "image-viewer.editor.save-image": {
+    "defaultMessage": "Save image"
+  },
+  "image-viewer.editor.size": {
+    "defaultMessage": "Size"
+  },
+  "image-viewer.editor.tool.arrow": {
+    "defaultMessage": "Arrow"
+  },
+  "image-viewer.editor.tool.censor": {
+    "defaultMessage": "Censor"
+  },
+  "image-viewer.editor.tool.crop": {
+    "defaultMessage": "Crop"
+  },
+  "image-viewer.editor.tool.ellipse": {
+    "defaultMessage": "Ellipse"
+  },
+  "image-viewer.editor.tool.eraser": {
+    "defaultMessage": "Eraser"
+  },
+  "image-viewer.editor.tool.highlight": {
+    "defaultMessage": "Highlight"
+  },
+  "image-viewer.editor.tool.pen": {
+    "defaultMessage": "Pen"
+  },
+  "image-viewer.editor.tool.rectangle": {
+    "defaultMessage": "Rectangle"
+  },
+  "image-viewer.editor.tool.select": {
+    "defaultMessage": "Select"
+  },
+  "image-viewer.editor.tool.text": {
+    "defaultMessage": "Text"
+  },
+  "image-viewer.editor.undo": {
+    "defaultMessage": "Undo"
+  },
+  "image-viewer.editor.width": {
+    "defaultMessage": "Width"
+  },
+  "image-viewer.editor.zoom-fit": {
+    "defaultMessage": "Fit"
+  },
+  "image-viewer.editor.zoom-fit-workspace": {
+    "defaultMessage": "Fit to workspace"
+  },
+  "image-viewer.editor.zoom-in": {
+    "defaultMessage": "Zoom in"
+  },
+  "image-viewer.editor.zoom-out": {
+    "defaultMessage": "Zoom out"
+  },
+  "image-viewer.metadata": {
+    "defaultMessage": "{size} · {width} × {height} px"
+  },
+  "image-viewer.next": {
+    "defaultMessage": "Next image"
+  },
+  "image-viewer.previous": {
+    "defaultMessage": "Previous image"
   },
   "input.search-version.placeholder": {
     "defaultMessage": "Search version..."
@@ -2309,24 +2453,6 @@
   "instances.content-install.select-icon": {
     "defaultMessage": "Select icon"
   },
-  "instances.modpack-content-modal.empty-description": {
-    "defaultMessage": "This modpack does not include any additional content."
-  },
-  "instances.modpack-content-modal.empty-title": {
-    "defaultMessage": "No content found"
-  },
-  "instances.modpack-content-modal.header": {
-    "defaultMessage": "Modpack content"
-  },
-  "instances.modpack-content-modal.loading": {
-    "defaultMessage": "Loading content..."
-  },
-  "instances.modpack-content-modal.no-results": {
-    "defaultMessage": "No projects match your search."
-  },
-  "instances.modpack-content-modal.search-placeholder": {
-    "defaultMessage": "Search {count, number} {count, plural, one {project} other {projects}}"
-  },
   "instances.updater-modal.badge.current": {
     "defaultMessage": "Current"
   },
@@ -2530,18 +2656,6 @@
   },
   "label.no-items": {
     "defaultMessage": "No items"
-  },
-  "notification.panel.copy": {
-    "defaultMessage": "Copy to clipboard"
-  },
-  "notification.panel.copy-support": {
-    "defaultMessage": "Copy error details for support"
-  },
-  "notification.panel.dismiss": {
-    "defaultMessage": "Dismiss"
-  },
-  "notification.panel.export-error-logs": {
-    "defaultMessage": "Export error logs"
   },
   "label.notifications": {
     "defaultMessage": "Notifications"
@@ -2762,149 +2876,35 @@
   "locale.zh-TW": {
     "defaultMessage": "Chinese (Traditional)"
   },
-  "markdown-editor.default-image-alt-text": {
-    "defaultMessage": "Replace this with a description"
+  "modal.confirm-action.failed": {
+    "defaultMessage": "The action could not be completed. Try again."
   },
-  "markdown-editor.error-label": {
-    "defaultMessage": "Error"
+  "modal.confirm.confirmation-placeholder": {
+    "defaultMessage": "Type here..."
   },
-  "markdown-editor.image-modal.description-field.description": {
-    "defaultMessage": "Describe the image completely as you would to someone who could not see the image."
+  "modal.confirm.confirmation-prompt": {
+    "defaultMessage": "To confirm you want to proceed, type <confirmation-text>{confirmationText}</confirmation-text> below:"
   },
-  "markdown-editor.image-modal.description-field.placeholder": {
-    "defaultMessage": "Describe the image..."
+  "modal.confirm.no-title": {
+    "defaultMessage": "No title defined"
   },
-  "markdown-editor.image-modal.description-field.title": {
-    "defaultMessage": "Description (alt text)"
+  "modal.confirm.proceed": {
+    "defaultMessage": "Proceed"
   },
-  "markdown-editor.image-modal.header": {
-    "defaultMessage": "Insert image"
+  "modal.install-to-play.admonition-body": {
+    "defaultMessage": "This server requires modded content to play. Accept to install the needed files from Modrinth."
   },
-  "markdown-editor.image-modal.upload-mode.label": {
-    "defaultMessage": "Image source"
+  "modal.install-to-play.admonition-header": {
+    "defaultMessage": "Shared server instance"
   },
-  "markdown-editor.image-modal.upload-mode.link": {
-    "defaultMessage": "Link"
+  "modal.install-to-play.shared-by": {
+    "defaultMessage": "<name>{name}</name> shared this instance with you today."
   },
-  "markdown-editor.image-modal.upload-mode.upload": {
-    "defaultMessage": "Upload"
+  "modal.install-to-play.shared-instance-label": {
+    "defaultMessage": "Shared instance"
   },
-  "markdown-editor.image-modal.upload.prompt": {
-    "defaultMessage": "Drag and drop to upload or click to select file"
-  },
-  "markdown-editor.image-modal.url-field.placeholder": {
-    "defaultMessage": "Enter the image URL..."
-  },
-  "markdown-editor.insert-button": {
-    "defaultMessage": "Insert"
-  },
-  "markdown-editor.link-modal.header": {
-    "defaultMessage": "Insert link"
-  },
-  "markdown-editor.link-modal.label-field.placeholder": {
-    "defaultMessage": "Enter label..."
-  },
-  "markdown-editor.link-modal.label-field.title": {
-    "defaultMessage": "Label"
-  },
-  "markdown-editor.link-modal.url-field.placeholder": {
-    "defaultMessage": "Enter the link's URL..."
-  },
-  "markdown-editor.markdown-formatting-support": {
-    "defaultMessage": "This editor supports <markdown-link>Markdown formatting</markdown-link>."
-  },
-  "markdown-editor.max-length.label": {
-    "defaultMessage": "Max length:"
-  },
-  "markdown-editor.max-length.unlimited": {
-    "defaultMessage": "Unlimited"
-  },
-  "markdown-editor.max-length.value": {
-    "defaultMessage": "{currentLength}/{maxLength}"
-  },
-  "markdown-editor.placeholder": {
-    "defaultMessage": "Write something..."
-  },
-  "markdown-editor.preview-label": {
-    "defaultMessage": "Preview"
-  },
-  "markdown-editor.preview-toggle.label": {
-    "defaultMessage": "Preview"
-  },
-  "markdown-editor.toolbar.bold": {
-    "defaultMessage": "Bold"
-  },
-  "markdown-editor.toolbar.bulleted-list": {
-    "defaultMessage": "Bulleted list"
-  },
-  "markdown-editor.toolbar.code": {
-    "defaultMessage": "Code"
-  },
-  "markdown-editor.toolbar.heading-1": {
-    "defaultMessage": "Heading 1"
-  },
-  "markdown-editor.toolbar.heading-2": {
-    "defaultMessage": "Heading 2"
-  },
-  "markdown-editor.toolbar.heading-3": {
-    "defaultMessage": "Heading 3"
-  },
-  "markdown-editor.toolbar.image": {
-    "defaultMessage": "Image"
-  },
-  "markdown-editor.toolbar.italic": {
-    "defaultMessage": "Italic"
-  },
-  "markdown-editor.toolbar.link": {
-    "defaultMessage": "Link"
-  },
-  "markdown-editor.toolbar.ordered-list": {
-    "defaultMessage": "Ordered list"
-  },
-  "markdown-editor.toolbar.quote": {
-    "defaultMessage": "Quote"
-  },
-  "markdown-editor.toolbar.spoiler": {
-    "defaultMessage": "Spoiler"
-  },
-  "markdown-editor.toolbar.strikethrough": {
-    "defaultMessage": "Strikethrough"
-  },
-  "markdown-editor.toolbar.video": {
-    "defaultMessage": "Video"
-  },
-  "markdown-editor.upload-error.no-file": {
-    "defaultMessage": "No file provided"
-  },
-  "markdown-editor.upload-error.no-handler": {
-    "defaultMessage": "No image upload handler provided"
-  },
-  "markdown-editor.url-label": {
-    "defaultMessage": "URL"
-  },
-  "markdown-editor.url-validation-error.blocked-domain": {
-    "defaultMessage": "Invalid URL. This domain is not allowed."
-  },
-  "markdown-editor.url-validation-error.malformed": {
-    "defaultMessage": "Invalid URL. Make sure the URL is well-formed."
-  },
-  "markdown-editor.url-validation-error.unsupported-protocol": {
-    "defaultMessage": "Unsupported protocol. Use http or https."
-  },
-  "markdown-editor.video-embed.title": {
-    "defaultMessage": "YouTube video player"
-  },
-  "markdown-editor.video-modal.header": {
-    "defaultMessage": "Insert YouTube video"
-  },
-  "markdown-editor.video-modal.url-field.description": {
-    "defaultMessage": "Enter a valid link to a YouTube video."
-  },
-  "markdown-editor.video-modal.url-field.placeholder": {
-    "defaultMessage": "Enter YouTube video URL"
-  },
-  "markdown-editor.video-modal.url-field.title": {
-    "defaultMessage": "YouTube video URL"
+  "modal.install-to-play.title": {
+    "defaultMessage": "Install to play"
   },
   "modal.open-in-app.benefit.install": {
     "defaultMessage": "Automatically install required content"
@@ -2932,6 +2932,18 @@
   },
   "notification.error.title": {
     "defaultMessage": "An error occurred"
+  },
+  "notification.panel.copy": {
+    "defaultMessage": "Copy to clipboard"
+  },
+  "notification.panel.copy-support": {
+    "defaultMessage": "Copy error details for support"
+  },
+  "notification.panel.dismiss": {
+    "defaultMessage": "Dismiss"
+  },
+  "notification.panel.export-error-logs": {
+    "defaultMessage": "Export error logs"
   },
   "omorphia.component.badge.label.accepted": {
     "defaultMessage": "Accepted"
@@ -2999,26 +3011,17 @@
   "omorphia.component.copy.action.copy": {
     "defaultMessage": "Copy code to clipboard"
   },
-  "omorphia.component.environment-indicator.label.client": {
-    "defaultMessage": "Client"
-  },
-  "omorphia.component.environment-indicator.label.client-and-server": {
-    "defaultMessage": "Client and server"
-  },
-  "omorphia.component.environment-indicator.label.client-or-server": {
-    "defaultMessage": "Client or server"
-  },
-  "omorphia.component.environment-indicator.label.server": {
-    "defaultMessage": "Server"
-  },
-  "omorphia.component.environment-indicator.label.type": {
-    "defaultMessage": "A {type}"
-  },
-  "omorphia.component.environment-indicator.label.unsupported": {
-    "defaultMessage": "Unsupported"
-  },
   "omorphia.component.loading-indicator.label": {
     "defaultMessage": "Loading"
+  },
+  "pagination.go-to-page": {
+    "defaultMessage": "Go to page"
+  },
+  "pagination.go-to-page.placeholder": {
+    "defaultMessage": "Page"
+  },
+  "pagination.loading-page": {
+    "defaultMessage": "Loading page…"
   },
   "payment-method.amazon_pay": {
     "defaultMessage": "Amazon Pay"
@@ -3083,8 +3086,23 @@
   "payment-method.visa": {
     "defaultMessage": "Visa"
   },
+  "project-card.date.created.tooltip": {
+    "defaultMessage": "Project created {date}"
+  },
+  "project-card.date.first-release.tooltip": {
+    "defaultMessage": "First release published {date}"
+  },
+  "project-card.date.project-modified.tooltip": {
+    "defaultMessage": "Project modified {date}"
+  },
+  "project-card.date.project-published.tooltip": {
+    "defaultMessage": "Project first published {date}"
+  },
   "project-card.date.published.tooltip": {
     "defaultMessage": "Published {date}"
+  },
+  "project-card.date.release-updated.tooltip": {
+    "defaultMessage": "Latest release published {date}"
   },
   "project-card.date.updated.tooltip": {
     "defaultMessage": "Updated {date}"
@@ -3668,6 +3686,9 @@
   "project.versions.filter.toggle-tooltip": {
     "defaultMessage": "Toggle filter for {filter}"
   },
+  "project.versions.no-matching-versions": {
+    "defaultMessage": "No versions match the selected filters."
+  },
   "project.versions.platform.modloader.short": {
     "defaultMessage": "ModLoader"
   },
@@ -3872,17 +3893,8 @@
   "search.server_content_type.vanilla": {
     "defaultMessage": "Vanilla"
   },
-  "servers.notice.dismiss": {
-    "defaultMessage": "Dismiss"
-  },
   "servers.notice.dismissable": {
     "defaultMessage": "Dismissable"
-  },
-  "servers.notice.heading.attention": {
-    "defaultMessage": "Attention"
-  },
-  "servers.notice.heading.info": {
-    "defaultMessage": "Info"
   },
   "servers.notice.level.critical.name": {
     "defaultMessage": "Critical"
@@ -4006,6 +4018,144 @@
   },
   "settings.sessions.title": {
     "defaultMessage": "Sessions"
+  },
+  "skin.preview.armor.equip-material": {
+    "defaultMessage": "{material} {slot}"
+  },
+  "skin.preview.armor.material": {
+    "defaultMessage": "Armor material"
+  },
+  "skin.preview.armor.material.chainmail": {
+    "defaultMessage": "Chainmail"
+  },
+  "skin.preview.armor.material.copper": {
+    "defaultMessage": "Copper"
+  },
+  "skin.preview.armor.material.diamond": {
+    "defaultMessage": "Diamond"
+  },
+  "skin.preview.armor.material.gold": {
+    "defaultMessage": "Gold"
+  },
+  "skin.preview.armor.material.iron": {
+    "defaultMessage": "Iron"
+  },
+  "skin.preview.armor.material.leather": {
+    "defaultMessage": "Leather"
+  },
+  "skin.preview.armor.material.netherite": {
+    "defaultMessage": "Netherite"
+  },
+  "skin.preview.armor.material.turtle": {
+    "defaultMessage": "Turtle Shell"
+  },
+  "skin.preview.armor.open": {
+    "defaultMessage": "Armor and trims"
+  },
+  "skin.preview.armor.piece": {
+    "defaultMessage": "Armor piece"
+  },
+  "skin.preview.armor.remove-piece": {
+    "defaultMessage": "Remove {slot}"
+  },
+  "skin.preview.armor.remove-trim": {
+    "defaultMessage": "No armor trim"
+  },
+  "skin.preview.armor.slot-state": {
+    "defaultMessage": "{slot}: {state}"
+  },
+  "skin.preview.armor.slot.boots": {
+    "defaultMessage": "Boots"
+  },
+  "skin.preview.armor.slot.chestplate": {
+    "defaultMessage": "Chestplate"
+  },
+  "skin.preview.armor.slot.helmet": {
+    "defaultMessage": "Helmet"
+  },
+  "skin.preview.armor.slot.leggings": {
+    "defaultMessage": "Leggings"
+  },
+  "skin.preview.armor.trim-material": {
+    "defaultMessage": "Trim material"
+  },
+  "skin.preview.armor.trim-material.amethyst": {
+    "defaultMessage": "Amethyst"
+  },
+  "skin.preview.armor.trim-material.emerald": {
+    "defaultMessage": "Emerald"
+  },
+  "skin.preview.armor.trim-material.lapis": {
+    "defaultMessage": "Lapis Lazuli"
+  },
+  "skin.preview.armor.trim-material.quartz": {
+    "defaultMessage": "Quartz"
+  },
+  "skin.preview.armor.trim-material.redstone": {
+    "defaultMessage": "Redstone"
+  },
+  "skin.preview.armor.trim-material.resin": {
+    "defaultMessage": "Resin Brick"
+  },
+  "skin.preview.armor.trim-pattern": {
+    "defaultMessage": "Trim pattern"
+  },
+  "skin.preview.armor.trim.bolt": {
+    "defaultMessage": "Bolt Armor Trim"
+  },
+  "skin.preview.armor.trim.coast": {
+    "defaultMessage": "Coast Armor Trim"
+  },
+  "skin.preview.armor.trim.dune": {
+    "defaultMessage": "Dune Armor Trim"
+  },
+  "skin.preview.armor.trim.eye": {
+    "defaultMessage": "Eye Armor Trim"
+  },
+  "skin.preview.armor.trim.flow": {
+    "defaultMessage": "Flow Armor Trim"
+  },
+  "skin.preview.armor.trim.host": {
+    "defaultMessage": "Host Armor Trim"
+  },
+  "skin.preview.armor.trim.raiser": {
+    "defaultMessage": "Raiser Armor Trim"
+  },
+  "skin.preview.armor.trim.rib": {
+    "defaultMessage": "Rib Armor Trim"
+  },
+  "skin.preview.armor.trim.sentry": {
+    "defaultMessage": "Sentry Armor Trim"
+  },
+  "skin.preview.armor.trim.shaper": {
+    "defaultMessage": "Shaper Armor Trim"
+  },
+  "skin.preview.armor.trim.silence": {
+    "defaultMessage": "Silence Armor Trim"
+  },
+  "skin.preview.armor.trim.snout": {
+    "defaultMessage": "Snout Armor Trim"
+  },
+  "skin.preview.armor.trim.spire": {
+    "defaultMessage": "Spire Armor Trim"
+  },
+  "skin.preview.armor.trim.tide": {
+    "defaultMessage": "Tide Armor Trim"
+  },
+  "skin.preview.armor.trim.vex": {
+    "defaultMessage": "Vex Armor Trim"
+  },
+  "skin.preview.armor.trim.ward": {
+    "defaultMessage": "Ward Armor Trim"
+  },
+  "skin.preview.armor.trim.wayfinder": {
+    "defaultMessage": "Wayfinder Armor Trim"
+  },
+  "skin.preview.armor.trim.wild": {
+    "defaultMessage": "Wild Armor Trim"
+  },
+  "skin.preview.armor.unequipped": {
+    "defaultMessage": "Unequipped"
   },
   "skin.preview.drag-to-rotate": {
     "defaultMessage": "Drag to rotate"
@@ -4433,96 +4583,6 @@
   "tag.loader.waterfall": {
     "defaultMessage": "Waterfall"
   },
-  "time-frame-picker.apply": {
-    "defaultMessage": "Apply"
-  },
-  "time-frame-picker.cancel": {
-    "defaultMessage": "Cancel"
-  },
-  "time-frame-picker.clear-range": {
-    "defaultMessage": "Clear"
-  },
-  "time-frame-picker.custom-range": {
-    "defaultMessage": "Custom fixed date range..."
-  },
-  "time-frame-picker.decrease-amount": {
-    "defaultMessage": "Decrease timeframe amount"
-  },
-  "time-frame-picker.empty-range": {
-    "defaultMessage": "No date range selected."
-  },
-  "time-frame-picker.end-date": {
-    "defaultMessage": "End date"
-  },
-  "time-frame-picker.increase-amount": {
-    "defaultMessage": "Increase timeframe amount"
-  },
-  "time-frame-picker.last-timeframe": {
-    "defaultMessage": "In the last {amount} {unit, select, hours {{amount, plural, one {hour} other {hours}}} days {{amount, plural, one {day} other {days}}} weeks {{amount, plural, one {week} other {weeks}}} months {{amount, plural, one {month} other {months}}} other {days}}"
-  },
-  "time-frame-picker.last-timeframe-prefix": {
-    "defaultMessage": "In the last"
-  },
-  "time-frame-picker.option.all-time": {
-    "defaultMessage": "All time"
-  },
-  "time-frame-picker.option.last-14-days": {
-    "defaultMessage": "Last 14 days"
-  },
-  "time-frame-picker.option.last-180-days": {
-    "defaultMessage": "Last 180 days"
-  },
-  "time-frame-picker.option.last-30-days": {
-    "defaultMessage": "Last 30 days"
-  },
-  "time-frame-picker.option.last-7-days": {
-    "defaultMessage": "Last 7 days"
-  },
-  "time-frame-picker.option.last-90-days": {
-    "defaultMessage": "Last 90 days"
-  },
-  "time-frame-picker.option.today": {
-    "defaultMessage": "Today"
-  },
-  "time-frame-picker.option.year-to-date": {
-    "defaultMessage": "Year to date"
-  },
-  "time-frame-picker.option.yesterday": {
-    "defaultMessage": "Yesterday"
-  },
-  "time-frame-picker.select-timeframe": {
-    "defaultMessage": "Select timeframe"
-  },
-  "time-frame-picker.selected-range": {
-    "defaultMessage": "Selected"
-  },
-  "time-frame-picker.selecting-range": {
-    "defaultMessage": "Selecting"
-  },
-  "time-frame-picker.start-date": {
-    "defaultMessage": "Start date"
-  },
-  "time-frame-picker.timeframe-amount": {
-    "defaultMessage": "Timeframe amount"
-  },
-  "time-frame-picker.timeframe-unit": {
-    "defaultMessage": "Timeframe unit"
-  },
-  "time-frame-picker.unit.days": {
-    "defaultMessage": "days"
-  },
-  "time-frame-picker.unit.hours": {
-    "defaultMessage": "hours"
-  },
-  "time-frame-picker.unit.months": {
-    "defaultMessage": "months"
-  },
-  "time-frame-picker.unit.weeks": {
-    "defaultMessage": "weeks"
-  },
-  "ui.component.unsaved-changes-popup.body": {
-    "defaultMessage": "You have unsaved changes."
-  },
   "ui.confirm-leave-modal.body": {
     "defaultMessage": "You have unsaved changes that will be lost if you leave this page."
   },
@@ -4673,12 +4733,6 @@
   "ui.scroll-to-top.tooltip": {
     "defaultMessage": "Scroll to top"
   },
-  "ui.stacked-admonitions.alert-count": {
-    "defaultMessage": "{count, plural, one {# alert} other {# alerts}}"
-  },
-  "ui.stacked-admonitions.dismiss-all": {
-    "defaultMessage": "Dismiss all"
-  },
   "version.content.name": {
     "defaultMessage": "Name"
   },
@@ -4760,6 +4814,9 @@
   "version.section.supplementary-resources": {
     "defaultMessage": "Supplementary resources"
   },
+  "version.summary.view-version": {
+    "defaultMessage": "View version"
+  },
   "version.supplementary-resources.file": {
     "defaultMessage": "File"
   },
@@ -4768,5 +4825,8 @@
   },
   "version.supplementary-resources.type": {
     "defaultMessage": "Type"
+  },
+  "version.uploaded-by": {
+    "defaultMessage": "Uploaded by"
   }
 }

@@ -43,35 +43,191 @@ const APP_DB = 'app.db'
 const CHANNELS = ['release', 'beta']
 
 // Schema added by known migrations, used to undo it. Every migration a
-// downgrade is allowed to pass needs an entry here: `ALTER TABLE ... ADD COLUMN`
-// cannot be reversed in place, and leaving the column behind breaks the next
-// install of a build that carries the migration. A migration that only moves
-// data (DELETE, UPDATE) gets an empty list - there is nothing to drop, but
-// naming it keeps the downgrade from stopping on a migration it could pass.
+// downgrade is allowed to pass needs an entry here: added columns and tables
+// cannot be left behind, or the next install of a build carrying the migration
+// fails on duplicate schema. A migration that only moves data (DELETE, UPDATE)
+// gets an empty object; naming it keeps the downgrade from stopping on a
+// migration it can safely pass.
 //
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
-const REVERTIBLE_COLUMNS = {
+const REVERTIBLE_SCHEMA = {
+    20261022120000: { columns: [{ table: 'settings', column: 'curseforge_api_key' }] },
+    // CodeFlow endpoint domain move; data only
+    20261021120000: {},
+    20261014210000: { tables: ['resource_legacy_rollback_journals'] },
+    20261014190000: {
+        objects: [
+            { type: 'index', name: 'resource_pending_download_project' },
+            { type: 'index', name: 'resource_link_modrinth_project' },
+            { type: 'index', name: 'resource_link_content_project' },
+            { type: 'index', name: 'resource_link_curseforge_project' },
+        ],
+    },
+    20261013120000: {
+        columns: [
+            { table: 'settings', column: 'resource_chinese_filenames' },
+            { table: 'settings', column: 'resource_preserve_filenames' },
+        ],
+        tables: ['resource_pack_unlinks'],
+    },
+    20261011164500: { objects: [{ type: 'trigger', name: 'resource_install_job_delete' }] },
+    20261011163000: { tables: ['resource_entry_graphs', 'resource_execution_journals'] },
+    20261011160000: { tables: ['resource_history_cleanup_plans', 'resource_history'] },
+    20261011150000: { tables: ['resource_installed_artifacts', 'resource_operation_plans'] },
+    20261011140000: { tables: ['resource_favorites'] },
+    20261011123000: {},
+    20261011120000: {
+        objects: [
+            { type: 'trigger', name: 'resource_instance_links_insert' },
+            { type: 'trigger', name: 'resource_instance_links_update' },
+            { type: 'view', name: 'resource_instance_pack_links' },
+            { type: 'trigger', name: 'resource_instance_content_provider_refs_insert' },
+            { type: 'trigger', name: 'resource_instance_content_provider_refs_update' },
+            { type: 'trigger', name: 'resource_content_favorites_insert' },
+            { type: 'trigger', name: 'resource_content_favorites_update' },
+            { type: 'trigger', name: 'resource_instance_pack_members_insert' },
+            { type: 'trigger', name: 'resource_instance_pack_members_update' },
+            { type: 'trigger', name: 'resource_instance_pending_manual_downloads_insert' },
+            { type: 'trigger', name: 'resource_instance_pending_manual_downloads_update' },
+            { type: 'view', name: 'resource_pack_links' },
+            { type: 'view', name: 'resource_favorite_links' },
+            { type: 'view', name: 'resource_entry_links' },
+            { type: 'view', name: 'resource_legacy_projects' },
+            { type: 'view', name: 'resource_instance_pack_projects' },
+        ],
+        tables: ['resource_identity_evidence', 'resource_aliases', 'resource_source_types', 'resource_source_projects', 'resource_preferences', 'resources'],
+    },
+	20261004140000: {
+		columns: [
+			{ table: 'settings', column: 'doh_enabled' },
+			{ table: 'settings', column: 'doh_server' },
+		],
+	},
+	20261004120001: {
+		tables: ['store_operations', 'store_retained_refs', 'store_instance_files', 'store_blobs'],
+	},
+	// XMCL removal only normalizes data; keep the legacy column as a rollback tombstone.
+	20261004130000: {},
+	20261002120000: { tables: ['official_login_proof'] },
 	// settings.close_behavior
-	20260903120000: [{ table: 'settings', column: 'close_behavior' }],
+	20260903120000: { columns: [{ table: 'settings', column: 'close_behavior' }] },
 	// instances: the direct link columns
-	20260904120000: [
-		{ table: 'instances', column: 'linked_launcher' },
-		{ table: 'instances', column: 'linked_launcher_root' },
-		{ table: 'instances', column: 'linked_dot_minecraft' },
-		{ table: 'instances', column: 'linked_version_id' },
-		{ table: 'instances', column: 'linked_version_json_path' },
-	],
+	20260904120000: {
+		columns: [
+			{ table: 'instances', column: 'linked_launcher' },
+			{ table: 'instances', column: 'linked_launcher_root' },
+			{ table: 'instances', column: 'linked_dot_minecraft' },
+			{ table: 'instances', column: 'linked_version_id' },
+			{ table: 'instances', column: 'linked_version_json_path' },
+		],
+	},
 	// telemetry samples; the tables stay, so nothing to drop
-	20260905000000: [],
+	20260905000000: {},
 	// settings.mc_maximize_window
-	20260908000000: [{ table: 'settings', column: 'mc_maximize_window' }],
+	20260908000000: { columns: [{ table: 'settings', column: 'mc_maximize_window' }] },
 	// instances.linked_game_dir_mode
-	20260908010000: [{ table: 'instances', column: 'linked_game_dir_mode' }],
+	20260908010000: { columns: [{ table: 'instances', column: 'linked_game_dir_mode' }] },
 	// crash_analysis_ai_settings.ai_source
-	20260911120000: [{ table: 'crash_analysis_ai_settings', column: 'ai_source' }],
+	20260911120000: {
+		columns: [{ table: 'crash_analysis_ai_settings', column: 'ai_source' }],
+	},
 	// settings.log_level
-	20260912120000: [{ table: 'settings', column: 'log_level' }],
+	20260912120000: { columns: [{ table: 'settings', column: 'log_level' }] },
+	// log level default normalization; data only
+	20260913170000: {},
+	// instance synchronization and screenshot center
+	20260914090000: {
+		columns: [
+			{ table: 'settings', column: 'sync_features_across_devices' },
+			{ table: 'settings', column: 'show_files_tab_in_instances' },
+			{ table: 'settings', column: 'show_worlds_tab_in_instances' },
+			{ table: 'settings', column: 'show_screenshots_tab_in_instances' },
+			{ table: 'settings', column: 'show_skin_selector_in_sidebar' },
+		],
+		// Reverse creation order keeps dependent tables ahead of their parents.
+		tables: [
+			'synced_pack_instances',
+			'synced_pack_catalog',
+			'screenshot_group_memberships',
+			'screenshot_groups',
+			'screenshots',
+			'instance_server_pack_state',
+			'instance_server_projection_entries',
+			'instance_servers',
+			'synced_servers',
+			'synced_server_state',
+			'synced_hotbar_state',
+			'instance_sync_checkpoints',
+			'game_option_locale_origins',
+			'instance_game_option_update_state',
+			'instance_game_option_pack_bases',
+			'synced_game_option_preferences',
+			'synced_game_option_values',
+			'synced_game_option_state',
+			'instance_sync_preferences',
+			'sync_feature_settings',
+		],
+	},
+	// linked server project sync source; data only
+	20260915090000: {},
+	// minecraft_users_with_identity table; trigger drops are not reversible
+	20260916090000: {
+		tables: ['minecraft_users_with_identity'],
+	},
+	// settings.ignore_ssl_errors
+	20260917120000: {
+		columns: [{ table: 'settings', column: 'ignore_ssl_errors' }],
+	},
+	// settings.home_widget_background_opacity
+	20260917130000: {
+		columns: [{ table: 'settings', column: 'home_widget_background_opacity' }],
+	},
+	// settings.hidden_nav_items
+	20260917131000: {
+		columns: [{ table: 'settings', column: 'hidden_nav_items' }],
+	},
+	// settings.custom_window_title_enabled / default_window_title
+	20260917140000: {
+		columns: [
+			{ table: 'settings', column: 'custom_window_title_enabled' },
+			{ table: 'settings', column: 'default_window_title' },
+		],
+	},
+	// settings.custom_background_component_opacity
+	20260917150000: {
+		columns: [{ table: 'settings', column: 'custom_background_component_opacity' }],
+	},
+	// settings.backup_repository_path
+	20260920130000: {
+		columns: [{ table: 'settings', column: 'backup_repository_path' }],
+	},
+	// old backup repository paths awaiting cleanup
+	20260920160000: {
+		tables: ['pending_backup_repository_cleanups'],
+	},
+	// synced pack selection state
+	20260922110000: {
+		columns: [
+			{ table: 'synced_pack_catalog', column: 'selected' },
+			{ table: 'synced_pack_catalog', column: 'selection_order' },
+		],
+	},
+	// settings.allow_external_scheme
+	20260922120000: {
+		columns: [{ table: 'settings', column: 'allow_external_scheme' }],
+	},
+	// settings.ui_font / mono_font
+	20260919120000: {
+		columns: [
+			{ table: 'settings', column: 'ui_font' },
+			{ table: 'settings', column: 'mono_font' },
+		],
+	},
+	// settings.allow_privileged_scheme
+	20261004120000: {
+		columns: [{ table: 'settings', column: 'allow_privileged_scheme' }],
+	},
 }
 
 function fail(message) {
@@ -334,6 +490,36 @@ function columnsPresent(db, columns) {
 	return present
 }
 
+function tablesPresent(db, tables) {
+	if (tables.length === 0) return []
+
+	const database = openReadOnly(db)
+	const present = tables.map((table) => ({
+		table,
+		present:
+			database
+				.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+				.get(table) !== undefined,
+	}))
+	database.close()
+	return present
+}
+
+function objectsPresent(db, objects) {
+    if (objects.length === 0) return []
+    const database = openReadOnly(db)
+    try {
+        return objects.map(({ type, name }) => {
+            if (!['view', 'trigger', 'index'].includes(type) || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+                fail('invalid schema object in REVERTIBLE_SCHEMA')
+            }
+            return { type, name, present: database.prepare('SELECT 1 FROM sqlite_master WHERE type = ? AND name = ?').get(type, name) !== undefined }
+        })
+    } finally {
+        database.close()
+    }
+}
+
 // Names a running launcher can appear under. Installed builds use the configured
 // main binary name and a `tauri dev` binary keeps the crate name; a fork may
 // rename it again, so AXOLOTL_LAUNCHER_IMAGES replaces the list.
@@ -425,8 +611,10 @@ function planDowngrade(db, target) {
 
 	const plan = applied.map((version) => ({
 		version,
-		mapped: REVERTIBLE_COLUMNS[version] !== undefined,
-		columns: columnsPresent(db, REVERTIBLE_COLUMNS[version] ?? []),
+		mapped: REVERTIBLE_SCHEMA[version] !== undefined,
+		columns: columnsPresent(db, REVERTIBLE_SCHEMA[version]?.columns ?? []),
+		tables: tablesPresent(db, REVERTIBLE_SCHEMA[version]?.tables ?? []),
+        objects: objectsPresent(db, REVERTIBLE_SCHEMA[version]?.objects ?? []),
 	}))
 
 	return { applied, failed, plan }
@@ -434,7 +622,7 @@ function planDowngrade(db, target) {
 
 function reportPlan({ applied, failed, plan }) {
 	note(`migrations to remove: ${applied.join(', ')}`)
-	for (const { version, mapped, columns } of plan) {
+    for (const { version, mapped, columns, tables, objects } of plan) {
 		if (!mapped) {
 			note(`  ${version}: no known schema for this migration, removing its record only`)
 			continue
@@ -446,6 +634,14 @@ function reportPlan({ applied, failed, plan }) {
 					: `  ${version}: ${table}.${column} is NOT in the database`,
 			)
 		}
+		for (const { table, present } of tables) {
+			note(
+				present ? `  ${version}: drop table ${table}` : `  ${version}: table ${table} is MISSING`,
+			)
+		}
+        for (const { type, name, present } of objects) {
+            note(present ? `  ${version}: drop ${type} ${name}` : `  ${version}: ${type} ${name} is MISSING`)
+        }
 	}
 
 	if (failed.length > 0) {
@@ -464,12 +660,16 @@ function reportPlan({ applied, failed, plan }) {
 // to repair, so stop instead.
 function checkMappings(plan) {
 	const mismatched = plan
-		.filter(({ mapped, columns }) => mapped && columns.some((column) => !column.present))
+		.filter(
+            ({ mapped, columns, tables, objects }) =>
+				mapped &&
+                (columns.some((column) => !column.present) || tables.some((table) => !table.present) || objects.some((object) => !object.present)),
+		)
 		.map(({ version }) => version)
 
 	if (mismatched.length > 0) {
 		fail(
-			`the schema recorded here for ${mismatched.join(', ')} does not match this database.\nRefusing to remove the records: reinstalling that build would then fail on a duplicate\ncolumn, and neither build could open the database. Check REVERTIBLE_COLUMNS against\npackages/app-lib/migrations, and use --list to inspect the database.`,
+			`the schema recorded here for ${mismatched.join(', ')} does not match this database.\nRefusing to remove the records: reinstalling that build would then fail on a duplicate\nschema object, and neither build could open the database. Check REVERTIBLE_SCHEMA against\npackages/app-lib/migrations, and use --list to inspect the database.`,
 		)
 	}
 }
@@ -539,7 +739,13 @@ function main() {
 		writable.exec('PRAGMA foreign_keys = OFF')
 		writable.exec('BEGIN')
 		try {
-			for (const { columns } of state.plan) {
+            for (const { columns, tables, objects } of [...state.plan].reverse()) {
+                for (const { type, name, present } of objects) {
+                    if (present) writable.exec(`DROP ${type.toUpperCase()} ${name}`)
+                }
+				for (const { table, present } of tables) {
+					if (present) writable.exec(`DROP TABLE ${table}`)
+				}
 				for (const { table, column, present } of columns) {
 					if (present) writable.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
 				}

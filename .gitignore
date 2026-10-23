@@ -54,6 +54,7 @@ Thumbs.db
 .turbo
 target
 generated
+.vite
 .env
 .dev.vars
 .dev.vars.*
@@ -66,8 +67,6 @@ access-jwt*.txt
 .vercel/
 
 .astro
-.claude/*
-!.claude/skills/
 .letta
 
 # ZCode agent session data
@@ -79,6 +78,12 @@ access-jwt*.txt
 
 # Codex local verification artifacts
 /.codex-*
+
+# Local agent/scratch caches; keep maintained instructions and Skills tracked.
+/.dev-data/
+/.commandcode/
+/.agents/tmp/
+/.agents/cache/
 
 # Oh My Code
 .omc/
@@ -106,3 +111,14 @@ apps/app/resources/blockbench-skin/
 .netlify
 .cf-reconcile-test
 .cf-reconcile-state-a
+
+# Vitest failure attachments (screenshots) and cache
+.vitest-attachments/
+
+# Vitest visual-regression screenshots
+**/__screenshots__/
+
+#local development script
+start-dev.ps1
+
+apps/app/resources/seed-map/

@@ -1,101 +1,80 @@
 <template>
-	<div class="chips flex gap-2 flex-wrap" role="radiogroup" :aria-label="ariaLabel">
-		<Button
-			v-for="item in items"
-			:key="formatLabel(item)"
-			v-tooltip="isDisabled(item) ? getDisabledTooltip(item) : undefined"
-			role="radio"
-			:aria-checked="selected === item"
-			:disabled="isDisabled(item)"
-			class="btn !brightness-100 hover:!brightness-125"
-			:class="{
-				selected: selected === item,
-				capitalize: capitalize,
-				'!px-2.5 !py-1.5': size === 'small',
-			}"
-			@click="toggleItem(item)"
-		>
-			<CheckIcon v-if="selected === item && !hideCheckmarkIcon" />
-			<span>{{ formatLabel(item) }}</span>
-		</Button>
-	</div>
+    <div class="chips flex gap-2 flex-wrap" role="radiogroup" :aria-label="ariaLabel">
+        <Button
+            v-for="item in items"
+            :key="formatLabel(item)"
+            v-tooltip="isDisabled(item) ? getDisabledTooltip(item) : undefined"
+            role="radio"
+            :aria-checked="selected === item"
+            :data-state="selected === item ? 'checked' : 'unchecked'"
+            :type="selected === item ? 'chip' : 'base'"
+            v-bind="selected === item ? { color: 'brand' as const } : {}"
+            :size="size === 'small' ? 'sm' : 'md'"
+            :disabled="isDisabled(item)"
+            :class="{ capitalize }"
+            @click="toggleItem(item)"
+        >
+            <CheckIcon v-if="selected === item && !hideCheckmarkIcon" />
+            <span>{{ formatLabel(item) }}</span>
+        </Button>
+    </div>
 </template>
 
 <script setup lang="ts" generic="T">
 import { CheckIcon } from '@modrinth/assets'
 
-import Button from './Button.vue'
+import Button from './buttons/Button.vue'
 
 const props = withDefaults(
-	defineProps<{
-		items: T[]
-		formatLabel?: (item: T) => string
-		neverEmpty?: boolean
-		capitalize?: boolean
-		size?: 'standard' | 'small'
-		ariaLabel?: string
-		disabledItems?: T[]
-		disabledTooltip?: string | ((item: T) => string | undefined)
-		hideCheckmarkIcon?: boolean
-	}>(),
-	{
-		neverEmpty: true,
-		// Intentional any type, as this default should only be used for primitives (string or number)
-		formatLabel: (item) => item.toString(),
-		capitalize: true,
-		size: 'standard',
-	},
+    defineProps<{
+        items: T[]
+        formatLabel?: (item: T) => string
+        neverEmpty?: boolean
+        capitalize?: boolean
+        size?: 'standard' | 'small'
+        ariaLabel?: string
+        disabledItems?: T[]
+        disabledTooltip?: string | ((item: T) => string | undefined)
+        hideCheckmarkIcon?: boolean
+    }>(),
+    {
+        neverEmpty: true,
+        // Intentional any type, as this default should only be used for primitives (string or number)
+        formatLabel: (item) => item.toString(),
+        capitalize: true,
+        size: 'standard',
+    },
 )
 
 const selected = defineModel<T | null>()
 
 // If one always has to be selected, default to the first one
 if (props.items.length > 0 && props.neverEmpty && !selected.value) {
-	selected.value = props.items[0]
+    selected.value = props.items[0]
 }
 
 function isDisabled(item: T): boolean {
-	return props.disabledItems?.includes(item) ?? false
+    return props.disabledItems?.includes(item) ?? false
 }
 
 function getDisabledTooltip(item: T): string | undefined {
-	return typeof props.disabledTooltip === 'function'
-		? props.disabledTooltip(item)
-		: props.disabledTooltip
+    return typeof props.disabledTooltip === 'function'
+        ? props.disabledTooltip(item)
+        : props.disabledTooltip
 }
 
 function toggleItem(item: T) {
-	if (isDisabled(item)) return
-	if (selected.value === item && !props.neverEmpty) {
-		selected.value = null
-	} else {
-		selected.value = item
-	}
+    if (isDisabled(item)) return
+    if (selected.value === item && !props.neverEmpty) {
+        selected.value = null
+    } else {
+        selected.value = item
+    }
 }
 </script>
 
-<style lang="scss" scoped>
-.chips {
-	.btn {
-		border: 1px solid transparent;
-		&.capitalize {
-			text-transform: capitalize;
-		}
-
-		svg {
-			width: 1em;
-			height: 1em;
-		}
-
-		&:focus-visible {
-			outline: 0.25rem solid var(--color-focus-ring);
-		}
-	}
-
-	.selected {
-		color: var(--color-brand);
-		background-color: var(--color-brand-highlight);
-		border: 1px solid var(--color-brand);
-	}
+<style scoped>
+.capitalize {
+    text-transform: capitalize;
 }
 </style>

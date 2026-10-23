@@ -1,4 +1,7 @@
 {
+  "content.page-layout.dependency-disable-failed": {
+    "defaultMessage": "无法禁用依赖这些内容的项目。请重试以完成删除。"
+  },
   "action.no-permission": {
     "defaultMessage": "你没有权限。"
   },
@@ -26,11 +29,26 @@
   "browse.filter-results": {
     "defaultMessage": "筛选结果……"
   },
+  "browse.clear-search": {
+    "defaultMessage": "清除搜索"
+  },
+  "browse.loading-results": {
+    "defaultMessage": "正在加载结果……"
+  },
   "browse.no-results": {
     "defaultMessage": "没有找到您的查询结果！"
   },
+  "browse.no-results.heading": {
+    "defaultMessage": "这里还是空的"
+  },
   "browse.offline": {
     "defaultMessage": "你目前处于离线状态。连接互联网来浏览Modrinth！"
+  },
+  "browse.offline.heading": {
+    "defaultMessage": "网络未连接"
+  },
+  "browse.retry": {
+    "defaultMessage": "重试"
   },
   "browse.search.placeholder": {
     "defaultMessage": "搜索{projectType}……"
@@ -84,7 +102,7 @@
     "defaultMessage": "已验证游玩次数"
   },
   "browse.view-prefix": {
-    "defaultMessage": "查看："
+    "defaultMessage": "查看"
   },
   "button.accept": {
     "defaultMessage": "接受"
@@ -112,6 +130,9 @@
   },
   "button.close": {
     "defaultMessage": "关闭"
+  },
+  "button.confirm": {
+    "defaultMessage": "确认"
   },
   "button.continue": {
     "defaultMessage": "继续"
@@ -198,7 +219,7 @@
     "defaultMessage": "重新安装整合包"
   },
   "button.remove": {
-    "defaultMessage": "删除通行密钥"
+    "defaultMessage": "删除"
   },
   "button.remove-image": {
     "defaultMessage": "移除图片"
@@ -659,6 +680,9 @@
   "console.filter.warn": {
     "defaultMessage": "警告"
   },
+  "console.log-viewport.scroll-to-bottom": {
+    "defaultMessage": "滚动到底部"
+  },
   "console.notification.delete-failed": {
     "defaultMessage": "删除日志文件失败"
   },
@@ -848,9 +872,6 @@
   "content.filter.updates": {
     "defaultMessage": "可更新"
   },
-  "content.filter.warnings": {
-    "defaultMessage": "警告"
-  },
   "content.metadata-filter.author": {
     "defaultMessage": "作者"
   },
@@ -917,35 +938,8 @@
   "content.metadata-filter.select-all": {
     "defaultMessage": "全选"
   },
-  "content.metadata-filter.source": {
-    "defaultMessage": "来源"
-  },
   "content.metadata-filter.source.curseforge": {
     "defaultMessage": "CurseForge"
-  },
-  "content.metadata-filter.source.imported-modpack": {
-    "defaultMessage": "导入整合包"
-  },
-  "content.metadata-filter.source.local": {
-    "defaultMessage": "本地"
-  },
-  "content.metadata-filter.source.modrinth-modpack": {
-    "defaultMessage": "Modrinth 整合包"
-  },
-  "content.metadata-filter.source.server-project": {
-    "defaultMessage": "服务器项目"
-  },
-  "content.metadata-filter.source.shared-instance": {
-    "defaultMessage": "共享实例"
-  },
-  "content.metadata-filter.state": {
-    "defaultMessage": "状态"
-  },
-  "content.metadata-filter.state.disabled": {
-    "defaultMessage": "已禁用"
-  },
-  "content.metadata-filter.state.enabled": {
-    "defaultMessage": "已启用"
   },
   "content.metadata-filter.toggle": {
     "defaultMessage": "筛选"
@@ -955,15 +949,6 @@
   },
   "content.metadata-filter.unknown": {
     "defaultMessage": "未知"
-  },
-  "content.metadata-filter.update.available": {
-    "defaultMessage": "可更新"
-  },
-  "content.metadata-filter.update.up-to-date": {
-    "defaultMessage": "已是最新"
-  },
-  "content.metadata-filter.updates": {
-    "defaultMessage": "更新"
   },
   "content.page-layout.browse-content": {
     "defaultMessage": "浏览内容"
@@ -1763,18 +1748,6 @@
   "header.category.resolutions": {
     "defaultMessage": "分辨率"
   },
-  "icon-select.edit": {
-    "defaultMessage": "编辑图标"
-  },
-  "icon-select.remove": {
-    "defaultMessage": "移除图标"
-  },
-  "icon-select.replace": {
-    "defaultMessage": "替换图标"
-  },
-  "icon-select.select": {
-    "defaultMessage": "选择图标"
-  },
   "input.search-version.placeholder": {
     "defaultMessage": "查找版本……"
   },
@@ -2009,24 +1982,6 @@
   "instances.content-install.select-icon": {
     "defaultMessage": "选择图标"
   },
-  "instances.modpack-content-modal.empty-description": {
-    "defaultMessage": "这个整合包不包含任何额外内容。"
-  },
-  "instances.modpack-content-modal.empty-title": {
-    "defaultMessage": "未找到内容"
-  },
-  "instances.modpack-content-modal.header": {
-    "defaultMessage": "整合包内容"
-  },
-  "instances.modpack-content-modal.loading": {
-    "defaultMessage": "加载内容……"
-  },
-  "instances.modpack-content-modal.no-results": {
-    "defaultMessage": "没有符合搜索条件的项目。"
-  },
-  "instances.modpack-content-modal.search-placeholder": {
-    "defaultMessage": "搜索 {count, number} {count, plural, other {个项目}}"
-  },
   "instances.updater-modal.badge.current": {
     "defaultMessage": "当前"
   },
@@ -2228,6 +2183,33 @@
   "label.no-items": {
     "defaultMessage": "空"
   },
+  "modal.confirm.confirmation-placeholder": {
+    "defaultMessage": "在此输入……"
+  },
+  "modal.confirm.confirmation-prompt": {
+    "defaultMessage": "要确认继续，请在下方输入 <confirmation-text>{confirmationText}</confirmation-text>："
+  },
+  "modal.confirm.no-title": {
+    "defaultMessage": "未定义标题"
+  },
+  "modal.confirm.proceed": {
+    "defaultMessage": "继续"
+  },
+  "modal.install-to-play.admonition-body": {
+    "defaultMessage": "此服务器需要模组内容才能游玩。接受后将安装来自 Modrinth 所需的文件。"
+  },
+  "modal.install-to-play.admonition-header": {
+    "defaultMessage": "共享服务器实例"
+  },
+  "modal.install-to-play.shared-by": {
+    "defaultMessage": "<name>{name}</name>今天与你共享了此实例。"
+  },
+  "modal.install-to-play.shared-instance-label": {
+    "defaultMessage": "共享实例"
+  },
+  "modal.install-to-play.title": {
+    "defaultMessage": "安装后游玩"
+  },
   "notification.panel.copy": {
     "defaultMessage": "复制到剪贴板"
   },
@@ -2319,7 +2301,7 @@
     "defaultMessage": "单人游戏"
   },
   "label.sort-by": {
-    "defaultMessage": "排序方式："
+    "defaultMessage": "排序方式"
   },
   "label.success": {
     "defaultMessage": "成功"
@@ -2459,150 +2441,6 @@
   "locale.zh-TW": {
     "defaultMessage": "中文（繁体）"
   },
-  "markdown-editor.default-image-alt-text": {
-    "defaultMessage": "用文字描述替代"
-  },
-  "markdown-editor.error-label": {
-    "defaultMessage": "出错"
-  },
-  "markdown-editor.image-modal.description-field.description": {
-    "defaultMessage": "尽可能地描述这张图片，以此关照不能加载图片的人。"
-  },
-  "markdown-editor.image-modal.description-field.placeholder": {
-    "defaultMessage": "描述此图片…"
-  },
-  "markdown-editor.image-modal.description-field.title": {
-    "defaultMessage": "描述（替代文本）"
-  },
-  "markdown-editor.image-modal.header": {
-    "defaultMessage": "插入图片"
-  },
-  "markdown-editor.image-modal.upload-mode.label": {
-    "defaultMessage": "图片来源"
-  },
-  "markdown-editor.image-modal.upload-mode.link": {
-    "defaultMessage": "链接"
-  },
-  "markdown-editor.image-modal.upload-mode.upload": {
-    "defaultMessage": "上传"
-  },
-  "markdown-editor.image-modal.upload.prompt": {
-    "defaultMessage": "拖放上传或单击选择文件"
-  },
-  "markdown-editor.image-modal.url-field.placeholder": {
-    "defaultMessage": "输入图片URL…"
-  },
-  "markdown-editor.insert-button": {
-    "defaultMessage": "插入"
-  },
-  "markdown-editor.link-modal.header": {
-    "defaultMessage": "插入链接"
-  },
-  "markdown-editor.link-modal.label-field.placeholder": {
-    "defaultMessage": "输入标签……"
-  },
-  "markdown-editor.link-modal.label-field.title": {
-    "defaultMessage": "标签"
-  },
-  "markdown-editor.link-modal.url-field.placeholder": {
-    "defaultMessage": "输入链接URL…"
-  },
-  "markdown-editor.markdown-formatting-support": {
-    "defaultMessage": "此编辑器支持 <markdown-link>Markdown 格式</markdown-link>。"
-  },
-  "markdown-editor.max-length.label": {
-    "defaultMessage": "长度限制："
-  },
-  "markdown-editor.max-length.unlimited": {
-    "defaultMessage": "无限制"
-  },
-  "markdown-editor.max-length.value": {
-    "defaultMessage": "{currentLength}/{maxLength}"
-  },
-  "markdown-editor.placeholder": {
-    "defaultMessage": "写点什么……"
-  },
-  "markdown-editor.preview-label": {
-    "defaultMessage": "预览"
-  },
-  "markdown-editor.preview-toggle.label": {
-    "defaultMessage": "预览"
-  },
-  "markdown-editor.toolbar.bold": {
-    "defaultMessage": "加粗"
-  },
-  "markdown-editor.toolbar.bulleted-list": {
-    "defaultMessage": "项目清单"
-  },
-  "markdown-editor.toolbar.code": {
-    "defaultMessage": "代码"
-  },
-  "markdown-editor.toolbar.heading-1": {
-    "defaultMessage": "一级标题"
-  },
-  "markdown-editor.toolbar.heading-2": {
-    "defaultMessage": "二级标题"
-  },
-  "markdown-editor.toolbar.heading-3": {
-    "defaultMessage": "三级标题"
-  },
-  "markdown-editor.toolbar.image": {
-    "defaultMessage": "图片"
-  },
-  "markdown-editor.toolbar.italic": {
-    "defaultMessage": "斜体"
-  },
-  "markdown-editor.toolbar.link": {
-    "defaultMessage": "链接"
-  },
-  "markdown-editor.toolbar.ordered-list": {
-    "defaultMessage": "已排序列表"
-  },
-  "markdown-editor.toolbar.quote": {
-    "defaultMessage": "引用"
-  },
-  "markdown-editor.toolbar.spoiler": {
-    "defaultMessage": "折叠内容"
-  },
-  "markdown-editor.toolbar.strikethrough": {
-    "defaultMessage": "删除线"
-  },
-  "markdown-editor.toolbar.video": {
-    "defaultMessage": "视频"
-  },
-  "markdown-editor.upload-error.no-file": {
-    "defaultMessage": "没有提供文件"
-  },
-  "markdown-editor.upload-error.no-handler": {
-    "defaultMessage": "未提供图像上传处理程序"
-  },
-  "markdown-editor.url-label": {
-    "defaultMessage": "URL链接"
-  },
-  "markdown-editor.url-validation-error.blocked-domain": {
-    "defaultMessage": "无效的URL。此域名不被允许使用。"
-  },
-  "markdown-editor.url-validation-error.malformed": {
-    "defaultMessage": "无效的URL。请确保URL格式正确。"
-  },
-  "markdown-editor.url-validation-error.unsupported-protocol": {
-    "defaultMessage": "不支持的协议。请使用 http 或 https。"
-  },
-  "markdown-editor.video-embed.title": {
-    "defaultMessage": "YouTube 视频播放器"
-  },
-  "markdown-editor.video-modal.header": {
-    "defaultMessage": "插入 YouTube 视频"
-  },
-  "markdown-editor.video-modal.url-field.description": {
-    "defaultMessage": "输入一个有效的 YouTube 视频链接。"
-  },
-  "markdown-editor.video-modal.url-field.placeholder": {
-    "defaultMessage": "输入 YouTube 视频 URL"
-  },
-  "markdown-editor.video-modal.url-field.title": {
-    "defaultMessage": "YouTube视频URL"
-  },
   "modal.open-in-app.benefit.install": {
     "defaultMessage": "自动安装所需要的内容"
   },
@@ -2696,26 +2534,17 @@
   "omorphia.component.copy.action.copy": {
     "defaultMessage": "将代码复制到剪贴板"
   },
-  "omorphia.component.environment-indicator.label.client": {
-    "defaultMessage": "客户端"
-  },
-  "omorphia.component.environment-indicator.label.client-and-server": {
-    "defaultMessage": "客户端和服务端"
-  },
-  "omorphia.component.environment-indicator.label.client-or-server": {
-    "defaultMessage": "客户端或服务端"
-  },
-  "omorphia.component.environment-indicator.label.server": {
-    "defaultMessage": "服务端"
-  },
-  "omorphia.component.environment-indicator.label.type": {
-    "defaultMessage": "{type}"
-  },
-  "omorphia.component.environment-indicator.label.unsupported": {
-    "defaultMessage": "不支持"
-  },
   "omorphia.component.loading-indicator.label": {
     "defaultMessage": "加载中"
+  },
+  "pagination.go-to-page": {
+    "defaultMessage": "跳转到页码"
+  },
+  "pagination.go-to-page.placeholder": {
+    "defaultMessage": "页码"
+  },
+  "pagination.loading-page": {
+    "defaultMessage": "正在加载页面……"
   },
   "payment-method.amazon_pay": {
     "defaultMessage": "Amazon 支付"
@@ -3371,6 +3200,9 @@
   "project.versions.table.version": {
     "defaultMessage": "版本"
   },
+  "project.versions.no-matching-versions": {
+    "defaultMessage": "没有符合所选筛选条件的版本。"
+  },
   "project.versions.version.withheld": {
     "defaultMessage": "保留"
   },
@@ -3560,17 +3392,8 @@
   "search.server_content_type.vanilla": {
     "defaultMessage": "原版"
   },
-  "servers.notice.dismiss": {
-    "defaultMessage": "隐藏"
-  },
   "servers.notice.dismissable": {
     "defaultMessage": "可隐藏"
-  },
-  "servers.notice.heading.attention": {
-    "defaultMessage": "注意"
-  },
-  "servers.notice.heading.info": {
-    "defaultMessage": "信息"
   },
   "servers.notice.level.critical.name": {
     "defaultMessage": "关键重要信息"
@@ -3694,6 +3517,144 @@
   },
   "settings.sessions.title": {
     "defaultMessage": "会话"
+  },
+  "skin.preview.armor.equip-material": {
+    "message": "为{slot}装备{material}"
+  },
+  "skin.preview.armor.material": {
+    "message": "盔甲材质"
+  },
+  "skin.preview.armor.material.chainmail": {
+    "message": "锁链"
+  },
+  "skin.preview.armor.material.copper": {
+    "message": "铜"
+  },
+  "skin.preview.armor.material.diamond": {
+    "message": "钻石"
+  },
+  "skin.preview.armor.material.gold": {
+    "message": "金"
+  },
+  "skin.preview.armor.material.iron": {
+    "message": "铁"
+  },
+  "skin.preview.armor.material.leather": {
+    "message": "皮革"
+  },
+  "skin.preview.armor.material.netherite": {
+    "message": "下界合金"
+  },
+  "skin.preview.armor.material.turtle": {
+    "message": "海龟壳"
+  },
+  "skin.preview.armor.open": {
+    "message": "盔甲与纹饰"
+  },
+  "skin.preview.armor.piece": {
+    "message": "盔甲部位"
+  },
+  "skin.preview.armor.remove-piece": {
+    "message": "脱下{slot}"
+  },
+  "skin.preview.armor.remove-trim": {
+    "message": "无盔甲纹饰"
+  },
+  "skin.preview.armor.slot-state": {
+    "message": "{slot}：{state}"
+  },
+  "skin.preview.armor.slot.boots": {
+    "message": "靴子"
+  },
+  "skin.preview.armor.slot.chestplate": {
+    "message": "胸甲"
+  },
+  "skin.preview.armor.slot.helmet": {
+    "message": "头盔"
+  },
+  "skin.preview.armor.slot.leggings": {
+    "message": "护腿"
+  },
+  "skin.preview.armor.trim-material": {
+    "message": "纹饰材料"
+  },
+  "skin.preview.armor.trim-material.amethyst": {
+    "message": "紫水晶"
+  },
+  "skin.preview.armor.trim-material.emerald": {
+    "message": "绿宝石"
+  },
+  "skin.preview.armor.trim-material.lapis": {
+    "message": "青金石"
+  },
+  "skin.preview.armor.trim-material.quartz": {
+    "message": "下界石英"
+  },
+  "skin.preview.armor.trim-material.redstone": {
+    "message": "红石"
+  },
+  "skin.preview.armor.trim-material.resin": {
+    "message": "树脂砖"
+  },
+  "skin.preview.armor.trim-pattern": {
+    "message": "纹饰图案"
+  },
+  "skin.preview.armor.trim.bolt": {
+    "message": "镶铆盔甲纹饰"
+  },
+  "skin.preview.armor.trim.coast": {
+    "message": "海岸盔甲纹饰"
+  },
+  "skin.preview.armor.trim.dune": {
+    "message": "沙丘盔甲纹饰"
+  },
+  "skin.preview.armor.trim.eye": {
+    "message": "眼眸盔甲纹饰"
+  },
+  "skin.preview.armor.trim.flow": {
+    "message": "涡流盔甲纹饰"
+  },
+  "skin.preview.armor.trim.host": {
+    "message": "雇主盔甲纹饰"
+  },
+  "skin.preview.armor.trim.raiser": {
+    "message": "牧民盔甲纹饰"
+  },
+  "skin.preview.armor.trim.rib": {
+    "message": "肋骨盔甲纹饰"
+  },
+  "skin.preview.armor.trim.sentry": {
+    "message": "哨兵盔甲纹饰"
+  },
+  "skin.preview.armor.trim.shaper": {
+    "message": "塑造盔甲纹饰"
+  },
+  "skin.preview.armor.trim.silence": {
+    "message": "幽静盔甲纹饰"
+  },
+  "skin.preview.armor.trim.snout": {
+    "message": "猪鼻盔甲纹饰"
+  },
+  "skin.preview.armor.trim.spire": {
+    "message": "尖塔盔甲纹饰"
+  },
+  "skin.preview.armor.trim.tide": {
+    "message": "潮汐盔甲纹饰"
+  },
+  "skin.preview.armor.trim.vex": {
+    "message": "恼鬼盔甲纹饰"
+  },
+  "skin.preview.armor.trim.ward": {
+    "message": "监守盔甲纹饰"
+  },
+  "skin.preview.armor.trim.wayfinder": {
+    "message": "向导盔甲纹饰"
+  },
+  "skin.preview.armor.trim.wild": {
+    "message": "荒野盔甲纹饰"
+  },
+  "skin.preview.armor.unequipped": {
+    "message": "未装备"
   },
   "skin.preview.drag-to-rotate": {
     "defaultMessage": "拖动以旋转"
@@ -4121,96 +4082,6 @@
   "tag.loader.waterfall": {
     "defaultMessage": "Waterfall"
   },
-  "time-frame-picker.apply": {
-    "defaultMessage": "应用"
-  },
-  "time-frame-picker.cancel": {
-    "defaultMessage": "取消"
-  },
-  "time-frame-picker.clear-range": {
-    "defaultMessage": "清除"
-  },
-  "time-frame-picker.custom-range": {
-    "defaultMessage": "自定义固定日期范围……"
-  },
-  "time-frame-picker.decrease-amount": {
-    "defaultMessage": "减少计费周期时长"
-  },
-  "time-frame-picker.empty-range": {
-    "defaultMessage": "未选择时间范围。"
-  },
-  "time-frame-picker.end-date": {
-    "defaultMessage": "结束日期"
-  },
-  "time-frame-picker.increase-amount": {
-    "defaultMessage": "增加计费周期时长"
-  },
-  "time-frame-picker.last-timeframe": {
-    "defaultMessage": "在最后的{amount} {unit, select, hours {{amount, plural, one {小时} other {小时}}} days {{amount, plural, one {天} other {天}}} weeks {{amount, plural, one {周} other {周}}} months {{amount, plural, one {月} other {月}}} other {天}}"
-  },
-  "time-frame-picker.last-timeframe-prefix": {
-    "defaultMessage": "最后的时间"
-  },
-  "time-frame-picker.option.all-time": {
-    "defaultMessage": "所有时间"
-  },
-  "time-frame-picker.option.last-14-days": {
-    "defaultMessage": "过去14天"
-  },
-  "time-frame-picker.option.last-180-days": {
-    "defaultMessage": "过去180天"
-  },
-  "time-frame-picker.option.last-30-days": {
-    "defaultMessage": "过去30天"
-  },
-  "time-frame-picker.option.last-7-days": {
-    "defaultMessage": "过去7天"
-  },
-  "time-frame-picker.option.last-90-days": {
-    "defaultMessage": "过去90天"
-  },
-  "time-frame-picker.option.today": {
-    "defaultMessage": "今天"
-  },
-  "time-frame-picker.option.year-to-date": {
-    "defaultMessage": "年初至今"
-  },
-  "time-frame-picker.option.yesterday": {
-    "defaultMessage": "昨天"
-  },
-  "time-frame-picker.select-timeframe": {
-    "defaultMessage": "选择时间段"
-  },
-  "time-frame-picker.selected-range": {
-    "defaultMessage": "已选择"
-  },
-  "time-frame-picker.selecting-range": {
-    "defaultMessage": "正在选择"
-  },
-  "time-frame-picker.start-date": {
-    "defaultMessage": "开始日期"
-  },
-  "time-frame-picker.timeframe-amount": {
-    "defaultMessage": "周期数值"
-  },
-  "time-frame-picker.timeframe-unit": {
-    "defaultMessage": "周期单位"
-  },
-  "time-frame-picker.unit.days": {
-    "defaultMessage": "日"
-  },
-  "time-frame-picker.unit.hours": {
-    "defaultMessage": "小时"
-  },
-  "time-frame-picker.unit.months": {
-    "defaultMessage": "月"
-  },
-  "time-frame-picker.unit.weeks": {
-    "defaultMessage": "周"
-  },
-  "ui.component.unsaved-changes-popup.body": {
-    "defaultMessage": "你有未保存的修改。"
-  },
   "ui.confirm-leave-modal.body": {
     "defaultMessage": "你有未保存的更改，离开此页面将会丢失这些更改。"
   },
@@ -4361,12 +4232,6 @@
   "ui.scroll-to-top.tooltip": {
     "defaultMessage": "返回顶部"
   },
-  "ui.stacked-admonitions.alert-count": {
-    "defaultMessage": "{count} 个警报"
-  },
-  "ui.stacked-admonitions.dismiss-all": {
-    "defaultMessage": "全部忽略"
-  },
   "version.content.name": {
     "defaultMessage": "名称"
   },
@@ -4447,6 +4312,9 @@
   },
   "version.section.supplementary-resources": {
     "defaultMessage": "附加的资源"
+  },
+  "version.summary.view-version": {
+    "defaultMessage": "查看版本"
   },
   "version.supplementary-resources.file": {
     "defaultMessage": "文件"
@@ -4768,5 +4636,197 @@
   },
   "drop.confirm.as-data-pack-desc": {
     "defaultMessage": "将数据包安装到存档"
+  },
+  "image-viewer.close": {
+    "message": "关闭"
+  },
+  "image-viewer.edit": {
+    "message": "编辑"
+  },
+  "image-viewer.metadata": {
+    "message": "{size} · {width} × {height} 像素"
+  },
+  "image-viewer.editor.colour": {
+    "message": "颜色"
+  },
+  "image-viewer.editor.crop.dimensions": {
+    "message": "{width} × {height} 像素"
+  },
+  "image-viewer.editor.crop.reset": {
+    "message": "重置裁剪"
+  },
+  "image-viewer.editor.delete-selection": {
+    "message": "删除选中的标注"
+  },
+  "image-viewer.editor.eraser.area": {
+    "message": "区域"
+  },
+  "image-viewer.editor.eraser.element": {
+    "message": "元素"
+  },
+  "image-viewer.editor.eraser.mode": {
+    "message": "橡皮擦模式"
+  },
+  "image-viewer.editor.image-editing-tools": {
+    "message": "图片编辑工具"
+  },
+  "image-viewer.editor.more-save-options": {
+    "message": "更多保存选项"
+  },
+  "image-viewer.editor.overwrite": {
+    "message": "覆盖"
+  },
+  "image-viewer.editor.redo": {
+    "message": "重做"
+  },
+  "image-viewer.editor.save-as-new": {
+    "message": "保存副本"
+  },
+  "image-viewer.editor.save-image": {
+    "message": "保存图片"
+  },
+  "image-viewer.editor.size": {
+    "message": "大小"
+  },
+  "image-viewer.editor.tool.arrow": {
+    "message": "箭头"
+  },
+  "image-viewer.editor.tool.censor": {
+    "message": "遮挡"
+  },
+  "image-viewer.editor.tool.crop": {
+    "message": "裁剪"
+  },
+  "image-viewer.editor.tool.ellipse": {
+    "message": "椭圆"
+  },
+  "image-viewer.editor.tool.eraser": {
+    "message": "橡皮擦"
+  },
+  "image-viewer.editor.tool.highlight": {
+    "message": "高亮"
+  },
+  "image-viewer.editor.tool.pen": {
+    "message": "画笔"
+  },
+  "image-viewer.editor.tool.rectangle": {
+    "message": "矩形"
+  },
+  "image-viewer.editor.tool.select": {
+    "message": "选择"
+  },
+  "image-viewer.editor.tool.text": {
+    "message": "文本"
+  },
+  "image-viewer.editor.undo": {
+    "message": "撤销"
+  },
+  "image-viewer.editor.width": {
+    "message": "宽度"
+  },
+  "image-viewer.editor.zoom-fit": {
+    "message": "适应"
+  },
+  "image-viewer.editor.zoom-fit-workspace": {
+    "message": "适应工作区"
+  },
+  "image-viewer.editor.zoom-in": {
+    "message": "放大"
+  },
+  "image-viewer.editor.zoom-out": {
+    "message": "缩小"
+  },
+  "image-viewer.next": {
+    "message": "下一张图片"
+  },
+  "image-viewer.previous": {
+    "message": "上一张图片"
+  },
+  "files.layout.no-matches": {
+    "defaultMessage": "此视图中没有匹配的文件"
+  },
+  "files.select-view": {
+    "defaultMessage": "选择此视图中的全部文件"
+  },
+  "browse.sort.first-release": {
+    "defaultMessage": "首次发布时间"
+  },
+  "browse.sort.latest-release": {
+    "defaultMessage": "最近发布时间"
+  },
+  "browse.sort.project-created": {
+    "defaultMessage": "项目创建时间"
+  },
+  "browse.sort.project-modified": {
+    "defaultMessage": "项目修改时间"
+  },
+  "content.metadata-filter.installed-source": {
+    "defaultMessage": "安装来源平台"
+  },
+  "content.metadata-filter.ownership": {
+    "defaultMessage": "内容归属"
+  },
+  "content.metadata-filter.ownership.local-discovered": {
+    "defaultMessage": "本地发现"
+  },
+  "content.metadata-filter.ownership.pack-managed": {
+    "defaultMessage": "整合包管理"
+  },
+  "content.metadata-filter.ownership.user-added": {
+    "defaultMessage": "用户添加"
+  },
+  "content.metadata-filter.source.mcarchive": {
+    "defaultMessage": "MCArchive"
+  },
+  "content.metadata-filter.source.modrinth": {
+    "defaultMessage": "Modrinth"
+  },
+  "content.metadata-filter.source.planet-minecraft": {
+    "defaultMessage": "Planet Minecraft"
+  },
+  "project-card.date.created.tooltip": {
+    "defaultMessage": "项目创建于 {date}"
+  },
+  "project-card.date.project-modified.tooltip": {
+    "defaultMessage": "项目修改于 {date}"
+  },
+  "project-card.date.release-updated.tooltip": {
+    "defaultMessage": "最近发布于 {date}"
+  },
+  "browse.sort.project-published": {
+    "defaultMessage": "项目首次公开时间"
+  },
+  "project-card.date.project-published.tooltip": {
+    "defaultMessage": "项目首次公开于 {date}"
+  },
+  "project-card.date.first-release.tooltip": {
+    "defaultMessage": "首次发布于 {date}"
+  },
+  "content.page-layout.duplicate-status": {
+    "defaultMessage": "{visible} 项匹配 · 全部副本：{updates} 项可更新 · {disabled} 项已禁用 · {missing} 项缺失 · {installing} 项处理中"
+  },
+  "content.page-layout.update-duplicate-group": {
+    "defaultMessage": "预览全部 {count, number} 个副本的更新"
+  },
+  "browse.search.failed": {
+    "message": "无法完成搜索，请检查网络或筛选条件后重试。"
+  },
+  "content.actions.update-all": {
+    "message": "全部更新"
+  },
+  "content.confirm-deletion.failed": {
+    "message": "无法删除所选内容，请重试。"
+  },
+  "content.dependency-warning.delete-failed": {
+    "message": "无法删除所选内容及其依赖，请重试。"
+  },
+  "content.page-layout.scroll-to-top": {
+    "message": "回到顶部"
+  },
+  "modal.confirm-action.failed": {
+    "message": "无法完成此操作，请重试。"
+  },
+  "version.uploaded-by": {
+    "message": "上传者"
   }
 }

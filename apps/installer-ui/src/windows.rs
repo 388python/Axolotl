@@ -29,7 +29,9 @@ use windows::{
     },
     core::PCWSTR,
 };
-use wry::{NewWindowResponse, WebView, WebViewBuilder, http::Request};
+use wry::{
+    NewWindowResponse, WebContext, WebView, WebViewBuilder, http::Request,
+};
 
 const HTML: &str = include_str!("installer.html");
 const LOGO: &[u8] = include_bytes!("../../app/icons/128x128.png");
@@ -44,6 +46,7 @@ struct Bootstrap {
     fresh_install: bool,
     language: Language,
     logo_data_url: String,
+    uninstall: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -68,6 +71,12 @@ struct InstallRequest {
     launch_after: bool,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UninstallRequest {
+    delete_app_data: bool,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum PathTarget {
@@ -83,6 +92,7 @@ enum UiCommand {
     Close,
     Browse { target: PathTarget, current: String },
     Install(InstallRequest),
+    Uninstall(UninstallRequest),
     Finish { launch: bool },
 }
 
@@ -93,6 +103,7 @@ enum UserEvent {
     Close,
     Browse { target: PathTarget, current: String },
     Install(InstallRequest),
+    Uninstall(UninstallRequest),
     Progress(u8),
     Finished(Result<(), InstallFailure>),
     Finish { launch: bool },
@@ -119,8 +130,10 @@ impl InstallerProcess {
                 match unsafe { WaitForSingleObject(*process, 0) } {
                     WAIT_OBJECT_0 => {
                         let mut exit_code = 0;
-                        unsafe { GetExitCodeProcess(*process, &mut exit_code) }
-                            .map_err(windows_error)?;
+                        unsafe {
+                            GetExitCodeProcess(*process, &raw mut exit_code)
+                        }
+                        .map_err(windows_error)?;
                         let process = std::mem::take(process);
                         let _ = unsafe { CloseHandle(process) };
                         Ok(Some(exit_code as i32))
@@ -172,6 +185,8 @@ pub fn run() -> Result<(), String> {
         serde_json::to_string(&arguments.bootstrap).map_err(|error| {
             format!("serializing installer settings failed: {error}")
         })?;
+    let webview_data_directory = webview_data_directory()?;
+    let mut webview_context = WebContext::new(Some(webview_data_directory));
     let proxy = event_loop.create_proxy();
     let ipc_proxy = proxy.clone();
     let handler = move |request: Request<String>| {
@@ -184,6 +199,7 @@ pub fn run() -> Result<(), String> {
                     UserEvent::Browse { target, current }
                 }
                 UiCommand::Install(request) => UserEvent::Install(request),
+                UiCommand::Uninstall(request) => UserEvent::Uninstall(request),
                 UiCommand::Finish { launch } => UserEvent::Finish { launch },
             };
             let _ = ipc_proxy.send_event(event);
@@ -191,7 +207,7 @@ pub fn run() -> Result<(), String> {
     };
 
     let mut webview = Some(
-        WebViewBuilder::new()
+        WebViewBuilder::new_with_web_context(&mut webview_context)
             .with_html(HTML)
             .with_initialization_script(format!(
                 "window.__AXOLOTL_INSTALLER__ = {bootstrap};"
@@ -210,6 +226,7 @@ pub fn run() -> Result<(), String> {
 
     let installer = arguments.installer;
     let fresh_install = arguments.bootstrap.fresh_install;
+    let uninstall = arguments.bootstrap.uninstall;
     let mut installing = false;
     let mut install_dir = PathBuf::from(&arguments.bootstrap.install_dir);
     let mut launch_after_install = false;
@@ -258,7 +275,7 @@ pub fn run() -> Result<(), String> {
                 }
             }
             Event::UserEvent(UserEvent::Install(request)) => {
-                if installing {
+                if installing || uninstall {
                     return;
                 }
                 match validate_request(&request, fresh_install) {
@@ -285,6 +302,22 @@ pub fn run() -> Result<(), String> {
                         }),
                     ),
                 }
+            }
+            Event::UserEvent(UserEvent::Uninstall(request)) => {
+                if installing || !uninstall {
+                    return;
+                }
+                installing = true;
+                send_to_webview(
+                    webview.as_ref(),
+                    json!({ "type": "installStarted" }),
+                );
+                start_uninstall(
+                    installer.clone(),
+                    install_dir.clone(),
+                    request,
+                    proxy.clone(),
+                );
             }
             Event::UserEvent(UserEvent::Progress(progress)) => {
                 send_to_webview(
@@ -328,7 +361,12 @@ pub fn run() -> Result<(), String> {
                 }
             }
             Event::UserEvent(UserEvent::Finish { launch }) => {
-                if launch && let Err(error) = launch_main_process(&install_dir)
+                if installing {
+                    return;
+                }
+                if launch
+                    && !uninstall
+                    && let Err(error) = launch_main_process(&install_dir)
                 {
                     send_to_webview(
                         webview.as_ref(),
@@ -354,6 +392,7 @@ fn parse_arguments() -> Result<Arguments, String> {
     let mut install_dir = None;
     let mut resource_dir = None;
     let mut fresh_install = true;
+    let mut uninstall = false;
     let mut language = Language::En;
 
     while let Some(argument) = args.next() {
@@ -362,6 +401,10 @@ fn parse_arguments() -> Result<Arguments, String> {
         })?;
         match argument.to_string_lossy().as_ref() {
             "--installer" => installer = Some(PathBuf::from(value)),
+            "--uninstaller" => {
+                installer = Some(PathBuf::from(value));
+                uninstall = true;
+            }
             "--version" => version = Some(value.to_string_lossy().into_owned()),
             "--install-dir" => {
                 install_dir = Some(value.to_string_lossy().into_owned())
@@ -386,23 +429,47 @@ fn parse_arguments() -> Result<Arguments, String> {
     if !installer.is_file() {
         return Err("installer executable does not exist".to_string());
     }
+    if uninstall {
+        validate_uninstall_directory(Path::new(
+            install_dir.as_deref().unwrap_or_default(),
+        ))
+        .map_err(|error| error.message)?;
+    }
 
     Ok(Arguments {
         installer,
         bootstrap: Bootstrap {
-            version: version.ok_or_else(|| "missing --version".to_string())?,
-            install_dir: install_dir
-                .ok_or_else(|| "missing --install-dir".to_string())?,
-            resource_dir: resource_dir
-                .ok_or_else(|| "missing --resource-dir".to_string())?,
+            version: version.unwrap_or_default(),
+            install_dir: install_dir.unwrap_or_default(),
+            resource_dir: resource_dir.unwrap_or_default(),
             fresh_install,
             language,
             logo_data_url: format!(
                 "data:image/png;base64,{}",
                 BASE64.encode(LOGO)
             ),
+            uninstall,
         },
     })
+}
+
+fn webview_data_directory() -> Result<PathBuf, String> {
+    let root = env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(env::temp_dir);
+    let directory = root
+        .join("Axolotl")
+        .join("InstallerUI")
+        .join(format!("WebView2-{}", std::process::id()));
+
+    fs::create_dir_all(&directory).map_err(|error| {
+        format!(
+            "creating WebView2 data directory '{}' failed: {error}",
+            directory.display()
+        )
+    })?;
+
+    Ok(directory)
 }
 
 fn validate_request(
@@ -494,6 +561,147 @@ fn start_install(
     });
 }
 
+fn start_uninstall(
+    uninstaller: PathBuf,
+    install_dir: PathBuf,
+    request: UninstallRequest,
+    proxy: EventLoopProxy<UserEvent>,
+) {
+    thread::spawn(move || {
+        let status_path = env::temp_dir().join(format!(
+            "axolotl-uninstaller-{}-{}.status",
+            std::process::id(),
+            thread_id_suffix()
+        ));
+        let _ = fs::remove_file(&status_path);
+        let result = spawn_uninstaller(
+            &uninstaller,
+            &install_dir,
+            &request,
+            &status_path,
+        )
+        .and_then(|mut process| {
+            match wait_for_installer(&mut process, &status_path, &proxy) {
+                Ok(()) => uninstall_result(0, &status_path, &install_dir),
+                Err(error) => match error.exit_code {
+                    Some(code) => {
+                        uninstall_result(code, &status_path, &install_dir)
+                    }
+                    None => Err(error),
+                },
+            }
+        });
+        let _ = fs::remove_file(status_path);
+        let _ = proxy.send_event(UserEvent::Finished(result));
+    });
+}
+
+fn spawn_uninstaller(
+    uninstaller: &Path,
+    install_dir: &Path,
+    request: &UninstallRequest,
+    status_path: &Path,
+) -> Result<InstallerProcess, InstallFailure> {
+    let args = uninstaller_arguments(install_dir, request, status_path)?;
+    let result = if install_dir_requires_elevation(install_dir) {
+        elevated_installer_process(uninstaller, &args)
+            .map(InstallerProcess::Elevated)
+    } else {
+        let mut command = Command::new(uninstaller);
+        for argument in args {
+            command.raw_arg(argument);
+        }
+        command.spawn().map(InstallerProcess::Direct)
+    };
+    result.map_err(|error| InstallFailure {
+        exit_code: None,
+        message: error.to_string(),
+    })
+}
+
+fn validate_uninstall_directory(
+    install_dir: &Path,
+) -> Result<(), InstallFailure> {
+    if !install_dir.is_absolute()
+        || install_dir.parent().is_none()
+        || install_dir
+            .to_string_lossy()
+            .contains(['"', '\r', '\n', '\0'])
+    {
+        return Err(InstallFailure {
+            exit_code: None,
+            message:
+                "The uninstaller did not receive a valid installation directory"
+                    .to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn uninstaller_arguments(
+    install_dir: &Path,
+    request: &UninstallRequest,
+    status_path: &Path,
+) -> Result<Vec<String>, InstallFailure> {
+    validate_uninstall_directory(install_dir)?;
+    let mut args = vec![
+        "/S".to_string(),
+        "/UI_CHILD".to_string(),
+        nsis_value_option("STATUS_FILE", &status_path.to_string_lossy()),
+    ];
+    if request.delete_app_data {
+        args.push("/DELETE_APP_DATA".to_string());
+    }
+    // NSIS consumes the entire remaining command line as this unquoted path.
+    // It also disables the copy-and-relaunch step, so we wait for the actual core.
+    args.push(format!("_?={}", install_dir.display()));
+    Ok(args)
+}
+
+fn uninstall_result(
+    exit_code: i32,
+    status_path: &Path,
+    install_dir: &Path,
+) -> Result<(), InstallFailure> {
+    let status = read_installer_status(status_path).unwrap_or_default();
+    if exit_code != 0 || status.trim() != "100" {
+        return Err(InstallFailure {
+            exit_code: Some(exit_code),
+            message: if let Some(message) = status.trim().strip_prefix("error:")
+            {
+                message.to_string()
+            } else {
+                "The uninstallation core did not confirm completion".to_string()
+            },
+        });
+    }
+    for filename in [MAIN_BINARY_NAME, "uninstall.exe"] {
+        let path = install_dir.join(filename);
+        match path.try_exists() {
+            Ok(false) => {}
+            Ok(true) => {
+                return Err(InstallFailure {
+                    exit_code: Some(exit_code),
+                    message: format!(
+                        "Uninstallation left '{}' on disk",
+                        path.display()
+                    ),
+                });
+            }
+            Err(error) => {
+                return Err(InstallFailure {
+                    exit_code: Some(exit_code),
+                    message: format!(
+                        "Could not verify '{}': {error}",
+                        path.display()
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 fn spawn_installer(
     installer: &Path,
     request: &InstallRequest,
@@ -569,7 +777,7 @@ fn elevated_installer_process(
         ..Default::default()
     };
 
-    unsafe { ShellExecuteExW(&mut execute_info) }.map_err(windows_error)?;
+    unsafe { ShellExecuteExW(&raw mut execute_info) }.map_err(windows_error)?;
     if execute_info.hProcess.is_invalid() {
         return Err(std::io::Error::other(
             "elevated installer did not return a process handle",
@@ -586,17 +794,15 @@ fn wide_null(value: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
 }
 
 fn windows_error(error: windows::core::Error) -> std::io::Error {
-    use windows::core::HRESULT;
-
     const FACILITY_WIN32: i32 = 7;
 
-    let hr: HRESULT = error.code();
+    let hr = error.code();
     let raw = hr.0;
 
     // If this is a Win32 error (FACILITY_WIN32), extract the underlying Win32 error code
     let facility = (raw >> 16) & 0x1fff;
     if facility == FACILITY_WIN32 {
-        let win32_code = (raw & 0xFFFF) as i32;
+        let win32_code = raw & 0xFFFF;
         std::io::Error::from_raw_os_error(win32_code)
     } else {
         // Fall back to using the HRESULT value as a raw OS error code when representable
@@ -608,6 +814,29 @@ fn nsis_value_option(name: &str, value: &str) -> String {
     format!(r#"/{name}="{value}""#)
 }
 
+fn read_installer_status(status_path: &Path) -> std::io::Result<String> {
+    let bytes = fs::read(status_path)?;
+    if let Some(bytes) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        if bytes.len() % 2 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Incomplete uninstaller status",
+            ));
+        }
+        let words: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        String::from_utf16(&words).map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })
+    } else {
+        String::from_utf8(bytes).map_err(|error| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, error)
+        })
+    }
+}
+
 fn wait_for_installer(
     process: &mut InstallerProcess,
     status_path: &Path,
@@ -615,7 +844,7 @@ fn wait_for_installer(
 ) -> Result<(), InstallFailure> {
     let mut last_progress = 0;
     loop {
-        if let Ok(value) = fs::read_to_string(status_path)
+        if let Ok(value) = read_installer_status(status_path)
             && let Ok(progress) = value.trim().parse::<u8>()
             && progress != last_progress
         {
@@ -667,8 +896,10 @@ fn send_to_webview(webview: Option<&WebView>, payload: serde_json::Value) {
 #[cfg(test)]
 mod tests {
     use super::{
-        UiCommand, dialog_initial_location, install_dir_requires_elevation,
-        launch_main_process, nsis_value_option, wide_null,
+        MAIN_BINARY_NAME, UiCommand, UninstallRequest, dialog_initial_location,
+        install_dir_requires_elevation, launch_main_process, nsis_value_option,
+        uninstall_result, uninstaller_arguments, webview_data_directory,
+        wide_null,
     };
     use std::{
         fs,
@@ -728,6 +959,108 @@ mod tests {
     }
 
     #[test]
+    fn uninstall_directory_is_the_last_unquoted_argument() {
+        for directory in [
+            r"C:\Program Files\Axolotl Launcher",
+            "D:\\游戏\\Axolotl Launcher\\",
+        ] {
+            for delete_app_data in [false, true] {
+                let args = uninstaller_arguments(
+                    &PathBuf::from(directory),
+                    &UninstallRequest { delete_app_data },
+                    &PathBuf::from(r"C:\Temp Folder\uninstall.status"),
+                )
+                .unwrap();
+                assert_eq!(args.last().unwrap(), &format!("_?={directory}"));
+                assert!(args.contains(&"/UI_CHILD".to_string()));
+                assert_eq!(
+                    args.contains(&"/DELETE_APP_DATA".to_string()),
+                    delete_app_data
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn uninstall_rejects_missing_relative_root_and_quoted_directories() {
+        for directory in ["", "relative", r"C:\", "C:\\bad\"path"] {
+            assert!(
+                uninstaller_arguments(
+                    &PathBuf::from(directory),
+                    &UninstallRequest {
+                        delete_app_data: false
+                    },
+                    &PathBuf::from(r"C:\Temp\uninstall.status"),
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn uninstall_success_requires_completion_and_removed_executables() {
+        let directory = std::env::temp_dir()
+            .join(format!("axolotl-uninstall-result-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let status = directory.join("uninstall.status");
+        assert!(uninstall_result(0, &status, &directory).is_err());
+        fs::write(&status, "82").unwrap();
+        assert!(uninstall_result(0, &status, &directory).is_err());
+        fs::write(&status, "error:Could not remove a locked file").unwrap();
+        assert!(
+            uninstall_result(2, &status, &directory)
+                .unwrap_err()
+                .message
+                .contains("locked file")
+        );
+        fs::write(&status, "100").unwrap();
+        assert!(uninstall_result(2, &status, &directory).is_err());
+        for filename in [MAIN_BINARY_NAME, "uninstall.exe"] {
+            let file = directory.join(filename);
+            fs::write(&file, "still installed").unwrap();
+            assert!(uninstall_result(0, &status, &directory).is_err());
+            fs::remove_file(file).unwrap();
+        }
+        assert!(uninstall_result(0, &status, &directory).is_ok());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn uninstall_preserves_unicode_failure_paths() {
+        let directory = std::env::temp_dir()
+            .join(format!("axolotl-uninstall-unicode-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let status = directory.join("uninstall.status");
+        let message = r"error:Could not remove: D:\游戏\启动器.exe";
+        let bytes: Vec<u8> = [0xfeff_u16]
+            .into_iter()
+            .chain(message.encode_utf16())
+            .flat_map(u16::to_le_bytes)
+            .collect();
+        fs::write(&status, bytes).unwrap();
+        assert_eq!(
+            uninstall_result(2, &status, &directory)
+                .unwrap_err()
+                .message,
+            &message[6..]
+        );
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn uac_cancellation_and_access_denied_keep_the_windows_error_codes() {
+        for code in [1223, 5] {
+            let error = windows::core::Error::from_hresult(
+                windows::core::HRESULT::from_win32(code),
+            );
+            assert_eq!(
+                super::windows_error(error).raw_os_error(),
+                Some(code as i32)
+            );
+        }
+    }
+
+    #[test]
     fn writable_install_directory_does_not_require_elevation() {
         let directory = std::env::temp_dir().join(format!(
             "axolotl-installer-ui-elevation-{}",
@@ -765,5 +1098,17 @@ mod tests {
         assert!(!missing.exists());
 
         assert!(launch_main_process(&missing).is_err());
+    }
+
+    #[test]
+    fn webview_data_directory_is_created_outside_the_installer_temp_directory()
+    {
+        let directory = webview_data_directory()
+            .expect("WebView2 data directory should be created");
+
+        assert!(directory.is_dir());
+        assert!(
+            directory.ends_with(format!("WebView2-{}", std::process::id()))
+        );
     }
 }

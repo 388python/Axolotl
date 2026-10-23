@@ -134,26 +134,14 @@
   "app.browse.server.installing": {
     "message": "インストール中"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Modパックの説明を入力…"
-  },
   "app.export-modal.export-button": {
     "message": "書き出し"
-  },
-  "app.export-modal.header": {
-    "message": "Modパックを書き出す"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Modパック名"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Modパック名"
-  },
   "app.export-modal.version-number-label": {
     "message": "バージョン番号"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "インスタンス内のすべてのデータは、ワールド、設定、インストール済みのコンテンツを含め、完全に削除されます。"
@@ -224,42 +212,6 @@
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "{count} 個のワールドを検索…"
   },
-  "app.modal.install-to-play.content-required": {
-    "message": "必須コンテンツ"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "インストールしてプレイ"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "インストール"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, other {#個のMod}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "必須のModパック"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "このサーバーをプレイするにはModが必要です。インストールをクリックしてModrinthから必要なファイルを設定し、サーバーに接続してください。"
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "共有インスタンス"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "共有サーバーインスタンス"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "コンテンツを見る"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "更新してプレイ"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "更新が必要です"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "{name}をプレイするには更新が必要です。ゲームを起動するには最新版に更新してください。"
-  },
   "app.settings.developer-mode-enabled": {
     "message": "開発者モードがオンになっています。"
   },
@@ -325,9 +277,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} のダウンロードが完了しました。今すぐ更新するには再読み込みするか、Axolotl Launcherを閉じる際に自動更新されます。"
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} が利用可能です。最新の機能と修正プログラムを入手するには、パッケージマネージャーを使用して更新してください！"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} が利用可能になりました！お使いのネットワークが従量制のため、自動ダウンロードは行っておりません。"
@@ -703,5 +652,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "不明なファイルの警告"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

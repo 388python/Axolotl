@@ -2,19 +2,33 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { isExcludedRelease, selectLatestStableRelease } from './release-policy.mjs'
+import {
+    assetDownloadUrl,
+    githubApiBase,
+    githubDownloadBase,
+    releaseVersion,
+    verifyAssetUrl,
+    verifyRelease,
+} from './release-utils.mjs'
+import { verifyUpdateManifest } from './verify-update-manifest.mjs'
 
 const [command, tag, outputDirectory] = process.argv.slice(2)
+if (isExcludedRelease(tag)) {
+    console.log(`Skipping temporary test release ${tag}`)
+    process.exit(0)
+}
 const apiEndpoint = (process.env.CNB_API_ENDPOINT || 'https://api.cnb.cool').replace(/\/$/, '')
+releaseVersion(tag)
 const repo = process.env.CNB_REPO_SLUG || 'axlmc/Axolotl'
 const token = process.env.CNB_TOKEN
 const tokenUser = process.env.CNB_TOKEN_USER_NAME || 'cnb'
 const repoUrl = process.env.CNB_REPO_URL_HTTPS || `https://cnb.cool/${repo}.git`
-const githubReleaseBaseUrl = (
-	process.env.GITHUB_RELEASE_BASE_URL || 'https://github.com/Mystic-Stars/Axolotl/releases/download'
-).replace(/\/$/, '')
-const githubApiBaseUrl = (
-	process.env.GITHUB_API_BASE_URL || 'https://api.github.com/repos/Mystic-Stars/Axolotl'
-).replace(/\/$/, '')
+const githubReleaseBaseUrl = (process.env.GITHUB_RELEASE_BASE_URL || githubDownloadBase()).replace(
+    /\/$/,
+    '',
+)
+const githubApiBaseUrl = (process.env.GITHUB_API_BASE_URL || githubApiBase()).replace(/\/$/, '')
 const configuredAssetMirrorConcurrency = Number(process.env.ASSET_MIRROR_CONCURRENCY || 4)
 const assetMirrorConcurrency =
 	Number.isSafeInteger(configuredAssetMirrorConcurrency) && configuredAssetMirrorConcurrency > 0
@@ -149,6 +163,7 @@ async function loadGithubManifest() {
 		)
 	}
 	const manifest = await response.json()
+    verifyUpdateManifest(manifest, tag)
 	if (manifest.version !== tag.replace(/^v/, '')) {
 		throw new Error(`GitHub manifest version ${manifest.version} does not match ${tag}`)
 	}
@@ -172,7 +187,17 @@ async function getGithubRelease() {
 }
 
 async function getLatestGithubRelease() {
-	return await loadGithubRelease(`${githubApiBaseUrl}/releases/latest`)
+    const latest = await loadGithubRelease(`${githubApiBaseUrl}/releases/latest`)
+    if (!isExcludedRelease(latest.tag_name)) return latest
+
+    for (let page = 1; ; page++) {
+        const releases = await loadGithubRelease(`${githubApiBaseUrl}/releases?per_page=100&page=${page}`)
+        const release = selectLatestStableRelease(releases)
+        if (release) return release
+        if (releases.length < 100) {
+            throw new Error('No eligible stable GitHub release was found')
+        }
+    }
 }
 
 async function mirrorGithubAsset(release, asset) {
@@ -208,6 +233,7 @@ async function mirrorGithubAssets(release, githubRelease) {
 		throw new Error('GitHub release contains duplicate asset names')
 	}
 	for (const asset of assets) {
+        verifyAssetUrl(asset.browser_download_url, tag, asset.name)
 		if (
 			!asset.name ||
 			!asset.browser_download_url ||
@@ -252,7 +278,7 @@ function createCnbManifest(githubManifest, mirroredNames) {
 		}
 		platforms[platform] = {
 			...update,
-			url: `https://cnb.cool/${repo}/-/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(filename)}`,
+            url: assetDownloadUrl(tag, filename, 'cnb'),
 		}
 	}
 
@@ -277,7 +303,7 @@ function publishUpdateBranch(manifestPath) {
 	git('checkout', '--orphan', 'update')
 	fs.copyFileSync(manifestPath, path.join(directory, 'latest.json'))
 	git('add', 'latest.json')
-	git('commit', '-m', `Publish ${tag}`)
+    git('commit', '-m', `chore(release): publish ${tag}`)
 	git('remote', 'add', 'origin', repoUrl)
 	git(
 		'-c',
@@ -296,10 +322,12 @@ async function finalizeRelease() {
 		getGithubRelease(),
 		getLatestGithubRelease(),
 	])
+    verifyRelease(githubRelease, tag, { published: true })
 	const isLatestRelease = githubRelease.tag_name === latestGithubRelease.tag_name
 	const release = await ensureRelease(githubRelease)
 	const mirroredNames = await mirrorGithubAssets(release, githubRelease)
 	const manifest = createCnbManifest(githubManifest, mirroredNames)
+    verifyUpdateManifest(manifest, tag, 'cnb')
 	const manifestPath = path.join(outputDirectory, 'latest.json')
 	fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
 	await uploadAsset(release, manifestPath)

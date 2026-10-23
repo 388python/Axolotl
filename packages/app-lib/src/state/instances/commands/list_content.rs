@@ -145,16 +145,7 @@ pub(crate) async fn get_installed_project_ids_for_instance(
         &state.pool,
     )
     .await?;
-    let projects =
-        get_content_projects(instance_id, content_set_id, None, state).await?;
-
-    let mut project_ids = projects
-        .into_iter()
-        .filter_map(|(_, file)| {
-            file.modrinth
-                .map(|metadata| metadata.project_id.to_string())
-        })
-        .collect::<HashSet<_>>();
+    let mut project_ids = HashSet::new();
     let provider_rows = sqlx::query(
         "SELECT DISTINCT ref.provider, ref.provider_project_id
          FROM instance_content_entries entry
@@ -393,6 +384,37 @@ pub(crate) async fn list_all_content(
     .await
 }
 
+pub(crate) async fn list_all_content_from_files(
+    instance_id: &str,
+    files: Vec<InstanceFile>,
+    cache_behaviour: Option<CacheBehaviour>,
+    refresh_file_updates: bool,
+    state: &State,
+) -> crate::Result<Vec<ContentItem>> {
+    let resolved =
+        resolve_content_scope_with_instance(instance_id, None, &state.pool)
+            .await?;
+    let files = content_projects_for_files(
+        &resolved,
+        files,
+        cache_behaviour,
+        state,
+        ContentFilter::All,
+        refresh_file_updates,
+    )
+    .await?
+    .into_iter()
+    .collect::<Vec<_>>();
+
+    content_files_to_content_items(
+        &resolved.instance,
+        &files,
+        cache_behaviour,
+        state,
+    )
+    .await
+}
+
 pub(crate) async fn list_content_by_paths(
     instance_id: &str,
     paths: &[String],
@@ -595,11 +617,18 @@ pub(crate) async fn get_linked_modpack_info(
             &state.api_semaphore,
         ),
     )?;
-    let version = version.ok_or_else(|| {
-        crate::ErrorKind::InputError(format!(
-            "Linked modpack version {version_id} not found"
-        ))
-    })?;
+    let version = match version {
+        Some(version) => version,
+        None if matches!(cache_behaviour, Some(CacheBehaviour::CacheOnly)) => {
+            return Ok(None);
+        }
+        None => {
+            return Err(crate::ErrorKind::InputError(format!(
+                "Linked modpack version {version_id} not found"
+            ))
+            .into());
+        }
+    };
     let (project, all_versions) = if version.project_id != project_id {
         let modpack_project_id_ref =
             ModrinthProjectId::new(version.project_id.clone())?;
@@ -2524,6 +2553,7 @@ async fn get_modpack_identifiers(
     pool: &SqlitePool,
     fetch_semaphore: &FetchSemaphore,
 ) -> crate::Result<ModpackIdentifiers> {
+    let _cache_usage = crate::storage::usage::lease().await?;
     if let Some(cached) =
         CachedEntry::get_modpack_files(version_id, pool, fetch_semaphore)
             .await?
@@ -2874,6 +2904,93 @@ mod tests {
             "vanilla",
             &[],
         ));
+    }
+
+    #[tokio::test]
+    async fn installed_ids_use_local_refs_without_hash_or_remote_metadata() {
+        let (_temp, state, resolved) = reconciliation_fixture().await;
+        for (id, enabled, missing, provider_ref) in [
+            (
+                "modrinth",
+                true,
+                false,
+                ContentProviderRef::Modrinth {
+                    project_id: crate::state::ModrinthProjectId::new(
+                        "projectA",
+                    )
+                    .unwrap(),
+                    version_id: Some(
+                        crate::state::ModrinthVersionId::new("versionA")
+                            .unwrap(),
+                    ),
+                },
+            ),
+            (
+                "disabled",
+                false,
+                false,
+                ContentProviderRef::CurseForge {
+                    project_id: crate::state::CurseForgeProjectId::new(123)
+                        .unwrap(),
+                    file_id: Some(
+                        crate::state::CurseForgeFileId::new(456).unwrap(),
+                    ),
+                },
+            ),
+            (
+                "missing",
+                true,
+                true,
+                ContentProviderRef::Modrinth {
+                    project_id: crate::state::ModrinthProjectId::new(
+                        "projectB",
+                    )
+                    .unwrap(),
+                    version_id: None,
+                },
+            ),
+        ] {
+            let file = insert_test_file(
+                &resolved,
+                &state,
+                id,
+                &format!("mods/{id}.jar"),
+                "hash",
+                enabled,
+            )
+            .await;
+            let entry =
+                insert_test_entry(&resolved, &state, &file, enabled).await;
+            let mut tx = state.pool.begin().await.unwrap();
+            sqlite::content_rows::upsert_content_provider_ref_in_transaction(
+                &entry.id,
+                &provider_ref,
+                true,
+                &mut tx,
+            )
+            .await
+            .unwrap();
+            sqlx::query("UPDATE instance_files SET missing = ? WHERE id = ?")
+                .bind(missing)
+                .bind(&file.id)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+        }
+        let mut ids = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            get_installed_project_ids_for_instance(
+                &resolved.instance.id,
+                None,
+                &state,
+            ),
+        )
+        .await
+        .expect("installed IDs must not wait for remote metadata")
+        .unwrap();
+        ids.sort();
+        assert_eq!(ids, ["curseforge:123", "projectA"]);
     }
 
     #[test]

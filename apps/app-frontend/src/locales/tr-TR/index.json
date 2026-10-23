@@ -176,26 +176,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "Kullanılabilir sürümler {compatibilityLabel} ile eşleşmiyor. Yine de kurulacak bir sürüm seçin. Bağımlılıklar otomatik olarak yüklenmeyecektir."
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Mod paketi açıklaması girin..."
-  },
   "app.export-modal.export-button": {
     "message": "Dışa aktar"
-  },
-  "app.export-modal.header": {
-    "message": "Mod paketini dışa aktar"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Mod Paketi Adı"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Mod paketi adı"
-  },
   "app.export-modal.version-number-label": {
     "message": "Sürüm numarası"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.install.phase.downloading_content": {
     "message": "İçerik indiriliyor"
@@ -352,42 +340,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "{count} dünya ara..."
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "İçerik gerekli"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "Oynamak için yükleyin"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "Yükle"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, one {#mod} other {#mods}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "Gerekli mod paketi"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "Bu sunucuya girebilmek için modlar gereklidir. Gerekli dosyaları Modrinth üzerinden kurmak için Yükle butonuna tıkla, ardından doğrudan sunucuya başlat."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "Paylaşılan Kurulum"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "Paylaşılan Sunucu Kurulumu"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "İçeriği görüntüle"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "Oynamak için güncelle"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "Güncelleme gerekli"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "{name} oyununu oynamak için güncelleme gereklidir. Oyunu başlatmak için lütfen en son sürüme güncelleyin."
   },
   "app.project.install-button.already-installed": {
     "message": "Bu proje zaten kurulu"
@@ -547,9 +499,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} indirildi. Güncellemek için yeniden başlatın veya Axolotl Launcher’i kapattığınızda otomatik olarak güncellenecektir."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} yayımlandı. En yeni özellikler ve hata düzeltmeleri için paket yöneticin üzerinden güncelle!"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} mevcut! Kısıtlı bağlantıda olduğunuzdan otomatik olarak indirmedik."
@@ -970,5 +919,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Bilinmeyen dosya uyarısı"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

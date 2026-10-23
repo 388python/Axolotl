@@ -1,6 +1,10 @@
 //! Route health state, authority memory, and probe bookkeeping.
 
 use super::route_policy;
+use crate::util::download::constants::{
+    DIAGNOSTICS_OTHER, ROUTE_HEALTH_CURSEFORGE, ROUTE_HEALTH_LOADER,
+    ROUTE_HEALTH_MINECRAFT, ROUTE_HEALTH_MODRINTH,
+};
 use crate::util::fetch::{DownloadRoute, ProxyPolicy, ResourceClass};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -20,11 +24,11 @@ pub(crate) enum ResourceFamily {
 impl ResourceFamily {
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
-            Self::Minecraft => "minecraft",
-            Self::Loader => "loader",
-            Self::Modrinth => "modrinth",
-            Self::CurseForge => "curseforge",
-            Self::Other => "other",
+            Self::Minecraft => ROUTE_HEALTH_MINECRAFT,
+            Self::Loader => ROUTE_HEALTH_LOADER,
+            Self::Modrinth => ROUTE_HEALTH_MODRINTH,
+            Self::CurseForge => ROUTE_HEALTH_CURSEFORGE,
+            Self::Other => DIAGNOSTICS_OTHER,
         }
     }
 }
@@ -33,6 +37,7 @@ impl ResourceFamily {
 pub(crate) struct RouteHealthKey {
     pub(crate) family: ResourceFamily,
     pub(crate) authority: String,
+    pub(crate) scope: String,
 }
 #[derive(Clone, Debug, Default)]
 pub(crate) struct RouteHealth {
@@ -63,15 +68,14 @@ impl Drop for TaskProbeGuard {
             return;
         }
         let mut families = self.state.families.lock();
-        if let Some(entry) = families.get_mut(&self.family) {
-            if entry
+        if let Some(entry) = families.get_mut(&self.family)
+            && entry
                 .in_flight
                 .as_ref()
                 .is_some_and(|v| Arc::ptr_eq(v, &self.notify))
-            {
-                entry.in_flight = None;
-                entry.last_probed = None;
-            }
+        {
+            entry.in_flight = None;
+            entry.last_probed = None;
         }
     }
 }
@@ -108,9 +112,7 @@ pub(crate) fn resource_family(
 ) -> ResourceFamily {
     match resource {
         ResourceClass::MinecraftLibrary
-            if route_policy::uses_mirror_first_loader_routes(
-                &route.url, resource,
-            ) =>
+            if route_policy::is_loader_repository(&route.url, resource) =>
         {
             ResourceFamily::Loader
         }
@@ -133,6 +135,7 @@ pub(crate) fn route_health_key(
     Some(RouteHealthKey {
         family: resource_family(route, resource),
         authority: crate::util::fetch::range_splitting_authority(route)?,
+        scope: super::proxy_context::scope(route.proxy),
     })
 }
 pub(crate) fn persisted_route_health(
@@ -159,7 +162,10 @@ pub(crate) fn effective_route_authority(
     let authority = crate::util::fetch::url_authority(&route.url)?;
     ROUTE_EFFECTIVE_AUTHORITIES
         .lock()
-        .get(&route.url)
+        .get(&super::proxy_context::authority_key(
+            &route.url,
+            route.proxy,
+        ))
         .cloned()
         .or(Some(authority))
 }
@@ -175,9 +181,15 @@ pub(crate) fn remember_effective_route_authority(
     };
     let mut map = ROUTE_EFFECTIVE_AUTHORITIES.lock();
     if original == effective {
-        map.remove(&route.url);
+        map.remove(&super::proxy_context::authority_key(
+            &route.url,
+            route.proxy,
+        ));
     } else {
-        map.insert(route.url.clone(), effective);
+        map.insert(
+            super::proxy_context::authority_key(&route.url, route.proxy),
+            effective,
+        );
     }
 }
 pub(crate) fn forget_effective_route_authority(
@@ -189,12 +201,19 @@ pub(crate) fn forget_effective_route_authority(
         return;
     };
     let mut map = ROUTE_EFFECTIVE_AUTHORITIES.lock();
-    if map.get(&route.url) == Some(&failed) {
-        map.remove(&route.url);
+    if map.get(&super::proxy_context::authority_key(
+        &route.url,
+        route.proxy,
+    )) == Some(&failed)
+    {
+        map.remove(&super::proxy_context::authority_key(
+            &route.url,
+            route.proxy,
+        ));
     }
 }
 
-const EWMA_ALPHA: f64 = 0.25;
+use super::constants::ROUTE_HEALTH_EWMA_ALPHA as EWMA_ALPHA;
 
 /// Updates a metric using the same weighted moving average for every route.
 pub(crate) fn update_ewma(current: &mut Option<f64>, sample: f64) {

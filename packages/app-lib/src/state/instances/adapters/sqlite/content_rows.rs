@@ -476,16 +476,15 @@ pub(crate) async fn get_instance_files<'e, E>(
 where
     E: Executor<'e, Database = Sqlite>,
 {
-    let rows = sqlx::query_as!(
-        InstanceFileRow,
+    let rows = sqlx::query_as::<_, InstanceFileRow>(
         "
 		SELECT *
 		FROM instance_files
 		WHERE instance_id = ?
 		ORDER BY relative_path ASC
 		",
-        instance_id,
     )
+    .bind(instance_id)
     .fetch_all(exec)
     .await?;
 
@@ -642,16 +641,15 @@ pub(crate) async fn get_instance_file_by_relative_path(
     relative_path: &str,
     pool: &SqlitePool,
 ) -> crate::Result<Option<InstanceFile>> {
-    let row = sqlx::query_as!(
-        InstanceFileRow,
+    let row = sqlx::query_as::<_, InstanceFileRow>(
         "
 		SELECT *
 		FROM instance_files
 		WHERE instance_id = ? AND relative_path = ?
 		",
-        instance_id,
-        relative_path,
     )
+    .bind(instance_id)
+    .bind(relative_path)
     .fetch_optional(pool)
     .await?;
 
@@ -1611,6 +1609,24 @@ pub(crate) async fn set_content_entry_auto_dependency(
     Ok(())
 }
 
+pub(crate) async fn set_content_entry_auto_dependency_in_transaction(
+    content_entry_id: &str,
+    auto_dependency: bool,
+    tx: &mut Transaction<'_, Sqlite>,
+) -> crate::Result<()> {
+    sqlx::query(
+        "UPDATE instance_content_entries
+         SET auto_dependency = ?, modified_at = ?
+         WHERE id = ?",
+    )
+    .bind(i64::from(auto_dependency))
+    .bind(Utc::now().timestamp())
+    .bind(content_entry_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub(crate) async fn get_dependency_backfilled_entry_ids(
     content_set_id: &str,
     pool: &SqlitePool,
@@ -2102,6 +2118,9 @@ pub(crate) async fn get_content_mutation_target(
     target_id: &str,
     pool: &SqlitePool,
 ) -> crate::Result<Option<ContentMutationTarget>> {
+    // Hash identification creates non-origin refs, including for unpacked mods
+    // after disconnecting a pack. Match the update check's Modrinth fallback:
+    // use those refs only when no origin/member or other provider takes priority.
     let row = sqlx::query(
         "SELECT entry.id AS entry_id,
 			member.id AS member_id,
@@ -2117,10 +2136,10 @@ pub(crate) async fn get_content_mutation_target(
 				NULLIF(entry.project_type, ''),
 				NULLIF(member.project_type, '')
 			) AS project_type,
-			COALESCE(origin.provider, member.provider) AS provider,
-			COALESCE(origin.provider_project_id, member.provider_project_id)
+			COALESCE(origin.provider, member.provider, identified.provider) AS provider,
+			COALESCE(origin.provider_project_id, member.provider_project_id, identified.provider_project_id)
 				AS provider_project_id,
-			COALESCE(origin.provider_release_id, member.provider_release_id)
+			COALESCE(origin.provider_release_id, member.provider_release_id, identified.provider_release_id)
 				AS provider_release_id
 		 FROM instance_content_sets content_set
 		 INNER JOIN instances instance
@@ -2135,6 +2154,19 @@ pub(crate) async fn get_content_mutation_target(
 			AND (file.id = ? OR file.id = entry.file_id)
 		 LEFT JOIN instance_content_provider_refs origin
 			ON origin.content_entry_id = entry.id AND origin.is_origin = 1
+		 LEFT JOIN instance_content_provider_refs identified
+			ON origin.provider IS NULL AND member.provider IS NULL
+			AND identified.rowid = (
+				SELECT ref.rowid FROM instance_content_provider_refs ref
+				WHERE ref.content_entry_id = entry.id AND ref.provider = 'modrinth'
+					AND NOT EXISTS (
+						SELECT 1 FROM instance_content_provider_refs other
+						WHERE other.content_entry_id = entry.id AND other.provider != 'modrinth'
+					)
+				ORDER BY ref.provider_project_id, ref.provider_release_id IS NULL,
+					ref.provider_release_id
+				LIMIT 1
+			)
 		 WHERE instance.id = ?
 			AND (entry.id = ? OR member.id = ? OR file.id = ?)
 		 LIMIT 1",
@@ -2222,6 +2254,44 @@ pub(crate) async fn get_pending_manual_downloads(
     .await?;
 
     rows.into_iter().map(TryInto::try_into).collect()
+}
+
+/// Restores membership for legacy pack-owned files without inventing remote
+/// identity or treating their current bytes as the pack's expected artifact.
+/// Entry identity keeps missing and disabled files at the same path distinct.
+pub(crate) async fn repair_pack_members_in_transaction(
+    content_set_id: &str,
+    tx: &mut Transaction<'_, Sqlite>,
+) -> crate::Result<bool> {
+    let result = sqlx::query(
+        "INSERT INTO instance_pack_members (
+            id, content_set_id, content_entry_id, member_key, project_type,
+            expected_relative_path, required, materialization_state,
+            override_kind, reconciled, created_at, modified_at
+         ) SELECT 'pack-member:entry:' || entry.id, entry.content_set_id, entry.id,
+            'entry:' || entry.id, entry.project_type,
+            file.pack_path, 1,
+            CASE WHEN file.missing = 1 THEN 'missing' ELSE 'present' END,
+            CASE WHEN file.enabled = 0 THEN 'disabled' ELSE 'none' END,
+            0, entry.added_at, entry.modified_at
+         FROM instance_content_entries entry
+         JOIN (
+            SELECT *, CASE WHEN substr(relative_path, -9) = '.disabled'
+                THEN substr(relative_path, 1, length(relative_path) - 9)
+                ELSE relative_path END AS pack_path
+            FROM instance_files
+         ) file ON file.id = entry.file_id
+         WHERE entry.content_set_id = ? AND entry.ownership_kind = 'pack_managed'
+            AND NOT EXISTS (
+                SELECT 1 FROM instance_pack_members member
+                WHERE member.content_set_id = entry.content_set_id
+                    AND member.content_entry_id = entry.id
+            )",
+    )
+    .bind(content_set_id)
+    .execute(&mut **tx)
+    .await?;
+    Ok(result.rows_affected() != 0)
 }
 
 pub(crate) async fn upsert_pack_member_in_transaction(
@@ -2583,6 +2653,7 @@ mod tests {
 				provider TEXT NOT NULL,
 				provider_project_id TEXT NOT NULL,
 				provider_release_id TEXT NULL,
+                provider_file_id TEXT NULL,
 				is_origin INTEGER NOT NULL DEFAULT 0
 			);
 			CREATE UNIQUE INDEX instance_content_provider_refs_identity
@@ -2702,8 +2773,7 @@ mod tests {
             .expect("existing instance passes inside a transaction");
     }
 
-    #[tokio::test]
-    async fn mutation_target_supports_untracked_instance_files() {
+    async fn mutation_target_pool() -> SqlitePool {
         let pool = test_pool().await;
         sqlx::query(
             "ALTER TABLE instances ADD COLUMN applied_content_set_id TEXT NULL",
@@ -2764,6 +2834,13 @@ mod tests {
         .await
         .expect("insert untracked file");
 
+        pool
+    }
+
+    #[tokio::test]
+    async fn mutation_target_supports_untracked_instance_files() {
+        let pool = mutation_target_pool().await;
+
         let target = get_content_mutation_target("instance", "file", &pool)
             .await
             .expect("resolve mutation target")
@@ -2774,6 +2851,59 @@ mod tests {
         assert_eq!(target.relative_path.as_deref(), Some("mods/example.jar"));
         assert_eq!(target.ownership_kind, ContentOwnershipKind::UserAdded);
         assert_eq!(target.project_type, ProjectType::Mod);
+    }
+
+    #[tokio::test]
+    async fn mutation_target_resolves_identified_mod_after_pack_disconnect() {
+        let pool = mutation_target_pool().await;
+        sqlx::raw_sql(
+            "INSERT INTO instance_content_entries VALUES
+                ('entry', 'set', 'file', 'user_added', 'mod');
+             INSERT INTO instance_content_provider_refs VALUES
+                ('entry', 'modrinth', 'AANobbMI', '7pwil2dy', 0);",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let target = get_content_mutation_target("instance", "entry", &pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(target.provider, Some(ContentProvider::Modrinth));
+        assert_eq!(target.provider_project_id.as_deref(), Some("AANobbMI"));
+        assert_eq!(target.provider_release_id.as_deref(), Some("7pwil2dy"));
+        assert_eq!(target.relative_path.as_deref(), Some("mods/example.jar"));
+        assert_eq!(target.ownership_kind, ContentOwnershipKind::UserAdded);
+
+        // A different provider ref must prevent an implicit provider switch.
+        sqlx::query(
+            "INSERT INTO instance_content_provider_refs VALUES
+            ('entry', 'curseforge', '123', '456', 0)",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let target = get_content_mutation_target("instance", "entry", &pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(target.provider, None);
+
+        sqlx::query(
+            "UPDATE instance_content_provider_refs SET is_origin = 1
+            WHERE provider = 'curseforge'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        let target = get_content_mutation_target("instance", "entry", &pool)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(target.provider, Some(ContentProvider::CurseForge));
+        assert_eq!(target.provider_project_id.as_deref(), Some("123"));
+        assert_eq!(target.provider_release_id.as_deref(), Some("456"));
     }
 
     #[tokio::test]

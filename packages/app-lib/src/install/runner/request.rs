@@ -1,4 +1,11 @@
+use super::super::model::InstallContentBatchItem;
 use super::*;
+
+pub(super) fn require_historical_release(
+    version_id: Option<String>,
+) -> crate::Result<String> {
+    version_id.filter(|id| !id.is_empty()).ok_or_else(|| ErrorKind::InputError("This historical task has no saved release; prepare a new content preview instead of selecting a new version during recovery".into()).into())
+}
 
 pub(super) async fn run_request(
     job_id: Uuid,
@@ -322,6 +329,13 @@ pub(super) async fn run_request(
                 Some(InstallContinuationState::InstallingPackToExistingInstance {
                     disabled_project_ids,
                 }) => disabled_project_ids.into_iter().collect(),
+                Some(_) => {
+                    return Err(crate::ErrorKind::InputError(
+                        "Install job continuation does not match its request"
+                            .to_string(),
+                    )
+                    .into());
+                }
                 None => {
                     let disabled_project_ids = remove_existing_pack_content(
                         job_id,
@@ -380,6 +394,7 @@ pub(super) async fn run_request(
             display_title: _,
             display_icon: _,
         } => {
+            let version_id = Some(require_historical_release(version_id)?);
             update_progress(
                 job_id,
                 job_state,
@@ -553,6 +568,114 @@ pub(super) async fn run_request(
             }
             Ok(InstallExecutionOutcome::Completed(Some(instance_id)))
         }
+        InstallRequest::InstallContentBatch {
+            instance_id, items, ..
+        } => {
+            update_progress(
+                job_id,
+                job_state,
+                state,
+                InstallPhaseId::DownloadingContent,
+                InstallPhaseDetails::Empty,
+            )
+            .await?;
+            let reporter =
+                InstallProgressReporter::new(job_id, job_state.clone());
+            // Every item in this request targets the same instance. Keep the
+            // plan pipeline serial so a content materialization cannot hold
+            // the instance lock while another plan waits on the install DB
+            // writer (or vice versa). The download helper still uses the
+            // global transfer concurrency for individual files.
+            let results = futures::stream::iter(items)
+                .map(|item| {
+                    let reporter = reporter.clone();
+                    let instance_id = instance_id.clone();
+                    async move {
+                        match item {
+                            InstallContentBatchItem::Modrinth {
+                                project_id,
+                                version_id,
+                                content_type,
+                                selected,
+                                excluded_project_ids,
+                                force_project_ids,
+                            } => {
+                                let version_id = Some(require_historical_release(version_id)?);
+                                let plan = crate::state::instances::commands::resolve_install_plan(
+                                    &instance_id,
+                                    crate::state::instances::commands::InstanceInstallProjectRequest {
+                                        project_id: project_id.clone(),
+                                        version_id,
+                                        content_type,
+                                        selected,
+                                        excluded_project_ids,
+                                        force_project_ids,
+                                    },
+                                    state,
+                                ).await?;
+                                crate::state::instances::commands::install_resolved_content_plan_with_reporter(
+                                    &instance_id, &plan, Some(reporter.clone()), state,
+                                ).await?;
+                                Ok::<Option<InstallPauseReason>, crate::Error>(None)
+                            }
+                            InstallContentBatchItem::CurseForge { request } => {
+                                let result = crate::api::curseforge::install_file_with_reporter(
+                                    request, reporter.clone(),
+                                ).await?;
+                                Ok(if result.manual_downloads.is_empty() {
+                                    None
+                                } else {
+                                    Some(InstallPauseReason::MissingRequiredContent {
+                                        failed_files: result.manual_downloads.len() as u64,
+                                        paths: result.manual_downloads.iter().map(|download| download.file_name.clone()).collect(),
+                                    })
+                                })
+                            }
+                            InstallContentBatchItem::CurseForgeWorld { request } => {
+                                let result = crate::api::curseforge::install_world_with_reporter(
+                                    request, reporter,
+                                ).await?;
+                                Ok(result.manual_download.map(|download| InstallPauseReason::MissingRequiredContent {
+                                    failed_files: 1,
+                                    paths: vec![format!("saves/{}", download.file_name)],
+                                }))
+                            }
+                            InstallContentBatchItem::FrozenResource { plan } => {
+                                Box::pin(crate::resources::plans::execute_frozen_plan(
+                                    &instance_id,
+                                    &plan,
+                                    Some(reporter.clone()),
+                                    state,
+                                )).await?;
+                                Ok(None)
+                            }
+                        }
+                    }
+                })
+                .buffer_unordered(1)
+                .collect::<Vec<_>>()
+                .await;
+            let mut pause_reason = None;
+            for result in results {
+                if let Some(reason) = result? {
+                    pause_reason = Some(reason);
+                }
+            }
+            if let Some(reason) = pause_reason {
+                return Ok(InstallExecutionOutcome::WaitingForUser(reason));
+            }
+            crate::api::instance::emit_content_changed(&instance_id).await?;
+            Ok(InstallExecutionOutcome::Completed(Some(instance_id)))
+        }
+        InstallRequest::ChangeContent {
+            instance_id,
+            intent,
+            ..
+        } => {
+            run_content_change(job_id, job_state, &instance_id, &intent)
+                .await?;
+            Ok(InstallExecutionOutcome::Completed(Some(instance_id)))
+        }
         InstallRequest::UpdateManagedCurseForgeModpack {
             instance_id,
             file_id,
@@ -597,6 +720,25 @@ pub(super) async fn run_request(
             }
             Ok(InstallExecutionOutcome::Completed(Some(instance_id)))
         }
+        InstallRequest::ExportResource {
+            plan,
+            output_path,
+            resolution,
+        } => {
+            if let Some(checkpoint) = resolution {
+                export::resolve(
+                    job_id,
+                    job_state,
+                    &plan,
+                    &output_path,
+                    *checkpoint,
+                )
+                .await?;
+            } else {
+                export::run(job_id, job_state, &plan, &output_path).await?;
+            }
+            Ok(InstallExecutionOutcome::Completed(Some(plan.instance_id)))
+        }
         InstallRequest::DownloadJava { vendor, version } => {
             update_progress(
                 job_id,
@@ -619,4 +761,13 @@ pub(super) async fn run_request(
             Ok(InstallExecutionOutcome::Completed(None))
         }
     }
+}
+
+async fn run_content_change(
+    job_id: uuid::Uuid,
+    job_state: &mut InstallJobState,
+    instance_id: &str,
+    intent: &crate::install::ContentChangeIntent,
+) -> crate::Result<()> {
+    content_change::run(job_id, job_state, instance_id, intent).await
 }

@@ -19,9 +19,45 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub async fn recover_interrupted_jobs(state: &State) -> crate::Result<()> {
+    crate::state::instances::commands::recover_legacy_rollbacks(state).await?;
     let jobs = store::list_interrupted_candidates(state).await?;
 
     for mut job in jobs {
+        if crate::resources::plans::frozen_request_completed(
+            &job.state.request,
+            &state.pool,
+        )
+        .await?
+        {
+            if let Err(error) = apply_cleanup(&mut job.state, state).await {
+                tracing::warn!(job_id = %job.id, %error, "Committed resource task staging cleanup deferred");
+            }
+            job.state.progress.phase = InstallPhaseId::Finalizing;
+            job.state.progress.progress = None;
+            job.state.progress.details = InstallPhaseDetails::Empty;
+            job.state.progress.parallel = None;
+            job.state.error = None;
+            job.state.rollback_error = None;
+            job.state.context = None;
+            job.state.pause_reason = None;
+            job.state.missing_content = None;
+            job.state.rollback = None;
+            job.state.record_event(InstallJobEventKind::JobSucceeded {
+                instance_id: Some(job.instance_id.clone().ok_or_else(
+                    || {
+                        crate::ErrorKind::InputError(
+                            "committed resource job has no instance".into(),
+                        )
+                    },
+                )?),
+            });
+            if let Some(record) =
+                store::complete_running_job(job.id, &job.state, state).await?
+            {
+                emit_install_job(&record.snapshot()).await?;
+                continue;
+            }
+        }
         if job.state.display.is_none() {
             job.state.display = display_from_request(&job.state);
         }
@@ -159,14 +195,28 @@ fn display_from_request(state: &InstallJobState) -> Option<InstallJobDisplay> {
             title: display_title.clone(),
             icon: display_icon.clone(),
         }),
-		InstallRequest::InstallCurseForgeWorld {
+        InstallRequest::InstallCurseForgeWorld {
 			display_title,
 			display_icon,
 			..
-		} => Some(InstallJobDisplay {
-			title: display_title.clone(),
-			icon: display_icon.clone(),
-		}),
+        } => Some(InstallJobDisplay {
+            title: display_title.clone(),
+            icon: display_icon.clone(),
+        }),
+        InstallRequest::InstallContentBatch {
+            display_title,
+            display_icon,
+            ..
+        }
+        | InstallRequest::ChangeContent {
+            display_title,
+            display_icon,
+            ..
+        } => Some(InstallJobDisplay {
+            title: display_title.clone(),
+            icon: display_icon.clone(),
+        }),
+        InstallRequest::ExportResource { plan, .. } => Some(InstallJobDisplay { title: plan.package_info.name.clone(), icon: None }),
         InstallRequest::DownloadJava { vendor, version } => Some(InstallJobDisplay {
             title: format!("Java {version} ({vendor})"),
             icon: None,
@@ -178,28 +228,61 @@ pub async fn apply_cleanup(
     job_state: &mut InstallJobState,
     state: &State,
 ) -> crate::Result<()> {
+    if let InstallRequest::ExportResource {
+        plan, output_path, ..
+    } = &job_state.request
+    {
+        crate::resources::export::writer::cleanup_partial(plan, output_path)
+            .await
+            .map_err(|e| crate::ErrorKind::InputError(e.to_string()))?;
+    }
+    if let InstallRequest::InstallContentBatch { items, .. } =
+        &job_state.request
+    {
+        for item in items {
+            if let super::model::InstallContentBatchItem::FrozenResource {
+                plan,
+            } = item
+            {
+                Box::pin(crate::resources::plans::recover_frozen_plan(
+                    plan, state,
+                ))
+                .await?;
+            }
+        }
+    }
     match job_state.cleanup.clone() {
         InstallCleanup::DeleteNewInstance { instance_id } => {
-            if let Some(instance_id) = instance_id {
-                if !job_state.instance_deleted() {
-                    crate::state::remove_instance(&instance_id, state).await?;
-                    job_state.record_event(
-                        InstallJobEventKind::TargetInstanceDeleted {
-                            instance_id: instance_id.clone(),
-                        },
-                    );
-                    if let Err(error) = emit_instance(
+            if let Some(instance_id) = instance_id
+                && !job_state.instance_deleted()
+            {
+                let preserve_external_files = matches!(
+                    &job_state.request,
+                    InstallRequest::ImportInstance { symlink: true, .. }
+                );
+                if preserve_external_files {
+                    crate::state::remove_instance_preserving_external_files(
                         &instance_id,
-                        InstancePayloadType::Removed,
+                        state,
                     )
-                    .await
-                    {
-                        tracing::warn!(
-                            instance_id,
-                            error = %error,
-                            "Install cleanup deleted a new instance, but its removal event could not be emitted"
-                        );
-                    }
+                    .await?;
+                } else {
+                    crate::state::remove_instance(&instance_id, state).await?;
+                }
+                job_state.record_event(
+                    InstallJobEventKind::TargetInstanceDeleted {
+                        instance_id: instance_id.clone(),
+                    },
+                );
+                if let Err(error) =
+                    emit_instance(&instance_id, InstancePayloadType::Removed)
+                        .await
+                {
+                    tracing::warn!(
+                        instance_id,
+                        error = %error,
+                        "Install cleanup deleted a new instance, but its removal event could not be emitted"
+                    );
                 }
             }
         }
@@ -1021,6 +1104,10 @@ mod tests {
         let state = State::init_for_test(root.to_string_lossy().to_string())
             .await
             .unwrap();
+        let instance_count_before = crate::state::list_instances(&state.pool)
+            .await
+            .unwrap()
+            .len();
         let old_link = InstanceLink::ImportedModpack {
             project_id: Some("old-project".to_string()),
             version_id: Some("old-version".to_string()),
@@ -1374,7 +1461,7 @@ mod tests {
                 .await
                 .unwrap()
                 .len(),
-            1
+            instance_count_before + 1
         );
 
         let new_instance = crate::api::instance::create(
@@ -1444,6 +1531,64 @@ mod tests {
                 .is_none()
         );
 
+        let external_instance =
+            root.join("external-launcher/versions/source-instance");
+        crate::util::io::create_dir_all(&external_instance)
+            .await
+            .unwrap();
+        let external_marker = external_instance.join("original-world.dat");
+        crate::util::io::write(&external_marker, b"must survive cancellation")
+            .await
+            .unwrap();
+        let linked_import = crate::api::instance::create(
+            "Canceled Symlink Import".to_string(),
+            "1.21.1".to_string(),
+            ModLoader::Vanilla,
+            None,
+            None,
+            InstanceLink::Unmanaged,
+            None,
+            Some(external_instance.to_string_lossy().to_string()),
+        )
+        .await
+        .unwrap();
+        let linked_import_id = linked_import.instance.id.clone();
+        let managed_import_path = state
+            .directories
+            .instances_dir()
+            .join(&linked_import.instance.path);
+        let mut linked_import_job =
+            InstallJobState::new(InstallRequest::ImportInstance {
+                launcher_type:
+                    crate::api::pack::import::ImportLauncherType::Generic,
+                base_path: root.clone(),
+                instance_folder: "source-instance".to_string(),
+                instance_path: Some(
+                    external_instance.to_string_lossy().to_string(),
+                ),
+                symlink: true,
+                game_version: None,
+                loader: None,
+                loader_version: None,
+                game_dir_override: Some(
+                    external_instance.to_string_lossy().to_string(),
+                ),
+            });
+        linked_import_job.cleanup = InstallCleanup::DeleteNewInstance {
+            instance_id: Some(linked_import_id.clone()),
+        };
+
+        apply_cleanup(&mut linked_import_job, &state).await.unwrap();
+
+        assert!(external_marker.exists());
+        assert!(!managed_import_path.exists());
+        assert!(
+            crate::state::get_instance(&linked_import_id, &state.pool)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
         let mut missing_instance_job =
             InstallJobState::new(InstallRequest::DownloadJava {
                 vendor: "test".to_string(),
@@ -1452,11 +1597,14 @@ mod tests {
         missing_instance_job.cleanup = InstallCleanup::DeleteNewInstance {
             instance_id: Some("missing-instance".to_string()),
         };
+        apply_cleanup(&mut missing_instance_job, &state)
+            .await
+            .unwrap();
         assert!(
-            apply_cleanup(&mut missing_instance_job, &state)
+            crate::state::get_instance("missing-instance", &state.pool)
                 .await
-                .is_err(),
-            "new-instance cleanup must report deletion failures"
+                .unwrap()
+                .is_none()
         );
     }
 }

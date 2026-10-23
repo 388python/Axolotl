@@ -1,5 +1,6 @@
 //! API for interacting with Theseus
 pub mod ai;
+pub mod anti_piracy;
 pub mod cache;
 pub mod content_favorites;
 pub mod content_search;
@@ -71,7 +72,7 @@ pub mod data {
         WindowSize,
     };
     pub use ariadne::users::UserStatus;
-    pub use modrinth_content_management::{
+    pub use content_management::{
         ContentType, ResolutionPreferences, ResolveContentPlan,
         ResolveContentRequest,
     };

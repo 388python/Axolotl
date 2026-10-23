@@ -1,33 +1,17 @@
 //! Shared helpers for extracting content from local modpack archives.
 
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use super::detect::decode_zip_entry_name;
 use crate::util::io;
 use tokio_util::sync::CancellationToken;
 
-const EXTRACTION_SIZE_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
+pub(crate) const EXTRACTION_SIZE_LIMIT: u64 = 8 * 1024 * 1024 * 1024;
 
 fn archive_error(error: zip::result::ZipError) -> crate::Error {
     crate::ErrorKind::InputError(format!("Modpack archive is invalid: {error}"))
         .into()
-}
-
-pub(crate) fn safe_relative_path(value: &str) -> crate::Result<String> {
-    let path = Path::new(value);
-    if value.is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        return Err(crate::ErrorKind::InputError(
-            "Modpack archive contains an invalid file path".to_string(),
-        )
-        .into());
-    }
-    Ok(path.to_string_lossy().replace('\\', "/"))
 }
 
 /// Extracts every file under `prefix` in the archive into `target_dir`,
@@ -51,7 +35,7 @@ pub(crate) async fn materialize_archive_subdir_for_instance(
     prefix: String,
     target_dir: PathBuf,
 ) -> crate::Result<(u32, StagedArchiveReplacements)> {
-    run_blocking_instance_write(
+    run_cancellable_blocking_instance_write(
         instance_id,
         cancellation,
         move |cancellation| {
@@ -75,9 +59,57 @@ where
     T: Send + 'static,
     F: FnOnce(&CancellationToken) -> crate::Result<T> + Send + 'static,
 {
+    run_blocking_instance_write_inner(
+        instance_id,
+        cancellation,
+        operation,
+        false,
+    )
+    .await
+}
+
+/// Cancellation may stop the lock wait, but a started writer must be joined
+/// before rollback. Finalization and rollback use the non-cancellable helper.
+pub(crate) async fn run_cancellable_blocking_instance_write<T, F>(
+    instance_id: String,
+    cancellation: CancellationToken,
+    operation: F,
+) -> crate::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&CancellationToken) -> crate::Result<T> + Send + 'static,
+{
+    run_blocking_instance_write_inner(
+        instance_id,
+        cancellation,
+        operation,
+        true,
+    )
+    .await
+}
+
+async fn run_blocking_instance_write_inner<T, F>(
+    instance_id: String,
+    cancellation: CancellationToken,
+    operation: F,
+    cancellable: bool,
+) -> crate::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&CancellationToken) -> crate::Result<T> + Send + 'static,
+{
     let state = crate::State::get().await?;
-    let instance_lock =
-        state.lock_instance_content_exclusive(&instance_id).await;
+    let started = std::time::Instant::now();
+    tracing::debug!(%instance_id, cancellable, "Waiting for modpack archive content write lock");
+    let instance_lock = if cancellable {
+        state
+            .instance_locks
+            .lock_exclusive_cancellable(&instance_id, &cancellation)
+            .await?
+    } else {
+        state.lock_instance_content_exclusive(&instance_id).await
+    };
+    tracing::debug!(%instance_id, wait_ms = started.elapsed().as_millis(), "Acquired modpack archive content write lock");
     tokio::task::spawn_blocking(move || {
         let _instance_lock = instance_lock;
         operation(&cancellation)
@@ -171,7 +203,8 @@ fn extract_archive_subdir_entries_sync(
             )
             .into());
         }
-        let target = target_dir.join(safe_relative_path(relative)?);
+        let target =
+            io::safe_relative_join(target_dir, &relative.replace('\\', "/"))?;
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|error| io::IOError::with_path(error, parent))?;
@@ -210,7 +243,14 @@ fn write_archive_entry_atomically<R: std::io::Read>(
     replacement_order: &mut Vec<PathBuf>,
 ) -> crate::Result<u64> {
     let written = write_archive_entry_to_staging(reader, target, cancellation)?;
-    materialize_staged_archive_entry(target, replacements, replacement_order)?;
+    if let Err(error) = materialize_staged_archive_entry(
+        target,
+        replacements,
+        replacement_order,
+    ) {
+        let _ = remove_file_if_exists(&sibling_path(target, ".installing"));
+        return Err(error);
+    }
     Ok(written)
 }
 
@@ -255,7 +295,22 @@ fn materialize_staged_archive_entry(
     replacement_order: &mut Vec<PathBuf>,
 ) -> crate::Result<()> {
     let temporary = sibling_path(target, ".installing");
-    if replacements.contains_key(target) {
+    let backup = sibling_path(target, ".installing.previous");
+    let created = sibling_path(target, ".installing.created");
+    let has_marker = backup.exists() || created.exists();
+    // On case-insensitive filesystems different ZIP spellings can identify
+    // the same file. Resolve the actual on-disk paths only on a marker
+    // collision so large archives keep constant-time transaction lookups in
+    // the usual case. Preserve the first spelling and its original backup.
+    let already_replaced = replacements.contains_key(target)
+        || (has_marker
+            && std::fs::canonicalize(target).ok().is_some_and(|canonical| {
+                replacements.keys().any(|previous| {
+                    std::fs::canonicalize(previous)
+                        .is_ok_and(|previous| previous == canonical)
+                })
+            }));
+    if already_replaced {
         // Duplicate archive entries for the same normalized path replace the
         // previous entry from this transaction, while the original pre-install
         // backup remains untouched for rollback.
@@ -267,9 +322,7 @@ fn materialize_staged_archive_entry(
         return Ok(());
     }
 
-    let backup = sibling_path(target, ".installing.previous");
-    let created = sibling_path(target, ".installing.created");
-    if backup.exists() || created.exists() {
+    if has_marker {
         return Err(crate::ErrorKind::FSError(format!(
             "Archive target has an unfinished replacement that must be recovered first: {}",
             target.display()
@@ -676,6 +729,86 @@ mod tests {
     use std::io::Cursor;
     use std::io::Write;
 
+    #[test]
+    fn unsafe_override_paths_fail_without_writing_outside_target() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let target_dir = root.path().join("server");
+        std::fs::create_dir(&target_dir).unwrap();
+        let outside = root.path().join("outside.txt");
+        std::fs::write(&outside, b"unchanged").unwrap();
+        for prefix in ["overrides/", "server/overrides/"] {
+            for relative in [
+                "../outside.txt",
+                r"..\outside.txt",
+                "config/../../outside.txt",
+                "/outside.txt",
+                "C:/outside.txt",
+                "C:outside.txt",
+                r"\\server\share\outside.txt",
+                "config/.. /outside.txt",
+                "config/mod.jar:payload",
+                "config/NUL",
+                "config/secret.",
+            ] {
+                let mut archive = zip::ZipWriter::new(
+                    std::fs::File::create(&archive_path).unwrap(),
+                );
+                archive
+                    .start_file(
+                        format!("{prefix}{relative}"),
+                        zip::write::SimpleFileOptions::default(),
+                    )
+                    .unwrap();
+                archive.write_all(b"malicious").unwrap();
+                archive.finish().unwrap();
+                assert!(
+                    extract_archive_subdir_sync(
+                        &archive_path,
+                        prefix,
+                        &target_dir,
+                        None,
+                    )
+                    .is_err(),
+                    "{prefix}{relative}"
+                );
+                assert_eq!(std::fs::read(&outside).unwrap(), b"unchanged");
+                assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn override_paths_with_backslashes_are_normalized() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let target_dir = root.path().join("server");
+        let mut archive =
+            zip::ZipWriter::new(std::fs::File::create(&archive_path).unwrap());
+        archive
+            .start_file(
+                r"overrides/config\example.toml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        archive.write_all(b"valid").unwrap();
+        archive.finish().unwrap();
+        assert_eq!(
+            extract_archive_subdir_sync(
+                &archive_path,
+                "overrides/",
+                &target_dir,
+                None,
+            )
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            std::fs::read(target_dir.join("config/example.toml")).unwrap(),
+            b"valid"
+        );
+    }
+
     struct CancelOnRead {
         cancellation: CancellationToken,
         read: bool,
@@ -955,6 +1088,115 @@ mod tests {
 
         rollback_archive_replacements(&replacements, &order).unwrap();
         assert_eq!(std::fs::read(&target).unwrap(), b"original");
+    }
+
+    #[test]
+    fn case_variant_zip_entries_finalize_and_rollback() {
+        let root = tempfile::tempdir().unwrap();
+        let archive_path = root.path().join("pack.zip");
+        let first_name = "config/Thaumcraft Mob Aspects[ThaumcraftMobAspects]/lang/zh_CN.lang";
+        let second_name = "config/Thaumcraft Mob Aspects[thaumcraftmobaspects]/lang/zh_cn.lang";
+        {
+            let mut archive = zip::ZipWriter::new(
+                std::fs::File::create(&archive_path).unwrap(),
+            );
+            let options = zip::write::SimpleFileOptions::default();
+            for (name, bytes) in [
+                (first_name, b"first".as_slice()),
+                (second_name, b"second".as_slice()),
+            ] {
+                archive.start_file(name, options).unwrap();
+                archive.write_all(bytes).unwrap();
+            }
+            archive.finish().unwrap();
+        }
+        for existing in [false, true] {
+            let target_dir =
+                root.path()
+                    .join(if existing { "existing" } else { "empty" });
+            std::fs::create_dir_all(
+                target_dir.join(first_name).parent().unwrap(),
+            )
+            .unwrap();
+            let first = target_dir.join(first_name);
+            let second = target_dir.join(second_name);
+            if existing {
+                std::fs::write(&first, b"original").unwrap();
+            }
+            let (written, replacements) = materialize_archive_subdir_sync(
+                &archive_path,
+                "",
+                &target_dir,
+                None,
+            )
+            .unwrap();
+            assert_eq!(written, 2);
+            assert_eq!(std::fs::read(&second).unwrap(), b"second");
+            let same_file = std::fs::canonicalize(&first).unwrap()
+                == std::fs::canonicalize(&second).unwrap();
+            assert_eq!(
+                replacements.replacements.len(),
+                if same_file { 1 } else { 2 }
+            );
+            replacements.rollback().unwrap();
+            if existing {
+                assert_eq!(std::fs::read(&first).unwrap(), b"original");
+            } else {
+                assert!(!first.exists());
+            }
+            if !same_file || !existing {
+                assert!(!second.exists());
+            }
+            extract_archive_subdir_sync(&archive_path, "", &target_dir, None)
+                .unwrap();
+            assert_eq!(std::fs::read(&second).unwrap(), b"second");
+            for target in [&first, &second] {
+                for suffix in [
+                    ".installing",
+                    ".installing.previous",
+                    ".installing.created",
+                ] {
+                    assert!(!sibling_path(target, suffix).exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "Set AXOLOTL_TEST_MULTIMC_ARCHIVE to a local GTNH MultiMC export"]
+    fn real_gtnh_archive_extracts_all_files() {
+        let archive_path = PathBuf::from(
+            std::env::var_os("AXOLOTL_TEST_MULTIMC_ARCHIVE")
+                .expect("local archive path"),
+        );
+        let root = tempfile::tempdir().unwrap();
+        let written = extract_archive_subdir_sync(
+            &archive_path,
+            "GT New Horizons 2.8.4/",
+            root.path(),
+            None,
+        )
+        .unwrap();
+        assert!(written > 1000);
+        assert!(root.path().join("mmc-pack.json").is_file());
+        assert!(
+            root.path()
+                .join("patches/net.minecraftforge.json")
+                .is_file()
+        );
+        assert!(
+            root.path()
+                .join("libraries/lwjgl3ify-2.1.16-forgePatches.jar")
+                .is_file()
+        );
+        let file = root.path().join(".minecraft/config/txloader/forceload/Thaumcraft Mob Aspects[thaumcraftmobaspects]/lang/zh_CN.lang");
+        assert_eq!(std::fs::metadata(&file).unwrap().len(), 59);
+        for suffix in
+            [".installing", ".installing.created", ".installing.previous"]
+        {
+            assert!(!sibling_path(&file, suffix).exists());
+        }
+        println!("GTNH archive fully extracted: {written} files");
     }
 
     #[test]

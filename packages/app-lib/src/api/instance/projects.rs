@@ -1,5 +1,5 @@
-use crate::event::emit::{emit_instance, emit_loading, init_loading};
-use crate::event::{InstancePayloadType, LoadingBarType};
+use crate::event::InstancePayloadType;
+use crate::event::emit::emit_instance;
 use crate::state::instances::adapters::sqlite::{content_rows, instance_rows};
 use crate::state::instances::{
     ContentOwnershipKind, PackMemberMaterializationState,
@@ -7,24 +7,7 @@ use crate::state::instances::{
 };
 use crate::state::{ContentProvider, ContentSourceKind, ProjectType, State};
 use crate::util::fetch;
-use modrinth_content_management::{
-    ContentType, ResolutionPreferences, ResolveContentPlan,
-};
-use std::collections::HashMap;
 use std::path::Path;
-
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
-pub struct InstallProjectWithDependenciesRequest {
-    pub project_id: String,
-    pub version_id: Option<String>,
-    pub content_type: ContentType,
-    #[serde(default)]
-    pub selected: ResolutionPreferences,
-    #[serde(default)]
-    pub excluded_project_ids: Vec<String>,
-    #[serde(default)]
-    pub force_project_ids: Vec<String>,
-}
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,236 +15,6 @@ pub struct ContentToggleResult {
     pub content_id: String,
     pub path: String,
     pub enabled: bool,
-}
-
-#[tracing::instrument]
-pub async fn update_all_projects(
-    instance_id: &str,
-) -> crate::Result<HashMap<String, String>> {
-    let state = State::get().await?;
-    let instance = get_instance_display_info(instance_id, &state).await?;
-    let loading_bar = init_loading(
-        LoadingBarType::InstanceUpdate {
-            instance_id: instance.id.clone(),
-            instance_name: instance.name.clone(),
-        },
-        100.0,
-        "Updating instance",
-    )
-    .await?;
-    let map = crate::state::instances::commands::update_all_projects(
-        instance_id,
-        &state,
-    )
-    .await?;
-    emit_loading(&loading_bar, 100.0, Some("Updated instance"))?;
-    emit_content_changed(&instance.id).await?;
-
-    Ok(map)
-}
-
-#[tracing::instrument]
-pub async fn update_project(
-    instance_id: &str,
-    project_path: &str,
-    skip_send_event: Option<bool>,
-) -> crate::Result<String> {
-    let state = State::get().await?;
-    let path = crate::state::instances::commands::update_project(
-        instance_id,
-        project_path,
-        &state,
-    )
-    .await?;
-
-    if !skip_send_event.unwrap_or(false) {
-        emit_content_changed(instance_id).await?;
-    }
-
-    Ok(path)
-}
-
-#[tracing::instrument]
-pub async fn add_project_from_version(
-    instance_id: &str,
-    version_id: &str,
-    reason: fetch::DownloadReason,
-    dependent_on_version_id: Option<String>,
-) -> crate::Result<String> {
-    let state = State::get().await?;
-    let project_path =
-        crate::state::instances::commands::add_project_from_version(
-            instance_id,
-            version_id,
-            reason,
-            dependent_on_version_id,
-            crate::state::ContentSourceKind::Local,
-            crate::state::instances::ContentOwnershipKind::UserAdded,
-            &state,
-        )
-        .await?;
-    emit_content_changed(instance_id).await?;
-
-    Ok(project_path)
-}
-
-#[tracing::instrument]
-pub async fn install_project_with_dependencies(
-    instance_id: &str,
-    request: InstallProjectWithDependenciesRequest,
-) -> crate::Result<ResolveContentPlan> {
-    let state = State::get().await?;
-    let metadata = super::get::get(instance_id).await?.ok_or_else(|| {
-        crate::ErrorKind::InputError("Unknown instance".to_string())
-    })?;
-    let plan = crate::state::instances::commands::resolve_install_plan(
-        instance_id,
-        crate::state::instances::commands::InstanceInstallProjectRequest {
-            project_id: request.project_id,
-            version_id: request.version_id,
-            content_type: request.content_type,
-            selected: request.selected,
-            excluded_project_ids: request.excluded_project_ids,
-            force_project_ids: request.force_project_ids,
-        },
-        &state,
-    )
-    .await?;
-
-    let instance_id = metadata.instance.id;
-    let project_ids = plan_project_ids(&plan);
-    let install_plan = plan.clone();
-    tokio::spawn(async move {
-        match crate::state::instances::commands::install_resolved_content_plan(
-            &instance_id,
-            &install_plan,
-            &state,
-        )
-        .await
-        {
-            Ok(_paths) => {
-                if let Err(error) = emit_instance(
-                    &instance_id,
-                    InstancePayloadType::ContentInstallFinished {
-                        project_ids: project_ids.clone(),
-                        dependency_project_ids: plan_project_ids(&install_plan)
-                            .into_iter()
-                            .skip(1)
-                            .collect(),
-                    },
-                )
-                .await
-                {
-                    tracing::error!(
-                        "Failed to emit content install finished event: {error}"
-                    );
-                }
-                if let Err(error) = emit_content_changed(&instance_id).await {
-                    tracing::error!(
-                        "Failed to emit instance edited event after content install: {error}"
-                    );
-                }
-            }
-            Err(error) => {
-                if let Err(emit_error) = emit_instance(
-                    &instance_id,
-                    InstancePayloadType::ContentInstallFailed {
-                        project_ids,
-                        message: error.to_string(),
-                    },
-                )
-                .await
-                {
-                    tracing::error!(
-                        "Failed to emit content install failed event: {emit_error}"
-                    );
-                }
-            }
-        }
-    });
-
-    Ok(plan)
-}
-
-#[tracing::instrument]
-pub async fn preview_project_with_dependencies(
-    instance_id: &str,
-    request: InstallProjectWithDependenciesRequest,
-) -> crate::Result<ResolveContentPlan> {
-    let state = State::get().await?;
-    super::get::get(instance_id).await?.ok_or_else(|| {
-        crate::ErrorKind::InputError("Unknown instance".to_string())
-    })?;
-    crate::state::instances::commands::resolve_install_plan(
-        instance_id,
-        crate::state::instances::commands::InstanceInstallProjectRequest {
-            project_id: request.project_id,
-            version_id: request.version_id,
-            content_type: request.content_type,
-            selected: request.selected,
-            excluded_project_ids: request.excluded_project_ids,
-            force_project_ids: request.force_project_ids,
-        },
-        &state,
-    )
-    .await
-}
-
-#[tracing::instrument]
-pub async fn preview_project_with_dependencies_for_target(
-    request: InstallProjectWithDependenciesRequest,
-    game_version: String,
-    loader: crate::state::ModLoader,
-) -> crate::Result<ResolveContentPlan> {
-    let state = State::get().await?;
-    crate::state::instances::commands::resolve_install_plan_for_target(
-        crate::state::instances::commands::InstanceInstallProjectRequest {
-            project_id: request.project_id,
-            version_id: request.version_id,
-            content_type: request.content_type,
-            selected: request.selected,
-            excluded_project_ids: request.excluded_project_ids,
-            force_project_ids: request.force_project_ids,
-        },
-        game_version,
-        loader,
-        &state,
-    )
-    .await
-}
-
-#[tracing::instrument]
-pub async fn queue_project_with_dependencies(
-    instance_id: &str,
-    request: InstallProjectWithDependenciesRequest,
-    display_title: String,
-    display_icon: Option<String>,
-) -> crate::Result<crate::install::InstallJobSnapshot> {
-    crate::install::install_content(
-        instance_id.to_string(),
-        request.project_id,
-        request.version_id,
-        request.content_type,
-        request.selected,
-        request.excluded_project_ids,
-        display_title,
-        display_icon,
-    )
-    .await
-}
-
-#[tracing::instrument]
-pub async fn queue_curseforge_content(
-    request: crate::api::curseforge::CurseForgeInstallRequest,
-    display_title: String,
-    display_icon: Option<String>,
-) -> crate::Result<crate::install::InstallJobSnapshot> {
-    crate::install::install_curseforge_content(
-        request,
-        display_title,
-        display_icon,
-    )
-    .await
 }
 
 #[tracing::instrument]
@@ -278,38 +31,37 @@ pub async fn queue_curseforge_world(
     .await
 }
 
-fn plan_project_ids(plan: &ResolveContentPlan) -> Vec<String> {
-    let mut project_ids = Vec::with_capacity(plan.dependencies.len() + 1);
-    project_ids.push(plan.primary.project_id.clone());
-    project_ids.extend(
-        plan.dependencies
-            .iter()
-            .map(|dependency| dependency.project_id.clone()),
-    );
-    project_ids
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallContentBatchRequest {
+    pub instance_id: String,
+    pub items: Vec<crate::install::InstallContentBatchItem>,
+    pub display_title: String,
+    pub display_icon: Option<String>,
 }
 
 #[tracing::instrument]
-pub async fn switch_project_version_with_dependencies(
-    instance_id: &str,
-    project_path: &str,
-    version_id: &str,
-) -> crate::Result<String> {
-    let state = State::get().await?;
-    let metadata = super::get::get(instance_id).await?.ok_or_else(|| {
-        crate::ErrorKind::InputError("Unknown instance".to_string())
-    })?;
-    let path =
-        crate::state::instances::commands::switch_project_version_with_dependencies(
-            instance_id,
-            project_path,
-            version_id,
-            &state,
+pub async fn queue_content_batch(
+    request: InstallContentBatchRequest,
+) -> crate::Result<crate::install::InstallJobSnapshot> {
+    if request.items.iter().any(|item| {
+        !matches!(
+            item,
+            crate::install::InstallContentBatchItem::CurseForgeWorld { .. }
         )
-        .await?;
-    emit_content_changed(&metadata.instance.id).await?;
-
-    Ok(path)
+    }) {
+        return Err(crate::ErrorKind::InputError(
+            "Resource installations require a reviewed resource plan".into(),
+        )
+        .into());
+    }
+    crate::install::install_content_batch(
+        request.instance_id,
+        request.items,
+        request.display_title,
+        request.display_icon,
+    )
+    .await
 }
 
 #[tracing::instrument]
@@ -512,45 +264,11 @@ pub async fn remove_content_entry(
 }
 
 #[tracing::instrument]
-pub async fn update_content_entry(
-    instance_id: &str,
-    content_id: &str,
-) -> crate::Result<String> {
-    let target = content_mutation_target(instance_id, content_id).await?;
-    let path = target.relative_path.ok_or_else(|| {
-        crate::ErrorKind::InputError(
-            "The selected content is not present on disk".to_string(),
-        )
-    })?;
-    match target.provider {
-        Some(ContentProvider::CurseForge) => {
-            let result = crate::api::curseforge::update_installed_file(
-                instance_id,
-                &path,
-            )
-            .await?;
-            let updated_path = result
-                .installed
-                .iter()
-                .find(|file| !file.dependency)
-                .map_or(path, |file| file.relative_path.clone());
-            emit_content_changed(instance_id).await?;
-            Ok(updated_path)
-        }
-        Some(ContentProvider::McArchive) => Err(crate::ErrorKind::InputError(
-            "MCArchive content updates require selecting a file manually"
-                .to_string(),
-        )
-        .into()),
-        _ => update_project(instance_id, &path, None).await,
-    }
-}
-
-#[tracing::instrument]
-pub async fn switch_content_entry_version(
+pub(crate) async fn switch_content_entry_version(
     instance_id: &str,
     content_id: &str,
     version_id: &str,
+    reporter: Option<crate::install::InstallProgressReporter>,
 ) -> crate::Result<String> {
     let target = content_mutation_target(instance_id, content_id).await?;
     let path = target.relative_path.ok_or_else(|| {
@@ -558,6 +276,7 @@ pub async fn switch_content_entry_version(
             "The selected content is not present on disk".to_string(),
         )
     })?;
+    let current_release_id = target.provider_release_id.clone();
     match target.provider {
         Some(ContentProvider::CurseForge) => {
             let file_id = version_id.parse::<u32>().map_err(|_| {
@@ -565,12 +284,14 @@ pub async fn switch_content_entry_version(
                     "The selected CurseForge file ID is invalid".to_string(),
                 )
             })?;
-            let result = crate::api::curseforge::switch_installed_file_version(
-                instance_id,
-                &path,
-                file_id,
-            )
-            .await?;
+            let result =
+                crate::api::curseforge::switch_installed_file_version(
+                    instance_id,
+                    &path,
+                    file_id,
+                    reporter,
+                )
+                .await?;
             let updated_path = result
                 .installed
                 .iter()
@@ -585,10 +306,14 @@ pub async fn switch_content_entry_version(
 		)
 		.into()),
         _ => {
-            switch_project_version_with_dependencies(
+            let state = State::get().await?;
+            crate::state::instances::commands::switch_project_version_with_dependencies_preserving_name(
                 instance_id,
                 &path,
+                current_release_id.as_deref(),
                 version_id,
+                reporter,
+                &state,
             )
             .await
         }
@@ -837,7 +562,7 @@ pub(crate) async fn emit_content_changed(
     .await
 }
 
-async fn content_mutation_target(
+pub(crate) async fn content_mutation_target(
     instance_id: &str,
     content_id: &str,
 ) -> crate::Result<content_rows::ContentMutationTarget> {

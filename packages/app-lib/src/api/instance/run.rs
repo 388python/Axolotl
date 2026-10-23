@@ -82,6 +82,15 @@ async fn run_with_extra_launch_args_inner(
     extra_launch_args: Option<Vec<String>>,
     gc_intent: Option<GcLaunchIntent>,
 ) -> crate::Result<(ProcessMetadata, Option<GcLaunchReport>)> {
+    if crate::api::instance::has_active_instance_operation(instance_id) {
+        return Err(crate::ErrorKind::InputError(
+			"Wait for the active backup operation to finish before launching this instance"
+				.to_string(),
+		)
+		.into());
+    }
+    let _maintenance_guard =
+        crate::api::instance::lock_instance_maintenance(instance_id).await;
     let state = State::get().await?;
     let launch_preparation_timeout =
         crate::state::instances::commands::get_instance_launch_context(
@@ -110,6 +119,10 @@ async fn run_with_extra_launch_args_inner(
             .await?
             .ok_or_else(|| crate::ErrorKind::NoCredentialsError.as_error())?
     };
+
+    if default_account.is_offline() {
+        crate::anti_piracy::ensure_offline_allowed().await?;
+    }
 
     tokio::time::timeout(
         Duration::from_secs(launch_preparation_timeout),
@@ -145,6 +158,13 @@ async fn run_credentials(
     launch_preparation_timeout: u64,
 ) -> crate::Result<(ProcessMetadata, Option<GcLaunchReport>)> {
     let state = State::get().await?;
+    if let Err(error) =
+        crate::api::instance::sync_game_options_before_launch(instance_id).await
+    {
+        tracing::warn!(
+            "Failed to reconcile game options before launching {instance_id}: {error}"
+        );
+    }
     let settings = Settings::get(&state.pool).await?;
     let context =
         crate::state::instances::commands::get_instance_launch_context(
@@ -185,13 +205,15 @@ async fn run_credentials(
             .into_iter();
 
         if let Some(command) = cmd.next() {
-            let full_path = crate::util::io::canonicalize(
-                state.directories.resolve_game_dir(
-                    &context.instance.path,
-                    context.instance.game_dir_override.as_deref(),
-                ),
-            )?;
+            let full_path =
+                crate::state::instances::commands::instance_content_root(
+                    &state.directories,
+                    &context.instance,
+                )?;
             let mut command = Command::new(command);
+            crate::util::java_environment::configure_child_environment(
+                command.as_std_mut(),
+            );
             command.args(cmd).current_dir(&full_path).kill_on_drop(true);
             let result = command
                 .spawn()
@@ -235,6 +257,17 @@ async fn run_credentials(
         .launch_overrides
         .maximize_window
         .unwrap_or(settings.maximize_window);
+    let window_title = settings
+        .custom_window_title_enabled
+        .then(|| {
+            context
+                .launch_overrides
+                .window_title
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(|| settings.default_window_title.clone())
+        })
+        .filter(|value| !value.trim().is_empty());
     let env_args = context
         .launch_overrides
         .custom_env_vars
@@ -255,6 +288,12 @@ async fn run_credentials(
         mc_set_options.push(("fullscreen".to_string(), "true".to_string()));
     }
 
+    crate::api::instance::apply_game_options_launcher_overrides(
+        instance_id,
+        &mc_set_options,
+    )
+    .await?;
+
     if credentials.is_microsoft()
         && let Some(project_id) = server_play_project_id(&context.link)
         && !project_id.trim().is_empty()
@@ -264,16 +303,16 @@ async fn run_credentials(
             "https://sessionserver.mojang.com/session/minecraft/join",
             state.mojang_auth_use_mirror(),
         );
-        let join_result = fetch::INSECURE_REQWEST_CLIENT
-			.post(join_url.as_ref())
-			.json(&json!({
-				"accessToken": &credentials.access_token,
-				"selectedProfile": credentials.offline_profile.id.simple().to_string(),
-				"serverId": &server_id,
-			}))
-			.timeout(Duration::from_secs(5))
-			.send()
-			.await;
+        let join_result = fetch::authentication_client()
+            .post(join_url.as_ref())
+            .json(&json!({
+                "accessToken": &credentials.access_token,
+                "selectedProfile": credentials.offline_profile.id.simple().to_string(),
+                "serverId": &server_id,
+            }))
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
 
         match join_result {
             Ok(resp) if resp.status().is_success() => {
@@ -325,10 +364,11 @@ async fn run_credentials(
     }
 
     if memory.automatic {
-        let instance_path = state.directories.resolve_game_dir(
-            &context.instance.path,
-            context.instance.game_dir_override.as_deref(),
-        );
+        let instance_path =
+            crate::state::instances::commands::instance_content_root(
+                &state.directories,
+                &context.instance,
+            )?;
         memory.maximum = crate::api::jre::automatic_memory_max_mb_for_instance(
             &instance_path,
             matches!(
@@ -350,6 +390,9 @@ async fn run_credentials(
     }
 
     let mut gc_report: Option<GcLaunchReport> = None;
+    if credentials.is_offline() {
+        crate::anti_piracy::ensure_offline_allowed().await?;
+    }
     let process = crate::launcher::launch_minecraft(
         &java_args,
         &env_args,
@@ -358,6 +401,7 @@ async fn run_credentials(
         &memory,
         &resolution,
         maximize_window,
+        window_title,
         launch_preparation_timeout,
         credentials,
         post_exit_hook,

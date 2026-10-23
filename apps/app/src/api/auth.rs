@@ -15,7 +15,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             check_reachable,
             check_mojang_services,
+            network_scope,
             set_mojang_auth_use_mirror,
+            mojang_auth_use_mirror,
             login,
             browser_login,
             begin_device_login,
@@ -31,6 +33,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             get_default_user,
             set_default_user,
             get_users,
+            get_anti_piracy_status,
+            clear_official_login_marker,
         ])
         .build()
 }
@@ -44,9 +48,18 @@ pub async fn check_reachable() -> Result<()> {
 
 /// Checks all Mojang services that the Fallen proxy mirrors.
 #[tauri::command]
-pub async fn check_mojang_services()
--> Result<Vec<minecraft_auth::MojangServiceStatus>> {
-    Ok(minecraft_auth::check_mojang_services().await)
+pub async fn check_mojang_services(
+    use_mirror: Option<bool>,
+) -> Result<Vec<minecraft_auth::MojangServiceStatus>> {
+    Ok(
+        minecraft_auth::check_mojang_services_for(use_mirror.unwrap_or(false))
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn network_scope() -> Result<String> {
+    Ok(State::get().await?.network_scope())
 }
 
 /// Stores whether the launcher should route Mojang service requests through
@@ -54,12 +67,19 @@ pub async fn check_mojang_services()
 #[tauri::command]
 pub async fn set_mojang_auth_use_mirror(
     use_mirror: bool,
-    automatic: bool,
-) -> Result<()> {
+    expected_source: theseus::settings::DownloadSourceMode,
+) -> Result<bool> {
     Ok(
-        minecraft_auth::set_mojang_auth_use_mirror(use_mirror, automatic)
+        minecraft_auth::set_mojang_auth_use_mirror(use_mirror, expected_source)
             .await?,
     )
+}
+
+/// Whether the launcher currently routes Mojang service requests through the
+/// Fallen proxy.
+#[tauri::command]
+pub fn mojang_auth_use_mirror() -> bool {
+    minecraft_auth::mojang_auth_use_mirror()
 }
 
 #[derive(Deserialize, Serialize)]
@@ -73,6 +93,13 @@ pub struct MinecraftLoginTroubleLinks {
 enum MinecraftLoginAlternative {
     Browser,
     DeviceCode,
+}
+
+async fn notify_anti_piracy_status<R: Runtime>(app: &tauri::AppHandle<R>) {
+    let status = theseus::anti_piracy::status().await;
+    if let Err(error) = app.emit("anti-piracy-status-changed", status) {
+        tracing::warn!(%error, "Could not notify frontend of official Minecraft login");
+    }
 }
 
 #[tauri::command]
@@ -213,6 +240,8 @@ pub async fn login<R: Runtime>(
             window.close()?;
             let val = minecraft_auth::finish_login(&code, &state, flow).await?;
 
+            notify_anti_piracy_status(&app).await;
+
             return Ok(Some(val));
         }
     }
@@ -275,6 +304,7 @@ pub async fn browser_login<R: Runtime>(
     })?;
     let credentials =
         minecraft_auth::finish_login(&reply.code, &state, flow).await?;
+    notify_anti_piracy_status(&app).await;
     if let Some(main_window) = app.get_webview_window("main") {
         main_window.set_focus().ok();
     }
@@ -289,10 +319,18 @@ pub async fn begin_device_login()
 }
 
 #[tauri::command]
-pub async fn poll_device_login(
+pub async fn poll_device_login<R: Runtime>(
+    app: tauri::AppHandle<R>,
     device_code: String,
 ) -> Result<minecraft_auth::MinecraftDeviceLoginPoll> {
-    Ok(minecraft_auth::poll_device_login(&device_code).await?)
+    let result = minecraft_auth::poll_device_login(&device_code).await?;
+    if matches!(
+        result,
+        minecraft_auth::MinecraftDeviceLoginPoll::Complete { .. }
+    ) {
+        notify_anti_piracy_status(&app).await;
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -525,28 +563,48 @@ pub async fn add_offline_user(
 }
 
 #[tauri::command]
-pub async fn remove_user(user: uuid::Uuid) -> Result<()> {
-    Ok(minecraft_auth::remove_user(user).await?)
+pub async fn remove_user(user: String) -> Result<()> {
+    Ok(minecraft_auth::remove_user(&user).await?)
 }
 
 #[tauri::command]
-pub async fn get_default_user(
-    offline_mode: bool,
-) -> Result<Option<uuid::Uuid>> {
+pub async fn get_default_user(offline_mode: bool) -> Result<Option<String>> {
     Ok(minecraft_auth::get_default_user(offline_mode).await?)
 }
 
 #[tauri::command]
-pub async fn set_default_user(user: uuid::Uuid) -> Result<()> {
-    Ok(minecraft_auth::set_default_user(user).await?)
+pub async fn set_default_user(user: String) -> Result<()> {
+    Ok(minecraft_auth::set_default_user(&user).await?)
 }
 
 /// Get a copy of the list of all user credentials
 #[tauri::command]
 pub async fn get_users(
     offline_mode: bool,
+    cached_only: Option<bool>,
 ) -> Result<Vec<minecraft_auth::MinecraftUser>> {
-    Ok(minecraft_auth::users(offline_mode).await?)
+    Ok(minecraft_auth::users_with_cache(
+        offline_mode,
+        cached_only.unwrap_or(false),
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn get_anti_piracy_status() -> theseus::anti_piracy::Status {
+    theseus::anti_piracy::status().await
+}
+
+#[tauri::command]
+pub async fn clear_official_login_marker<R: Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<theseus::anti_piracy::Status> {
+    theseus::anti_piracy::clear_official_login().await?;
+    let status = theseus::anti_piracy::status().await;
+    if let Err(error) = app.emit("anti-piracy-status-changed", status) {
+        tracing::warn!(%error, "Could not notify frontend of cleared official Minecraft login");
+    }
+    Ok(status)
 }
 
 #[cfg(test)]

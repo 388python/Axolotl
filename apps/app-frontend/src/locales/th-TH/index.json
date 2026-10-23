@@ -155,26 +155,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "ไม่มีเวอร์ชันที่เข้ากันได้ {compatibilityLabel} โปรดเลือกเวอร์ชันที่จะติดตั้ง ไฟล์ที่จำเป็นจะไม่ถูกติดตั้งโดยอัตโนมัติ"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "กรอกคำอธิบายมอดแพ็ก.."
-  },
   "app.export-modal.export-button": {
     "message": "ส่งออก"
-  },
-  "app.export-modal.header": {
-    "message": "ส่งออกแพ็กม็อด"
   },
   "app.export-modal.modpack-name-label": {
     "message": "ชื่อแพ็กม็อด"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "ชื่อแพ็กม็อด"
-  },
   "app.export-modal.version-number-label": {
     "message": "หมายเลขเวอร์ชัน"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "ข้อมูลทั้งหมดที่ถูกเก็บไว้ในโปรแกรมจะถูกลบออกอย่างถาวร รวมถึงโลก การตั้งค่า และเนื้อหาอื่นที่ติดตั้งไว้ทั้งหมด"
@@ -244,42 +232,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "ค้าหาโลกทั้งหมด {count} โลก"
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "เนื้อหาที่จำเป็น"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "ติดตั้งเพื่อเล่น"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "ติดตั้ง"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, other {# ม็อด}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "มอดแพ็กที่จำเป็น"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "เซิร์ฟเวอร์ดังกล่าวจำเป็นต้องใช้ม็อดเพื่อเล่น โปรดติดตั้งและตั้งค่าไฟล์อื่นใดที่จำเป็นจาก Modrinth ก่อน จากนั้นถึงจะสามารถเข้าเล่นเซิร์ฟเวอร์ได้"
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "โปรแกรมที่มีร่วมกัน"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "เซิร์ฟเวอร์ของโปรแกรมที่มีร่วมกัน"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "ดูเนื้อหา"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "อัปเดตเพื่อเล่น"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "จำเป็นต้องอัปเดต"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "จำเป็นต้องอัปเดตเพื่อเล่น {name} กรุณาอัปเดตเป็นเวอร์ชันล่าสุดเพื่อเปิดเกม"
   },
   "app.project.install-button.already-installed": {
     "message": "โปรเจคนี้ถูกติดตั้งแล้ว"
@@ -436,9 +388,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "ดาวน์โหลด Axolotl Launcherv{version} สำเร็จแล้ว เปิดโปรแกรมใหม่อีกครั้งเพื่ออัปเดตตอนนี้ หรือจะรออัปเดตอัตโนมัติ ซึ่งจะเกิดขึ้นเมื่อคุณกดปิดโปรแกรม Axolotl Launcher"
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcherv{version} พร้อมให้อัปเดตแล้ว โปรดไปที่การจัดการแพ็กเกจของคุณสำหรับการอัปเดตคุณสมบัติใหม่และการแก้ไขต่าง ๆ"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcherv{version} พร้อมให้บริการแล้ว! แต่เนื่องจากคุณเปิดโหมดจำกัดปริมาณการใช้ข้อมูลเครือข่าย เราจึงไม่ได้อัปเดตเนื้อหาโดยอัตโนมัติ"
@@ -811,5 +760,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "แจ้งเตือนไฟล์ไม่รู้จัก"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

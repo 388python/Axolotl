@@ -47,26 +47,14 @@
   "app.browse.discover-servers": {
     "message": "גלה שרתים"
   },
-  "app.export-modal.description-placeholder": {
-    "message": "הזן את תיאור חבילת המודים..."
-  },
   "app.export-modal.export-button": {
     "message": "יצוא"
-  },
-  "app.export-modal.header": {
-    "message": "יצוא חבילת מודים"
   },
   "app.export-modal.modpack-name-label": {
     "message": "שם חבילת המודים"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "שם חבילת המודים"
-  },
   "app.export-modal.version-number-label": {
     "message": "מספר גרסה"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.instance.confirm-delete.admonition-body": {
     "message": "כל הנתונים של ההתקנה שלך ימחקו לתמיד, זה כולל את העולמות שלך, ההגדרות וכל התוכן שהתקנת."
@@ -137,42 +125,6 @@
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "חיפוש ב-{count} עולמות..."
   },
-  "app.modal.install-to-play.content-required": {
-    "message": "תוכן נדרש"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "צריך להתקין כדי לשחק"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "התקנה"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, one {מוד אחד} other {# מודים}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "חבילת מודים נדרשת"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "שרת זה דורש מודים כדי לשחק. לחץ על \"התקן\" כדי להגדיר את הקבצים הנדרשים מ-Modrinth, ולאחר מכן הפעל ישירות לשרת."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "התקנה משותפת"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "התקנת שרת משותפת"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "הצג תוכן"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "צריך לעדכן כדי לשחק"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "עדכון נדרש"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "עדכון נדרש כדי לשחק ב{name}. ניתן להתחיל את המשחק רק לאחר עדכון לגרסה החדשה."
-  },
   "app.settings.developer-mode-enabled": {
     "message": "מצב מפתח מופעל."
   },
@@ -181,9 +133,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Axolotl Launcher v{version} סיימה את תהליך ההורדה. יש לרענן כדי לעדכן עכשיו, או באופן אוטומטי בעת סגירת האפליקציה."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Axolotl Launcher v{version} זמין. יש להשתמש במנהל חבילות שלך כדי לעדכן בשביל התכונות החדשות ותיקונים!"
   },
   "app.update-popup.body.metered": {
     "message": "Axolotl Launcher v{version} זמינה עכשיו! בגלל החיבור לפי שימוש, לא הורדנו אותה אוטומטית."
@@ -520,5 +469,92 @@
   },
   "search.filter.locked.server-loader.title": {
     "message": "הטוען מסופק על ידי השרת"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

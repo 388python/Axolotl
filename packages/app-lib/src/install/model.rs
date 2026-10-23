@@ -11,7 +11,7 @@ use crate::state::{
     InstanceUpgradeSolution, InstanceUpgradeSourceFile, ModLoader, PackMember,
 };
 use chrono::{DateTime, Utc};
-use modrinth_content_management::{ContentType, ResolutionPreferences};
+use content_management::{ContentType, ResolutionPreferences};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf};
 use uuid::Uuid;
@@ -30,7 +30,196 @@ pub enum InstallPauseReason {
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InstallContinuationState {
-    InstallingPackToExistingInstance { disabled_project_ids: Vec<String> },
+    InstallingPackToExistingInstance {
+        disabled_project_ids: Vec<String>,
+    },
+    ChangeContent {
+        #[serde(default)]
+        version: u32,
+        actions: Vec<ContentChangeAction>,
+    },
+}
+
+pub const CONTENT_CHANGE_PLAN_VERSION: u32 = 2;
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeTarget {
+    pub content_id: String,
+    pub target_release_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentChangeIntent {
+    UpdateOne {
+        content_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        target_release_id: Option<String>,
+    },
+    UpdateSelected {
+        targets: Vec<ContentChangeTarget>,
+    },
+    UpdateAllUserAdded,
+    SwitchVersion {
+        content_id: String,
+        target_release_id: String,
+    },
+}
+
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, Default, Eq, PartialEq,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentChangeOperation {
+    #[default]
+    Update,
+    SwitchVersion,
+}
+
+#[derive(
+    Serialize, Deserialize, Clone, Copy, Debug, Default, Eq, PartialEq,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentChangeActionStatus {
+    #[default]
+    Pending,
+    Prepared,
+    Downloaded,
+    WaitingForUser,
+    Applying,
+    Completed,
+    Skipped,
+    Failed,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentChangeFileRole {
+    Primary,
+    Dependency,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, Eq, PartialEq)]
+pub struct ContentChangeFileIntegrity {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha512: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub md5: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeFile {
+    pub id: String,
+    pub role: ContentChangeFileRole,
+    pub provider: ContentProvider,
+    pub project_id: String,
+    pub release_id: String,
+    pub file_name: String,
+    pub target_relative_path: String,
+    #[serde(default)]
+    pub urls: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_download_url: Option<String>,
+    #[serde(default)]
+    pub integrity: ContentChangeFileIntegrity,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeDependency {
+    pub parent_file_id: String,
+    pub child_file_id: String,
+    pub provider: ContentProvider,
+    pub project_id: String,
+    pub release_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<crate::state::instances::ContentDependencyKind>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeAction {
+    pub content_id: String,
+    #[serde(default)]
+    pub operation: ContentChangeOperation,
+    pub provider: ContentProvider,
+    pub project_id: Option<String>,
+    pub expected_release_id: Option<String>,
+    pub target_release_id: String,
+    pub relative_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_provider_file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_provider_file_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_relative_path: Option<String>,
+    #[serde(default)]
+    pub files: Vec<ContentChangeFile>,
+    #[serde(default)]
+    pub dependencies: Vec<ContentChangeDependency>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modrinth_plan: Option<content_management::ResolveContentPlan>,
+    #[serde(default)]
+    pub status: ContentChangeActionStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    // Read old continuations that only persisted a completion flag. New
+    // continuations use `status`, but retaining this field keeps old jobs
+    // retryable without changing their frozen target release.
+    #[serde(default)]
+    pub completed: bool,
+}
+
+impl ContentChangeAction {
+    pub fn effective_status(&self) -> ContentChangeActionStatus {
+        if self.completed && self.status == ContentChangeActionStatus::Pending {
+            ContentChangeActionStatus::Completed
+        } else {
+            self.status
+        }
+    }
+
+    pub fn is_complete(&self) -> bool {
+        matches!(
+            self.effective_status(),
+            ContentChangeActionStatus::Completed
+                | ContentChangeActionStatus::Skipped
+        )
+    }
+
+    pub fn set_status(&mut self, status: ContentChangeActionStatus) {
+        self.status = status;
+        self.completed = matches!(
+            status,
+            ContentChangeActionStatus::Completed
+                | ContentChangeActionStatus::Skipped
+        );
+        if status != ContentChangeActionStatus::Failed {
+            self.error = None;
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeActionSnapshot {
+    pub content_id: String,
+    pub operation: ContentChangeOperation,
+    pub target_release_id: String,
+    pub final_relative_path: Option<String>,
+    pub status: ContentChangeActionStatus,
+    pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct ContentChangeSnapshot {
+    pub intent: ContentChangeIntent,
+    pub content_ids: Vec<String>,
+    pub plan_version: Option<u32>,
+    pub actions: Vec<ContentChangeActionSnapshot>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -225,9 +414,16 @@ pub(crate) fn initial_phase_for_request(
     match request {
         InstallRequest::InstallContent { .. }
         | InstallRequest::InstallCurseForgeContent { .. }
-        | InstallRequest::InstallCurseForgeWorld { .. } => {
+        | InstallRequest::InstallCurseForgeWorld { .. }
+        | InstallRequest::InstallContentBatch { .. }
+        | InstallRequest::ChangeContent { .. } => {
             InstallPhaseId::DownloadingContent
         }
+        InstallRequest::ExportResource {
+            resolution: Some(_),
+            ..
+        } => InstallPhaseId::Verifying,
+        InstallRequest::ExportResource { .. } => InstallPhaseId::Exporting,
         _ => InstallPhaseId::PreparingInstance,
     }
 }
@@ -350,6 +546,7 @@ mod tests {
             });
         job.rollback = Some(InstallRollbackState {
             instance: InstanceMetadata {
+                synced_options: Default::default(),
                 instance: Instance {
                     id: instance_id.clone(),
                     path: "instance".to_string(),
@@ -485,7 +682,7 @@ mod tests {
         assert_eq!(summary.bytes_total, Some(300));
         let items = job.download_items();
         assert_eq!(items.len(), 3);
-        assert_eq!(items[0].status, DownloadItemStatus::Verifying);
+        assert_eq!(items[0].status, DownloadItemStatus::Completed);
         assert_eq!(items[0].attempt, Some(1));
         assert_eq!(items[0].max_attempts, Some(4));
         assert_eq!(
@@ -745,7 +942,7 @@ mod tests {
         let items = job.download_items();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].name, "runtime-manifest.json");
-        assert_eq!(items[0].status, DownloadItemStatus::Completed);
+        assert_eq!(items[0].status, DownloadItemStatus::Verifying);
         assert_eq!(items[0].bytes_downloaded, 1024);
         assert_eq!(items[0].bytes_total, Some(1024));
         assert_eq!(items[0].source.as_deref(), Some("official"));
@@ -796,6 +993,14 @@ mod tests {
         let summary = job.download_summary();
         assert_eq!(summary.speed_bytes_per_second, Some(200));
         assert_eq!(summary.eta_seconds, Some(3));
+
+        job.active_downloads.get_mut("client.jar").unwrap().status =
+            DownloadItemStatus::Verifying;
+        let verifying = job.download_summary();
+        assert_eq!(verifying.speed_bytes_per_second, None);
+        assert_eq!(verifying.eta_seconds, None);
+        job.active_downloads.get_mut("client.jar").unwrap().status =
+            DownloadItemStatus::Downloading;
 
         job.active_downloads
             .get_mut("client.jar")
@@ -1122,11 +1327,220 @@ mod tests {
     }
 
     #[test]
+    fn content_change_request_is_persistent_and_round_trips() {
+        let request = InstallRequest::ChangeContent {
+            instance_id: "instance".to_string(),
+            intent: ContentChangeIntent::SwitchVersion {
+                content_id: "entry".to_string(),
+                target_release_id: "target".to_string(),
+            },
+            display_title: "Example".to_string(),
+            display_icon: None,
+        };
+        assert_eq!(request.kind(), InstallJobKind::ChangeContent);
+        assert_eq!(request.kind().as_str(), "change_content");
+        assert_eq!(
+            InstallJobKind::from_stored_str("change_content"),
+            InstallJobKind::ChangeContent
+        );
+        assert_eq!(request.cleanup(), InstallCleanup::None);
+        assert_eq!(
+            request.target(),
+            InstallTarget::ExistingInstance {
+                instance_id: "instance".to_string()
+            }
+        );
+
+        let restored: InstallRequest =
+            serde_json::from_value(serde_json::to_value(&request).unwrap())
+                .unwrap();
+        assert!(matches!(
+            restored,
+            InstallRequest::ChangeContent {
+                intent: ContentChangeIntent::SwitchVersion {
+                    content_id,
+                    target_release_id
+                },
+                ..
+            } if content_id == "entry" && target_release_id == "target"
+        ));
+    }
+
+    #[test]
+    fn content_change_snapshot_uses_persisted_action_ids() {
+        let mut state = InstallJobState::new(InstallRequest::ChangeContent {
+            instance_id: "instance".to_string(),
+            intent: ContentChangeIntent::UpdateAllUserAdded,
+            display_title: "Update content".to_string(),
+            display_icon: None,
+        });
+        assert_eq!(
+            state.content_change().unwrap().content_ids,
+            Vec::<String>::new()
+        );
+        state.continuation = Some(InstallContinuationState::ChangeContent {
+            version: CONTENT_CHANGE_PLAN_VERSION,
+            actions: vec![ContentChangeAction {
+                content_id: "entry".to_string(),
+                operation: ContentChangeOperation::Update,
+                provider: ContentProvider::Modrinth,
+                project_id: Some("project".to_string()),
+                expected_release_id: Some("old".to_string()),
+                target_release_id: "new".to_string(),
+                relative_path: Some("mods/example.jar".to_string()),
+                current_provider_file_name: Some("example.jar".to_string()),
+                target_provider_file_name: Some("example-new.jar".to_string()),
+                final_relative_path: Some("mods/example-new.jar".to_string()),
+                files: Vec::new(),
+                dependencies: Vec::new(),
+                modrinth_plan: None,
+                status: ContentChangeActionStatus::Completed,
+                error: None,
+                completed: true,
+            }],
+        });
+        assert_eq!(
+            state.content_change().unwrap().content_ids,
+            vec!["entry".to_string()]
+        );
+        let restored: InstallJobState =
+            serde_json::from_value(serde_json::to_value(&state).unwrap())
+                .unwrap();
+        assert!(matches!(
+            restored.continuation,
+            Some(InstallContinuationState::ChangeContent {
+                version: CONTENT_CHANGE_PLAN_VERSION,
+                actions,
+            }) if actions[0].is_complete()
+        ));
+    }
+
+    #[test]
+    fn legacy_content_change_continuation_keeps_its_frozen_target() {
+        let continuation: InstallContinuationState =
+            serde_json::from_value(serde_json::json!({
+                "type": "change_content",
+                "actions": [{
+                    "content_id": "entry",
+                    "provider": "modrinth",
+                    "project_id": "project",
+                    "expected_release_id": "old",
+                    "target_release_id": "frozen-target",
+                    "relative_path": "mods/example.jar",
+                    "completed": true
+                }]
+            }))
+            .unwrap();
+
+        let InstallContinuationState::ChangeContent { version, actions } =
+            continuation
+        else {
+            panic!("wrong continuation variant");
+        };
+        assert_eq!(version, 0);
+        assert_eq!(actions[0].target_release_id, "frozen-target");
+        assert_eq!(
+            actions[0].effective_status(),
+            ContentChangeActionStatus::Completed
+        );
+    }
+
+    #[test]
     fn instance_upgrade_completes_install_stage() {
         assert!(
             upgrade_request(SharedUpgradeMode::Direct)
                 .completes_instance_install_stage()
         );
+    }
+
+    #[test]
+    fn legacy_actions_keep_source_entry_and_pinned_target_identity() {
+        let continuation: InstallContinuationState = serde_json::from_value(serde_json::json!({
+            "type": "change_content",
+            "actions": [
+                {
+                    "content_id": "mr-entry", "provider": "modrinth",
+                    "project_id": "42", "expected_release_id": "6",
+                    "target_release_id": "7", "relative_path": "mods/中文-one.jar.disabled",
+                    "modrinth_plan": {
+                        "primary": { "project_id": "42", "version_id": "7", "dependent_on_version_id": null },
+                        "dependencies": [], "skipped": []
+                    },
+                    "completed": true
+                },
+                {
+                    "content_id": "cf-entry", "provider": "curseforge",
+                    "project_id": "42", "expected_release_id": "6",
+                    "target_release_id": "7", "relative_path": "mods/中文-two.jar",
+                    "completed": false
+                }
+            ]
+        })).unwrap();
+        let restored: InstallContinuationState = serde_json::from_value(
+            serde_json::to_value(&continuation).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(restored, continuation);
+        let InstallContinuationState::ChangeContent { version, actions } =
+            restored
+        else {
+            panic!("wrong continuation variant");
+        };
+        assert_eq!(version, 0);
+        assert_eq!(actions.len(), 2);
+        assert_ne!(actions[0].content_id, actions[1].content_id);
+        assert_eq!(actions[0].provider, ContentProvider::Modrinth);
+        assert_eq!(actions[1].provider, ContentProvider::CurseForge);
+        for action in &actions {
+            assert_eq!(action.target_release_id, "7");
+            assert!(action.files.is_empty());
+        }
+        assert_eq!(
+            actions[0].relative_path.as_deref(),
+            Some("mods/中文-one.jar.disabled")
+        );
+        assert!(actions[0].is_complete());
+        assert!(!actions[1].is_complete());
+        assert!(actions[0].modrinth_plan.as_ref().unwrap().primary.required);
+        assert_eq!(
+            actions[0]
+                .modrinth_plan
+                .as_ref()
+                .unwrap()
+                .primary
+                .version_id,
+            "7"
+        );
+    }
+
+    #[test]
+    fn legacy_install_request_keeps_exact_version_and_default_preferences() {
+        let request: InstallRequest =
+            serde_json::from_value(serde_json::json!({
+                "type": "install_content", "instance_id": "instance",
+                "project_id": "YL57xq9U", "version_id": "G5dd9TM4",
+                "content_type": "mod", "display_title": "Iris"
+            }))
+            .unwrap();
+        let restored: InstallRequest =
+            serde_json::from_value(serde_json::to_value(&request).unwrap())
+                .unwrap();
+        let InstallRequest::InstallContent {
+            project_id,
+            version_id,
+            selected,
+            excluded_project_ids,
+            display_icon,
+            ..
+        } = restored
+        else {
+            panic!("wrong install request variant");
+        };
+        assert_eq!(project_id, "YL57xq9U");
+        assert_eq!(version_id.as_deref(), Some("G5dd9TM4"));
+        assert_eq!(selected, ResolutionPreferences::default());
+        assert!(excluded_project_ids.is_empty());
+        assert!(display_icon.is_none());
     }
 
     #[test]
@@ -1509,9 +1923,58 @@ pub enum InstallRequest {
         #[serde(default)]
         display_icon: Option<String>,
     },
+    InstallContentBatch {
+        instance_id: String,
+        items: Vec<InstallContentBatchItem>,
+        display_title: String,
+        #[serde(default)]
+        display_icon: Option<String>,
+    },
+    ChangeContent {
+        instance_id: String,
+        intent: ContentChangeIntent,
+        display_title: String,
+        #[serde(default)]
+        display_icon: Option<String>,
+    },
+    ExportResource {
+        plan: content_management::resources::ResourceExportPlan,
+        output_path: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        resolution: Option<
+            Box<crate::resources::export::job::ExportResolutionCheckpoint>,
+        >,
+    },
     DownloadJava {
         vendor: String,
         version: u32,
+    },
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InstallContentBatchItem {
+    Modrinth {
+        project_id: String,
+        version_id: Option<String>,
+        content_type: ContentType,
+        #[serde(default)]
+        selected: ResolutionPreferences,
+        #[serde(default)]
+        excluded_project_ids: Vec<String>,
+        #[serde(default)]
+        force_project_ids: Vec<String>,
+    },
+    CurseForge {
+        request: CurseForgeInstallRequest,
+    },
+    CurseForgeWorld {
+        request: CurseForgeWorldInstallRequest,
+    },
+    /// A resource operation plan has already resolved every release and
+    /// artifact. The worker must execute this snapshot without re-querying.
+    FrozenResource {
+        plan: content_management::resources::ResourceOperationPlan,
     },
 }
 
@@ -1541,6 +2004,9 @@ impl InstallRequest {
             Self::InstallContent { .. }
             | Self::InstallCurseForgeContent { .. }
             | Self::InstallCurseForgeWorld { .. }
+            | Self::InstallContentBatch { .. }
+            | Self::ChangeContent { .. }
+            | Self::ExportResource { .. }
             | Self::DownloadJava { .. } => false,
         }
     }
@@ -1572,6 +2038,15 @@ impl InstallRequest {
             Self::InstallCurseForgeWorld { .. } => {
                 InstallJobKind::InstallContent
             }
+            Self::InstallContentBatch { items, .. } => {
+                if items.iter().any(|item| matches!(item, InstallContentBatchItem::FrozenResource { plan } if plan.intent != crate::resources::ResourceOperationIntent::Install)) {
+                    InstallJobKind::ChangeContent
+                } else {
+                    InstallJobKind::InstallContent
+                }
+            },
+            Self::ChangeContent { .. } => InstallJobKind::ChangeContent,
+            Self::ExportResource { .. } => InstallJobKind::ExportResource,
             Self::DownloadJava { .. } => InstallJobKind::DownloadJava,
         }
     }
@@ -1608,6 +2083,21 @@ impl InstallRequest {
                     instance_id: request.instance_id.clone(),
                 }
             }
+            Self::InstallContentBatch { instance_id, .. } => {
+                InstallTarget::ExistingInstance {
+                    instance_id: instance_id.clone(),
+                }
+            }
+            Self::ExportResource { plan, .. } => {
+                InstallTarget::ExistingInstance {
+                    instance_id: plan.instance_id.clone(),
+                }
+            }
+            Self::ChangeContent { instance_id, .. } => {
+                InstallTarget::ExistingInstance {
+                    instance_id: instance_id.clone(),
+                }
+            }
             _ => InstallTarget::NewInstance { instance_id: None },
         }
     }
@@ -1638,6 +2128,9 @@ impl InstallRequest {
             Self::InstallContent { .. } => InstallCleanup::None,
             Self::InstallCurseForgeContent { .. } => InstallCleanup::None,
             Self::InstallCurseForgeWorld { .. } => InstallCleanup::None,
+            Self::InstallContentBatch { .. } => InstallCleanup::None,
+            Self::ChangeContent { .. } => InstallCleanup::None,
+            Self::ExportResource { .. } => InstallCleanup::None,
             _ => InstallCleanup::DeleteNewInstance { instance_id: None },
         }
     }
@@ -1654,7 +2147,9 @@ pub enum InstallJobKind {
     UpgradeUnmanagedInstance,
     InstallPackToExistingInstance,
     InstallContent,
+    ChangeContent,
     DownloadJava,
+    ExportResource,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
@@ -1768,6 +2263,8 @@ impl InstallJobKind {
                 "install_pack_to_existing_instance"
             }
             Self::InstallContent => "install_content",
+            Self::ChangeContent => "change_content",
+            Self::ExportResource => "export_resource",
             Self::DownloadJava => "download_java",
         }
     }
@@ -1783,6 +2280,8 @@ impl InstallJobKind {
                 Self::InstallPackToExistingInstance
             }
             "install_content" => Self::InstallContent,
+            "change_content" => Self::ChangeContent,
+            "export_resource" => Self::ExportResource,
             "download_java" => Self::DownloadJava,
             _ => Self::CreateInstance,
         }
@@ -1884,6 +2383,7 @@ pub struct InstallParallelProgress {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum InstallPhaseId {
+    Exporting,
     PreparingInstance,
     CreatingBackup,
     StagingContent,
@@ -2315,6 +2815,7 @@ pub struct InstallJobSnapshot {
     pub rollback_error: Option<InstallErrorView>,
     pub pause_reason: Option<InstallPauseReason>,
     pub upgrade_result: Option<InstanceUpgradeResult>,
+    pub content_change: Option<ContentChangeSnapshot>,
     pub created: DateTime<Utc>,
     pub modified: DateTime<Utc>,
     pub finished: Option<DateTime<Utc>>,
@@ -2323,6 +2824,69 @@ pub struct InstallJobSnapshot {
 }
 
 impl InstallJobState {
+    pub fn content_change(&self) -> Option<ContentChangeSnapshot> {
+        if let InstallRequest::InstallContentBatch { items, .. } = &self.request
+            && let Some(plan) = items.iter().find_map(|item| match item { InstallContentBatchItem::FrozenResource { plan } if plan.intent != crate::resources::ResourceOperationIntent::Install => Some(plan), _ => None }) {
+                let targets: Vec<_> = plan.actions.iter().filter(|action| action.current.is_some()).map(|action| ContentChangeTarget { content_id: action.entry_id.as_str().into(), target_release_id: action.target.reference.release.release_id.as_str().into() }).collect();
+                let status = if self.events.iter().any(|event| matches!(event.kind, InstallJobEventKind::JobSucceeded { .. })) { ContentChangeActionStatus::Completed } else if self.error.is_some() { ContentChangeActionStatus::Failed } else { ContentChangeActionStatus::Prepared };
+                return Some(ContentChangeSnapshot {
+                    intent: if plan.intent == crate::resources::ResourceOperationIntent::SwitchVersion && !targets.is_empty() { ContentChangeIntent::SwitchVersion { content_id: targets[0].content_id.clone(), target_release_id: targets[0].target_release_id.clone() } } else { ContentChangeIntent::UpdateSelected { targets } },
+                    content_ids: plan.actions.iter().map(|action| action.entry_id.as_str().into()).collect(),
+                    plan_version: Some(plan.revision),
+                    actions: plan.actions.iter().map(|action| ContentChangeActionSnapshot { content_id: action.entry_id.as_str().into(), operation: if plan.intent == crate::resources::ResourceOperationIntent::SwitchVersion { ContentChangeOperation::SwitchVersion } else { ContentChangeOperation::Update }, target_release_id: action.target.reference.release.release_id.as_str().into(), final_relative_path: Some(action.target_relative_path.clone()), status, error: self.error.as_ref().map(|error| error.message.clone()) }).collect(),
+                });
+            }
+        let InstallRequest::ChangeContent { intent, .. } = &self.request else {
+            return None;
+        };
+        let (content_ids, plan_version, actions) = match &self.continuation {
+            Some(InstallContinuationState::ChangeContent {
+                version,
+                actions,
+            }) => (
+                actions
+                    .iter()
+                    .map(|action| action.content_id.clone())
+                    .collect(),
+                Some(*version),
+                actions
+                    .iter()
+                    .map(|action| ContentChangeActionSnapshot {
+                        content_id: action.content_id.clone(),
+                        operation: action.operation,
+                        target_release_id: action.target_release_id.clone(),
+                        final_relative_path: action.final_relative_path.clone(),
+                        status: action.effective_status(),
+                        error: action.error.clone(),
+                    })
+                    .collect(),
+            ),
+            _ => match intent {
+                ContentChangeIntent::UpdateOne { content_id, .. }
+                | ContentChangeIntent::SwitchVersion { content_id, .. } => {
+                    (vec![content_id.clone()], None, Vec::new())
+                }
+                ContentChangeIntent::UpdateSelected { targets } => (
+                    targets
+                        .iter()
+                        .map(|target| target.content_id.clone())
+                        .collect(),
+                    None,
+                    Vec::new(),
+                ),
+                ContentChangeIntent::UpdateAllUserAdded => {
+                    (Vec::new(), None, Vec::new())
+                }
+            },
+        };
+        Some(ContentChangeSnapshot {
+            intent: intent.clone(),
+            content_ids,
+            plan_version,
+            actions,
+        })
+    }
+
     pub fn source_instance_id(&self) -> Option<String> {
         match &self.request {
             InstallRequest::UpgradeUnmanagedInstance {
@@ -2408,11 +2972,32 @@ impl InstallJobState {
             InstallRequest::InstallContent { .. } => {
                 InstallJobProvider::Modrinth
             }
+            InstallRequest::ChangeContent { .. } => {
+                InstallJobProvider::Application
+            }
+            InstallRequest::InstallContentBatch { items, .. } => {
+                if items.iter().all(|item| {
+                    matches!(item, InstallContentBatchItem::Modrinth { .. })
+                }) {
+                    InstallJobProvider::Modrinth
+                } else if items.iter().all(|item| {
+                    matches!(
+                        item,
+                        InstallContentBatchItem::CurseForge { .. }
+                            | InstallContentBatchItem::CurseForgeWorld { .. }
+                    )
+                }) {
+                    InstallJobProvider::CurseForge
+                } else {
+                    InstallJobProvider::Application
+                }
+            }
             InstallRequest::InstallCurseForgeContent { .. }
             | InstallRequest::InstallCurseForgeWorld { .. }
             | InstallRequest::UpdateManagedCurseForgeModpack { .. } => {
                 InstallJobProvider::CurseForge
             }
+            InstallRequest::ExportResource { .. } => InstallJobProvider::Local,
             InstallRequest::DownloadJava { .. } => InstallJobProvider::Java,
             InstallRequest::ImportInstance { .. }
             | InstallRequest::DuplicateInstance { .. } => {
@@ -2915,14 +3500,16 @@ impl InstallJobState {
                 ..
             }
         );
+        let now = Utc::now();
         let active_speed = self
             .active_downloads
             .values()
             .filter(|download| {
-                Utc::now()
-                    .signed_duration_since(download.last_progress_at)
-                    .num_milliseconds()
-                    < 3_000
+                download.status == DownloadItemStatus::Downloading
+                    && now
+                        .signed_duration_since(download.last_progress_at)
+                        .num_milliseconds()
+                        < 3_000
             })
             .filter_map(|download| download.speed_bytes_per_second)
             .fold(0_u64, u64::saturating_add);

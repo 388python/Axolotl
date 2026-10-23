@@ -176,26 +176,14 @@
   "app.content-install.no-compatible-versions": {
     "message": "Nie znaleziono żadnych wersji pasujących do {compatibilityLabel}. Wybierz wersję, by zainstalować ją mimo tego. Zależności nie zostaną zainstalowane automatycznie."
   },
-  "app.export-modal.description-placeholder": {
-    "message": "Wprowadź opis paczki modów..."
-  },
   "app.export-modal.export-button": {
     "message": "Eksportuj"
-  },
-  "app.export-modal.header": {
-    "message": "Eksportuj paczkę modów"
   },
   "app.export-modal.modpack-name-label": {
     "message": "Nazwa paczki modów"
   },
-  "app.export-modal.modpack-name-placeholder": {
-    "message": "Nazwa paczki modów"
-  },
   "app.export-modal.version-number-label": {
     "message": "Numer wersji"
-  },
-  "app.export-modal.version-number-placeholder": {
-    "message": "1.0.0"
   },
   "app.install.phase.downloading_content": {
     "message": "Pobieranie zawartości"
@@ -349,42 +337,6 @@
   },
   "app.instance.worlds.search-worlds-placeholder": {
     "message": "Szukaj wśród {count} światów..."
-  },
-  "app.modal.install-to-play.content-required": {
-    "message": "Wymagana zawartość"
-  },
-  "app.modal.install-to-play.header": {
-    "message": "Zainstaluj, aby grać"
-  },
-  "app.modal.install-to-play.install-button": {
-    "message": "Zainstaluj"
-  },
-  "app.modal.install-to-play.mod-count": {
-    "message": "{count, plural, one {# mod} few {# mody} other {# modów}}"
-  },
-  "app.modal.install-to-play.required-modpack": {
-    "message": "Wymagana paczka modów"
-  },
-  "app.modal.install-to-play.server-requires-mods": {
-    "message": "Ten serwer wymaga modów, aby na nim grać. Kliknij \"Zainstaluj\" aby otrzymać potrzebne pliki z Modrinth, a potem dołącz bezpośrednio do serwera."
-  },
-  "app.modal.install-to-play.shared-instance": {
-    "message": "Wspólna instancja"
-  },
-  "app.modal.install-to-play.shared-server-instance": {
-    "message": "Wspólna instancja serwera"
-  },
-  "app.modal.install-to-play.view-contents": {
-    "message": "Pokaż zawartość"
-  },
-  "app.modal.update-to-play.header": {
-    "message": "Zaktualizuj, by grać"
-  },
-  "app.modal.update-to-play.update-required": {
-    "message": "Wymagana jest aktualizacja"
-  },
-  "app.modal.update-to-play.update-required-description": {
-    "message": "Aktualizacja jest wymagana, aby grać w {name}. Proszę zaktualizować do najnowszej wersji, aby uruchomić grę."
   },
   "app.project.install-button.already-installed": {
     "message": "Ten projekt jest już zainstalowany"
@@ -544,9 +496,6 @@
   },
   "app.update-popup.body.download-complete": {
     "message": "Wersja Axolotl Launcher v{version} została pobrana. Załaduj ponownie, żeby zaktualizować teraz, albo automatycznie, gdy zamkniesz Axolotl Launcher."
-  },
-  "app.update-popup.body.linux": {
-    "message": "Wersja Axolotl Launcher v{version} jest dostępna. Pobierz aktualizację poprzez menedżer pakietów, by uzyskać najnowsze funkcje i poprawki!"
   },
   "app.update-popup.body.metered": {
     "message": "Wersja Axolotl Launcher v{version} jest dostępna! Skoro korzystasz z sieci taryfowej, nie pobraliśmy jej automatycznie."
@@ -967,5 +916,92 @@
   },
   "unknown-pack-warning-modal.warning.title": {
     "message": "Ostrzeżenie o nieznanym pliku"
+  },
+  "app.appearance-settings.sections.advanced-interface": {
+    "message": "Advanced interface"
+  },
+  "app.appearance-settings.sections.content-behavior": {
+    "message": "Content behavior"
+  },
+  "app.appearance-settings.sections.home-navigation": {
+    "message": "Home & navigation"
+  },
+  "app.settings.defaults.sections.after-launch": {
+    "message": "After launch behavior"
+  },
+  "app.settings.defaults.sections.environment": {
+    "message": "Environment variables"
+  },
+  "app.settings.defaults.sections.launch-hooks": {
+    "message": "Launch hooks"
+  },
+  "app.settings.defaults.sections.window-behavior": {
+    "message": "Window behavior"
+  },
+  "app.settings.developer.feature-flags-section-title": {
+    "message": "Feature flags"
+  },
+  "app.settings.privacy.section-title": {
+    "message": "Privacy & data sharing"
+  },
+  "app.settings.resources.sections.data-storage": {
+    "message": "Data directories & cache"
+  },
+  "app.settings.resources.sections.download-behavior": {
+    "message": "Download behavior"
+  },
+  "app.settings.resources.sections.missing-content": {
+    "message": "Missing content"
+  },
+  "app.settings.resources.sections.network-authentication": {
+    "message": "Network authentication"
+  },
+  "app.translation-settings.display-section-title": {
+    "message": "Translation display"
+  },
+  "app.settings.feature-flags.project-background": {
+    "message": "Project backgrounds"
+  },
+  "app.settings.feature-flags.page-path": {
+    "message": "Page path"
+  },
+  "app.settings.feature-flags.worlds-tab": {
+    "message": "Worlds tab"
+  },
+  "app.settings.feature-flags.worlds-in-home": {
+    "message": "Worlds on home page"
+  },
+  "app.settings.feature-flags.server-project-qa": {
+    "message": "Server project QA"
+  },
+  "app.settings.feature-flags.show-version-environment-column": {
+    "message": "Show version environment column"
+  },
+  "app.settings.feature-flags.server-ram-as-bytes-always-on": {
+    "message": "Always show server RAM as bytes"
+  },
+  "app.settings.feature-flags.always-show-app-controls": {
+    "message": "Always show app controls"
+  },
+  "app.settings.feature-flags.skip-non-essential-warnings": {
+    "message": "Skip non-essential warnings"
+  },
+  "app.settings.feature-flags.skip-unknown-pack-warning": {
+    "message": "Skip unknown pack warnings"
+  },
+  "app.settings.feature-flags.i18n-debug": {
+    "message": "Translation debugging"
+  },
+  "app.settings.feature-flags.show-instance-play-time": {
+    "message": "Show instance play time"
+  },
+  "app.settings.feature-flags.page-transitions": {
+    "message": "Page transitions"
+  },
+  "app.settings.feature-flags.advanced-filters-collapsed": {
+    "message": "Collapse advanced filters by default"
+  },
+  "app.settings.feature-flags.auto-install-dependencies": {
+    "message": "Automatically install dependencies"
   }
 }

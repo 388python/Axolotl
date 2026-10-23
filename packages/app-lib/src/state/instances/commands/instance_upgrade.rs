@@ -1,30 +1,26 @@
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::time::SystemTime;
 
 use chrono::{DateTime, Utc};
 
 use crate::State;
-use crate::api::curseforge::{
-    CurseForgeFilesRequest, DEPENDENCY_RELATION_REQUIRED, get_file, get_files,
-    get_files_many,
-};
+use crate::api::curseforge::DEPENDENCY_RELATION_REQUIRED;
 use crate::state::instances::{
     ContentItemCapabilities, ContentOwnershipKind, InstanceContentSnapshot,
     InstanceContentSnapshotItem, InstanceLink, LoaderComponentKind,
     PackMemberMaterializationState, PackMemberOverrideKind,
 };
 use crate::state::{
-    CacheBehaviour, CachedEntry, ContentItem, ContentProvider,
-    ContentProviderRef, ContentSourceKind, DependencyType,
-    InstanceUpgradeAction, InstanceUpgradeDependencyChange,
+    ContentItem, ContentProvider, ContentProviderRef, ContentSourceKind,
+    DependencyType, InstanceUpgradeAction, InstanceUpgradeDependencyChange,
     InstanceUpgradeDependencyChangeKind, InstanceUpgradeDependencyRequirement,
     InstanceUpgradeEnvironment, InstanceUpgradeFixedConstraint,
     InstanceUpgradeIssue, InstanceUpgradeIssueCode, InstanceUpgradeItem,
     InstanceUpgradeItemStatus, InstanceUpgradePlan, InstanceUpgradeResolution,
     InstanceUpgradeSelection, InstanceUpgradeSolution,
     InstanceUpgradeSolutionKind, InstanceUpgradeSourceFile, ModrinthProjectId,
-    ModrinthVersionId, ProjectType, ShaderRuntime, Version,
+    ProjectType, ShaderRuntime, Version,
 };
 
 const MAX_CANDIDATES_PER_PROJECT: usize = 6;
@@ -166,7 +162,9 @@ pub(crate) struct ReadOnlyUpgradeSource {
     snapshot: InstanceContentSnapshot,
     source_files: Vec<InstanceUpgradeSourceFile>,
     instance_path: String,
+    game_dir: std::path::PathBuf,
     file_states: Vec<UpgradeSourceFileState>,
+    catalog: Option<UpgradeCatalog>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -271,7 +269,7 @@ pub(crate) async fn create_instance_upgrade_plan_with_source(
         .into());
     }
 
-    let source = read_only_upgrade_source(instance_id, state).await?;
+    let mut source = read_only_upgrade_source(instance_id, state).await?;
     let snapshot = source.snapshot.clone();
     if snapshot.revision != metadata.applied_content_set.revision {
         return Err(crate::ErrorKind::InputError(
@@ -369,6 +367,7 @@ pub(crate) async fn create_instance_upgrade_plan_with_source(
         selected_solution,
         custom_constraints: Vec::new(),
     };
+    source.catalog = Some(catalog);
     Ok((plan, source))
 }
 
@@ -377,16 +376,17 @@ async fn read_only_upgrade_source(
     state: &State,
 ) -> crate::Result<ReadOnlyUpgradeSource> {
     let mut snapshot =
-        super::get_content_snapshot(instance_id, false, state).await?;
+        super::get_cached_content_snapshot(instance_id, state).await?;
     let instance = crate::state::instances::adapters::sqlite::instance_rows::get_instance_by_id(
         instance_id,
         &state.pool,
     )
     .await?
     .ok_or_else(|| crate::ErrorKind::InputError("Unknown instance".to_string()))?;
+    let instance_dir = upgrade_source_game_dir(&instance, &state.directories)?;
     let scanned =
         crate::state::instances::adapters::filesystem::scan_content_files_from(
-            &state.directories.instance_game_dir(&instance),
+            &instance_dir,
             &instance.path,
         )?;
     let file_states = scanned
@@ -398,7 +398,6 @@ async fn read_only_upgrade_source(
             modified: file.modified,
         })
         .collect();
-    let instance_dir = state.directories.instance_game_dir(&instance);
     let mut scanned_by_path = HashMap::new();
     let mut source_files = Vec::new();
     for file in scanned {
@@ -444,6 +443,10 @@ async fn read_only_upgrade_source(
             continue;
         };
         snapshot.items.push(InstanceContentSnapshotItem {
+            artifact_ref: None,
+            compatibility: None,
+            resource_id: None,
+            pack_resource_id: None,
             file_id: None,
             entry_id: None,
             member_id: None,
@@ -486,8 +489,23 @@ async fn read_only_upgrade_source(
         snapshot,
         source_files,
         instance_path: instance.path,
+        game_dir: instance_dir,
         file_states,
+        catalog: None,
     })
+}
+
+fn upgrade_source_game_dir(
+    instance: &crate::state::Instance,
+    directories: &crate::state::DirectoryInfo,
+) -> crate::Result<std::path::PathBuf> {
+    Ok(
+        crate::launcher::instance_runtime::InstanceRuntimeAdapter::for_instance(
+            instance,
+            directories,
+        )?
+        .game_dir(),
+    )
 }
 
 pub(crate) async fn validate_instance_upgrade_plan_source(
@@ -560,7 +578,10 @@ impl UpgradePlanRuntimeValidation {
             .content_watch_snapshot(&plan.instance_id)
             .await
         else {
-            return self.authoritative_validate(plan, state).await;
+            // Unwatched game directories still support metadata and hash
+            // validation through the resolved source directory.
+            self.incremental_validate(plan, None, state).await?;
+            return Ok(self.source.clone());
         };
         if self.watcher_epoch != Some(before.epoch)
             || self.validated_generation.is_none()
@@ -570,7 +591,8 @@ impl UpgradePlanRuntimeValidation {
         }
 
         for _ in 0..2 {
-            self.incremental_validate(plan, &before, state).await?;
+            self.incremental_validate(plan, Some(&before), state)
+                .await?;
             let Some(after) = state
                 .file_watcher
                 .content_watch_snapshot(&plan.instance_id)
@@ -594,21 +616,13 @@ impl UpgradePlanRuntimeValidation {
     async fn incremental_validate(
         &mut self,
         plan: &InstanceUpgradePlan,
-        watch: &crate::state::instances::watcher::InstanceContentWatchSnapshot,
-        state: &State,
+        watch: Option<
+            &crate::state::instances::watcher::InstanceContentWatchSnapshot,
+        >,
+        _state: &State,
     ) -> crate::Result<()> {
-        let source_override =
-            crate::state::instances::adapters::sqlite::instance_rows::get_game_dir_override_by_path(
-                &self.source.instance_path,
-                &state.pool,
-            )
-            .await?;
-        let source_game_dir = state.directories.resolve_game_dir(
-            &self.source.instance_path,
-            source_override.as_deref(),
-        );
         let scanned = crate::state::instances::adapters::filesystem::scan_content_files_from(
-            &source_game_dir,
+            &self.source.game_dir,
             &self.source.instance_path,
         )?;
         let planned = self
@@ -631,9 +645,10 @@ impl UpgradePlanRuntimeValidation {
             return stale_upgrade_source(&plan.instance_id);
         }
 
-        let watcher_changed =
-            self.validated_generation != Some(watch.generation);
-        let instance_dir = &source_game_dir;
+        let watcher_changed = watch.is_some_and(|watch| {
+            self.validated_generation != Some(watch.generation)
+        });
+        let instance_dir = &self.source.game_dir;
         for file in &scanned {
             let planned_file = planned[&file.relative_path.as_str()];
             if file.size != planned_file.size
@@ -645,7 +660,9 @@ impl UpgradePlanRuntimeValidation {
                 .get(file.relative_path.as_str())
                 .is_none_or(|previous| previous.modified != file.modified);
             let watcher_marked = watcher_changed
-                && watch.dirty_paths.contains(&file.relative_path);
+                && watch.is_some_and(|watch| {
+                    watch.dirty_paths.contains(&file.relative_path)
+                });
             if metadata_changed || watcher_marked {
                 let (_, sha1) = crate::util::fetch::sha1_file_async(
                     instance_dir.join(&file.relative_path),
@@ -696,7 +713,9 @@ impl UpgradePlanRuntimeValidation {
         self.watcher_epoch = watch.as_ref().map(|watch| watch.epoch);
         self.validated_generation =
             watch.as_ref().map(|watch| watch.generation);
+        let catalog = self.source.catalog.clone();
         self.source = current;
+        self.source.catalog = catalog;
         Ok(self.source.clone())
     }
 }
@@ -1088,6 +1107,28 @@ struct StrategySolveOutcome {
     visited_states: usize,
 }
 
+#[derive(Eq, PartialEq)]
+struct FrontierState {
+    selected: Vec<usize>,
+    primary_score: i64,
+    freshness_score: i64,
+}
+
+impl Ord for FrontierState {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.primary_score
+            .cmp(&other.primary_score)
+            .then_with(|| self.freshness_score.cmp(&other.freshness_score))
+            .then_with(|| other.selected.cmp(&self.selected))
+    }
+}
+
+impl PartialOrd for FrontierState {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub(crate) async fn recompute_instance_upgrade_plan_from_source(
     plan: &mut InstanceUpgradePlan,
     fixed_constraints: &[InstanceUpgradeFixedConstraint],
@@ -1095,12 +1136,14 @@ pub(crate) async fn recompute_instance_upgrade_plan_from_source(
     source: ReadOnlyUpgradeSource,
     state: &State,
 ) -> crate::Result<()> {
+    let started_at = std::time::Instant::now();
     ensure_upgrade_source_files_match(
         &plan.instance_id,
         &plan.source_files,
         &source.source_files,
     )?;
     let snapshot = source.snapshot;
+    let cached_catalog = source.catalog;
     let (_, installed) = snapshot_upgrade_items(&snapshot);
     let root_types = installed
         .iter()
@@ -1108,19 +1151,46 @@ pub(crate) async fn recompute_instance_upgrade_plan_from_source(
         .map(|node| (node.key.clone(), node.project_type))
         .collect::<HashMap<_, _>>();
     let fixed = FixedRootConstraints::from_constraints(fixed_constraints);
-    let catalog = load_upgrade_catalog(
-        &root_types,
-        &installed,
-        &fixed,
-        &plan.target_environment,
-        state,
-    )
-    .await?;
+    let catalog = if fixed_constraints.is_empty() {
+        cached_catalog.ok_or_else(|| {
+            crate::ErrorKind::OtherError(
+                "Upgrade plan source is missing its catalog".to_string(),
+            )
+        })?
+    } else {
+        match cached_catalog {
+            Some(catalog)
+                if catalog_supports_fixed_constraints(&catalog, &fixed) =>
+            {
+                catalog
+            }
+            _ => {
+                load_upgrade_catalog(
+                    &root_types,
+                    &installed,
+                    &fixed,
+                    &plan.target_environment,
+                    state,
+                )
+                .await?
+            }
+        }
+    };
+    tracing::warn!(
+        elapsed_ms = started_at.elapsed().as_millis(),
+        catalog_reused = fixed_constraints.is_empty()
+            || catalog_supports_fixed_constraints(&catalog, &fixed),
+        "[upgrade-plan-bench] recompute catalog"
+    );
     classify_items(
         &mut plan.items,
         &installed,
         &catalog,
         &plan.target_environment,
+    );
+    tracing::warn!(
+        elapsed_ms = started_at.elapsed().as_millis(),
+        "[upgrade-plan-bench] recompute classified items"
     );
     let roots = roots_from_items(&plan.items, &installed);
     let outcome = solve_upgrade_with_fixed_roots(
@@ -1129,6 +1199,10 @@ pub(crate) async fn recompute_instance_upgrade_plan_from_source(
         &catalog,
         &fixed,
         &confirmed_prereleases(&plan.items),
+    );
+    tracing::warn!(
+        elapsed_ms = started_at.elapsed().as_millis(),
+        "[upgrade-plan-bench] recompute solver"
     );
     apply_solver_issues_to_items(&mut plan.items, &outcome.issues);
     let mut blocking_issues = outcome.issues;
@@ -1192,6 +1266,21 @@ pub(crate) async fn recompute_instance_upgrade_plan_from_source(
     Ok(())
 }
 
+fn catalog_supports_fixed_constraints(
+    catalog: &UpgradeCatalog,
+    fixed: &FixedRootConstraints,
+) -> bool {
+    fixed.versions_by_project.iter().all(|(key, versions)| {
+        catalog.get(key).is_some_and(|pool| {
+            versions.iter().all(|version_id| {
+                pool.candidates.iter().any(|candidate| {
+                    candidate.version_id == *version_id && candidate.compatible
+                })
+            })
+        })
+    })
+}
+
 async fn load_upgrade_catalog(
     root_types: &HashMap<NodeKey, ProjectType>,
     installed: &[InstalledNode],
@@ -1214,64 +1303,80 @@ async fn load_upgrade_catalog(
         .collect::<VecDeque<_>>();
     let mut seen = HashSet::new();
     let mut exact_versions = fixed.versions_by_project.clone();
-    while let Some((key, project_type)) = queue.pop_front() {
-        if !seen.insert(key.clone()) {
-            continue;
+    while !queue.is_empty() {
+        let mut batch = Vec::new();
+        while let Some((key, project_type)) = queue.pop_front() {
+            if seen.insert(key.clone()) {
+                batch.push((key, project_type));
+            }
         }
-        let current = current_versions.get(&key).map(String::as_str);
-        let exact = exact_versions.get(&key).cloned().unwrap_or_default();
-        let empty_fixed_versions = HashSet::new();
-        let custom_fixed_versions = fixed
-            .versions_for_project(&key)
-            .unwrap_or(&empty_fixed_versions);
-        let candidates = match key.provider {
-            ContentProvider::Modrinth => {
-                load_modrinth_candidates(
-                    &key,
-                    project_type,
-                    current,
-                    &exact,
-                    custom_fixed_versions,
-                    target,
-                    state,
-                )
-                .await?
-            }
-            ContentProvider::CurseForge => {
-                load_curseforge_candidates(
-                    &key,
-                    project_type,
-                    current,
-                    &exact,
-                    custom_fixed_versions,
-                    target,
-                )
-                .await?
-            }
-            ContentProvider::McArchive | ContentProvider::Local => {
-                CandidatePool::default()
-            }
-        };
-        for candidate in &candidates.candidates {
-            for dependency in &candidate.dependencies {
-                if dependency.kind == CandidateDependencyKind::Required {
-                    if let Some(version_id) = dependency.version_id.as_ref()
-                        && exact_versions
-                            .entry(dependency.key.clone())
-                            .or_default()
-                            .insert(version_id.clone())
-                        && seen.remove(&dependency.key)
-                    {
+        let results = futures::future::try_join_all(batch.into_iter().map(
+            |(key, project_type)| {
+                let current = current_versions.get(&key).cloned();
+                let exact =
+                    exact_versions.get(&key).cloned().unwrap_or_default();
+                let custom_fixed_versions = fixed
+                    .versions_for_project(&key)
+                    .cloned()
+                    .unwrap_or_default();
+                async move {
+                    let candidates = match key.provider {
+                        ContentProvider::Modrinth => {
+                            load_modrinth_candidates(
+                                &key,
+                                project_type,
+                                current.as_deref(),
+                                &exact,
+                                &custom_fixed_versions,
+                                target,
+                                state,
+                            )
+                            .await?
+                        }
+                        ContentProvider::CurseForge => {
+                            load_curseforge_candidates(
+                                &key,
+                                project_type,
+                                current.as_deref(),
+                                &exact,
+                                &custom_fixed_versions,
+                                target,
+                                state,
+                            )
+                            .await?
+                        }
+                        ContentProvider::McArchive | ContentProvider::Local => {
+                            CandidatePool::default()
+                        }
+                    };
+                    Ok::<_, crate::Error>((key, candidates))
+                }
+            },
+        ))
+        .await?;
+        for (key, candidates) in results {
+            for candidate in &candidates.candidates {
+                for dependency in &candidate.dependencies {
+                    if dependency.kind == CandidateDependencyKind::Required {
+                        if let Some(version_id) = dependency.version_id.as_ref()
+                        {
+                            let added = exact_versions
+                                .entry(dependency.key.clone())
+                                .or_default()
+                                .insert(version_id.clone());
+                            if added {
+                                seen.remove(&dependency.key);
+                            }
+                        }
                         queue.push_back((
                             dependency.key.clone(),
                             ProjectType::Mod,
                         ));
                     }
-                    queue.push_back((dependency.key.clone(), ProjectType::Mod));
                 }
             }
+            catalog.insert(key, candidates);
         }
-        catalog.insert(key, candidates);
     }
     for node in installed {
         for alias in &node.aliases {
@@ -1298,6 +1403,52 @@ async fn load_upgrade_catalog(
     Ok(catalog)
 }
 
+/// The environment solver reads provider protocol projections from the shared
+/// resource catalog. Source failure remains visible instead of becoming an
+/// empty list or an apparently fresh legacy cache hit.
+async fn load_planner_project_versions(
+    project_id: &ModrinthProjectId,
+    target: &InstanceUpgradeEnvironment,
+    state: &State,
+) -> crate::Result<(Vec<Version>, bool)> {
+    crate::resources::legacy_catalog::page(
+        crate::resources::SourceId::modrinth(),
+        project_id.as_str().into(),
+        crate::resources::ipc::ResourceTarget {
+            game_versions: vec![target.game_version.clone()],
+            loaders: vec![],
+            channels: vec![],
+        },
+        state,
+    )
+    .await
+}
+async fn planner_version(
+    id: &str,
+    state: &State,
+) -> crate::Result<Option<Version>> {
+    crate::resources::legacy_catalog::exact(
+        crate::resources::SourceId::modrinth(),
+        None,
+        id.into(),
+        state,
+    )
+    .await
+}
+async fn planner_cf_file(
+    project_id: u32,
+    file_id: u32,
+    state: &State,
+) -> crate::Result<Option<crate::api::curseforge::CurseForgeFile>> {
+    crate::resources::legacy_catalog::exact(
+        crate::resources::SourceId::curseforge(),
+        Some(project_id.to_string()),
+        file_id.to_string(),
+        state,
+    )
+    .await
+}
+
 async fn load_modrinth_candidates(
     key: &NodeKey,
     project_type: ProjectType,
@@ -1308,14 +1459,8 @@ async fn load_modrinth_candidates(
     state: &State,
 ) -> crate::Result<CandidatePool> {
     let project_id = ModrinthProjectId::new(key.project_id.clone())?;
-    let mut versions = CachedEntry::get_project_versions(
-        &project_id,
-        Some(CacheBehaviour::MustRevalidate),
-        &state.pool,
-        &state.api_semaphore,
-    )
-    .await?
-    .unwrap_or_default();
+    let (mut versions, more_releases) =
+        load_planner_project_versions(&project_id, target, state).await?;
     let has_target_game_version_release = versions.iter().any(|version| {
         version
             .game_versions
@@ -1336,13 +1481,7 @@ async fn load_modrinth_candidates(
             .iter()
             .find(|version| version.id == current_release_id)
             .cloned()
-            .or(CachedEntry::get_version(
-                &ModrinthVersionId::new(current_release_id.to_string())?,
-                Some(CacheBehaviour::MustRevalidate),
-                &state.pool,
-                &state.api_semaphore,
-            )
-            .await?);
+            .or(planner_version(current_release_id, state).await?);
         if let Some(current) = current {
             selected.push(current);
         }
@@ -1363,13 +1502,7 @@ async fn load_modrinth_candidates(
                     .find(|version| version.id == *exact_version)
                     .cloned()
             })
-            .or(CachedEntry::get_version(
-                &ModrinthVersionId::new(exact_version.clone())?,
-                Some(CacheBehaviour::MustRevalidate),
-                &state.pool,
-                &state.api_semaphore,
-            )
-            .await?);
+            .or(planner_version(&(exact_version.clone()), state).await?);
         if let Some(exact) = exact {
             if custom_fixed_versions.contains(exact_version) {
                 validate_modrinth_custom_fixed(
@@ -1400,15 +1533,12 @@ async fn load_modrinth_candidates(
             let project_id = match dependency.project_id.clone() {
                 Some(project_id) => project_id,
                 None => match dependency.version_id.as_deref() {
-                    Some(version_id) => CachedEntry::get_version(
-                        &ModrinthVersionId::new(version_id.to_string())?,
-                        Some(CacheBehaviour::MustRevalidate),
-                        &state.pool,
-                        &state.api_semaphore,
-                    )
-                    .await?
-                    .map(|version| version.project_id)
-                    .unwrap_or_else(|| format!("missing-version:{version_id}")),
+                    Some(version_id) => planner_version(version_id, state)
+                        .await?
+                        .map(|version| version.project_id)
+                        .unwrap_or_else(|| {
+                            format!("missing-version:{version_id}")
+                        }),
                     None => continue,
                 },
             };
@@ -1446,7 +1576,7 @@ async fn load_modrinth_candidates(
     sort_candidates(&mut candidates);
     Ok(CandidatePool {
         candidates,
-        exploration_limited,
+        exploration_limited: exploration_limited || more_releases,
         has_target_game_version_release,
     })
 }
@@ -1481,6 +1611,7 @@ async fn load_curseforge_candidates(
     exact_versions: &HashSet<String>,
     custom_fixed_versions: &HashSet<String>,
     target: &InstanceUpgradeEnvironment,
+    state: &State,
 ) -> crate::Result<CandidatePool> {
     let project_id = key.project_id.parse::<u32>().map_err(|_| {
         crate::ErrorKind::InputError(format!(
@@ -1488,20 +1619,30 @@ async fn load_curseforge_candidates(
             key.project_id
         ))
     })?;
-    let mut files = get_files(
-        project_id,
-        CurseForgeFilesRequest {
-            game_version: Some(target.game_version.clone()),
-            mod_loader_type: (project_type == ProjectType::Mod)
-                .then(|| curseforge_loader_type(target.mod_loader))
-                .flatten(),
-            game_version_type_id: None,
-            index: 0,
-            page_size: 50,
+    let (mut files, more_releases): (
+        Vec<crate::api::curseforge::CurseForgeFile>,
+        bool,
+    ) = crate::resources::legacy_catalog::page(
+        crate::resources::SourceId::curseforge(),
+        project_id.to_string(),
+        crate::resources::ipc::ResourceTarget {
+            game_versions: vec![target.game_version.clone()],
+            loaders: if project_type == ProjectType::Mod {
+                match target.mod_loader.as_str() {
+                    "forge" | "fabric" | "quilt" | "neoforge" => {
+                        vec![target.mod_loader.as_str().into()]
+                    }
+                    "lite_loader" => vec!["liteloader".into()],
+                    _ => vec![],
+                }
+            } else {
+                vec![]
+            },
+            channels: vec![],
         },
+        state,
     )
-    .await?
-    .files;
+    .await?;
     let has_target_game_version_release = files.iter().any(|file| {
         file.is_available && curseforge_game_version_matches(file, target)
     });
@@ -1529,7 +1670,9 @@ async fn load_curseforge_candidates(
         let current = match current {
             Some(current) => Some(current),
             None => match current_release_id.parse::<u32>() {
-                Ok(file_id) => Some(get_file(project_id, file_id).await?),
+                Ok(file_id) => {
+                    planner_cf_file(project_id, file_id, state).await?
+                }
                 Err(_) => None,
             },
         };
@@ -1552,10 +1695,8 @@ async fn load_curseforge_candidates(
         let exact =
             match selected.iter().find(|file| file.id == file_id).cloned() {
                 Some(file) => file,
-                None => get_files_many(vec![file_id])
+                None => planner_cf_file(project_id, file_id, state)
                     .await?
-                    .into_iter()
-                    .next()
                     .ok_or_else(|| {
                         crate::ErrorKind::InputError(format!(
                             "Unknown CurseForge file ID {exact_version}"
@@ -1628,7 +1769,7 @@ async fn load_curseforge_candidates(
     sort_candidates(&mut candidates);
     Ok(CandidatePool {
         candidates,
-        exploration_limited,
+        exploration_limited: exploration_limited || more_releases,
         has_target_game_version_release,
     })
 }
@@ -1649,16 +1790,6 @@ fn bounded_compatible_candidates<T: Clone>(
         }
     }
     (selected, compatible_count > MAX_CANDIDATES_PER_PROJECT)
-}
-
-fn curseforge_loader_type(loader: crate::state::ModLoader) -> Option<u32> {
-    match loader {
-        crate::state::ModLoader::Forge => Some(1),
-        crate::state::ModLoader::Fabric => Some(4),
-        crate::state::ModLoader::Quilt => Some(5),
-        crate::state::ModLoader::NeoForge => Some(6),
-        _ => None,
-    }
 }
 
 fn compare_modrinth_version(left: &Version, right: &Version) -> Ordering {
@@ -2204,23 +2335,13 @@ fn solve_for_strategy_with_fixed_roots_and_limit(
     }
 
     let initial = vec![0; options.len()];
-    let mut frontier = vec![initial.clone()];
+    let mut frontier =
+        BinaryHeap::from([frontier_state(initial.clone(), &options, strategy)]);
     let mut queued = HashSet::from([initial]);
     let mut total_visited = 0;
     let mut best_failure: Option<ConflictFailure> = None;
 
-    while !frontier.is_empty() {
-        let best_index = (0..frontier.len())
-            .max_by(|left, right| {
-                compare_root_candidate_states(
-                    &frontier[*left],
-                    &frontier[*right],
-                    &options,
-                    strategy,
-                )
-            })
-            .unwrap_or(0);
-        let selected = frontier.swap_remove(best_index);
+    while let Some(FrontierState { selected, .. }) = frontier.pop() {
         let mut requirements = roots
             .iter()
             .zip(&options)
@@ -2304,7 +2425,11 @@ fn solve_for_strategy_with_fixed_roots_and_limit(
                 let mut alternative = selected.clone();
                 alternative[index] = next_index;
                 if queued.insert(alternative.clone()) {
-                    frontier.push(alternative);
+                    frontier.push(frontier_state(
+                        alternative,
+                        &options,
+                        strategy,
+                    ));
                     branched = true;
                 }
             } else if root_options.exploration_limited {
@@ -2422,64 +2547,46 @@ fn root_candidate_options(
     }
 }
 
-fn compare_root_candidate_states(
-    left: &[usize],
-    right: &[usize],
+fn frontier_state(
+    selected: Vec<usize>,
     options: &[RootCandidateOptions],
     strategy: SolveStrategy,
-) -> Ordering {
-    let candidates = |state: &[usize]| {
-        options
-            .iter()
-            .zip(state)
-            .filter_map(|(options, index)| options.candidates[*index].as_ref())
-            .collect::<Vec<_>>()
+) -> FrontierState {
+    let candidates = options
+        .iter()
+        .zip(&selected)
+        .filter_map(|(options, index)| options.candidates[*index].as_ref());
+    let mut minimum_channel = None;
+    let mut freshness_score = 0;
+    for candidate in candidates {
+        minimum_channel = Some(
+            minimum_channel.map_or(candidate.channel.rank(), |rank: u8| {
+                rank.min(candidate.channel.rank())
+            }),
+        );
+        freshness_score += candidate.published.timestamp();
+    }
+    let primary_score = match strategy {
+        SolveStrategy::Newest => i64::from(minimum_channel.unwrap_or(0)),
+        SolveStrategy::MinimalChange => -i64::try_from(
+            options
+                .iter()
+                .zip(&selected)
+                .filter(|(options, index)| {
+                    options.candidates[**index].as_ref().is_some_and(
+                        |candidate| {
+                            candidate.version_id != options.current_release_id
+                        },
+                    )
+                })
+                .count(),
+        )
+        .unwrap_or(i64::MIN),
     };
-    let left_candidates = candidates(left);
-    let right_candidates = candidates(right);
-    match strategy {
-        SolveStrategy::Newest => {
-            let score = |candidates: &[&UpgradeCandidate]| {
-                (
-                    candidates
-                        .iter()
-                        .map(|candidate| candidate.channel.rank())
-                        .min()
-                        .unwrap_or(0),
-                    candidates
-                        .iter()
-                        .map(|candidate| candidate.published.timestamp())
-                        .sum::<i64>(),
-                )
-            };
-            score(&left_candidates)
-                .cmp(&score(&right_candidates))
-                .then_with(|| right.cmp(left))
-        }
-        SolveStrategy::MinimalChange => {
-            let score = |state: &[usize], candidates: &[&UpgradeCandidate]| {
-                let replacements = options
-                    .iter()
-                    .zip(state)
-                    .filter(|(options, index)| {
-                        options.candidates[**index].as_ref().is_some_and(
-                            |candidate| {
-                                candidate.version_id
-                                    != options.current_release_id
-                            },
-                        )
-                    })
-                    .count();
-                let freshness = candidates
-                    .iter()
-                    .map(|candidate| candidate.published.timestamp())
-                    .sum::<i64>();
-                (std::cmp::Reverse(replacements), freshness)
-            };
-            score(left, &left_candidates)
-                .cmp(&score(right, &right_candidates))
-                .then_with(|| right.cmp(left))
-        }
+    FrontierState {
+        selected,
+        primary_score,
+        freshness_score,
     }
 }
 
@@ -2936,7 +3043,8 @@ fn candidates_for_requirement<'a>(
     confirmed_prereleases: &HashSet<(NodeKey, String)>,
 ) -> Vec<&'a UpgradeCandidate> {
     let root = roots.iter().find(|root| root.key == requirement.key);
-    let candidates = catalog
+
+    catalog
         .get(&requirement.key)
         .into_iter()
         .flat_map(|pool| &pool.candidates)
@@ -2976,8 +3084,7 @@ fn candidates_for_requirement<'a>(
                 }
             }
         })
-        .collect::<Vec<_>>();
-    candidates
+        .collect::<Vec<_>>()
 }
 
 fn assigned_key_for_requirement<'a>(
@@ -3452,6 +3559,7 @@ fn materialize_solution(
             continue;
         };
         if candidate.compatible
+            || !key_is_enabled(key, &enabled, &aliases)
             || warnings.iter().any(|warning| {
                 warning.provider == Some(key.provider)
                     && warning.project_id.as_deref()
@@ -3612,7 +3720,7 @@ fn item_warnings_with_fixed(
                 }
                 InstanceUpgradeItemStatus::NoCompatibleRelease
                     if item.resolution.action
-                        != InstanceUpgradeAction::Upgrade =>
+                        == InstanceUpgradeAction::Keep =>
                 {
                     InstanceUpgradeIssueCode::KeepIncompatible
                 }
@@ -4869,7 +4977,8 @@ mod tests {
             ContentProviderRef::Modrinth {
                 project_id: ModrinthProjectId::new("P7dR8mSH").unwrap(),
                 version_id: Some(
-                    ModrinthVersionId::new(current_release).unwrap(),
+                    crate::state::ModrinthVersionId::new(current_release)
+                        .unwrap(),
                 ),
             },
         ];
@@ -4945,12 +5054,62 @@ mod tests {
     }
 
     #[test]
+    fn cached_catalog_supports_fixed_candidate_already_in_plan() {
+        let catalog = catalog([(
+            key("a"),
+            vec![candidate("a", "newest", 2), candidate("a", "fixed", 1)],
+        )]);
+        let fixed = FixedRootConstraints::from_constraints(&[
+            InstanceUpgradeFixedConstraint {
+                content_id: "physical-a".to_string(),
+                provider: ContentProvider::Modrinth,
+                project_id: "a".to_string(),
+                version_id: "fixed".to_string(),
+            },
+        ]);
+
+        assert!(catalog_supports_fixed_constraints(&catalog, &fixed));
+    }
+
+    #[test]
+    fn cached_catalog_reloads_when_fixed_candidate_is_missing_or_incompatible()
+    {
+        let catalog =
+            catalog([(key("a"), vec![candidate("a", "compatible", 1)])]);
+        let missing = FixedRootConstraints::from_constraints(&[
+            InstanceUpgradeFixedConstraint {
+                content_id: "physical-a".to_string(),
+                provider: ContentProvider::Modrinth,
+                project_id: "a".to_string(),
+                version_id: "missing".to_string(),
+            },
+        ]);
+        assert!(!catalog_supports_fixed_constraints(&catalog, &missing));
+
+        let mut incompatible_catalog = catalog;
+        incompatible_catalog.get_mut(&key("a")).unwrap().candidates[0]
+            .compatible = false;
+        let incompatible = FixedRootConstraints::from_constraints(&[
+            InstanceUpgradeFixedConstraint {
+                content_id: "physical-a".to_string(),
+                provider: ContentProvider::Modrinth,
+                project_id: "a".to_string(),
+                version_id: "compatible".to_string(),
+            },
+        ]);
+        assert!(!catalog_supports_fixed_constraints(
+            &incompatible_catalog,
+            &incompatible
+        ));
+    }
+
+    #[test]
     fn custom_fixed_constraint_binds_only_matching_physical_root() {
         let mut first = root("duplicate", "first-old", true);
         first.content_id = "physical-first".to_string();
         let mut second = root("duplicate", "second-old", true);
         second.content_id = "physical-second".to_string();
-        let roots = vec![first, second];
+        let roots = [first, second];
         let catalog = catalog([(
             key("duplicate"),
             vec![
@@ -5982,6 +6141,7 @@ mod tests {
         );
         assert!(!solution.selections[0].enabled);
         assert!(!solution.dependency_changes[0].enabled);
+        assert!(solution.warnings.is_empty());
     }
 
     #[test]
@@ -6103,7 +6263,7 @@ mod tests {
             dependencies: Vec::new(),
         };
         let catalog = catalog([
-            (cf_root, vec![root_candidate.clone()]),
+            (cf_root, vec![root_candidate]),
             (cf_dep.clone(), vec![dep_candidate]),
         ]);
         let installed_dep = InstalledNode {
@@ -6226,7 +6386,7 @@ mod tests {
         let catalog = catalog([
             (key("a"), vec![a]),
             (cf_b, vec![b]),
-            (mr_x.clone(), vec![candidate("x-mr", "x-mr-new", 3)]),
+            (mr_x, vec![candidate("x-mr", "x-mr-new", 3)]),
             (cf_x.clone(), vec![candidate_for_key(&cf_x, "x-cf-new", 2)]),
         ]);
         let outcome =
@@ -6302,6 +6462,10 @@ mod tests {
             revision: 7,
             pack: None,
             items: vec![InstanceContentSnapshotItem {
+                artifact_ref: None,
+                compatibility: None,
+                resource_id: None,
+                pack_resource_id: None,
                 file_id: Some("file".to_string()),
                 entry_id: Some("entry".to_string()),
                 member_id: None,
@@ -6507,6 +6671,130 @@ mod tests {
         assert_eq!(metadata.applied_content_set.revision, plan.source_revision);
     }
 
+    #[tokio::test]
+    async fn direct_link_upgrade_source_resolves_external_game_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let directories = crate::state::DirectoryInfo {
+            settings_dir: temp.path().to_path_buf(),
+            config_dir: temp.path().to_path_buf(),
+            app_identifier: "direct-upgrade-planner-test".to_string(),
+        };
+        std::fs::create_dir_all(directories.instances_dir()).unwrap();
+        let pool = SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(temp.path().join("state.db"))
+                    .create_if_missing(true)
+                    .foreign_keys(true),
+            )
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let state = crate::state::test_state(directories, pool).await.unwrap();
+
+        let dot_minecraft = temp.path().join("external-minecraft");
+        let version_dir = dot_minecraft.join("versions/direct-upgrade");
+        std::fs::create_dir_all(version_dir.join("mods")).unwrap();
+        std::fs::write(
+            version_dir.join("direct-upgrade.json"),
+            br#"{
+                "id": "direct-upgrade",
+                "inheritsFrom": "1.21.4",
+                "mainClass": "net.minecraft.client.main.Main"
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(version_dir.join("mods/new.jar"), b"not-a-real-jar")
+            .unwrap();
+
+        let instance = crate::state::create_direct_link_instance(
+            crate::state::CreateDirectLinkInstance {
+                name: Some("Direct Upgrade".to_string()),
+                launcher_type:
+                    crate::api::pack::import::ImportLauncherType::Generic,
+                base_path: dot_minecraft,
+                instance_folder: "versions/direct-upgrade".to_string(),
+                instance_path: None,
+                game_dir_mode: Some(
+                    crate::launcher::ExternalGameDirMode::Isolated,
+                ),
+            },
+            &state,
+        )
+        .await
+        .unwrap();
+
+        assert!(
+            !state
+                .directories
+                .instances_dir()
+                .join(&instance.path)
+                .exists()
+        );
+        let source_dir =
+            upgrade_source_game_dir(&instance, &state.directories).unwrap();
+        assert_eq!(
+            source_dir.canonicalize().unwrap(),
+            version_dir.canonicalize().unwrap()
+        );
+        let scanned = crate::state::instances::adapters::filesystem::scan_content_files_from(
+            &source_dir,
+            &instance.path,
+        )
+        .unwrap();
+        assert!(
+            scanned
+                .iter()
+                .any(|file| file.relative_path == "mods/new.jar")
+        );
+
+        let creation_watch = state
+            .file_watcher
+            .content_watch_snapshot(&instance.id)
+            .await;
+        let source = read_only_upgrade_source(&instance.id, &state)
+            .await
+            .unwrap();
+        let environment = InstanceUpgradeEnvironment {
+            game_version: "1.21.4".to_string(),
+            mod_loader: crate::state::ModLoader::Vanilla,
+            mod_loader_version: None,
+            shader_runtime: ShaderRuntime::None,
+        };
+        let plan = InstanceUpgradePlan {
+            id: "direct-upgrade-validation".to_string(),
+            instance_id: instance.id.clone(),
+            source_revision: source.snapshot.revision,
+            source_files: source.source_files.clone(),
+            source_environment: environment.clone(),
+            target_environment: environment,
+            items: Vec::new(),
+            dependency_changes: Vec::new(),
+            warnings: Vec::new(),
+            blocking_issues: Vec::new(),
+            newest_solution: None,
+            minimal_change_solution: None,
+            selected_solution: None,
+            custom_constraints: Vec::new(),
+        };
+        let mut validation = UpgradePlanRuntimeValidation::new(
+            source,
+            &instance.id,
+            creation_watch,
+            &state,
+        )
+        .await;
+        validation.validate(&plan, &state).await.unwrap();
+        validation.validate(&plan, &state).await.unwrap();
+        assert_eq!(validation.full_hash_validations, 0);
+        assert_eq!(validation.incremental_hashes, 0);
+
+        std::fs::write(version_dir.join("mods/added.jar"), b"added").unwrap();
+        assert!(validation.validate(&plan, &state).await.is_err());
+        assert_eq!(validation.full_hash_validations, 0);
+    }
+
     async fn planner_state_digest(
         pool: &sqlx::SqlitePool,
         instance_dir: &Path,
@@ -6633,6 +6921,10 @@ mod tests {
         release_id: Option<&str>,
     ) -> InstanceContentSnapshotItem {
         InstanceContentSnapshotItem {
+            artifact_ref: None,
+            compatibility: None,
+            resource_id: None,
+            pack_resource_id: None,
             file_id: Some("file".to_string()),
             entry_id: Some("entry".to_string()),
             member_id: None,

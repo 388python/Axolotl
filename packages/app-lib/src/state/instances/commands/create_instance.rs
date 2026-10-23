@@ -38,6 +38,7 @@ pub(crate) async fn create_instance(
     input: CreateInstance,
     state: &State,
 ) -> crate::Result<Instance> {
+    let _metadata_usage = crate::storage::usage::lease().await?;
     trace!("Creating new instance. {}", input.name);
 
     let (path, full_path) =
@@ -135,6 +136,12 @@ pub(crate) async fn create_instance(
 
         let mut tx = state.pool.begin().await?;
         instance_rows::insert_instance(&instance, &mut tx).await?;
+        sqlx::query(
+            "INSERT INTO instance_sync_preferences (instance_id, feature, enabled) SELECT ?, feature, new_instance_default FROM sync_feature_settings",
+        )
+        .bind(&instance_id)
+        .execute(&mut *tx)
+        .await?;
         content_rows::insert_content_set(&content_set, &mut tx).await?;
         loader_component_rows::replace_loader_components(
             &instance_id,
@@ -157,10 +164,14 @@ pub(crate) async fn create_instance(
 
         config_sync::mark_dirty(&instance_id);
 
+        let content_root = crate::state::instances::commands::instance_content_root(
+            &state.directories,
+            &instance,
+        )?;
         crate::state::instances::watcher::watch_instance_folder(
             &instance.id,
             &instance.path,
-            &state.directories.instance_game_dir(&instance),
+            &content_root,
             &state.file_watcher,
         )
         .await;
@@ -278,11 +289,17 @@ async fn fetch_icon_bytes(
     icon_url: &str,
     state: &State,
 ) -> crate::Result<bytes::Bytes> {
+    let normalized =
+        crate::util::download::retired_sources::normalize(icon_url)?;
+    let icon_url = normalized.as_ref();
     // Prefer a direct connection for CDN hosts that are commonly blocked or
     // broken through local HTTP proxies (e.g. media.forgecdn.net).
     if is_direct_cdn_icon_url(icon_url) {
         let permit = state.fetch_semaphore.0.acquire().await?;
-        let response = DIRECT_ICON_CLIENT.get(icon_url).send().await?;
+        let response = crate::util::download::native_request::send_cdn_request(
+            DIRECT_ICON_CLIENT.get(icon_url),
+        )
+        .await?;
         drop(permit);
         if !response.status().is_success() {
             return Err(crate::ErrorKind::OtherError(format!(
@@ -318,6 +335,7 @@ fn is_direct_cdn_icon_url(url: &str) -> bool {
 static DIRECT_ICON_CLIENT: std::sync::LazyLock<reqwest::Client> =
     std::sync::LazyLock::new(|| {
         reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(15))
             .read_timeout(std::time::Duration::from_secs(30))
             .user_agent(crate::launcher_user_agent())

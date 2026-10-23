@@ -1,3 +1,4 @@
+pub(crate) mod critical_section;
 mod diagnostics;
 pub mod events;
 pub mod import_plan;
@@ -19,7 +20,12 @@ pub use missing_content::{
     scan_missing_modpack_files,
 };
 pub use model::{
-    DownloadItemSnapshot, DownloadItemStatus, DownloadJobSummary,
+    CONTENT_CHANGE_PLAN_VERSION, ContentChangeAction,
+    ContentChangeActionSnapshot, ContentChangeActionStatus,
+    ContentChangeDependency, ContentChangeFile, ContentChangeFileIntegrity,
+    ContentChangeFileRole, ContentChangeIntent, ContentChangeOperation,
+    ContentChangeSnapshot, ContentChangeTarget, DownloadItemSnapshot,
+    DownloadItemStatus, DownloadJobSummary, InstallContentBatchItem,
     InstallErrorContext, InstallErrorView, InstallJavaStep,
     InstallJobEventKind, InstallJobKind, InstallJobProvider,
     InstallJobSnapshot, InstallJobStatus, InstallModpackPreview,
@@ -34,11 +40,11 @@ pub use runner::{
     cancel_job, clear_job_history, create_instance,
     create_instance_with_adjuncts, create_modpack_instance, dismiss_job,
     download_java, duplicate_instance, get_job, import_instance,
-    import_instance_with_path, import_instance_with_plan, install_content,
-    install_curseforge_content, install_curseforge_world,
-    install_existing_instance, install_pack_to_existing_instance,
-    job_support_details, list_jobs, repair_cache_and_retry_job, resume_job,
-    retry_job, retry_job_as_new, skip_missing_content_and_resume_job,
+    import_instance_with_path, import_instance_with_plan,
+    install_content_batch, install_curseforge_world, install_existing_instance,
+    install_pack_to_existing_instance, job_support_details, list_jobs,
+    queue_content_change, repair_cache_and_retry_job, resume_job, retry_job,
+    retry_job_as_new, skip_missing_content_and_resume_job,
     update_managed_curseforge_modpack, upgrade_unmanaged_instance,
 };
 
@@ -48,7 +54,15 @@ pub async fn censor_shared_text(
     text: String,
     state: &crate::State,
 ) -> crate::Result<String> {
-    diagnostics::censor_support_text(text, state).await
+    diagnostics::censor_support_text(text, &state.pool).await
+}
+
+/// Replaces credentials while preserving IP addresses for network diagnostics.
+pub async fn censor_shared_credentials(
+    text: String,
+    state: &crate::State,
+) -> crate::Result<String> {
+    diagnostics::censor_credentials(text, &state.pool).await
 }
 
 /// Runs fallible work with bounded concurrency without dropping peer futures

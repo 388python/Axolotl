@@ -7,6 +7,16 @@ use crate::install::{
 };
 use crate::instance::QuickPlayType;
 use crate::launcher::parse_rules;
+use crate::util::download::constants::DERIVED_VERSION_CACHE_FORMAT;
+use crate::util::download::constants::FABRIC_MAVEN;
+use crate::util::download::constants::FORGE_MAVEN;
+use crate::util::download::constants::LAUNCHER_META_MAVEN;
+pub(crate) use crate::util::download::constants::LIBRARIES_MAVEN;
+use crate::util::download::constants::MAVEN_CENTRAL;
+use crate::util::download::constants::MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES;
+use crate::util::download::constants::NEOFORGE_MAVEN;
+use crate::util::download::constants::QUILT_MAVEN;
+use crate::util::download::constants::SPONGE_MAVEN;
 use crate::{
     event::{
         LoadingBarId,
@@ -40,8 +50,6 @@ use std::{
     },
 };
 use url::Url;
-
-const MINECRAFT_DOWNLOAD_PROGRESS_MIN_BYTES: u64 = 256 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalRuntimeSource {
@@ -205,7 +213,7 @@ impl MinecraftDownloadProgress {
         Ok(progress)
     }
 
-    async fn add_total(&self, total: u64) -> crate::Result<()> {
+    pub(crate) async fn add_total(&self, total: u64) -> crate::Result<()> {
         if total == 0 {
             return Ok(());
         }
@@ -215,7 +223,7 @@ impl MinecraftDownloadProgress {
             .await
     }
 
-    async fn add_bytes(&self, bytes: u64) -> crate::Result<()> {
+    pub(crate) async fn add_bytes(&self, bytes: u64) -> crate::Result<()> {
         if bytes == 0 {
             return Ok(());
         }
@@ -320,7 +328,7 @@ impl MinecraftDownloadProgress {
             .fetch_add(result.fallback_count as u64, Ordering::Relaxed);
     }
 
-    async fn finish(&self) -> crate::Result<()> {
+    pub(crate) async fn finish(&self) -> crate::Result<()> {
         // The initial missing-byte estimate can be stale when another install,
         // a local runtime source, or a cache satisfies the file before this
         // task reaches it. A successful Minecraft install is terminal for this
@@ -476,8 +484,9 @@ async fn download_minecraft_file_with_candidates(
 }
 
 pub(crate) fn minecraft_library_mirrors(url: &str) -> Vec<String> {
-    const MACHINA_LWJGL_RELEASE: &str = "https://github.com/MinecraftMachina/lwjgl/releases/download/2.9.4-20150209-mmachina.2/";
-    const MOJANG_LWJGL_PATH: &str = "https://libraries.minecraft.net/org/lwjgl/lwjgl/lwjgl-platform/2.9.4-nightly-20150209/";
+    use crate::util::download::constants::MACHINA_LWJGL_RELEASE;
+
+    use crate::util::download::constants::MOJANG_LWJGL_PATH;
 
     let mut mirrors = vec![url.to_string()];
     if let Some(file_name) = url.strip_prefix(MACHINA_LWJGL_RELEASE) {
@@ -485,15 +494,6 @@ pub(crate) fn minecraft_library_mirrors(url: &str) -> Vec<String> {
     }
     mirrors
 }
-
-const LAUNCHER_META_MAVEN: &str = "https://launcher-meta.modrinth.com/maven";
-pub(crate) const LIBRARIES_MAVEN: &str = "https://libraries.minecraft.net";
-const FABRIC_MAVEN: &str = "https://maven.fabricmc.net";
-const FORGE_MAVEN: &str = "https://maven.minecraftforge.net";
-const NEOFORGE_MAVEN: &str = "https://maven.neoforged.net/releases";
-const QUILT_MAVEN: &str = "https://maven.quiltmc.org/repository/release";
-const SPONGE_MAVEN: &str = "https://repo.spongepowered.org/maven";
-const MAVEN_CENTRAL: &str = "https://repo.maven.apache.org/maven2";
 
 pub(crate) fn legacy_library_download_urls(
     repository: Option<&str>,
@@ -926,9 +926,9 @@ fn missing_asset_bytes(
             );
             let should_fetch_object =
                 force || !asset_file_is_usable(&object_path, asset.size as u64);
-            let should_fetch_legacy = (with_legacy
-                && !asset_file_is_usable(&legacy_path, asset.size as u64))
-                || force;
+            let should_fetch_legacy = with_legacy
+                && (force
+                    || !asset_file_is_usable(&legacy_path, asset.size as u64));
 
             (should_fetch_object || should_fetch_legacy)
                 .then_some(asset.size as u64)
@@ -962,17 +962,16 @@ fn missing_library_bytes(
         }
 
         // Native library size for this platform, if any.
-        if is_native_library(library) {
-            if let Some(classifier) =
+        if is_native_library(library)
+            && let Some(classifier) =
                 library_native_classifier(library, java_arch)
-                && let Some(native) = library
-                    .downloads
-                    .as_ref()
-                    .and_then(|downloads| downloads.classifiers.as_ref())
-                    .and_then(|classifiers| classifiers.get(&classifier))
-            {
-                total += native.size as u64;
-            }
+            && let Some(native) = library
+                .downloads
+                .as_ref()
+                .and_then(|downloads| downloads.classifiers.as_ref())
+                .and_then(|classifiers| classifiers.get(&classifier))
+        {
+            total += native.size as u64;
         }
 
         // Java artifact size. Mixed libraries carry both.
@@ -980,15 +979,14 @@ fn missing_library_bytes(
             let artifact_path = d::get_path_from_artifact(&library.name)?;
             let path = st.directories.libraries_dir().join(&artifact_path);
 
-            if !path.exists() || force {
-                if let Some(artifact) = library
+            if (!path.exists() || force)
+                && let Some(artifact) = library
                     .downloads
                     .as_ref()
                     .and_then(|downloads| downloads.artifact.as_ref())
-                    && !artifact.url.is_empty()
-                {
-                    total += artifact.size as u64;
-                }
+                && !artifact.url.is_empty()
+            {
+                total += artifact.size as u64;
             }
         }
     }
@@ -1028,7 +1026,7 @@ pub async fn download_minecraft(
     minecraft_updated: bool,
     reporter: Option<InstallProgressReporter>,
     phase_details: InstallPhaseDetails,
-) -> crate::Result<()> {
+) -> crate::Result<Option<MinecraftDownloadProgress>> {
     tracing::info!("Downloading Minecraft version {}", version.id);
     let progress = if let Some(reporter) = reporter {
         Some(
@@ -1097,12 +1095,8 @@ pub async fn download_minecraft(
             Ok::<_, crate::Error>(())
         }
     }?;
-    if let Some(progress) = &progress {
-        progress.finish().await?;
-    }
-
     tracing::info!("Done downloading Minecraft!");
-    Ok(())
+    Ok(progress)
 }
 
 #[tracing::instrument(skip_all, fields(version = version.id.as_str(), loader = ?loader))]
@@ -1131,12 +1125,14 @@ pub async fn download_version_info(
             .err_into::<crate::Error>()
             .await
             .and_then(|ref it| Ok(serde_json::from_slice(it)?))?;
+        let normalized_timestamps =
+            normalize_version_timestamps(version, &mut info);
         let normalized =
             normalize_version_info(mod_loader, &version.id, &mut info, "cache");
         let restored_legacy_arguments =
             restore_legacy_minecraft_arguments(st, version, loader, &mut info)
                 .await?;
-        if normalized || restored_legacy_arguments {
+        if normalized_timestamps || normalized || restored_legacy_arguments {
             write_version_info(&path, serde_json::to_vec(&info)?).await?;
         }
         info
@@ -1272,6 +1268,7 @@ pub async fn download_version_info(
             info = d::modded::merge_partial_version(partial, info);
         }
 
+        normalize_version_timestamps(version, &mut info);
         normalize_version_info(mod_loader, &version.id, &mut info, "network");
 
         info.id.clone_from(&version_id);
@@ -1316,12 +1313,14 @@ pub async fn load_local_version_info(
 
     let bytes = io::read(&path).err_into::<crate::Error>().await?;
     let mut info: GameVersionInfo = serde_json::from_slice(&bytes)?;
+    let normalized_timestamps =
+        normalize_version_timestamps(version, &mut info);
     let normalized =
         normalize_version_info(mod_loader, &version.id, &mut info, "cache");
     let restored_legacy_arguments =
         restore_legacy_minecraft_arguments(st, version, loader, &mut info)
             .await?;
-    if normalized || restored_legacy_arguments {
+    if normalized_timestamps || normalized || restored_legacy_arguments {
         write_version_info(&path, serde_json::to_vec(&info)?).await?;
     }
     Ok(info)
@@ -1335,12 +1334,18 @@ async fn write_version_info(path: &Path, data: Vec<u8>) -> crate::Result<()> {
     Ok(())
 }
 
-// Bumped when profile merge semantics change. This forces existing loader
-// caches to be regenerated so duplicate Forge/vanilla libraries regain native
-// classifier metadata.
-// Bump this marker when derived loader metadata changes in a way that requires
-// rebuilding cached versions and re-extracting installer artifacts.
-const DERIVED_VERSION_CACHE_FORMAT: &str = "3";
+/// Bumped when derived loader metadata must be rebuilt from the base profile.
+
+fn normalize_version_timestamps(
+    version: &GameVersion,
+    info: &mut GameVersionInfo,
+) -> bool {
+    let changed =
+        info.release_time != version.release_time || info.time != version.time;
+    info.release_time = version.release_time;
+    info.time = version.time;
+    changed
+}
 
 fn derived_version_cache_marker_path(path: &Path) -> PathBuf {
     path.with_extension("json.axolotl-format")
@@ -1438,6 +1443,27 @@ fn normalize_version_info(
     }
 
     let mut changed = !removed.is_empty();
+    // Cleanroom's Foundation bootstrap needs Java 21+. New installers declare
+    // this themselves; older alphas ship no javaVersion at all and would
+    // otherwise inherit vanilla 1.12.2's Java 8 and fail to launch.
+    if loader == ModLoader::Cleanroom
+        && version_info
+            .java_version
+            .as_ref()
+            .is_none_or(|java| java.major_version < 21)
+    {
+        version_info.java_version = Some(d::minecraft::JavaVersion {
+            component: "java-runtime-delta".to_string(),
+            major_version: 21,
+        });
+        tracing::info!(
+            loader = loader.as_meta_str(),
+            game_version,
+            version_info_source,
+            "Raised Cleanroom version profile to Java 21"
+        );
+        changed = true;
+    }
     if version_info
         .libraries
         .iter()
@@ -1495,6 +1521,61 @@ pub fn ensure_local_log_config(
     Ok(())
 }
 
+/// Reports whether an existing client JAR may be reused. `Ok(None)` means the
+/// version metadata carries no hash, so only its presence could be confirmed.
+async fn client_jar_is_intact(
+    path: &Path,
+    expected_sha1: Option<&str>,
+) -> crate::Result<Option<bool>> {
+    let Some(expected_sha1) = expected_sha1 else {
+        return Ok(None);
+    };
+    if expected_sha1.is_empty() {
+        return Ok(None);
+    }
+    let (_, actual_sha1) = sha1_file_async(path).await?;
+    Ok(Some(actual_sha1.eq_ignore_ascii_case(expected_sha1)))
+}
+
+/// Moves a client JAR that failed verification next to itself instead of
+/// deleting it, so the broken file stays available for diagnosis. The moved
+/// file cannot block the replacement download because the downloader commits
+/// atomically.
+async fn move_corrupt_client(path: &Path) -> Option<PathBuf> {
+    static CORRUPT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let file_name = path.file_name()?.to_string_lossy().to_string();
+    let directory = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(".corrupt");
+    if let Err(error) = io::create_dir_all(&directory).await {
+        tracing::warn!(
+            directory = %directory.display(),
+            error = %error,
+            "Could not create the corrupt-client directory"
+        );
+        return None;
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or_default();
+    let sequence = CORRUPT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let quarantine =
+        directory.join(format!("{file_name}.{stamp:x}-{sequence}.corrupt"));
+    match tokio::fs::rename(path, &quarantine).await {
+        Ok(()) => Some(quarantine),
+        Err(error) => {
+            tracing::warn!(
+                path = %path.display(),
+                error = %error,
+                "Could not move the corrupt client JAR aside"
+            );
+            None
+        }
+    }
+}
+
 #[tracing::instrument(skip_all)]
 
 pub async fn download_client(
@@ -1521,6 +1602,52 @@ pub async fn download_client(
         .directories
         .version_dir(version)
         .join(format!("{version}.jar"));
+
+    // A client JAR that exists is not proof that it is complete: an
+    // interrupted transfer can leave a file of the right length with the wrong
+    // contents, and the client is what the game starts from. Verify the
+    // metadata hash before reusing it.
+    if !force && path.exists() {
+        let reusable = match client_jar_is_intact(
+            &path,
+            Some(&client_download.sha1),
+        )
+        .await
+        {
+            Ok(Some(true)) => true,
+            Ok(Some(false)) => {
+                let quarantine = move_corrupt_client(&path).await;
+                tracing::warn!(
+                    path = %path.display(),
+                    quarantined_to = ?quarantine,
+                    "Cached client JAR failed its SHA-1 check; downloading a replacement"
+                );
+                false
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    "Client JAR has no checksum metadata; reusing the cached file without strong validation"
+                );
+                true
+            }
+            Err(error) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %error,
+                    "Could not verify the cached client JAR; downloading a replacement"
+                );
+                false
+            }
+        };
+        if reusable {
+            tracing::debug!("Reusing verified client for version {version}");
+            if let Some(loading_bar) = loading_bar {
+                emit_loading(loading_bar, 9.0, None)?;
+            }
+            return Ok(());
+        }
+    }
 
     if !path.exists() || force {
         let context = InstallErrorContext::new("download Minecraft client")
@@ -1704,6 +1831,32 @@ fn build_fallback_asset_from_batch(item: H2BatchAsset) -> FallbackAsset {
     }
 }
 
+/// Coalesce every fallback that writes the same physical object. This is
+/// especially important for legacy indexes, where several logical names can
+/// share one hash: concurrent local-reuse tasks would otherwise race on the
+/// same `.part` and destination paths.
+fn coalesce_fallback_assets(items: Vec<FallbackAsset>) -> Vec<FallbackAsset> {
+    let mut positions: HashMap<(PathBuf, String, u64), usize> = HashMap::new();
+    let mut coalesced: Vec<FallbackAsset> = Vec::new();
+    for mut item in items {
+        let key = (item.resource_path.clone(), item.hash.clone(), item.size);
+        if let Some(&position) = positions.get(&key) {
+            let existing = &mut coalesced[position];
+            existing.logical_items =
+                existing.logical_items.saturating_add(item.logical_items);
+            for legacy in item.legacy_resource_paths.drain(..) {
+                if !existing.legacy_resource_paths.contains(&legacy) {
+                    existing.legacy_resource_paths.push(legacy);
+                }
+            }
+        } else {
+            positions.insert(key, coalesced.len());
+            coalesced.push(item);
+        }
+    }
+    coalesced
+}
+
 /// Coalesce index aliases that refer to one physical object. The key includes
 /// the destination and full integrity contract so unrelated artifacts can
 /// never share a writer. Legacy paths remain separate outputs of that single
@@ -1757,7 +1910,7 @@ pub async fn download_assets(
     let mut legacy_copies = Vec::new();
     let mut fallback_assets = Vec::new();
     let mut skipped_count = 0_u64;
-    for (name, asset) in index.objects.iter() {
+    for (name, asset) in &index.objects {
         let hash = &asset.hash;
         let resource_path = st.directories.object_dir(hash);
         let legacy_resource_path = st
@@ -1766,9 +1919,12 @@ pub async fn download_assets(
             .join(name.replace('/', &String::from(std::path::MAIN_SEPARATOR)));
         let should_fetch_object =
             force || !asset_file_is_usable(&resource_path, asset.size as u64);
-        let should_fetch_legacy = (with_legacy
-            && !asset_file_is_usable(&legacy_resource_path, asset.size as u64))
-            || force;
+        let should_fetch_legacy = with_legacy
+            && (force
+                || !asset_file_is_usable(
+                    &legacy_resource_path,
+                    asset.size as u64,
+                ));
 
         if should_fetch_object {
             let local_candidate = !force
@@ -1818,8 +1974,7 @@ pub async fn download_assets(
             ResourceClass::MinecraftAsset,
             source_mode,
         );
-        let apply_native_policy = crate::util::download::active_engine()
-            != crate::util::download::DownloadEngine::XmclCompat;
+        let apply_native_policy = true;
         if apply_native_policy {
             let probe_request =
                 DownloadRequest::new(&first_url, ResourceClass::MinecraftAsset)
@@ -1830,7 +1985,7 @@ pub async fn download_assets(
             prepare_native_download_routes(
                 &probe_request,
                 &mut routes,
-                &st.fetch_semaphore,
+                &st.download_semaphore,
             )
             .await;
         }
@@ -1874,14 +2029,13 @@ pub async fn download_assets(
                     let loading_bar = loading_bar.clone();
                     Box::pin(async move {
                         for _ in 0..item.logical_items {
-                            if let Some(progress) = &progress {
-                                if let Err(error) = progress.add_bytes(item.size).await {
+                            if let Some(progress) = &progress
+                                && let Err(error) = progress.add_bytes(item.size).await {
                                     tracing::warn!(
                                         error = %error,
                                         "Failed to record batch asset bytes"
                                     );
                                 }
-                            }
                             if let Some(loading_bar) = &loading_bar {
                                 let _ = emit_loading(loading_bar, per_file_fraction, None);
                             }
@@ -1892,9 +2046,9 @@ pub async fn download_assets(
             let failed = download_asset_batch_via_h2(
                 &route,
                 batch_items,
-                ASSET_BATCH_CONCURRENCY,
+                ASSET_BATCH_CONCURRENCY.min(st.download_concurrency()),
                 apply_native_policy,
-                apply_native_policy.then_some(&st.fetch_semaphore),
+                apply_native_policy.then_some(&st.download_semaphore),
                 callback,
             )
             .await?;
@@ -1953,9 +2107,9 @@ pub async fn download_assets(
     // Per-file fallback path: local runtime reuse, no batch route, or batch
     // failures. Runs concurrently (same budget as the original scheduler) so
     // import flows are not serialised.
+    let fallback_assets = coalesce_fallback_assets(fallback_assets);
     if !fallback_assets.is_empty() {
         let limit = crate::util::download::task_concurrency_limit(st)
-            .map(|limit| limit.saturating_mul(2))
             .unwrap_or(ASSET_BATCH_CONCURRENCY);
         futures::stream::iter(fallback_assets)
             .map(Ok::<FallbackAsset, crate::Error>)
@@ -1971,9 +2125,9 @@ pub async fn download_assets(
                         .legacy_resource_paths
                         .iter()
                         .filter(|path| {
-                            force
-                                || (with_legacy
-                                    && !asset_file_is_usable(path, item.size))
+                            with_legacy
+                                && (force
+                                    || !asset_file_is_usable(path, item.size))
                         })
                         .collect::<Vec<_>>();
                     let should_fetch_legacy = !legacy_resource_paths.is_empty();
@@ -2130,7 +2284,7 @@ pub async fn download_libraries(
     let num_files = tasks.len();
     loading_try_for_each_concurrent(
 		stream::iter(tasks).map(Ok::<LibraryDownloadTask<'_>, crate::Error>),
-		crate::util::download::task_concurrency_limit(&st).map(|limit| limit.saturating_mul(2)),
+		crate::util::download::task_concurrency_limit(st),
         loading_bar,
         loading_amount,
         num_files,
@@ -2619,8 +2773,207 @@ mod tests {
     use super::*;
     use crate::launcher::natives::prepare_native_libraries as prepare_test_natives;
 
+    async fn client_sha1(bytes: &[u8]) -> String {
+        sha1_async(bytes.to_vec().into()).await.expect("hash")
+    }
+
+    #[tokio::test]
+    async fn an_existing_client_jar_with_the_wrong_contents_is_rejected() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("1.20.1.jar");
+        let good = b"a complete client jar".as_slice();
+        let truncated = b"a complete client".as_slice();
+        tokio::fs::write(&path, truncated).await.unwrap();
+
+        assert_eq!(
+            client_jar_is_intact(&path, Some(&client_sha1(good).await))
+                .await
+                .unwrap(),
+            Some(false),
+            "a wrong-content cache entry must not be reused"
+        );
+        assert_eq!(
+            client_jar_is_intact(&path, Some(&client_sha1(truncated).await))
+                .await
+                .unwrap(),
+            Some(true),
+            "an intact cache entry is reusable"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_client_jar_without_metadata_hash_is_not_strongly_verified() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("1.20.1.jar");
+        tokio::fs::write(&path, b"client").await.unwrap();
+
+        assert_eq!(client_jar_is_intact(&path, None).await.unwrap(), None);
+        assert_eq!(
+            client_jar_is_intact(&path, Some("")).await.unwrap(),
+            None,
+            "an empty hash must not be reported as a verified file"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_client_jar_is_moved_aside_instead_of_deleted() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("1.20.1.jar");
+        tokio::fs::write(&path, b"broken").await.unwrap();
+
+        let quarantine =
+            move_corrupt_client(&path).await.expect("quarantine file");
+
+        assert!(!path.exists(), "the broken file leaves its original path");
+        assert_eq!(tokio::fs::read(&quarantine).await.unwrap(), b"broken");
+        assert!(
+            quarantine.starts_with(directory.path().join(".corrupt")),
+            "the file stays beside its version directory"
+        );
+    }
+
     fn urls(values: &[&str]) -> Option<Vec<String>> {
         Some(values.iter().map(|value| (*value).to_string()).collect())
+    }
+
+    fn version_info_with_java(
+        java: Option<d::minecraft::JavaVersion>,
+    ) -> GameVersionInfo {
+        let mut info: GameVersionInfo = serde_json::from_value(serde_json::json!({
+            "assetIndex": {"id": "1.12", "sha1": "", "size": 0, "totalSize": 0, "url": ""},
+            "assets": "1.12",
+            "downloads": {},
+            "id": "1.12.2",
+            "libraries": [],
+            "mainClass": "net.minecraft.client.main.Main",
+            "minimumLauncherVersion": 21,
+            "releaseTime": "2026-01-01T00:00:00+00:00",
+            "time": "2026-01-01T00:00:00+00:00",
+            "type": "release"
+        }))
+        .unwrap();
+        info.java_version = java;
+        info
+    }
+
+    #[test]
+    fn cleanroom_without_java_version_is_raised_to_java_21() {
+        let mut info = version_info_with_java(None);
+        assert!(normalize_version_info(
+            ModLoader::Cleanroom,
+            "1.12.2",
+            &mut info,
+            "network",
+        ));
+        let java = info.java_version.expect("java version pinned");
+        assert_eq!(java.major_version, 21);
+        assert_eq!(java.component, "java-runtime-delta");
+    }
+
+    #[tokio::test]
+    async fn cached_loader_timestamps_are_corrected_online_and_offline() {
+        let temp = tempfile::tempdir().unwrap();
+        let directories = crate::state::DirectoryInfo {
+            settings_dir: temp.path().join("settings"),
+            config_dir: temp.path().join("config"),
+            app_identifier: "test".to_string(),
+        };
+        std::fs::create_dir_all(directories.instances_dir()).unwrap();
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        let state = crate::state::test_state(directories, pool).await.unwrap();
+        let version: GameVersion = serde_json::from_value(serde_json::json!({
+			"id": "1.12.2", "type": "release", "url": "invalid://no-network",
+			"releaseTime": "2017-09-18T08:39:46Z", "time": "2021-12-15T15:04:05Z",
+			"sha1": "", "complianceLevel": 0
+		})).unwrap();
+        let loader: LoaderVersion = serde_json::from_value(serde_json::json!({
+            "id": "test-loader", "stable": true, "url": "invalid://no-network"
+        }))
+        .unwrap();
+        let path = state
+            .directories
+            .version_dir("1.12.2-test-loader")
+            .join("1.12.2-test-loader.json");
+        for offline in [false, true] {
+            let mut info = version_info_with_java(None);
+            info.id = "1.12.2-test-loader".to_string();
+            write_version_info(&path, serde_json::to_vec(&info).unwrap())
+                .await
+                .unwrap();
+            if offline {
+                io::write(derived_version_cache_marker_path(&path), "3")
+                    .await
+                    .unwrap();
+            } else {
+                write_derived_version_cache_marker(&path).await.unwrap();
+            }
+            let mut loaded = if offline {
+                load_local_version_info(
+                    &state,
+                    &version,
+                    ModLoader::Forge,
+                    Some(&loader),
+                )
+                .await
+            } else {
+                download_version_info(
+                    &state,
+                    &version,
+                    ModLoader::Forge,
+                    Some(&loader),
+                    None,
+                    None,
+                    None,
+                )
+                .await
+            }
+            .unwrap();
+            assert_eq!(loaded.release_time, version.release_time);
+            assert_eq!(loaded.time, version.time);
+            let saved: GameVersionInfo =
+                serde_json::from_slice(&io::read(&path).await.unwrap())
+                    .unwrap();
+            assert_eq!(saved.release_time, version.release_time);
+            assert_eq!(saved.time, version.time);
+            assert!(!normalize_version_timestamps(&version, &mut loaded));
+            assert_eq!(derived_version_cache_is_current(&path).await, !offline);
+        }
+    }
+
+    #[test]
+    fn cleanroom_installer_declared_java_is_preserved() {
+        let mut info =
+            version_info_with_java(Some(d::minecraft::JavaVersion {
+                component: "java-runtime-epsilon".to_string(),
+                major_version: 25,
+            }));
+        assert!(!normalize_version_info(
+            ModLoader::Cleanroom,
+            "1.12.2",
+            &mut info,
+            "network",
+        ));
+        assert_eq!(
+            info.java_version.as_ref().map(|java| java.major_version),
+            Some(25)
+        );
+    }
+
+    #[test]
+    fn vanilla_stays_on_inherited_java_runtime() {
+        let mut info = version_info_with_java(None);
+        assert!(!normalize_version_info(
+            ModLoader::Vanilla,
+            "1.12.2",
+            &mut info,
+            "network",
+        ));
+        assert!(info.java_version.is_none());
     }
 
     #[test]
@@ -2669,6 +3022,64 @@ mod tests {
 
         assert_eq!(
             coalesce_batch_assets(vec![
+                make_item("first", 42),
+                make_item("second", 42),
+                make_item("first", 43),
+            ])
+            .len(),
+            3
+        );
+    }
+
+    #[test]
+    fn fallback_assets_coalesce_aliases_and_keep_legacy_targets() {
+        let destination = PathBuf::from("assets/objects/85/hash");
+        let first_legacy = PathBuf::from("resources/sound/liquid/splash2.ogg");
+        let second_legacy =
+            PathBuf::from("resources/sounds/liquid/splash2.ogg");
+        let make_item = |name: &str, legacy_resource_paths: Vec<PathBuf>| {
+            FallbackAsset {
+                name: name.into(),
+                hash: "857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+                size: 36_747,
+            url: "https://resources.download.minecraft.net/85/857abbbfb58186c2f1b5510a4072630950e518f6".into(),
+            resource_path: destination.clone(),
+                legacy_resource_paths,
+                logical_items: 1,
+            }
+        };
+
+        let items = coalesce_fallback_assets(vec![
+            make_item("sound/liquid/splash2.ogg", vec![first_legacy.clone()]),
+            make_item(
+                "sounds/liquid/splash2.ogg",
+                vec![second_legacy.clone(), first_legacy.clone()],
+            ),
+        ]);
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].logical_items, 2);
+        assert_eq!(
+            items[0].legacy_resource_paths,
+            vec![first_legacy, second_legacy]
+        );
+    }
+
+    #[test]
+    fn fallback_assets_do_not_coalesce_different_integrity_contracts() {
+        let destination = PathBuf::from("assets/objects/85/object");
+        let make_item = |hash: &str, size| FallbackAsset {
+            name: hash.into(),
+            hash: hash.into(),
+            size,
+            url: format!("https://resources.download.minecraft.net/85/{hash}"),
+            resource_path: destination.clone(),
+            legacy_resource_paths: Vec::new(),
+            logical_items: 1,
+        };
+
+        assert_eq!(
+            coalesce_fallback_assets(vec![
                 make_item("first", 42),
                 make_item("second", 42),
                 make_item("first", 43),
@@ -2962,7 +3373,7 @@ mod tests {
         write_version_info(&path, b"{}".to_vec()).await.unwrap();
 
         assert!(!derived_version_cache_is_current(&path).await);
-        io::write(derived_version_cache_marker_path(&path), "0")
+        io::write(derived_version_cache_marker_path(&path), "3")
             .await
             .unwrap();
         assert!(!derived_version_cache_is_current(&path).await);
@@ -3173,7 +3584,7 @@ mod tests {
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
         for (name, contents) in entries {
-            writer.start_file(*name, options.clone()).unwrap();
+            writer.start_file(*name, options).unwrap();
             writer.write_all(contents).unwrap();
         }
         writer.finish().unwrap();
