@@ -98,6 +98,8 @@ jobs:
         run: node scripts/axolotl/downgrade-app-db.test.mjs
       - name: Check release notes
         run: node --test scripts/axolotl/create-release-notes.test.mjs
+      - name: Check Discord release notifications
+        run: node --test scripts/axolotl/publish-discord-release.test.mjs
       - name: Check formatting of Rust code
         run: cargo fmt --all --check
 
