@@ -1,7 +1,17 @@
 <script setup lang="ts">
+import { BoxIcon } from '@modrinth/assets'
 import { Button, Combobox, type ComboboxOption, StyledInput, Toggle, useVIntl } from '@modrinth/ui'
 import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
+import RecipeItemIcon from '@/components/lab/recipe-generator/RecipeItemIcon.vue'
+import type { SlotDisplay } from '@/lab/recipe-generator/display'
+import { getSlotDisplay } from '@/lab/recipe-generator/display'
+import {
+    buildSlotContext,
+    loadVersionResources,
+    TEXTURE_ATLAS,
+} from '@/lab/recipe-generator/resources'
+import type { JavaVersionId } from '@/lab/recipe-generator/types'
 import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
 import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
 import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
@@ -242,6 +252,60 @@ function onItemPicked(id: string) {
     emit('update:modelValue', id)
 }
 
+// ===== 物品/方块图标实时渲染 =====
+
+const inputDisplay = ref<SlotDisplay | undefined>(undefined)
+let itemCtx: any = null
+let resourcesLoaded = false
+
+// 这些方块在原版中没有标准模型，资源库渲染出来是紫黑网格，需要强制走 BoxIcon
+const FORCE_MISSING_ICONS = new Set([
+    'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air',
+    'minecraft:water', 'minecraft:lava', 'minecraft:fire',
+    'minecraft:nether_portal', 'minecraft:end_portal', 'minecraft:end_gateway',
+    'minecraft:bubble_column', 'minecraft:moving_piston', 'minecraft:piston_head',
+    'minecraft:light', 'minecraft:frosted_ice'
+])
+
+watch(
+    () => [props.modelValue, props.arg.type],
+    async ([val, type]) => {
+        if (type !== 'item' && type !== 'block') return
+
+        const id = String(val ?? '').trim()
+        if (!id) {
+            inputDisplay.value = undefined
+            return
+        }
+
+        // 如果是特殊方块或模组自定义物品，强制显示 BoxIcon（置空 display）
+        if (FORCE_MISSING_ICONS.has(id) || !id.includes('minecraft:')) {
+            inputDisplay.value = undefined
+            return
+        }
+
+        // 按需加载资源上下文（内部有缓存，不会重复请求）
+        if (!resourcesLoaded) {
+            try {
+                const version = (props.version || getCurrentVersion()) as JavaVersionId
+                const resources = await loadVersionResources(version)
+                itemCtx = buildSlotContext([], [], resources)
+                resourcesLoaded = true
+            } catch (e) {
+                inputDisplay.value = undefined
+                return
+            }
+        }
+
+        let display = getSlotDisplay({ kind: 'item', id }, itemCtx)
+        if (!display) {
+            display = getSlotDisplay({ kind: 'block', id } as any, itemCtx)
+        }
+        inputDisplay.value = display || undefined
+    },
+    { immediate: true },
+)
+
 // ===== 坐标编辑器 =====
 
 type CoordinateMode = 'relative' | 'local' | 'absolute'
@@ -259,7 +323,6 @@ const coordinateAxes = computed<readonly string[]>(() =>
     coordinateDimensions.value === 2 ? COORDINATE_AXES_2D : COORDINATE_AXES_3D,
 )
 
-// 混合模式（如 teleport）：如果是实体，就整体显示文本；否则显示坐标框
 const mixedAsEntity = ref(
     isMixedCoordinates.value && props.modelValue
         ? !/^[~^0-9.\- ]+$/.test(String(props.modelValue))
@@ -424,14 +487,27 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             @update:model-value="onCheckboxChange"
         />
         <div v-else-if="isItem || isBlock" class="flex min-w-0 flex-wrap gap-2">
-            <StyledInput
-                :id="fieldId"
-                :model-value="String(modelValue ?? '')"
-                :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
-                class="min-w-0 flex-1"
-                :spellcheck="false"
-                @update:model-value="onTextInput(String($event ?? ''))"
-            />
+            <!-- 利用 relative 定位把图标内嵌到 StyledInput 左侧 -->
+            <div class="relative min-w-0 flex-1">
+                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <RecipeItemIcon
+                        v-if="inputDisplay"
+                        :display="inputDisplay"
+                        :atlas="TEXTURE_ATLAS"
+                        :size="20"
+                        :show-count="false"
+                    />
+                    <BoxIcon v-else class="h-5 w-5 text-[var(--color-text-tertiary)]" />
+                </div>
+                <StyledInput
+                    :id="fieldId"
+                    :model-value="String(modelValue ?? '')"
+                    :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+                    class="w-full pl-10"
+                    :spellcheck="false"
+                    @update:model-value="onTextInput(String($event ?? ''))"
+                />
+            </div>
             <Button type="outlined" @click="openItemPicker">
                 {{
                     t(
