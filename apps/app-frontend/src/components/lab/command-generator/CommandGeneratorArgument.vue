@@ -4,6 +4,11 @@ import { Button, Combobox, type ComboboxOption, StyledInput, Toggle, useVIntl } 
 import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
 import RecipeItemIcon from '@/components/lab/recipe-generator/RecipeItemIcon.vue'
+import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
+import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
+import advancementsData from '@/lab/command-generator/data/advancements.json'
+import effectsData from '@/lab/command-generator/data/effects.json'
+import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 import type { SlotDisplay } from '@/lab/recipe-generator/display'
 import { getSlotDisplay } from '@/lab/recipe-generator/display'
 import {
@@ -11,13 +16,8 @@ import {
     loadVersionResources,
     TEXTURE_ATLAS,
 } from '@/lab/recipe-generator/resources'
-import type { JavaVersionId } from '@/lab/recipe-generator/types'
-import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
-import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
-import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
+import type { JavaVersionId, SlotValue } from '@/lab/recipe-generator/types'
 
-import effectsData from '@/lab/command-generator/data/effects.json'
-import advancementsData from '@/lab/command-generator/data/advancements.json'
 import CommandGeneratorItemPickerModal from './CommandGeneratorItemPickerModal.vue'
 import CommandGeneratorNbtEditor from './CommandGeneratorNbtEditor.vue'
 
@@ -146,9 +146,16 @@ const isEffect = computed(() => props.arg.type === 'effect')
 const isAdvancement = computed(() => props.arg.type === 'advancement')
 
 const isCoordinates = computed(
-    () => props.arg.type === 'coordinates' || (props.arg as any).coordinatesOptionalTarget,
+    () =>
+        props.arg.type === 'coordinates' ||
+        (props.arg as CommandArgument & { coordinatesOptionalTarget?: boolean })
+            .coordinatesOptionalTarget,
 )
-const isMixedCoordinates = computed(() => (props.arg as any).coordinatesOptionalTarget === true)
+const isMixedCoordinates = computed(
+    () =>
+        (props.arg as CommandArgument & { coordinatesOptionalTarget?: boolean })
+            .coordinatesOptionalTarget === true,
+)
 
 const hasInlinePresets = computed(
     () =>
@@ -241,8 +248,8 @@ function onTextInput(value: string) {
     }
 }
 
-function onCheckboxChange(checked: boolean) {
-    emit('update:modelValue', checked)
+function onCheckboxChange(checked: boolean | undefined) {
+    emit('update:modelValue', checked === true)
 }
 
 function applyPreset(value: string | number | boolean) {
@@ -263,11 +270,20 @@ let itemCtx: any = null
 let resourcesLoaded = false
 
 const FORCE_MISSING_ICONS = new Set([
-    'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air',
-    'minecraft:water', 'minecraft:lava', 'minecraft:fire',
-    'minecraft:nether_portal', 'minecraft:end_portal', 'minecraft:end_gateway',
-    'minecraft:bubble_column', 'minecraft:moving_piston', 'minecraft:piston_head',
-    'minecraft:light', 'minecraft:frosted_ice'
+    'minecraft:air',
+    'minecraft:cave_air',
+    'minecraft:void_air',
+    'minecraft:water',
+    'minecraft:lava',
+    'minecraft:fire',
+    'minecraft:nether_portal',
+    'minecraft:end_portal',
+    'minecraft:end_gateway',
+    'minecraft:bubble_column',
+    'minecraft:moving_piston',
+    'minecraft:piston_head',
+    'minecraft:light',
+    'minecraft:frosted_ice',
 ])
 
 watch(
@@ -281,10 +297,10 @@ watch(
             return
         }
 
-        // 1. 效果预览（使用代表物品代替）
+        // 1. 效果预览
         if (type === 'effect') {
             const shortId = id.split(':').pop()
-            const effectData = effectsData.find(e => e.id === shortId)
+            const effectData = effectsData.find((e) => e.id === shortId)
 
             if (!resourcesLoaded) {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
@@ -294,14 +310,23 @@ watch(
             }
 
             const iconItem = effectData?.icon || 'potion'
-            inputDisplay.value = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, itemCtx)
+            let display = getSlotDisplay(
+                { kind: 'item', id: `minecraft:${iconItem}` } as unknown as SlotValue,
+                itemCtx,
+            )
+            if (!display)
+                display = getSlotDisplay(
+                    { kind: 'item', id: 'minecraft:potion' } as unknown as SlotValue,
+                    itemCtx,
+                )
+            inputDisplay.value = display || undefined
             return
         }
 
         // 2. 成就预览
         if (type === 'advancement') {
             const cleanId = id.replace('minecraft:', '')
-            const adv = advancementsData.find(a => a.id === cleanId)
+            const adv = advancementsData.find((a) => a.id === cleanId)
 
             if (!resourcesLoaded) {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
@@ -311,7 +336,16 @@ watch(
             }
 
             const iconItem = adv?.icon || 'book'
-            inputDisplay.value = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, itemCtx)
+            let display = getSlotDisplay(
+                { kind: 'item', id: `minecraft:${iconItem}` } as unknown as SlotValue,
+                itemCtx,
+            )
+            if (!display)
+                display = getSlotDisplay(
+                    { kind: 'item', id: 'minecraft:book' } as unknown as SlotValue,
+                    itemCtx,
+                )
+            inputDisplay.value = display || undefined
             return
         }
 
@@ -327,7 +361,7 @@ watch(
                 const resources = await loadVersionResources(version)
                 itemCtx = buildSlotContext([], [], resources)
                 resourcesLoaded = true
-            } catch (e) {
+            } catch {
                 inputDisplay.value = undefined
                 return
             }
@@ -335,7 +369,7 @@ watch(
 
         let display = getSlotDisplay({ kind: 'item', id }, itemCtx)
         if (!display) {
-            display = getSlotDisplay({ kind: 'block', id } as any, itemCtx)
+            display = getSlotDisplay({ kind: 'block', id } as unknown as SlotValue, itemCtx)
         }
         inputDisplay.value = display || undefined
     },
@@ -360,7 +394,7 @@ const coordinateAxes = computed<readonly string[]>(() =>
 
 const mixedAsEntity = ref(
     isMixedCoordinates.value && props.modelValue
-        ? !/^[~^0-9.\- ]+$/.test(String(props.modelValue))
+        ? !/^[~^0-9. -]+$/.test(String(props.modelValue))
         : false,
 )
 
@@ -430,14 +464,14 @@ function cycleCoordinateMode(index: number) {
 function setCoordinateValue(index: number, value: string) {
     const part = coordinateParts.value[index]
     if (!part) return
-    part.value = value.replace(/[^0-9.\-]/g, '')
+    part.value = value.replace(/[^-0-9.]/g, '')
     emitCoordinates()
 }
 
 function switchMixedMode(toEntity: boolean) {
     mixedAsEntity.value = toEntity
     const val = String(props.modelValue ?? '')
-    const isCoordString = /^[~^0-9.\- ]*$/.test(val)
+    const isCoordString = /^[-~^0-9. ]*$/.test(val)
 
     if (toEntity) {
         if (!val || isCoordString) emit('update:modelValue', '@p')
@@ -482,7 +516,11 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                 <button
                     type="button"
                     class="rounded-md px-2 py-0.5 text-xs transition-colors"
-                    :class="!mixedAsEntity ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'"
+                    :class="
+                        !mixedAsEntity
+                            ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium'
+                            : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                    "
                     @click="switchMixedMode(false)"
                 >
                     {{ t('app.lab.command-generator.coordinate.use-coords', '坐标') }}
@@ -490,7 +528,11 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                 <button
                     type="button"
                     class="rounded-md px-2 py-0.5 text-xs transition-colors"
-                    :class="mixedAsEntity ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'"
+                    :class="
+                        mixedAsEntity
+                            ? 'bg-surface-4 text-[var(--color-text-primary)] font-medium'
+                            : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                    "
                     @click="switchMixedMode(true)"
                 >
                     {{ t('app.lab.command-generator.coordinate.use-entity', '实体') }}
@@ -521,7 +563,10 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             :aria-label="t(arg.displayNameKey)"
             @update:model-value="onCheckboxChange"
         />
-        <div v-else-if="isItem || isBlock || isEffect || isAdvancement" class="flex min-w-0 flex-wrap gap-2">
+        <div
+            v-else-if="isItem || isBlock || isEffect || isAdvancement"
+            class="flex min-w-0 flex-wrap gap-2"
+        >
             <div class="relative min-w-0 flex-1">
                 <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <RecipeItemIcon
@@ -545,10 +590,13 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             <Button type="outlined" @click="openItemPicker">
                 {{
                     t(
-                        isBlock ? 'app.lab.command-generator.block-picker.button' :
-                        isEffect ? 'app.lab.command-generator.effect-picker.button' :
-                        isAdvancement ? 'app.lab.command-generator.advancement-picker.button' :
-                        'app.lab.command-generator.item-picker.button',
+                        isBlock
+                            ? 'app.lab.command-generator.block-picker.button'
+                            : isEffect
+                              ? 'app.lab.command-generator.effect-picker.button'
+                              : isAdvancement
+                                ? 'app.lab.command-generator.advancement-picker.button'
+                                : 'app.lab.command-generator.item-picker.button',
                     )
                 }}
             </Button>
