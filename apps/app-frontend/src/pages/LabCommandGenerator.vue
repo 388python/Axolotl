@@ -51,14 +51,12 @@ function t(key: string, fallback?: string): string {
 type CommandComboboxOption = ComboboxOption<string> & {
     description: string
     category: string
+    isAlias?: boolean
+    aliasOf?: string
 }
 
 function asCommandOption(item: ComboboxOption<string>): CommandComboboxOption {
     return item as CommandComboboxOption
-}
-
-function aliasesOf(commandId: unknown): string[] {
-    return findCommand(String(commandId))?.aliases ?? []
 }
 
 const versionOptions = ref<ComboboxOption<string>[]>([])
@@ -143,19 +141,34 @@ const filteredCommands = computed(() => {
     return list
 })
 
-const commandOptions = computed<CommandComboboxOption[]>(() =>
-    filteredCommands.value.map((cmd) => ({
-        value: cmd.id,
-        label: cmd.name,
-        description: t(cmd.descriptionKey),
-        category: t(CATEGORY_KEYS[cmd.category]),
-        searchTerms: [
-            t(cmd.descriptionKey),
-            t(CATEGORY_KEYS[cmd.category]),
-            ...(cmd.aliases ?? []),
-        ],
-    })),
-)
+const commandOptions = computed<CommandComboboxOption[]>(() => {
+    const list: CommandComboboxOption[] = []
+    for (const cmd of filteredCommands.value) {
+        const description = t(cmd.descriptionKey)
+        const category = t(CATEGORY_KEYS[cmd.category])
+
+        list.push({
+            value: cmd.id,
+            label: cmd.name,
+            description,
+            category,
+            searchTerms: [description, category],
+        })
+
+        for (const alias of cmd.aliases ?? []) {
+            list.push({
+                value: `alias:${cmd.id}:${alias}`,
+                label: alias,
+                description,
+                category,
+                isAlias: true,
+                aliasOf: cmd.name,
+                searchTerms: [cmd.name, description, category],
+            })
+        }
+    }
+    return list
+})
 
 const currentCommand = computed(() =>
     selectedCommandId.value ? (findCommand(selectedCommandId.value) ?? null) : null,
@@ -255,7 +268,13 @@ watch(
 )
 
 function onCommandChange(id: unknown) {
-    selectedCommandId.value = String(id)
+    const rawId = String(id)
+    let resolvedId = rawId
+    if (rawId.startsWith('alias:')) {
+        const parts = rawId.split(':')
+        resolvedId = parts[1] ?? ''
+    }
+    selectedCommandId.value = resolvedId
     copied.value = false
     executeChainOutput.value = ''
     if (!selectedCommandId.value) {
@@ -312,18 +331,6 @@ async function copy() {
         }, 1600)
     } catch {
         showToast(formatMessage(messages.copyFailed))
-    }
-}
-
-function openWiki() {
-    if (currentCommand.value) {
-        const a = document.createElement('a')
-        a.href = wikiUrl.value
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
     }
 }
 
@@ -413,6 +420,18 @@ async function jumpToPreset(preset: UserPreset) {
 
     showGlobalPresets.value = false
     showToast(formatMessage(messages.toastPresetLoaded, { name: preset.name }))
+}
+
+function openWiki() {
+    if (currentCommand.value) {
+        const a = document.createElement('a')
+        a.href = wikiUrl.value
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+    }
 }
 </script>
 
@@ -554,17 +573,21 @@ async function jumpToPreset(preset: UserPreset) {
                                 <div class="flex min-w-0 flex-col gap-1">
                                     <span class="flex flex-wrap items-baseline gap-1.5">
                                         <span class="font-mono font-semibold"
-                                            >/{{ item.value }}</span
+                                            >/{{ item.label }}</span
                                         >
                                         <span
-                                            v-for="alias in aliasesOf(item.value)"
-                                            :key="alias"
-                                            class="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
+                                            v-if="asCommandOption(item).isAlias"
+                                            class="inline-flex items-center rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
                                         >
-                                            <span class="font-mono">/{{ alias }}</span>
-                                            <span>{{
-                                                t('app.lab.command-generator.alias-hint', 'Alias')
-                                            }}</span>
+                                            {{
+                                                formatMessage(
+                                                    {
+                                                        id: 'app.lab.command-generator.alias-of',
+                                                        defaultMessage: "{command}'s alias",
+                                                    },
+                                                    { command: asCommandOption(item).aliasOf },
+                                                )
+                                            }}
                                         </span>
                                     </span>
                                     <span class="text-xs text-[var(--color-text-tertiary)]">{{
@@ -730,10 +753,14 @@ async function jumpToPreset(preset: UserPreset) {
                         >
                             <BookmarkIcon />{{ formatMessage(messages.savePreset) }}
                         </Button>
+
+                        <!-- Wiki 链接按钮 -->
                         <Button type="quiet" size="sm" @click="openWiki">
                             <BookIcon class="h-4 w-4" />
                             {{ t('app.lab.command-generator.view-on-wiki', 'View on Wiki') }}
                         </Button>
+
+                        <!-- 预设表单 -->
                         <form
                             v-if="showPresetInput"
                             class="mt-3 flex w-full min-w-0 flex-wrap items-center gap-2"

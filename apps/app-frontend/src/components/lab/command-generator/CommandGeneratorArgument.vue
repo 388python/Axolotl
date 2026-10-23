@@ -268,6 +268,7 @@ function onItemPicked(id: string) {
 const inputDisplay = ref<SlotDisplay | undefined>(undefined)
 let itemCtx: ReturnType<typeof buildSlotContext> | null = null
 let resourcesLoaded = false
+let requestId = 0
 
 const FORCE_MISSING_ICONS = new Set([
     'minecraft:air',
@@ -289,6 +290,7 @@ const FORCE_MISSING_ICONS = new Set([
 watch(
     () => [props.modelValue, props.arg.type],
     async ([val, type]) => {
+        const currentRequest = ++requestId
         if (!['item', 'block', 'effect', 'advancement'].includes(type as string)) return
 
         const id = String(val ?? '').trim()
@@ -305,6 +307,7 @@ watch(
             if (!resourcesLoaded) {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
                 const resources = await loadVersionResources(version)
+                if (currentRequest !== requestId) return
                 itemCtx = buildSlotContext([], [], resources)
                 resourcesLoaded = true
             }
@@ -319,7 +322,9 @@ watch(
                     { kind: 'item', id: 'minecraft:potion' } as unknown as SlotValue,
                     itemCtx!,
                 )
-            inputDisplay.value = display || undefined
+            if (currentRequest === requestId) {
+                inputDisplay.value = display || undefined
+            }
             return
         }
 
@@ -331,6 +336,7 @@ watch(
             if (!resourcesLoaded) {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
                 const resources = await loadVersionResources(version)
+                if (currentRequest !== requestId) return
                 itemCtx = buildSlotContext([], [], resources)
                 resourcesLoaded = true
             }
@@ -345,7 +351,9 @@ watch(
                     { kind: 'item', id: 'minecraft:book' } as unknown as SlotValue,
                     itemCtx!,
                 )
-            inputDisplay.value = display || undefined
+            if (currentRequest === requestId) {
+                inputDisplay.value = display || undefined
+            }
             return
         }
 
@@ -359,10 +367,11 @@ watch(
             try {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
                 const resources = await loadVersionResources(version)
+                if (currentRequest !== requestId) return
                 itemCtx = buildSlotContext([], [], resources)
                 resourcesLoaded = true
             } catch {
-                inputDisplay.value = undefined
+                if (currentRequest === requestId) inputDisplay.value = undefined
                 return
             }
         }
@@ -371,7 +380,9 @@ watch(
         if (!display) {
             display = getSlotDisplay({ kind: 'block', id } as unknown as SlotValue, itemCtx!)
         }
-        inputDisplay.value = display || undefined
+        if (currentRequest === requestId) {
+            inputDisplay.value = display || undefined
+        }
     },
     { immediate: true },
 )
@@ -437,6 +448,15 @@ const coordinateParts = ref<CoordinatePart[]>(
         : [],
 )
 
+// 如果外部尚未赋值（例如刚选中断头台），主动抛出默认的相对坐标，防止校验报错
+if (
+    isCoordinates.value &&
+    !mixedAsEntity.value &&
+    (props.modelValue === undefined || props.modelValue === '')
+) {
+    emit('update:modelValue', serializeCoordinates(coordinateParts.value))
+}
+
 watch(
     () => props.modelValue,
     (val) => {
@@ -454,12 +474,31 @@ function emitCoordinates() {
 }
 
 function cycleCoordinateMode(index: number) {
-    const order: CoordinateMode[] = ['relative', 'local', 'absolute']
     const part = coordinateParts.value[index]
     if (!part) return
-    part.mode = order[(order.indexOf(part.mode) + 1) % order.length]
-    if (part.mode === 'absolute' && part.value === '') {
-        part.value = '0'
+
+    let nextMode: CoordinateMode
+    if (part.mode === 'relative') nextMode = 'local'
+    else if (part.mode === 'local') nextMode = 'absolute'
+    else nextMode = 'relative'
+
+    // Minecraft 不允许混合 ^ 和其他坐标。如果切到 ^，强制全部变 ^。
+    if (nextMode === 'local') {
+        coordinateParts.value.forEach((p) => {
+            p.mode = 'local'
+            if (p.value === '') p.value = '0'
+        })
+    } else {
+        part.mode = nextMode
+        if (part.mode === 'absolute' && part.value === '') {
+            part.value = '0'
+        }
+        // 把其他 ^ 重置为 ~
+        coordinateParts.value.forEach((p, i) => {
+            if (i !== index && p.mode === 'local') {
+                p.mode = 'relative'
+            }
+        })
     }
     emitCoordinates()
 }
@@ -634,7 +673,9 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                     <StyledInput
                         :model-value="part.value"
                         :aria-label="`${coordinateAxes[index] ?? '0'} coordinate`"
-                        :placeholder="coordinateAxes[index] ?? '0'"
+                        :placeholder="
+                            part.mode === 'relative' ? '0' : (coordinateAxes[index] ?? '0')
+                        "
                         style="width: 4.5rem"
                         :spellcheck="false"
                         @update:model-value="setCoordinateValue(index, String($event ?? ''))"

@@ -87,6 +87,8 @@ const EXTRA_BLOCKS_META: ExtraBlockMeta[] = [
     { id: 'minecraft:bubble_column', nameKey: 'app.lab.command-generator.block.bubble_column' },
     { id: 'minecraft:moving_piston', nameKey: 'app.lab.command-generator.block.moving_piston' },
     { id: 'minecraft:piston_head', nameKey: 'app.lab.command-generator.block.piston_head' },
+    { id: 'minecraft:frosted_ice', nameKey: 'app.lab.command-generator.block.frosted_ice' },
+    { id: 'minecraft:light', nameKey: 'app.lab.command-generator.block.light' },
 ]
 
 function isNonBlockItem(rawId: string): boolean {
@@ -127,6 +129,7 @@ function isNonBlockItem(rawId: string): boolean {
         'mangrove_propagule',
         'pink_petals',
         'torchflower_seeds',
+        'cake',
     ])
     if (ACTUAL_BLOCKS.has(name)) return false
 
@@ -183,7 +186,6 @@ function isNonBlockItem(rawId: string): boolean {
         'sugar',
         'melon_slice',
         'cookie',
-        'cake',
         'pumpkin_pie',
         'chorus_fruit',
         'popped_chorus_fruit',
