@@ -7215,19 +7215,37 @@
     "message": "Misc"
   },
   "app.lab.command-generator.perm.0": {
-    "message": "Everyone"
+    "message": "All"
   },
   "app.lab.command-generator.perm.1": {
-    "message": "Admin"
+    "message": "Moderator"
   },
   "app.lab.command-generator.perm.2": {
-    "message": "OP"
+    "message": "Gamemaster"
   },
   "app.lab.command-generator.perm.3": {
-    "message": "Server console"
+    "message": "Admin"
   },
   "app.lab.command-generator.perm.4": {
-    "message": "Singleplayer only"
+    "message": "Owner"
+  },
+  "app.lab.command-generator.perm.0.desc": {
+    "message": "No special permission required"
+  },
+  "app.lab.command-generator.perm.1.desc": {
+    "message": "Can bypass spawn protection"
+  },
+  "app.lab.command-generator.perm.2.desc": {
+    "message": "Most gameplay commands, command blocks and functions"
+  },
+  "app.lab.command-generator.perm.3.desc": {
+    "message": "Multiplayer management commands"
+  },
+  "app.lab.command-generator.perm.4.desc": {
+    "message": "Server management commands"
+  },
+  "app.lab.command-generator.perm.seed.multiplayer-note": {
+    "message": "In multiplayer, /seed requires permission level 2"
   },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "Grant or revoke player advancements"

@@ -6189,16 +6189,34 @@
     "message": "所有人"
   },
   "app.lab.command-generator.perm.1": {
-    "message": "管理员"
+    "message": "版主"
   },
   "app.lab.command-generator.perm.2": {
-    "message": "OP (管理员权限)"
+    "message": "游戏管理员"
   },
   "app.lab.command-generator.perm.3": {
-    "message": "服务器控制台"
+    "message": "管理员"
   },
   "app.lab.command-generator.perm.4": {
-    "message": "仅单人"
+    "message": "所有者"
+  },
+  "app.lab.command-generator.perm.0.desc": {
+    "message": "无特殊权限要求"
+  },
+  "app.lab.command-generator.perm.1.desc": {
+    "message": "可绕过出生点保护"
+  },
+  "app.lab.command-generator.perm.2.desc": {
+    "message": "绝大多数游戏命令、命令方块和函数"
+  },
+  "app.lab.command-generator.perm.3.desc": {
+    "message": "多人游戏管理命令"
+  },
+  "app.lab.command-generator.perm.4.desc": {
+    "message": "服务器管理命令"
+  },
+  "app.lab.command-generator.perm.seed.multiplayer-note": {
+    "message": "多人游戏下 /seed 需要 2 级权限"
   },
   "app.lab.command-generator.cmd.advancement.desc": {
     "message": "给予或移除玩家的进度"

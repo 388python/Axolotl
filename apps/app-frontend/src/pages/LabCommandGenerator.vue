@@ -19,7 +19,9 @@ import {
     getAllCommands,
     getCurrentVersion,
     initializeRegistry,
-    PERMISSION_KEYS,
+    PERMISSION_DESC_KEYS,
+    PERMISSION_DESCRIPTIONS,
+    PERMISSION_LABELS,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
 import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
@@ -58,7 +60,7 @@ const versionOptions = ref<ComboboxOption<string>[]>([])
 const selectedVersion = ref('')
 const selectedCommandId = ref('')
 const filterCategory = ref<string>('')
-const filterPermission = ref<string>('')
+const filterPermission = ref<string>('4')
 const values = ref<Record<string, string | number | boolean>>({})
 const executeChainOutput = ref('')
 const executeChainRef = ref<InstanceType<typeof CommandGeneratorExecuteChain> | null>(null)
@@ -114,14 +116,21 @@ const categoryOptions = computed<ComboboxOption<string>[]>(() => [
     })),
 ])
 
-const permissionOptions = computed<ComboboxOption<string>[]>(() => [
-    { value: '', label: formatMessage(messages.filterAll) },
-    { value: '0', label: `0 · ${t(PERMISSION_KEYS[0])}` },
-    { value: '1', label: `1 · ${t(PERMISSION_KEYS[1])}` },
-    { value: '2', label: `2 · ${t(PERMISSION_KEYS[2])}` },
-    { value: '3', label: `3 · ${t(PERMISSION_KEYS[3])}` },
-    { value: '4', label: `4 · ${t(PERMISSION_KEYS[4])}` },
-])
+/**
+ * 权限筛选项。
+ * 语义：选择 “N” 表示“当前等级为 N 的玩家可以使用的全部命令”，
+ * 因为高权限等级继承低等级的全部命令。过滤逻辑用 permissionLevel <= N。
+ * 没有“全部”选项：4 级已经覆盖所有命令。
+ */
+const permissionOptions = computed<ComboboxOption<string>[]>(() =>
+    ([0, 1, 2, 3, 4] as const).map((level) => ({
+        value: String(level),
+        label: `${level} · ${PERMISSION_LABELS[level]} — ${t(
+            PERMISSION_DESC_KEYS[level],
+            PERMISSION_DESCRIPTIONS[level],
+        )}`,
+    })),
+)
 
 const versionLabelMap = computed<Record<string, string>>(() => {
     const map: Record<string, string> = {}
@@ -136,8 +145,9 @@ const filteredCommands = computed(() => {
     if (filterCategory.value) {
         list = list.filter((c) => c.category === filterCategory.value)
     }
-    if (filterPermission.value !== '') {
-        list = list.filter((c) => String(c.permissionLevel) === filterPermission.value)
+    const maxLevel = Number(filterPermission.value)
+    if (!Number.isNaN(maxLevel)) {
+        list = list.filter((c) => c.permissionLevel <= maxLevel)
     }
     return list
 })
@@ -183,9 +193,23 @@ const uiArguments = computed<CommandArgument[]>(() => {
     return [...nonNbt, ...nbt]
 })
 
-const permissionName = computed(() =>
-    currentCommand.value ? t(PERMISSION_KEYS[currentCommand.value.permissionLevel]) : '',
-)
+const permissionName = computed(() => {
+    if (!currentCommand.value) return ''
+    const level = currentCommand.value.permissionLevel
+    return `${PERMISSION_LABELS[level] ?? level} (${level})`
+})
+
+/** 命令卡片右上角权限标签的 tooltip 文案 */
+const permissionTooltip = computed(() => {
+    if (!currentCommand.value) return undefined
+    if (currentCommand.value.id === 'seed') {
+        return formatMessage(messages.seedMultiplayerNote)
+    }
+    return t(
+        PERMISSION_DESC_KEYS[currentCommand.value.permissionLevel],
+        PERMISSION_DESCRIPTIONS[currentCommand.value.permissionLevel],
+    )
+})
 
 const isChainCommand = computed(() => currentCommand.value?.isChainCommand === true)
 
@@ -353,7 +377,7 @@ async function jumpToPreset(preset: UserPreset) {
     }
 
     filterCategory.value = ''
-    filterPermission.value = ''
+    filterPermission.value = '4'
 
     selectedCommandId.value = preset.commandId
     const cmd = findCommand(preset.commandId)
@@ -503,6 +527,7 @@ async function jumpToPreset(preset: UserPreset) {
                                     ><Combobox
                                         :model-value="filterPermission"
                                         :options="permissionOptions"
+                                        width="full"
                                         @update:model-value="filterPermission = String($event)"
                                     />
                                 </div>
@@ -578,6 +603,7 @@ async function jumpToPreset(preset: UserPreset) {
                             </p>
                         </div>
                         <span
+                            v-tooltip="permissionTooltip"
                             class="rounded-md bg-surface-3 px-2 py-1 text-xs text-[var(--color-text-tertiary)]"
                             >{{ permissionName }}</span
                         >
