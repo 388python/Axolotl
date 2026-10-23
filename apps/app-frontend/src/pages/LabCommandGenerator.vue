@@ -492,7 +492,7 @@ async function jumpToPreset(preset: UserPreset) {
                 <div
                     class="flex min-w-0 flex-col gap-4 border-0 border-b border-solid border-surface-4 p-4"
                 >
-                    <div class="flex flex-wrap items-end justify-between gap-3">
+                    <div class="flex flex-col items-start gap-3">
                         <div class="flex min-w-0 flex-col gap-2">
                             <label class="text-sm font-semibold text-[var(--color-text-primary)]">{{
                                 formatMessage(messages.selectVersion)
@@ -503,13 +503,11 @@ async function jumpToPreset(preset: UserPreset) {
                                 @update:model-value="selectedVersion = String($event)"
                             />
                         </div>
-                        <details class="min-w-0">
-                            <summary
-                                class="cursor-pointer rounded-lg p-2 text-sm text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
-                            >
+                        <div class="flex min-w-0 flex-col gap-2">
+                            <span class="text-sm font-semibold text-[var(--color-text-primary)]">
                                 {{ formatMessage(messages.filters) }}
-                            </summary>
-                            <div class="mt-2 flex flex-wrap gap-3">
+                            </span>
+                            <div class="flex flex-wrap gap-3">
                                 <div class="flex min-w-0 flex-col gap-2">
                                     <label class="text-sm">{{
                                         formatMessage(messages.filterCategory)
@@ -532,7 +530,7 @@ async function jumpToPreset(preset: UserPreset) {
                                     />
                                 </div>
                             </div>
-                        </details>
+                        </div>
                     </div>
                     <div class="flex min-w-0 flex-col gap-2">
                         <label class="text-sm font-semibold text-[var(--color-text-primary)]">{{
