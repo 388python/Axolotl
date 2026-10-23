@@ -1,11 +1,9 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import fs from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import { setTimeout } from 'node:timers/promises'
 
-import { validateReleaseNotices } from './release-notices.mjs'
-import { buildReleaseNotesHtml, renderReleaseNotesImage } from './render-discord-release.mjs'
+import { renderReleaseNotice, validateReleaseNotices } from './release-notices.mjs'
 import { githubRepository, isMain, releaseVersion, verifyRelease } from './release-utils.mjs'
 
 const MiB = 1024 * 1024
@@ -61,7 +59,7 @@ function installerLabel(filename) {
     return `Windows ${arch} · ${variant}`.replace(/ +/g, ' ')
 }
 
-export function releaseThumbnail(release) {
+export function releaseImage(release) {
     const body = release.body ?? ''
     const matches = [
         ...body.matchAll(/!\[[^\]]*\]\(\s*<?(https:\/\/[^\s)>]+)>?(?:\s+"[^"]*")?\s*\)/gi),
@@ -83,6 +81,50 @@ export function releaseThumbnail(release) {
         }
     }
     return undefined
+}
+
+export function buildReleaseNotesText(announcement, { notice = null } = {}) {
+    const pair = (text) => {
+        if (!text?.['zh-CN']?.trim() || !text?.['en-US']?.trim())
+            throw new Error('Announcement text requires both zh-CN and en-US')
+        return `${text['zh-CN'].trim()}\n${text['en-US'].trim()}`
+    }
+    const labels = {
+        added: '新增 / Added',
+        changed: '变更 / Changed',
+        deprecated: '弃用 / Deprecated',
+        removed: '移除 / Removed',
+        fixed: 'Bug 修复 / Fixed',
+        security: '安全修复 / Security',
+    }
+    const sections = []
+    if (notice) {
+        pair(notice)
+        sections.push(renderReleaseNotice(notice).join('\n').trim())
+    }
+    for (const [category, label] of Object.entries(labels)) {
+        const changes = announcement.changes[category]
+        if (changes?.length)
+            sections.push(
+                `**${label}**\n${changes.map((change) => `- ${pair(change)}`).join('\n\n')}`,
+            )
+    }
+    if (announcement.notes) sections.push(`**说明 / Notes**\n${pair(announcement.notes)}`)
+    return sections.join('\n\n')
+}
+
+function splitDescriptions(text) {
+    const chunks = []
+    while (text.length > 4096) {
+        let end = text.lastIndexOf('\n', 4096)
+        if (end < 2048) end = 4096
+        // Avoid splitting a UTF-16 surrogate pair between embeds.
+        if (/[\uD800-\uDBFF]/.test(text[end - 1])) end--
+        chunks.push(text.slice(0, end))
+        text = text.slice(end).replace(/^\n+/, '')
+    }
+    if (text) chunks.push(text)
+    return chunks
 }
 
 export function buildReleaseNotification(
@@ -123,38 +165,47 @@ export function buildReleaseNotification(
             inline: true,
         }
     })
-    const description =
-        '中英更新日志见图片。安装包集中附带；未附带的文件请使用下方直链。\nBilingual notes in the image; use the links for files not attached.'
-    const footer = 'Axolotl Launcher · 更新日志 / Release notes'
+    const notes = buildReleaseNotesText(announcement, { notice })
+    const footer = `Axolotl Launcher · 更新日志 / Release notes · #${release.id}`
     const textLength =
         title.length +
-        description.length +
         footer.length +
         fields.reduce((total, field) => total + field.name.length + field.value.length, 0)
     if (fields.length > 25 || textLength > 6000) {
         throw new Error('Installer links exceed the single-message Discord embed limits')
     }
-    const imageName = `axolotl-release-${release.id}.png`
-    const thumbnail = releaseThumbnail(release)
+    const textFiles = []
+    let description = notes
+    if (notes.length + textLength > 6000) {
+        // Discord caps text across all embeds in one message at 6000 characters.
+        // Preserve the full bilingual text as Markdown without posting extra messages.
+        description =
+            '完整中英更新日志见附带的 Markdown 文本或 GitHub Releases。\nFull bilingual release notes are attached as Markdown and available on GitHub Releases.'
+        textFiles.push({
+            name: `axolotl-release-${release.id}.md`,
+            bytes: Buffer.from(`# ${title}\n\n${notes}\n`),
+            contentType: 'text/markdown; charset=utf-8',
+        })
+    }
+    if (description.length + textLength > 6000)
+        throw new Error('Installer links exceed the single-message Discord embed limits')
+    const embeds = splitDescriptions(description).map((part) => ({
+        color: 0xf28db2,
+        description: part,
+    }))
+    if (!embeds.length) embeds.push({ color: 0xf28db2 })
+    Object.assign(embeds[0], { title, url, footer: { text: footer } })
+    const image = releaseImage(release)
+    if (image) embeds[0].image = { url: image }
+    embeds.at(-1).fields = fields
     return {
-        imageName,
-        imageHtml: buildReleaseNotesHtml(announcement, { notice }),
+        textFiles,
+        footer,
         marker: `axolotl-release:${repository}:${release.id}`,
         installers,
         payload: {
             allowed_mentions: { parse: [] },
-            embeds: [
-                {
-                    title,
-                    url,
-                    color: 0xf28db2,
-                    description,
-                    image: { url: `attachment://${imageName}` },
-                    ...(thumbnail ? { thumbnail: { url: thumbnail } } : {}),
-                    fields,
-                    footer: { text: footer },
-                },
-            ],
+            embeds,
             components: [
                 { type: 1, components: [{ type: 2, style: 5, label: 'GitHub Releases', url }] },
             ],
@@ -277,7 +328,6 @@ export async function publishDiscordRelease({
     api,
     maxUploadBytes = uploadLimit(),
     download = downloadInstaller,
-    renderImage = renderReleaseNotesImage,
     beforeSend = async () => {},
     notifyRoleId,
     notifyRoleName = 'update-notify',
@@ -324,13 +374,12 @@ export async function publishDiscordRelease({
         const history = await api(`/channels/${channelId}/messages?limit=100${before}`)
         for (const entry of history) {
             if (entry.author?.id !== bot.id) continue
-            if (
-                entry.attachments?.some(
-                    (attachment) => attachment.filename === notification.imageName,
-                )
-            )
+            if (entry.embeds?.some((embed) => embed.footer?.text === notification.footer))
                 return { sent: 0, skipped: 1 }
             if (
+                entry.attachments?.some(
+                    (attachment) => attachment.filename === `axolotl-release-${release.id}.png`,
+                ) ||
                 entry.embeds?.some(
                     (embed) => embed.footer?.text === `${notification.marker}:notes-1`,
                 )
@@ -344,16 +393,14 @@ export async function publishDiscordRelease({
     } while (true)
 
     await beforeSend()
-    const image = {
-        name: notification.imageName,
-        bytes: await renderImage(notification.imageHtml),
-        contentType: 'image/png',
+    const files = [...notification.textFiles]
+    let totalBytes = files.reduce((total, file) => total + file.bytes.length, 0)
+    if (
+        files.some((file) => file.bytes.length > maxUploadBytes) ||
+        totalBytes > maxRequestFileBytes
+    ) {
+        throw new Error('Release notes text exceeds the Discord attachment limit')
     }
-    if (image.bytes.length > maxUploadBytes || image.bytes.length > maxRequestFileBytes) {
-        throw new Error('Release notes image exceeds the Discord attachment limit')
-    }
-    const files = [image]
-    let totalBytes = image.bytes.length
     for (const asset of notification.installers) {
         if (
             asset.size > maxUploadBytes ||
@@ -380,10 +427,17 @@ export async function publishDiscordRelease({
     try {
         await api(endpoint, { method, payload: content, files })
     } catch (error) {
-        if (files.length === 1 || !(error.status === 413 || error.code === 40005)) throw error
-        // Keep the changelog image and all download links when the combined upload is rejected.
-        content.attachments = [{ id: 0, filename: image.name }]
-        await api(endpoint, { method, payload: content, files: [image] })
+        if (
+            files.length === notification.textFiles.length ||
+            !(error.status === 413 || error.code === 40005)
+        )
+            throw error
+        // Retain all text and download links, dropping only installer uploads.
+        content.attachments = notification.textFiles.map((file, id) => ({
+            id,
+            filename: file.name,
+        }))
+        await api(endpoint, { method, payload: content, files: notification.textFiles })
     }
     return { sent: 1, skipped: 0 }
 }
@@ -424,15 +478,8 @@ export async function waitForUpdateServer(
 
 if (isMain(import.meta.url)) {
     const [tag, mode] = process.argv.slice(2)
-    const previewPath = process.argv[4]
-    if (
-        !tag ||
-        (mode && !['--dry-run', '--preview'].includes(mode)) ||
-        (mode === '--preview' && !previewPath)
-    ) {
-        throw new Error(
-            'Usage: node publish-discord-release.mjs <tag> [--dry-run | --preview <image.png>]',
-        )
+    if (!tag || (mode && mode !== '--dry-run')) {
+        throw new Error('Usage: node publish-discord-release.mjs <tag> [--dry-run]')
     }
     releaseVersion(tag)
     const repository = githubRepository()
@@ -459,17 +506,15 @@ if (isMain(import.meta.url)) {
     }
     const notification = buildReleaseNotification(release, announcement, { repository, notice })
     const maxUploadBytes = uploadLimit(process.env.DISCORD_MAX_UPLOAD_MIB)
-    const renderImage = async (html) => {
-        const bytes = await renderReleaseNotesImage(html)
-        if (process.env.DISCORD_PREVIEW_PATH)
-            await fs.writeFile(process.env.DISCORD_PREVIEW_PATH, bytes)
-        return bytes
-    }
     if (mode === '--dry-run') {
         console.log(
             JSON.stringify(
                 {
                     payload: notification.payload,
+                    textAttachments: notification.textFiles.map((file) => ({
+                        name: file.name,
+                        text: file.bytes.toString('utf8'),
+                    })),
                     installers: notification.installers,
                     maxUploadBytes,
                 },
@@ -477,10 +522,6 @@ if (isMain(import.meta.url)) {
                 2,
             ),
         )
-        if (process.env.DISCORD_PREVIEW_PATH) await renderImage(notification.imageHtml)
-    } else if (mode === '--preview') {
-        await fs.writeFile(previewPath, await renderReleaseNotesImage(notification.imageHtml))
-        console.log(`Rendered release notes preview: ${previewPath}`)
     } else {
         if (!process.env.DISCORD_BOT_TOKEN) throw new Error('DISCORD_BOT_TOKEN is required')
         const result = await publishDiscordRelease({
@@ -489,7 +530,6 @@ if (isMain(import.meta.url)) {
             channelId: process.env.DISCORD_CHANNEL_ID,
             api: discordClient(process.env.DISCORD_BOT_TOKEN),
             maxUploadBytes,
-            renderImage,
             beforeSend: () => waitForUpdateServer(release),
             notifyRoleId: process.env.DISCORD_NOTIFY_ROLE_ID || undefined,
         })

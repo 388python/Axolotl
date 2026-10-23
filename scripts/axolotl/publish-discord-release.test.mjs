@@ -5,18 +5,18 @@ import test from 'node:test'
 
 import {
     buildReleaseNotification,
+    buildReleaseNotesText,
     channelPermissions,
     discordClient,
     DiscordError,
     downloadInstaller,
     loadAnnouncement,
     publishDiscordRelease,
-    releaseThumbnail,
+    releaseImage,
     updateServerDownloadUrl,
     uploadLimit,
     waitForUpdateServer,
 } from './publish-discord-release.mjs'
-import { buildReleaseNotesHtml } from './render-discord-release.mjs'
 import { assetDownloadUrl, githubRepository } from './release-utils.mjs'
 
 const repository = githubRepository()
@@ -84,7 +84,6 @@ const send = (mock, options = {}) =>
         channelId,
         api: mock.api,
         download: async () => Buffer.from('test'),
-        renderImage: async () => Buffer.from('image'),
         ...options,
     })
 const historical = (overrides = {}) => ({
@@ -94,7 +93,7 @@ const historical = (overrides = {}) => ({
     ...overrides,
 })
 
-test('one notification contains the image and both direct links for every installer architecture', () => {
+test('one notification contains bilingual text and both direct links for every installer architecture', () => {
     const notification = plan()
     assert.deepEqual(
         notification.installers.map((asset) => asset.id),
@@ -102,7 +101,11 @@ test('one notification contains the image and both direct links for every instal
     )
     assert.equal(notification.payload.embeds.length, 1)
     const embed = notification.payload.embeds[0]
-    assert.equal(embed.image.url, `attachment://${notification.imageName}`)
+    assert.equal(embed.image, undefined)
+    assert.equal(notification.imageHtml, undefined)
+    assert.equal(notification.textFiles.length, 0)
+    assert.match(embed.description, /新增测试功能\nAdded a test feature/)
+    assert.match(embed.description, /中文说明\nEnglish notes/)
     assert.equal(embed.fields.length, 4)
     for (const [index, field] of embed.fields.entries()) {
         assert.ok(
@@ -168,33 +171,28 @@ test('only Modern Windows installers are uploaded or linked; NSIS and legacy EXE
     )
 })
 
-test('HTML pairs Chinese and English, preserves categories and escapes source markup', () => {
-    const html = buildReleaseNotesHtml(
+test('Markdown pairs Chinese and English and preserves categories, formatting and notices', () => {
+    const text = buildReleaseNotesText(
         {
             ...announcement,
-            notes: { 'zh-CN': '<script>alert(1)</script>', 'en-US': 'Use **bold** and `code`' },
+            notes: { 'zh-CN': '中文说明', 'en-US': 'Use **bold** and `code`' },
         },
         {
             notice: { type: 'warning', 'zh-CN': '警告', 'en-US': 'Warning' },
         },
     )
-    assert.match(html, /新增 \/ Added/)
-    assert.match(html, /新增测试功能/)
-    assert.match(html, /Added a test feature/)
-    assert.match(html, /WARNING/)
-    assert.match(html, /&lt;script&gt;/)
-    assert.doesNotMatch(html, /<script>/)
-    assert.match(html, /<strong>bold<\/strong>/)
-    assert.match(html, /<code>code<\/code>/)
-    assert.match(html, /grid-template-columns: 1fr 1fr/)
+    assert.match(text, /新增 \/ Added/)
+    assert.match(text, /新增测试功能\nAdded a test feature/)
+    assert.match(text, /WARNING/)
+    assert.match(text, /Use \*\*bold\*\* and `code`/)
     assert.throws(
-        () => buildReleaseNotesHtml({ ...announcement, notes: { 'zh-CN': '中文' } }),
+        () => buildReleaseNotesText({ ...announcement, notes: { 'zh-CN': '中文' } }),
         /both zh-CN and en-US/,
     )
 })
 
-test('long changelogs remain a single image notification without losing entries', () => {
-    const changes = Array.from({ length: 150 }, (_, index) => ({
+test('overlong changelogs retain every entry in a single Markdown attachment', async () => {
+    const changes = Array.from({ length: 350 }, (_, index) => ({
         'zh-CN': `第${index}条修复`,
         'en-US': `Fix number ${index}`,
     }))
@@ -204,21 +202,76 @@ test('long changelogs remain a single image notification without losing entries'
         { repository },
     )
     assert.equal(notification.payload.embeds.length, 1)
-    for (const change of changes) assert.ok(notification.imageHtml.includes(change['en-US']))
+    assert.equal(notification.textFiles.length, 1)
+    assert.match(notification.textFiles[0].name, /\.md$/)
+    const text = notification.textFiles[0].bytes.toString('utf8')
+    for (const change of changes) {
+        assert.ok(text.includes(change['zh-CN']))
+        assert.ok(text.includes(change['en-US']))
+    }
+    const mock = mockDiscord()
+    await send(mock, { notification })
+    assert.equal(mock.sent.length, 1)
+    assert.equal(mock.sent[0].files[0].contentType, 'text/markdown; charset=utf-8')
+    await assert.rejects(send(mockDiscord(), { notification, maxUploadBytes: 5 }), /text exceeds/)
+    const rejected = mockDiscord()
+    await send(rejected, {
+        notification,
+        api: async (endpoint, options) => {
+            if (options?.files?.length > 1) throw new DiscordError(413)
+            return rejected.api(endpoint, options)
+        },
+    })
+    assert.equal(rejected.sent.length, 1)
+    assert.deepEqual(rejected.sent[0].files, notification.textFiles)
+    assert.equal(rejected.sent[0].payload.attachments.length, 1)
 })
 
-test('uses the first release image as the upper-right thumbnail with image asset fallback', () => {
+test('text over 4096 characters is split into embeds within one message without losing text', () => {
+    for (const chinese of ['中'.repeat(4090) + '🌟'.repeat(8), '第一行\n' + '中'.repeat(4100)]) {
+        const source = {
+            ...announcement,
+            changes: { added: [{ 'zh-CN': chinese, 'en-US': 'English detail' }] },
+        }
+        const notification = buildReleaseNotification(release, source, { repository })
+        assert.equal(notification.textFiles.length, 0)
+        assert.equal(notification.payload.embeds.length, 2)
+        const embeds = notification.payload.embeds
+        assert.ok(embeds.every((embed) => embed.description.length <= 4096))
+        const joined = embeds.map((embed) => embed.description).join('\n')
+        assert.equal(
+            joined.replaceAll('\n', ''),
+            buildReleaseNotesText(source).replaceAll('\n', ''),
+        )
+        const length = embeds.reduce(
+            (total, embed) =>
+                total +
+                (embed.title?.length ?? 0) +
+                embed.description.length +
+                (embed.footer?.text.length ?? 0) +
+                (embed.fields ?? []).reduce(
+                    (sum, field) => sum + field.name.length + field.value.length,
+                    0,
+                ),
+            0,
+        )
+        assert.ok(length <= 6000)
+    }
+})
+
+test('uses the first release image in the main image position with image asset fallback', () => {
     const source = {
         ...release,
         body: '<img alt="banner" src="https://example.com/first.png">\n![second](https://example.com/second.png)',
     }
-    assert.equal(plan(source).payload.embeds[0].thumbnail.url, 'https://example.com/first.png')
+    assert.equal(plan(source).payload.embeds[0].image.url, 'https://example.com/first.png')
+    assert.equal(plan(source).payload.embeds[0].thumbnail, undefined)
     assert.equal(
-        releaseThumbnail({ ...release, body: '![pic](<https://example.com/a.png> "title")' }),
+        releaseImage({ ...release, body: '![pic](<https://example.com/a.png> "title")' }),
         'https://example.com/a.png',
     )
     assert.equal(
-        releaseThumbnail({ ...release, body: '![unsafe](https://user:secret@example.com/a.png)' }),
+        releaseImage({ ...release, body: '![unsafe](https://user:secret@example.com/a.png)' }),
         undefined,
     )
     const asset = {
@@ -228,10 +281,10 @@ test('uses the first release image as the upper-right thumbnail with image asset
         browser_download_url: assetDownloadUrl(tag, 'banner.png'),
     }
     assert.equal(
-        plan({ ...release, assets: [...release.assets, asset] }).payload.embeds[0].thumbnail.url,
+        plan({ ...release, assets: [...release.assets, asset] }).payload.embeds[0].image.url,
         asset.browser_download_url,
     )
-    assert.equal(plan().payload.embeds[0].thumbnail, undefined)
+    assert.equal(plan().payload.embeds[0].image, undefined)
 })
 
 test('loads exact TypeScript versions and rejects missing versions', async () => {
@@ -270,8 +323,8 @@ test('sends one message with all attachments and mentions only update-notify at 
     assert.deepEqual(await send(mock), { sent: 1, skipped: 0 })
     assert.equal(mock.sent.length, 1)
     const { payload, files } = mock.sent[0]
-    assert.equal(files.length, 5)
-    assert.equal(files[0].contentType, 'image/png')
+    assert.equal(files.length, 4)
+    assert.ok(files.every((file) => !file.name.endsWith('.png')))
     assert.deepEqual(payload.allowed_mentions, { parse: [], roles: [roleId] })
     assert.equal(payload.content, `<@&${roleId}>`)
     assert.ok(payload.nonce.length <= 25)
@@ -279,7 +332,7 @@ test('sends one message with all attachments and mentions only update-notify at 
     assert.equal(payload.attachments.length, files.length)
 })
 
-test('large files use mirror and GitHub links in the same image message without downloading', async () => {
+test('large files use mirror and GitHub links in the same text message without downloading', async () => {
     const mock = mockDiscord()
     await send(mock, {
         maxUploadBytes: 5,
@@ -290,7 +343,7 @@ test('large files use mirror and GitHub links in the same image message without 
         }),
     })
     assert.equal(mock.sent.length, 1)
-    assert.equal(mock.sent[0].files.length, 1)
+    assert.equal(mock.sent[0].files.length, 0)
     assert.ok(
         mock.sent[0].payload.embeds[0].fields.every(
             (field) =>
@@ -333,24 +386,23 @@ test('caps aggregate upload bytes and attachment count within a single message',
     assert.equal(crowded.sent[0].files.length, 10)
 })
 
-test('Discord size rejection retains the image and both download links on retry', async () => {
+test('Discord size rejection retains all text, the release image and both download links on retry', async () => {
     for (const error of [new DiscordError(413), new DiscordError(400, 40005)]) {
         const mock = mockDiscord()
         await send(mock, {
+            notification: plan({ ...release, body: '![banner](https://example.com/banner.png)' }),
             api: async (endpoint, options) => {
-                if (options?.files?.length > 1) throw error
+                if (options?.files?.length > 0) throw error
                 return mock.api(endpoint, options)
             },
         })
         assert.equal(mock.sent.length, 1)
-        assert.equal(mock.sent[0].files.length, 1)
-        assert.equal(mock.sent[0].payload.attachments.length, 1)
+        assert.equal(mock.sent[0].files.length, 0)
+        assert.equal(mock.sent[0].payload.attachments.length, 0)
+        assert.match(mock.sent[0].payload.embeds[0].description, /Added a test feature/)
+        assert.equal(mock.sent[0].payload.embeds[0].image.url, 'https://example.com/banner.png')
         assert.equal(mock.sent[0].payload.embeds[0].fields.length, 4)
     }
-    await assert.rejects(
-        send(mockDiscord(), { renderImage: async () => Buffer.alloc(6), maxUploadBytes: 5 }),
-        /image exceeds/,
-    )
     const mock = mockDiscord()
     await assert.rejects(
         send(mock, {
@@ -363,20 +415,19 @@ test('Discord size rejection retains the image and both download links on retry'
     )
 })
 
-test('reruns paginate history and skip the delivered image before rendering or downloading', async () => {
+test('reruns paginate history and skip the delivered text before downloading', async () => {
     const filler = Array.from({ length: 100 }, (_, index) =>
         historical({
             id: String(index),
             author: { id: 'other-bot' },
-            attachments: [{ filename: plan().imageName }],
+            embeds: [{ footer: { text: plan().footer } }],
         }),
     )
     const mock = mockDiscord({
-        history: [filler, [historical({ attachments: [{ filename: plan().imageName }] })]],
+        history: [filler, [historical({ embeds: [{ footer: { text: plan().footer } }] })]],
     })
     assert.deepEqual(
         await send(mock, {
-            renderImage: () => assert.fail('Must not render'),
             download: () => assert.fail('Must not download'),
             beforeSend: () => assert.fail('Must not wait'),
         }),
@@ -386,15 +437,21 @@ test('reruns paginate history and skip the delivered image before rendering or d
     assert.equal(mock.sent.length, 0)
 })
 
-test('upgrades the old text changelog in place instead of posting another notification', async () => {
-    const mock = mockDiscord({
-        history: [[historical({ embeds: [{ footer: { text: `${plan().marker}:notes-1` } }] })]],
-    })
-    await send(mock)
-    assert.equal(mock.sent.length, 1)
-    assert.equal(mock.sent[0].method, 'PATCH')
-    assert.equal(mock.sent[0].endpoint, `/channels/${channelId}/messages/777`)
-    assert.equal(mock.sent[0].payload.nonce, undefined)
+test('upgrades old text and rendered changelogs in place instead of posting another notification', async () => {
+    for (const history of [
+        { embeds: [{ footer: { text: `${plan().marker}:notes-1` } }] },
+        { attachments: [{ filename: `axolotl-release-${release.id}.png` }] },
+    ]) {
+        const mock = mockDiscord({
+            history: [[historical(history)]],
+        })
+        await send(mock)
+        assert.equal(mock.sent.length, 1)
+        assert.equal(mock.sent[0].method, 'PATCH')
+        assert.equal(mock.sent[0].endpoint, `/channels/${channelId}/messages/777`)
+        assert.equal(mock.sent[0].payload.nonce, undefined)
+        assert.ok(mock.sent[0].files.every((file) => !file.name.endsWith('.png')))
+    }
 })
 
 test('reports the exact missing channel permission before sending', async () => {
