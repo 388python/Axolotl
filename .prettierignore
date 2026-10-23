@@ -1,3 +1,6 @@
 Cargo.lock
 pnpm-lock.yaml
 .github/**/*.png
+# TOML formatting is owned by tombi (see tombi.toml and the repo-check CI job);
+# Prettier's TOML output conflicts with `tombi fmt --check`.
+**/*.toml

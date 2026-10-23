@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - "apps/telemetry-worker/**"
+      - 'apps/telemetry-worker/**'
   pull_request:
     paths-ignore:
-      - "apps/telemetry-worker/**"
+      - 'apps/telemetry-worker/**'
   workflow_dispatch:
 
 concurrency:
