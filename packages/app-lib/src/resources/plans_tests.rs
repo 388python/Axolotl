@@ -3,6 +3,49 @@ use crate::resources::plans::OperationDraft;
 use std::collections::HashMap;
 
 #[tokio::test]
+async fn remote_artifact_file_names_are_sanitized_for_install_and_update() {
+    let mut root = release("root0000", "1", 'a');
+    root.artifacts[0].file_name = Some("mod:version?\n.jar".into());
+    let (_directory, service) = service(vec![root.clone()]).await;
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("root", &root, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert_eq!(plan.actions.len(), 1);
+    assert_eq!(
+        plan.actions[0].target_relative_path,
+        "mods/mod_version__.jar"
+    );
+    assert_eq!(
+        plan.actions[0].target.file_name.as_deref(),
+        Some("mod:version?\n.jar")
+    );
+
+    let mut current =
+        installed(&root, "entry", "mods/[自定义]mod_old.jar.disabled");
+    current.original_file_name = Some("mod:old.jar".into());
+    assert_eq!(
+        super::naming::replacement_path(&current, "mod:new.jar", true).unwrap(),
+        "mods/[自定义]mod_new.jar.disabled"
+    );
+    assert_eq!(
+        super::naming::replacement_path(&current, "mod:new.jar", false)
+            .unwrap(),
+        "mods/mod_new.jar.disabled"
+    );
+    service.cache().close().await;
+}
+
+#[tokio::test]
 async fn switching_a_missing_entry_to_its_current_artifact_restores_the_file() {
     let current = release("root0000", "1", 'a');
     let (_temp, service) = service(vec![current.clone()]).await;

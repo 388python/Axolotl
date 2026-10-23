@@ -805,9 +805,9 @@ pub(crate) fn valid_artifact(artifact: &ResourceArtifact) -> bool {
     if artifact.file_name.as_ref().is_some_and(|name| {
         name.is_empty()
             || matches!(name.as_str(), "." | "..")
-            || name.chars().any(|character| {
-                character.is_control() || matches!(character, '/' | '\\')
-            })
+            || name
+                .chars()
+                .any(|character| matches!(character, '/' | '\\'))
     }) {
         return false;
     }

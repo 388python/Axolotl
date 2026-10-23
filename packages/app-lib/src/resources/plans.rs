@@ -261,9 +261,8 @@ pub fn artifact_path(
         .file_name
         .as_ref()
         .ok_or_else(|| invalid("artifact has no filename"))?;
-    if !safe_relative_path(file) || file.contains('/') {
-        return Err(invalid("invalid artifact filename"));
-    }
+    let file = crate::util::io::sanitize_download_file_name(file)
+        .map_err(|_| invalid("invalid artifact filename"))?;
     let base = match scope {
         InstallScope::World { relative_path } => {
             format!("{relative_path}/datapacks")
