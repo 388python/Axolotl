@@ -21,12 +21,6 @@
  * there. Test files are skipped: they assert on the strings rather than use the
  * classes, and `screenshot-thumbnail-contract.test.ts` deliberately names them.
  *
- * `apps/telemetry-dashboard` is deliberately not a root: it has its own Tailwind
- * config, which defines `primary` and `secondary`, so those utilities are live
- * there. That config has no `contrast`, so a `text-contrast` in that app would be
- * dead and unguarded — add it here together with allowlist entries naming the
- * config that backs each surviving utility.
- *
  * Usage: node scripts/axolotl/check-dead-colours.mjs
  * `scan(roots)` is exported so `check-dead-colours.test.mjs` can cover the walk,
  * the allowlist and the reporting against fixtures; the matcher itself is proven
