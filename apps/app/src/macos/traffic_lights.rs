@@ -21,8 +21,8 @@ use objc2_app_kit::{
     NSWindowWillCloseNotification,
 };
 use objc2_foundation::{
-    NSNotification, NSNotificationCenter, NSObjectProtocol, NSOperationQueue,
-    NSPoint, NSRect, NSRunLoop, NSSize,
+    NSArray, NSNotification, NSNotificationCenter, NSObjectProtocol,
+    NSOperationQueue, NSPoint, NSRect, NSRunLoop, NSRunLoopCommonModes, NSSize,
 };
 use serde::Deserialize;
 use tauri::WebviewWindow;
@@ -180,7 +180,8 @@ impl TrafficLightController {
             });
         });
         unsafe {
-            NSRunLoop::mainRunLoop().performBlock(&block);
+            let modes = NSArray::from_slice(&[NSRunLoopCommonModes]);
+            NSRunLoop::mainRunLoop().performInModes_block(&modes, &block);
         }
     }
 
@@ -193,17 +194,19 @@ impl TrafficLightController {
             return;
         }
 
+        let webview = self.webview.borrow();
+        let anchor_in_webview =
+            dom_rect_in_view(anchor, webview.bounds(), webview.isFlipped());
+        let anchor_in_window =
+            webview.convertRect_toView(anchor_in_webview, None);
+        self.expand_titlebar_container(anchor_in_window);
+        // Resizing the container can move the buttons through autoresizing.
         let Some(buttons) = self.current_buttons() else {
             self.repositioning.set(false);
             return;
         };
         self.refresh_button_observers(&buttons);
 
-        let webview = self.webview.borrow();
-        let anchor_in_webview =
-            dom_rect_in_view(anchor, webview.bounds(), webview.isFlipped());
-        let anchor_in_window =
-            webview.convertRect_toView(anchor_in_webview, None);
         let group_min_x = buttons
             .iter()
             .map(|button| button.frame_in_window.origin.x)
@@ -254,6 +257,33 @@ impl TrafficLightController {
         }
 
         self.repositioning.set(false);
+    }
+
+    fn expand_titlebar_container(&self, anchor_in_window: NSRect) {
+        let Some(close_button) = self
+            .window
+            .standardWindowButton(NSWindowButton::CloseButton)
+        else {
+            return;
+        };
+        // Keep the native titlebar's hit-test area around the moved buttons.
+        let Some((container, superview)) = (unsafe {
+            close_button.superview().and_then(|titlebar| {
+                let container = titlebar.superview()?;
+                let superview = container.superview()?;
+                Some((container, superview))
+            })
+        }) else {
+            return;
+        };
+        let frame_in_window =
+            superview.convertRect_toView(container.frame(), None);
+        let expanded_frame =
+            expanded_titlebar_frame(frame_in_window, anchor_in_window);
+        if expanded_frame != frame_in_window {
+            container
+                .setFrame(superview.convertRect_fromView(expanded_frame, None));
+        }
     }
 
     fn current_buttons(&self) -> Option<Vec<ButtonSnapshot>> {
@@ -390,6 +420,16 @@ fn dom_rect_in_view(
     )
 }
 
+fn expanded_titlebar_frame(frame: NSRect, anchor: NSRect) -> NSRect {
+    let min_y = frame.origin.y.min(anchor.origin.y);
+    let max_y = (frame.origin.y + frame.size.height)
+        .max(anchor.origin.y + anchor.size.height);
+    NSRect::new(
+        NSPoint::new(frame.origin.x, min_y),
+        NSSize::new(frame.size.width, max_y - min_y),
+    )
+}
+
 fn assert_main_thread() {
     assert!(
         MainThreadMarker::new().is_some(),
@@ -467,6 +507,18 @@ pub async fn update_traffic_lights_anchor(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn expands_native_titlebar_to_contain_the_dom_titlebar() {
+        let frame =
+            NSRect::new(NSPoint::new(0.0, 772.0), NSSize::new(1280.0, 28.0));
+        let anchor =
+            NSRect::new(NSPoint::new(0.0, 752.0), NSSize::new(1280.0, 48.0));
+
+        assert_eq!(expanded_titlebar_frame(frame, anchor), anchor);
+        assert_eq!(expanded_titlebar_frame(anchor, frame), anchor);
+        assert_eq!(expanded_titlebar_frame(anchor, anchor), anchor);
+    }
 
     #[test]
     fn converts_dom_rect_for_unflipped_appkit_view() {
