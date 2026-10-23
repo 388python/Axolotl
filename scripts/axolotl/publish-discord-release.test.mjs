@@ -4,16 +4,19 @@ import fs from 'node:fs/promises'
 import test from 'node:test'
 
 import {
-    buildReleaseMessages,
+    buildReleaseNotification,
     channelPermissions,
     discordClient,
     DiscordError,
     downloadInstaller,
     loadAnnouncement,
     publishDiscordRelease,
-    splitDescription,
+    releaseThumbnail,
+    updateServerDownloadUrl,
     uploadLimit,
+    waitForUpdateServer,
 } from './publish-discord-release.mjs'
+import { buildReleaseNotesHtml } from './render-discord-release.mjs'
 import { assetDownloadUrl, githubRepository } from './release-utils.mjs'
 
 const repository = githubRepository()
@@ -21,7 +24,9 @@ const tag = 'v2.3.4-beta.1'
 const channelId = '123456789012345678'
 const botId = '234567890123456789'
 const guildId = '345678901234567890'
+const roleId = '456789012345678901'
 const required = 117760n
+const MiB = 1024 * 1024
 const announcement = {
     version: tag.slice(1),
     publishedAt: '2026-01-01',
@@ -35,116 +40,213 @@ const release = {
     published_at: '2026-01-01T00:00:00Z',
     assets: ['exe', 'dmg', 'deb', 'deb', 'exe.sig', 'rpm'].map((extension, index) => ({
         id: index + 100,
-        name: `Axolotl-${index}.${extension}`,
+        name: index === 0 ? 'Axolotl_x64_modern-setup.exe' : `Axolotl-${index}.${extension}`,
         size: 4,
-        browser_download_url: assetDownloadUrl(tag, `Axolotl-${index}.${extension}`),
+        browser_download_url: assetDownloadUrl(
+            tag,
+            index === 0 ? 'Axolotl_x64_modern-setup.exe' : `Axolotl-${index}.${extension}`,
+        ),
     })),
 }
-const plan = (overrides = {}) =>
-    buildReleaseMessages(release, announcement, { repository, ...overrides })
+const plan = (source = release, options = {}) =>
+    buildReleaseNotification(source, announcement, { repository, ...options })
 
-function mockDiscord({ history = [], failAt = -1, permission = required, channelType = 0 } = {}) {
+function mockDiscord({
+    history = [],
+    permission = required,
+    channelType = 0,
+    roles: extraRoles,
+} = {}) {
     const sent = []
     const reads = []
     const api = async (endpoint, options = {}) => {
         if (endpoint === '/users/@me') return { id: botId }
         if (endpoint === `/channels/${channelId}`) return { type: channelType, guild_id: guildId }
-        if (endpoint.endsWith('/roles')) return [{ id: guildId, permissions: String(permission) }]
+        if (endpoint.endsWith('/roles'))
+            return [
+                { id: guildId, permissions: String(permission) },
+                ...(extraRoles ?? [{ id: roleId, name: 'update-notify', mentionable: true }]),
+            ]
         if (endpoint.endsWith(`/members/${botId}`)) return { roles: [] }
-        if (options.method === 'POST') {
-            if (sent.length === failAt) throw new Error('Simulated interruption')
-            sent.push(options)
-            return { id: String(sent.length) }
+        if (['POST', 'PATCH'].includes(options.method)) {
+            sent.push({ endpoint, ...options })
+            return { id: 'sent' }
         }
         reads.push(endpoint)
         return history[reads.length - 1] ?? []
     }
     return { api, sent, reads }
 }
-
 const send = (mock, options = {}) =>
     publishDiscordRelease({
         release,
-        messages: plan(),
+        notification: plan(),
         channelId,
         api: mock.api,
         download: async () => Buffer.from('test'),
+        renderImage: async () => Buffer.from('image'),
         ...options,
     })
-const historical = (payload, id = '777') => ({
-    id,
+const historical = (overrides = {}) => ({
+    id: '777',
     author: { id: botId },
-    embeds: payload.embeds,
     timestamp: '2026-01-02T00:00:00Z',
+    ...overrides,
 })
 
-test('renders paired bilingual categories, notices, notes and release buttons', () => {
-    const messages = plan({ notice: { type: 'warning', 'zh-CN': '中文警告', 'en-US': 'Warning' } })
-    const first = messages[0].payload
-    assert.match(first.embeds[0].description, /中文警告\nWarning/)
-    assert.match(first.embeds[0].description, /新增 \/ Added/)
-    assert.match(first.embeds[0].description, /新增测试功能\n  Added a test feature/)
-    assert.match(first.embeds[0].description, /中文说明\nEnglish notes/)
-    assert.equal(messages.length, 5)
+test('one notification contains the image and both direct links for every installer architecture', () => {
+    const notification = plan()
     assert.deepEqual(
-        messages.slice(1).map((entry) => entry.asset.id),
+        notification.installers.map((asset) => asset.id),
         [100, 101, 102, 103],
     )
-    for (const { payload } of messages) {
-        assert.deepEqual(payload.allowed_mentions, { parse: [] })
-        assert.equal(payload.components[0].components[0].style, 5)
-        assert.equal(
-            payload.components[0].components[0].url,
-            `https://github.com/${repository}/releases/tag/${tag}`,
+    assert.equal(notification.payload.embeds.length, 1)
+    const embed = notification.payload.embeds[0]
+    assert.equal(embed.image.url, `attachment://${notification.imageName}`)
+    assert.equal(embed.fields.length, 4)
+    for (const [index, field] of embed.fields.entries()) {
+        assert.ok(
+            field.value.includes(updateServerDownloadUrl(tag, notification.installers[index].name)),
         )
-        assert.ok(payload.embeds[0].description.length <= 4096)
+        assert.ok(field.value.includes(notification.installers[index].browser_download_url))
     }
+    assert.equal(
+        notification.payload.components[0].components[0].url,
+        `https://github.com/${repository}/releases/tag/${tag}`,
+    )
+    assert.doesNotMatch(embed.footer.text, /axolotl-release:/)
 })
 
-test('loads the exact release from TypeScript and rejects a missing version', async () => {
+test('mirror links follow the website route, omit v and encode filenames', () => {
+    assert.equal(
+        updateServerDownloadUrl(tag, 'Axolotl x64.deb'),
+        'https://update.axlmc.org/dist/2.3.4-beta.1/Axolotl%20x64.deb',
+    )
+})
+
+test('only Modern Windows installers are uploaded or linked; NSIS and legacy EXEs are excluded', async () => {
+    const excluded = ['Axolotl_x64_nsis-setup.exe', 'Axolotl_x64-setup.exe'].map((name, index) => ({
+        id: 900 + index,
+        name,
+        size: 4,
+        browser_download_url: assetDownloadUrl(tag, name),
+    }))
+    const notification = plan({ ...release, assets: [...release.assets, ...excluded] })
+    assert.deepEqual(
+        notification.installers.map((asset) => asset.id),
+        [100, 101, 102, 103],
+    )
+    assert.doesNotMatch(JSON.stringify(notification.payload), /nsis-setup|x64-setup/)
+    const mock = mockDiscord()
+    await send(mock, { notification })
+    assert.equal(mock.sent[0].files.filter((file) => file.name.endsWith('.exe')).length, 1)
+    assert.ok(mock.sent[0].files.some((file) => file.name.endsWith('_modern-setup.exe')))
+    assert.throws(
+        () =>
+            plan({
+                ...release,
+                assets: [
+                    ...release.assets.filter((asset) => !asset.name.endsWith('_modern-setup.exe')),
+                    ...excluded,
+                ],
+            }),
+        /Modern Windows/,
+    )
+    await waitForUpdateServer(
+        { ...release, assets: [...release.assets, ...excluded] },
+        {
+            attempts: 1,
+            fetchImpl: async () =>
+                Response.json({
+                    status: 'published',
+                    artifacts: notification.installers.map((asset) => ({
+                        filename: asset.name,
+                        size: asset.size,
+                    })),
+                }),
+        },
+    )
+})
+
+test('HTML pairs Chinese and English, preserves categories and escapes source markup', () => {
+    const html = buildReleaseNotesHtml(
+        {
+            ...announcement,
+            notes: { 'zh-CN': '<script>alert(1)</script>', 'en-US': 'Use **bold** and `code`' },
+        },
+        {
+            notice: { type: 'warning', 'zh-CN': '警告', 'en-US': 'Warning' },
+        },
+    )
+    assert.match(html, /新增 \/ Added/)
+    assert.match(html, /新增测试功能/)
+    assert.match(html, /Added a test feature/)
+    assert.match(html, /WARNING/)
+    assert.match(html, /&lt;script&gt;/)
+    assert.doesNotMatch(html, /<script>/)
+    assert.match(html, /<strong>bold<\/strong>/)
+    assert.match(html, /<code>code<\/code>/)
+    assert.match(html, /grid-template-columns: 1fr 1fr/)
+    assert.throws(
+        () => buildReleaseNotesHtml({ ...announcement, notes: { 'zh-CN': '中文' } }),
+        /both zh-CN and en-US/,
+    )
+})
+
+test('long changelogs remain a single image notification without losing entries', () => {
+    const changes = Array.from({ length: 150 }, (_, index) => ({
+        'zh-CN': `第${index}条修复`,
+        'en-US': `Fix number ${index}`,
+    }))
+    const notification = buildReleaseNotification(
+        release,
+        { ...announcement, changes: { fixed: changes } },
+        { repository },
+    )
+    assert.equal(notification.payload.embeds.length, 1)
+    for (const change of changes) assert.ok(notification.imageHtml.includes(change['en-US']))
+})
+
+test('uses the first release image as the upper-right thumbnail with image asset fallback', () => {
+    const source = {
+        ...release,
+        body: '<img alt="banner" src="https://example.com/first.png">\n![second](https://example.com/second.png)',
+    }
+    assert.equal(plan(source).payload.embeds[0].thumbnail.url, 'https://example.com/first.png')
+    assert.equal(
+        releaseThumbnail({ ...release, body: '![pic](<https://example.com/a.png> "title")' }),
+        'https://example.com/a.png',
+    )
+    assert.equal(
+        releaseThumbnail({ ...release, body: '![unsafe](https://user:secret@example.com/a.png)' }),
+        undefined,
+    )
+    const asset = {
+        id: 200,
+        name: 'banner.png',
+        size: 10,
+        browser_download_url: assetDownloadUrl(tag, 'banner.png'),
+    }
+    assert.equal(
+        plan({ ...release, assets: [...release.assets, asset] }).payload.embeds[0].thumbnail.url,
+        asset.browser_download_url,
+    )
+    assert.equal(plan().payload.embeds[0].thumbnail, undefined)
+})
+
+test('loads exact TypeScript versions and rejects missing versions', async () => {
     const source = `const entry: { version: string } = ${JSON.stringify(announcement)}
-        export function getAnnouncementByVersion(version: string) {
-            return entry.version === version ? entry : undefined
-        }`
+        export function getAnnouncementByVersion(version: string) { return version === entry.version ? entry : undefined }`
     assert.deepEqual(await loadAnnouncement(source, tag), announcement)
     await assert.rejects(loadAnnouncement(source, 'v2.3.5'), /No bundled announcement/)
-})
-
-test('can read the real catalog without frontend dependencies or changing it', async () => {
-    const source = await fs.readFile(
+    const real = await fs.readFile(
         new URL('../../apps/app-frontend/src/announcements/catalog.ts', import.meta.url),
         'utf8',
     )
-    assert.equal((await loadAnnouncement(source, 'v1.4.0')).version, '1.4.0')
+    assert.equal((await loadAnnouncement(real, 'v1.4.0')).version, '1.4.0')
 })
 
-test('splits large descriptions without dropping text or breaking emoji', () => {
-    const text = '中'.repeat(3499) + '🦎'.repeat(4000)
-    const chunks = splitDescription(text)
-    assert.equal(chunks.join(''), text)
-    assert.ok(chunks.every((chunk) => chunk.length <= 3500))
-    assert.ok(chunks.every((chunk) => !/[\uD800-\uDBFF]$/.test(chunk)))
-    const large = buildReleaseMessages(
-        release,
-        {
-            ...announcement,
-            changes: {
-                fixed: Array.from({ length: 100 }, () => ({
-                    'zh-CN': '修复'.repeat(100),
-                    'en-US': 'Fixed '.repeat(100),
-                })),
-            },
-        },
-        { repository },
-    )
-    assert.ok(large.length > 10)
-    assert.equal(
-        new Set(large.map((entry) => entry.payload.embeds[0].footer.text)).size,
-        large.length,
-    )
-})
-
-test('rejects unpublished, mismatched, incomplete and foreign releases before sending', () => {
+test('rejects unpublished, mismatched, incomplete and foreign release metadata before sending', () => {
     for (const update of [
         { draft: true },
         { published_at: null },
@@ -156,62 +258,99 @@ test('rejects unpublished, mismatched, incomplete and foreign releases before se
             ],
         },
         { assets: release.assets.map((asset) => ({ ...asset, size: 0 })) },
-    ]) {
-        assert.throws(() =>
-            buildReleaseMessages({ ...release, ...update }, announcement, { repository }),
-        )
-    }
+    ])
+        assert.throws(() => plan({ ...release, ...update }))
     assert.throws(() =>
-        buildReleaseMessages(release, { ...announcement, version: '2.3.5' }, { repository }),
-    )
-    assert.throws(
-        () =>
-            buildReleaseMessages(
-                release,
-                {
-                    ...announcement,
-                    notes: { 'zh-CN': '中文' },
-                },
-                { repository },
-            ),
-        /both zh-CN and en-US/,
+        buildReleaseNotification(release, { ...announcement, version: '2.3.5' }, { repository }),
     )
 })
 
-test('sends every installer architecture as an attachment and suppresses mentions', async () => {
+test('sends one message with all attachments and mentions only update-notify at the beginning', async () => {
     const mock = mockDiscord()
-    assert.deepEqual(await send(mock), { sent: 5, skipped: 0 })
-    assert.equal(mock.sent.filter((entry) => entry.file).length, 4)
-    assert.equal(new Set(mock.sent.map((entry) => entry.payload.nonce)).size, 5)
-    for (const { payload } of mock.sent) {
-        assert.equal(payload.enforce_nonce, true)
-        assert.ok(payload.nonce.length <= 25)
-        assert.deepEqual(payload.allowed_mentions, { parse: [] })
-    }
+    assert.deepEqual(await send(mock), { sent: 1, skipped: 0 })
+    assert.equal(mock.sent.length, 1)
+    const { payload, files } = mock.sent[0]
+    assert.equal(files.length, 5)
+    assert.equal(files[0].contentType, 'image/png')
+    assert.deepEqual(payload.allowed_mentions, { parse: [], roles: [roleId] })
+    assert.equal(payload.content, `<@&${roleId}>`)
+    assert.ok(payload.nonce.length <= 25)
+    assert.equal(payload.enforce_nonce, true)
+    assert.equal(payload.attachments.length, files.length)
 })
 
-test('oversized installers retain direct links without downloading files', async () => {
+test('large files use mirror and GitHub links in the same image message without downloading', async () => {
     const mock = mockDiscord()
-    await send(mock, { maxUploadBytes: 1, download: () => assert.fail('Must not download') })
-    for (const entry of mock.sent.slice(1)) {
-        assert.equal(entry.file, undefined)
-        assert.match(entry.payload.embeds[0].description, /File exceeds upload limit/)
-        assert.match(entry.payload.embeds[0].description, /github.com/)
-    }
+    await send(mock, {
+        maxUploadBytes: 5,
+        download: () => assert.fail('Must not download'),
+        notification: plan({
+            ...release,
+            assets: release.assets.map((asset) => ({ ...asset, size: 100 })),
+        }),
+    })
+    assert.equal(mock.sent.length, 1)
+    assert.equal(mock.sent[0].files.length, 1)
+    assert.ok(
+        mock.sent[0].payload.embeds[0].fields.every(
+            (field) =>
+                field.value.includes('update.axlmc.org') && field.value.includes('github.com'),
+        ),
+    )
 })
 
-test('Discord size rejection falls back to links, while authentication errors fail', async () => {
+test('caps aggregate upload bytes and attachment count within a single message', async () => {
+    const large = {
+        ...release,
+        assets: release.assets.map((asset) => ({ ...asset, size: 10 * MiB })),
+    }
+    const mock = mockDiscord()
+    let downloads = 0
+    await send(mock, {
+        notification: plan(large),
+        download: async () => {
+            downloads++
+            return Buffer.alloc(10 * MiB)
+        },
+    })
+    assert.equal(downloads, 2)
+    assert.ok(mock.sent[0].files.reduce((total, file) => total + file.bytes.length, 0) <= 24 * MiB)
+    const many = {
+        ...release,
+        assets: [
+            ...release.assets,
+            ...Array.from({ length: 12 }, (_, index) => ({
+                id: 500 + index,
+                size: 4,
+                name: `extra-${index}.deb`,
+                browser_download_url: assetDownloadUrl(tag, `extra-${index}.deb`),
+            })),
+        ],
+    }
+    const crowded = mockDiscord()
+    await send(crowded, { notification: plan(many) })
+    assert.equal(crowded.sent.length, 1)
+    assert.equal(crowded.sent[0].files.length, 10)
+})
+
+test('Discord size rejection retains the image and both download links on retry', async () => {
     for (const error of [new DiscordError(413), new DiscordError(400, 40005)]) {
         const mock = mockDiscord()
         await send(mock, {
             api: async (endpoint, options) => {
-                if (options?.file) throw error
+                if (options?.files?.length > 1) throw error
                 return mock.api(endpoint, options)
             },
         })
-        assert.equal(mock.sent.length, 5)
-        assert.match(mock.sent[1].payload.embeds[0].description, /Discord rejected/)
+        assert.equal(mock.sent.length, 1)
+        assert.equal(mock.sent[0].files.length, 1)
+        assert.equal(mock.sent[0].payload.attachments.length, 1)
+        assert.equal(mock.sent[0].payload.embeds[0].fields.length, 4)
     }
+    await assert.rejects(
+        send(mockDiscord(), { renderImage: async () => Buffer.alloc(6), maxUploadBytes: 5 }),
+        /image exceeds/,
+    )
     const mock = mockDiscord()
     await assert.rejects(
         send(mock, {
@@ -224,37 +363,50 @@ test('Discord size rejection falls back to links, while authentication errors fa
     )
 })
 
-test('reruns paginate history and skip only this bot’s previously delivered parts', async () => {
-    const messages = plan()
-    const filler = Array.from({ length: 100 }, (_, index) => ({
-        id: String(index),
-        author: { id: 'other-bot' },
-        embeds: messages[0].payload.embeds,
-        timestamp: '2026-01-02T00:00:00Z',
-    }))
-    const mock = mockDiscord({ history: [filler, [historical(messages[0].payload)]] })
-    assert.deepEqual(await send(mock), { sent: 4, skipped: 1 })
+test('reruns paginate history and skip the delivered image before rendering or downloading', async () => {
+    const filler = Array.from({ length: 100 }, (_, index) =>
+        historical({
+            id: String(index),
+            author: { id: 'other-bot' },
+            attachments: [{ filename: plan().imageName }],
+        }),
+    )
+    const mock = mockDiscord({
+        history: [filler, [historical({ attachments: [{ filename: plan().imageName }] })]],
+    })
+    assert.deepEqual(
+        await send(mock, {
+            renderImage: () => assert.fail('Must not render'),
+            download: () => assert.fail('Must not download'),
+            beforeSend: () => assert.fail('Must not wait'),
+        }),
+        { sent: 0, skipped: 1 },
+    )
     assert.match(mock.reads[1], /before=99/)
-    const complete = mockDiscord({ history: [messages.map(({ payload }) => historical(payload))] })
-    assert.deepEqual(await send(complete, { download: () => assert.fail('Must not download') }), {
-        sent: 0,
-        skipped: 5,
-    })
+    assert.equal(mock.sent.length, 0)
 })
 
-test('resumes after partial delivery without resending completed messages', async () => {
-    const partial = mockDiscord({ failAt: 2 })
-    await assert.rejects(send(partial), /Simulated interruption/)
-    const resumed = mockDiscord({
-        history: [partial.sent.map(({ payload }) => historical(payload))],
+test('upgrades the old text changelog in place instead of posting another notification', async () => {
+    const mock = mockDiscord({
+        history: [[historical({ embeds: [{ footer: { text: `${plan().marker}:notes-1` } }] })]],
     })
-    assert.deepEqual(await send(resumed), { sent: 3, skipped: 2 })
+    await send(mock)
+    assert.equal(mock.sent.length, 1)
+    assert.equal(mock.sent[0].method, 'PATCH')
+    assert.equal(mock.sent[0].endpoint, `/channels/${channelId}/messages/777`)
+    assert.equal(mock.sent[0].payload.nonce, undefined)
 })
 
-test('requires history permission and a supported channel before posting', async () => {
-    const missing = mockDiscord({ permission: required & ~65536n })
-    await assert.rejects(send(missing), /Read Message History/)
-    assert.equal(missing.sent.length, 0)
+test('reports the exact missing channel permission before sending', async () => {
+    const mock = mockDiscord({ permission: required & ~65536n })
+    await assert.rejects(send(mock), (error) => {
+        assert.match(error.message, /missing channel permissions: Read Message History/)
+        assert.ok(error.message.includes(`Bot ${botId}`))
+        assert.ok(error.message.includes(`channel ${channelId}`))
+        assert.doesNotMatch(error.message, /Send Messages/)
+        return true
+    })
+    assert.equal(mock.sent.length, 0)
     await assert.rejects(send(mockDiscord({ channelType: 15 })), /text or announcement channel/)
     await assert.rejects(
         send(mockDiscord(), { channelId: 'invalid' }),
@@ -262,7 +414,23 @@ test('requires history permission and a supported channel before posting', async
     )
 })
 
-test('applies everyone, aggregate role and member permission overwrites in order', () => {
+test('resolves role names or explicit IDs and rejects ambiguous or unmentionable roles', async () => {
+    await assert.rejects(send(mockDiscord({ roles: [] })), /found 0/)
+    const role = { id: roleId, name: 'update-notify', mentionable: true }
+    await assert.rejects(
+        send(mockDiscord({ roles: [role, { ...role, id: 'other-role' }] })),
+        /found 2/,
+    )
+    await assert.rejects(
+        send(mockDiscord({ roles: [{ ...role, mentionable: false }] })),
+        /must allow mentions/,
+    )
+    const explicit = mockDiscord({ roles: [{ ...role, name: 'renamed-role' }] })
+    await send(explicit, { notifyRoleId: roleId })
+    assert.equal(explicit.sent[0].payload.content, `<@&${roleId}>`)
+})
+
+test('channel role and member overwrites take precedence over invite permissions', () => {
     const channel = {
         guild_id: guildId,
         permission_overwrites: [
@@ -282,7 +450,38 @@ test('applies everyone, aggregate role and member permission overwrites in order
     )
 })
 
-test('uploads valid bytes and rejects truncated, excessive or tampered downloads', async () => {
+test('waits for matching published mirror artifacts and bounds incomplete-publication retries', async () => {
+    const delays = []
+    let calls = 0
+    await waitForUpdateServer(release, {
+        attempts: 3,
+        sleep: async (delay) => delays.push(delay),
+        fetchImpl: async (url) => {
+            assert.equal(url, 'https://update.axlmc.org/api/versions/2.3.4-beta.1')
+            calls++
+            if (calls === 1) return new Response('', { status: 404 })
+            if (calls === 2) return Response.json({ status: 'pending', artifacts: [] })
+            return Response.json({
+                status: 'published',
+                artifacts: release.assets.map((asset) => ({
+                    filename: asset.name,
+                    size: asset.size,
+                })),
+            })
+        },
+    })
+    assert.deepEqual(delays, [10000, 10000])
+    await assert.rejects(
+        waitForUpdateServer(release, {
+            attempts: 2,
+            sleep: async () => {},
+            fetchImpl: async () => Response.json({ status: 'published', artifacts: [] }),
+        }),
+        /not ready/,
+    )
+})
+
+test('verifies downloaded installer size and SHA-256', async () => {
     const bytes = Buffer.from('test')
     const asset = {
         ...release.assets[0],
@@ -299,28 +498,32 @@ test('uploads valid bytes and rejects truncated, excessive or tampered downloads
     await assert.rejects(downloadInstaller(asset, 10, download('evil')), /digest mismatch/)
 })
 
-test('uses multipart payload_json and files[0], without manually setting its boundary', async () => {
+test('multipart upload uses separate indexed fields for the image and installers', async () => {
     const api = discordClient('test-token', {
         fetchImpl: async (url, options) => {
             assert.equal(url, 'https://discord.com/api/v10/channels/123/messages')
             assert.equal(options.headers.Authorization, 'Bot test-token')
             assert.equal(options.headers['Content-Type'], undefined)
             assert.deepEqual(JSON.parse(options.body.get('payload_json')), { content: 'hello' })
-            assert.equal(await options.body.get('files[0]').text(), 'test')
-            assert.equal(options.body.get('files[0]').name, 'Axolotl.exe')
+            assert.equal(options.body.get('files[0]').type, 'image/png')
+            assert.equal(await options.body.get('files[1]').text(), 'test')
+            assert.equal(options.body.get('files[1]').name, 'Axolotl.exe')
             return Response.json({ id: 'sent' })
         },
     })
     await api('/channels/123/messages', {
         method: 'POST',
         payload: { content: 'hello' },
-        file: { name: 'Axolotl.exe', bytes: Buffer.from('test') },
+        files: [
+            { name: 'notes.png', bytes: Buffer.from('image'), contentType: 'image/png' },
+            { name: 'Axolotl.exe', bytes: Buffer.from('test') },
+        ],
     })
 })
 
-test('honors Discord rate limits and retries transient failures with the same nonce', async () => {
-    const delays = []
-    const payloads = []
+test('rate limits and transient failures retry with an unchanged nonce', async () => {
+    const delays = [],
+        payloads = []
     let calls = 0
     const api = discordClient('test-token', {
         sleep: async (delay) => delays.push(delay),
@@ -328,7 +531,7 @@ test('honors Discord rate limits and retries transient failures with the same no
             calls++
             payloads.push(options.body)
             if (calls === 1) return Response.json({ retry_after: 1.25 }, { status: 429 })
-            if (calls === 2) throw new Error('Network error containing sensitive data')
+            if (calls === 2) throw new Error('Network error with sensitive details')
             if (calls === 3) return Response.json({}, { status: 503 })
             return Response.json({ id: 'sent' })
         },
@@ -339,7 +542,7 @@ test('honors Discord rate limits and retries transient failures with the same no
     assert.ok(payloads.every((body) => body === JSON.stringify(payload)))
 })
 
-test('bounds retries, never retries permanent failures and never logs raw API errors', async () => {
+test('does not retry permanent failures or expose raw API errors, and bounds transient retries', async () => {
     let calls = 0
     const api = discordClient('test-token', {
         sleep: async () => {},
@@ -348,9 +551,8 @@ test('bounds retries, never retries permanent failures and never logs raw API er
             return Response.json({ code: 50013, message: 'sensitive data' }, { status: 403 })
         },
     })
-    await assert.rejects(api('/users/@me'), (error) => {
-        assert.equal(error.message, 'Discord API request failed (HTTP 403, code 50013)')
-        return true
+    await assert.rejects(api('/users/@me'), {
+        message: 'Discord API request failed (HTTP 403, code 50013)',
     })
     assert.equal(calls, 1)
     calls = 0
@@ -365,10 +567,9 @@ test('bounds retries, never retries permanent failures and never logs raw API er
     assert.equal(calls, 5)
 })
 
-test('upload configuration respects the total request ceiling', () => {
-    assert.equal(uploadLimit(), 20 * 1024 * 1024)
-    assert.equal(uploadLimit('24'), 24 * 1024 * 1024)
-    for (const value of ['0', '-1', '25', 'NaN', 'Infinity', '']) {
+test('per-file upload configuration reserves multipart request space', () => {
+    assert.equal(uploadLimit(), 20 * MiB)
+    assert.equal(uploadLimit('24'), 24 * MiB)
+    for (const value of ['0', '-1', '25', 'NaN', 'Infinity', ''])
         assert.throws(() => uploadLimit(value), /DISCORD_MAX_UPLOAD_MIB/)
-    }
 })

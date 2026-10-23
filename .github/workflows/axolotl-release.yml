@@ -338,7 +338,7 @@ jobs:
 
   notify-discord:
     name: Notify Discord
-    needs: verify-and-publish
+    needs: [verify-and-publish, notify-update-server]
     if: ${{ !cancelled() && needs.verify-and-publish.result == 'success' && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'discord') }}
     permissions:
       contents: read
