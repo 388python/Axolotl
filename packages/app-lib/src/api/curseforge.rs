@@ -1514,7 +1514,7 @@ pub async fn get_download_url(
 
 use curseforge_download::resolve_download_url as resolve_curseforge_download_url;
 
-fn derived_curseforge_download_url(
+pub(crate) fn derived_curseforge_download_url(
     file_id: u32,
     file_name: &str,
 ) -> crate::Result<String> {
