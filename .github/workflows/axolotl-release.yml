@@ -18,6 +18,7 @@ on:
           - update-server
           - website
           - cnb
+          - discord
   push:
     tags:
       - 'v*'
@@ -74,6 +75,7 @@ jobs:
           node scripts/axolotl/brand-guard.mjs
           node scripts/axolotl/i18n-check.mjs
           node --test scripts/axolotl/create-release-notes.test.mjs
+          node --test scripts/axolotl/publish-discord-release.test.mjs
           cargo fmt --all --check
 
       - name: Prepare draft release
@@ -333,6 +335,18 @@ jobs:
           overwrite: true
           retention-days: 7
           if-no-files-found: error
+
+  notify-discord:
+    name: Notify Discord
+    needs: [verify-and-publish, notify-update-server]
+    if: ${{ !cancelled() && needs.verify-and-publish.result == 'success' && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'discord') }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/discord-release.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+    secrets:
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
 
   notify-update-server:
     needs: verify-and-publish
