@@ -119,13 +119,17 @@ const emit = defineEmits<{
 const modal = ref<InstanceType<typeof NewModal>>()
 const visibleCount = ref(props.count)
 const visibleItemType = ref(props.itemType)
+// Snapshot the raw type as well: a partially failed batch mutates the pending
+// selection while this modal stays open, and the warning must keep describing
+// the same selection as the header and the delete button.
+const visibleContentType = ref(props.contentType)
 const busy = ref(false)
 const error = ref<string | null>(null)
 
 // The warning body names the content type, so it needs the raw type key rather
 // than the pre-rendered label the header and button use.
 const admonitionValues = computed(() => ({
-    contentType: normalizeProjectType(props.contentType ?? ''),
+    contentType: normalizeProjectType(visibleContentType.value ?? ''),
 }))
 
 async function show() {
@@ -133,6 +137,7 @@ async function show() {
     await nextTick()
     visibleCount.value = props.count
     visibleItemType.value = props.itemType
+    visibleContentType.value = props.contentType
     modal.value?.show()
 }
 
