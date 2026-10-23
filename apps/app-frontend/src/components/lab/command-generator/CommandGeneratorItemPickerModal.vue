@@ -12,11 +12,13 @@ import {
 } from '@/lab/recipe-generator/resources'
 import type { JavaVersionId, SlotValue } from '@/lab/recipe-generator/types'
 
+import effectsData from '@/lab/command-generator/data/effects.json'
+import advancementsData from '@/lab/command-generator/data/advancements.json'
 import CommandGeneratorItemPicker, { type CommandItemEntry } from './CommandGeneratorItemPicker.vue'
 
 const props = defineProps<{
     version: string
-    kind?: 'item' | 'block'
+    kind?: 'item' | 'block' | 'effect' | 'advancement'
 }>()
 
 const emit = defineEmits<{
@@ -31,20 +33,12 @@ const cachedLocale = ref('')
 const atlas: TextureAtlas = TEXTURE_ATLAS
 
 const messages = defineMessages({
-    titleItem: {
-        id: 'app.lab.command-generator.item-picker.title',
-        defaultMessage: 'Pick an item',
-    },
-    titleBlock: {
-        id: 'app.lab.command-generator.block-picker.title',
-        defaultMessage: 'Pick a block',
-    },
+    titleItem: { id: 'app.lab.command-generator.item-picker.title', defaultMessage: 'Pick an item' },
+    titleBlock: { id: 'app.lab.command-generator.block-picker.title', defaultMessage: 'Pick a block' },
+    titleEffect: { id: 'app.lab.command-generator.effect-picker.title', defaultMessage: 'Pick a status effect' },
+    titleAdvancement: { id: 'app.lab.command-generator.advancement-picker.title', defaultMessage: 'Pick an advancement' },
 })
 
-/**
- * 无物品形态的特殊方块元数据。
- * 已移除 frost_ice 和 light。
- */
 const EXTRA_BLOCKS_META = [
     { id: 'minecraft:air', nameKey: 'app.lab.command-generator.block.air' },
     { id: 'minecraft:cave_air', nameKey: 'app.lab.command-generator.block.cave_air' },
@@ -124,6 +118,18 @@ function isNonBlockItem(rawId: string): boolean {
     return NON_BLOCKS.has(name)
 }
 
+function isVersionAtLeast(current: string, target: string): boolean {
+    const cur = current.split('.').map(Number)
+    const tgt = target.split('.').map(Number)
+    const len = Math.max(cur.length, tgt.length)
+    for (let i = 0; i < len; i++) {
+        const c = cur[i] || 0
+        const t = tgt[i] || 0
+        if (c !== t) return c > t
+    }
+    return true
+}
+
 async function show() {
     modal.value?.show()
     if (entries.value.length > 0 && cachedLocale.value === locale.value) return
@@ -134,7 +140,77 @@ async function show() {
         const resources = await loadVersionResources(version)
         const ctx = buildSlotContext([], [], resources)
         const currentLocale = locale.value
+        const anyRes = resources as any
 
+        const getI18nOrLang = (key: string, langKey: string, fallback: string) => {
+            const translated = formatMessage({ id: key, defaultMessage: '' })
+            if (translated) return translated
+            return resources.lang?.[langKey] || fallback
+        }
+
+        // 1. 效果
+        if (props.kind === 'effect') {
+            let effectList: any[] = []
+            if (anyRes.effectsByName || anyRes.effects) {
+                const src = anyRes.effectsByName || anyRes.effects
+                effectList = Object.values(src)
+            } else {
+                effectList = effectsData
+                    .filter(e => isVersionAtLeast(props.version, e.since))
+                    .map(e => ({ name: e.id, iconItem: e.icon }))
+            }
+
+            entries.value = effectList.map((effect: any) => {
+                const shortId = effect.name
+                const iconItem = effect.iconItem || 'potion'
+                const fullId = `minecraft:${shortId}`
+
+                let display = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, ctx)
+                if (!display) display = getSlotDisplay({ kind: 'item', id: 'minecraft:potion' }, ctx)
+
+                const displayName = getI18nOrLang(`effect.${shortId}`, `effect.${shortId}`, effect.displayName || shortId)
+                return {
+                    id: fullId,
+                    name: displayName,
+                    display: display || undefined,
+                    value: { kind: 'item', id: fullId }
+                }
+            })
+            cachedLocale.value = currentLocale
+            return
+        }
+
+        // 2. 成就
+        if (props.kind === 'advancement') {
+            let advList: any[] = []
+            if (anyRes.advancements) {
+                advList = Object.values(anyRes.advancements)
+            } else {
+                advList = advancementsData
+                    .filter(a => isVersionAtLeast(props.version, a.since))
+                    .map(a => ({ id: a.id, iconItem: a.icon }))
+            }
+
+            entries.value = advList.map((adv: any) => {
+                const iconItem = adv.iconItem || adv.display?.icon?.item || 'book'
+                const fullId = adv.id.startsWith('minecraft:') ? adv.id : `minecraft:${adv.id}`
+
+                let display = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, ctx)
+                if (!display) display = getSlotDisplay({ kind: 'item', id: 'minecraft:book' }, ctx)
+
+                const displayName = getI18nOrLang(`advancement.${fullId}.title`, `advancement.${fullId}.title`, fullId.split('/').pop() || fullId)
+                return {
+                    id: fullId,
+                    name: displayName,
+                    display: display || undefined,
+                    value: { kind: 'item', id: fullId }
+                }
+            })
+            cachedLocale.value = currentLocale
+            return
+        }
+
+        // 3. 物品/方块
         let sourceItems: any[] = resources.items
         let extraBlocks: any[] = []
 
@@ -154,7 +230,6 @@ async function show() {
             const value: SlotValue = { kind: 'item', id: item.id }
             let display = undefined
 
-            // 只有非特殊硬编码方块，才去请求渲染资源
             if (!item.__extraMeta) {
                 display = getSlotDisplay(value, ctx)
                 if (!display) {
@@ -202,7 +277,12 @@ defineExpose({ show })
 <template>
     <NewModal
         ref="modal"
-        :header="formatMessage(kind === 'block' ? messages.titleBlock : messages.titleItem)"
+        :header="formatMessage(
+            kind === 'block' ? messages.titleBlock :
+            kind === 'effect' ? messages.titleEffect :
+            kind === 'advancement' ? messages.titleAdvancement :
+            messages.titleItem
+        )"
         width="min(640px, calc(100vw - 2rem))"
         max-width="640px"
         scrollable
@@ -213,6 +293,7 @@ defineExpose({ show })
                 :entries="entries"
                 :atlas="atlas"
                 :loading="loading"
+                :kind="kind"
                 @pick="onPick"
             />
         </div>

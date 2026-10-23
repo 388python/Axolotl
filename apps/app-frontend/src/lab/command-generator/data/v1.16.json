@@ -71,7 +71,7 @@
         {
           "name": "advancement",
           "displayNameKey": "app.lab.command-generator.arg.advancement.advancement.display",
-          "type": "string",
+          "type": "advancement",
           "required": true,
           "descriptionKey": "app.lab.command-generator.arg.advancement.advancement.desc",
           "placeholder": "minecraft:story/root",

@@ -20,6 +20,7 @@ const props = defineProps<{
     entries: CommandItemEntry[]
     atlas: TextureAtlas
     loading: boolean
+    kind?: 'item' | 'block' | 'effect' | 'advancement'
 }>()
 
 const emit = defineEmits<{
@@ -31,19 +32,31 @@ const { formatMessage } = useVIntl()
 const messages = defineMessages({
     searchPlaceholder: {
         id: 'app.lab.command-generator.item-picker.search-placeholder',
-        defaultMessage: 'Search items by name or ID',
+        defaultMessage: 'Search by name or ID',
     },
     loading: {
         id: 'app.lab.command-generator.item-picker.loading',
-        defaultMessage: 'Loading items',
+        defaultMessage: 'Loading…',
     },
     empty: {
         id: 'app.lab.command-generator.item-picker.empty',
-        defaultMessage: 'No items match your search.',
+        defaultMessage: 'No matches found.',
     },
     pickItem: {
-        id: 'app.lab.command-generator.item-picker.pick',
+        id: 'app.lab.command-generator.item-picker.pick-item',
         defaultMessage: 'Pick item',
+    },
+    pickBlock: {
+        id: 'app.lab.command-generator.item-picker.pick-block',
+        defaultMessage: 'Pick block',
+    },
+    pickEffect: {
+        id: 'app.lab.command-generator.item-picker.pick-effect',
+        defaultMessage: 'Pick effect',
+    },
+    pickAdvancement: {
+        id: 'app.lab.command-generator.item-picker.pick-advancement',
+        defaultMessage: 'Pick advancement',
     },
 })
 
@@ -81,6 +94,15 @@ const visibleEntries = computed(() => {
     return fuse.value.search(query).map((result) => result.item)
 })
 
+const actionText = computed(() => {
+    switch (props.kind) {
+        case 'block': return formatMessage(messages.pickBlock)
+        case 'effect': return formatMessage(messages.pickEffect)
+        case 'advancement': return formatMessage(messages.pickAdvancement)
+        default: return formatMessage(messages.pickItem)
+    }
+})
+
 function pick(value: SlotValue) {
     emit('pick', value)
 }
@@ -113,10 +135,10 @@ function pick(value: SlotValue) {
             <button
                 v-for="entry in visibleEntries"
                 :key="entry.id"
-                v-tooltip="`${formatMessage(messages.pickItem)}: ${entry.name} (${entry.id})`"
+                v-tooltip="`${actionText}: ${entry.name} (${entry.id})`"
                 type="button"
                 class="flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-lg border border-solid border-surface-4 bg-surface-3 p-2 text-[var(--color-text-primary)] hover:border-brand focus-visible:outline-brand"
-                :aria-label="`${formatMessage(messages.pickItem)}: ${entry.name}`"
+                :aria-label="`${actionText}: ${entry.name}`"
                 @click="pick(entry.value)"
             >
                 <RecipeItemIcon
@@ -126,7 +148,6 @@ function pick(value: SlotValue) {
                     :size="34"
                     :show-count="false"
                 />
-                <!-- 这里的 v-else 现在可以正常生效了，因为特殊方块的 display 被强制置空了 -->
                 <div
                     v-else
                     class="flex items-center justify-center rounded-lg bg-surface-4"

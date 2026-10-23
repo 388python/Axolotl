@@ -16,6 +16,8 @@ import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
 import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
 import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 
+import effectsData from '@/lab/command-generator/data/effects.json'
+import advancementsData from '@/lab/command-generator/data/advancements.json'
 import CommandGeneratorItemPickerModal from './CommandGeneratorItemPickerModal.vue'
 import CommandGeneratorNbtEditor from './CommandGeneratorNbtEditor.vue'
 
@@ -140,8 +142,9 @@ const isNumber = computed(() => props.arg.type === 'number' || props.arg.type ==
 const isNbt = computed(() => props.arg.supportsNbtEditor === true)
 const isItem = computed(() => props.arg.type === 'item')
 const isBlock = computed(() => props.arg.type === 'block')
+const isEffect = computed(() => props.arg.type === 'effect')
+const isAdvancement = computed(() => props.arg.type === 'advancement')
 
-// 是否为坐标，或者既可以是坐标又可以是实体的混合类型
 const isCoordinates = computed(
     () => props.arg.type === 'coordinates' || (props.arg as any).coordinatesOptionalTarget,
 )
@@ -208,6 +211,8 @@ const showPresets = computed(
         !isNbt.value &&
         !isItem.value &&
         !isBlock.value &&
+        !isEffect.value &&
+        !isAdvancement.value &&
         !isCoordinates.value &&
         mergedPresets.value.length > 0,
 )
@@ -252,13 +257,11 @@ function onItemPicked(id: string) {
     emit('update:modelValue', id)
 }
 
-// ===== 物品/方块图标实时渲染 =====
-
+// ===== 物品/方块/效果/成就 图标实时渲染 =====
 const inputDisplay = ref<SlotDisplay | undefined>(undefined)
 let itemCtx: any = null
 let resourcesLoaded = false
 
-// 这些方块在原版中没有标准模型，资源库渲染出来是紫黑网格，需要强制走 BoxIcon
 const FORCE_MISSING_ICONS = new Set([
     'minecraft:air', 'minecraft:cave_air', 'minecraft:void_air',
     'minecraft:water', 'minecraft:lava', 'minecraft:fire',
@@ -270,7 +273,7 @@ const FORCE_MISSING_ICONS = new Set([
 watch(
     () => [props.modelValue, props.arg.type],
     async ([val, type]) => {
-        if (type !== 'item' && type !== 'block') return
+        if (!['item', 'block', 'effect', 'advancement'].includes(type as string)) return
 
         const id = String(val ?? '').trim()
         if (!id) {
@@ -278,13 +281,46 @@ watch(
             return
         }
 
-        // 如果是特殊方块或模组自定义物品，强制显示 BoxIcon（置空 display）
+        // 1. 效果预览（使用代表物品代替）
+        if (type === 'effect') {
+            const shortId = id.split(':').pop()
+            const effectData = effectsData.find(e => e.id === shortId)
+
+            if (!resourcesLoaded) {
+                const version = (props.version || getCurrentVersion()) as JavaVersionId
+                const resources = await loadVersionResources(version)
+                itemCtx = buildSlotContext([], [], resources)
+                resourcesLoaded = true
+            }
+
+            const iconItem = effectData?.icon || 'potion'
+            inputDisplay.value = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, itemCtx)
+            return
+        }
+
+        // 2. 成就预览
+        if (type === 'advancement') {
+            const cleanId = id.replace('minecraft:', '')
+            const adv = advancementsData.find(a => a.id === cleanId)
+
+            if (!resourcesLoaded) {
+                const version = (props.version || getCurrentVersion()) as JavaVersionId
+                const resources = await loadVersionResources(version)
+                itemCtx = buildSlotContext([], [], resources)
+                resourcesLoaded = true
+            }
+
+            const iconItem = adv?.icon || 'book'
+            inputDisplay.value = getSlotDisplay({ kind: 'item', id: `minecraft:${iconItem}` }, itemCtx)
+            return
+        }
+
+        // 3. 物品/方块预览
         if (FORCE_MISSING_ICONS.has(id) || !id.includes('minecraft:')) {
             inputDisplay.value = undefined
             return
         }
 
-        // 按需加载资源上下文（内部有缓存，不会重复请求）
         if (!resourcesLoaded) {
             try {
                 const version = (props.version || getCurrentVersion()) as JavaVersionId
@@ -307,7 +343,6 @@ watch(
 )
 
 // ===== 坐标编辑器 =====
-
 type CoordinateMode = 'relative' | 'local' | 'absolute'
 
 interface CoordinatePart {
@@ -486,8 +521,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             :aria-label="t(arg.displayNameKey)"
             @update:model-value="onCheckboxChange"
         />
-        <div v-else-if="isItem || isBlock" class="flex min-w-0 flex-wrap gap-2">
-            <!-- 利用 relative 定位把图标内嵌到 StyledInput 左侧 -->
+        <div v-else-if="isItem || isBlock || isEffect || isAdvancement" class="flex min-w-0 flex-wrap gap-2">
             <div class="relative min-w-0 flex-1">
                 <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                     <RecipeItemIcon
@@ -511,9 +545,10 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             <Button type="outlined" @click="openItemPicker">
                 {{
                     t(
-                        isBlock
-                            ? 'app.lab.command-generator.block-picker.button'
-                            : 'app.lab.command-generator.item-picker.button',
+                        isBlock ? 'app.lab.command-generator.block-picker.button' :
+                        isEffect ? 'app.lab.command-generator.effect-picker.button' :
+                        isAdvancement ? 'app.lab.command-generator.advancement-picker.button' :
+                        'app.lab.command-generator.item-picker.button',
                     )
                 }}
             </Button>
@@ -589,10 +624,10 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             >
         </div>
         <CommandGeneratorItemPickerModal
-            v-if="isItem || isBlock"
+            v-if="isItem || isBlock || isEffect || isAdvancement"
             ref="itemPickerRef"
             :version="getCurrentVersion()"
-            :kind="isBlock ? 'block' : 'item'"
+            :kind="isBlock ? 'block' : isEffect ? 'effect' : isAdvancement ? 'advancement' : 'item'"
             @select="onItemPicked"
         />
     </div>
