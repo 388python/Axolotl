@@ -7841,6 +7841,9 @@
   "app.lab.command-generator.item-picker.pick-advancement": {
     "message": "Pick advancement"
   },
+  "app.lab.command-generator.view-on-wiki": {
+    "message": "View on English Wiki"
+  },
   "app.lab.command-generator.item-picker.search-placeholder": {
     "message": "Search items by name or ID"
   },

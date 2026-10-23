@@ -6812,6 +6812,9 @@
   "app.lab.command-generator.item-picker.pick-advancement": {
     "message": "选择成就"
   },
+  "app.lab.command-generator.view-on-wiki": {
+    "message": "转到中文 Wiki"
+  },
   "app.lab.command-generator.item-picker.search-placeholder": {
     "message": "按名称或 ID 搜索物品"
   },

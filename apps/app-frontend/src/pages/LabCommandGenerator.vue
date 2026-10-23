@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+    BookIcon,
     BookmarkIcon,
     CheckIcon,
     ClipboardCopyIcon,
@@ -19,6 +20,9 @@ import {
     getAllCommands,
     getCurrentVersion,
     initializeRegistry,
+    PERMISSION_DESC_KEYS,
+    PERMISSION_DESCRIPTIONS,
+    PERMISSION_LABELS,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
 import type { CommandArgument, CommandCategory } from '@/lab/command-generator/commands/types.ts'
@@ -38,46 +42,23 @@ import {
     type UserPreset,
 } from '@/lab/command-generator/presets.ts'
 
-const { formatMessage } = useVIntl()
+const { formatMessage, locale } = useVIntl()
 
 function t(key: string, fallback?: string): string {
     return formatMessage({ id: key, defaultMessage: fallback ?? key })
 }
 
-// ===== 权限等级常量（内联，避免依赖 registry.ts 的新增导出） =====
-const PERMISSION_LABELS: Record<number, string> = {
-    0: 'All',
-    1: 'Moderator',
-    2: 'Gamemaster',
-    3: 'Admin',
-    4: 'Owner',
-}
-const PERMISSION_DESCRIPTIONS: Record<number, string> = {
-    0: 'No special permission required.',
-    1: 'Can bypass spawn protection.',
-    2: 'Most gameplay commands, command blocks and functions.',
-    3: 'Multiplayer management commands.',
-    4: 'Server management commands.',
-}
-
-function permissionLabel(level: number): string {
-    return PERMISSION_LABELS[level] ?? String(level)
-}
-function permissionDescription(level: number): string {
-    return t(`app.lab.command-generator.perm.${level}.desc`, PERMISSION_DESCRIPTIONS[level])
-}
-
 type CommandComboboxOption = ComboboxOption<string> & {
     description: string
     category: string
-    /** 该条目是否为别名条目 */
-    isAlias: boolean
-    /** 别名对应的主命令名，仅 isAlias 时有意义 */
-    aliasOf: string
 }
 
 function asCommandOption(item: ComboboxOption<string>): CommandComboboxOption {
     return item as CommandComboboxOption
+}
+
+function aliasesOf(commandId: unknown): string[] {
+    return findCommand(String(commandId))?.aliases ?? []
 }
 
 const versionOptions = ref<ComboboxOption<string>[]>([])
@@ -135,7 +116,10 @@ const categoryOptions = computed<ComboboxOption<string>[]>(() => [
 const permissionOptions = computed<ComboboxOption<string>[]>(() =>
     ([0, 1, 2, 3, 4] as const).map((level) => ({
         value: String(level),
-        label: `${level} · ${permissionLabel(level)} — ${permissionDescription(level)}`,
+        label: `${level} · ${PERMISSION_LABELS[level]} — ${t(
+            PERMISSION_DESC_KEYS[level],
+            PERMISSION_DESCRIPTIONS[level],
+        )}`,
     })),
 )
 
@@ -159,42 +143,19 @@ const filteredCommands = computed(() => {
     return list
 })
 
-/**
- * 命令下拉框选项。
- * 每个命令生成一条主条目；每个别名再生成一条独立条目。
- * 别名条目的 value 用 `alias:<commandId>:<alias>` 编码，
- * onCommandChange 时会解析回主命令 id。
- */
-const commandOptions = computed<CommandComboboxOption[]>(() => {
-    const list: CommandComboboxOption[] = []
-    for (const cmd of filteredCommands.value) {
-        const categoryLabel = t(CATEGORY_KEYS[cmd.category])
-        const description = t(cmd.descriptionKey)
-
-        list.push({
-            value: cmd.id,
-            label: cmd.name,
-            description,
-            category: categoryLabel,
-            isAlias: false,
-            aliasOf: '',
-            searchTerms: [description, categoryLabel],
-        })
-
-        for (const alias of cmd.aliases ?? []) {
-            list.push({
-                value: `alias:${cmd.id}:${alias}`,
-                label: alias,
-                description,
-                category: categoryLabel,
-                isAlias: true,
-                aliasOf: cmd.name,
-                searchTerms: [cmd.name, description, categoryLabel],
-            })
-        }
-    }
-    return list
-})
+const commandOptions = computed<CommandComboboxOption[]>(() =>
+    filteredCommands.value.map((cmd) => ({
+        value: cmd.id,
+        label: cmd.name,
+        description: t(cmd.descriptionKey),
+        category: t(CATEGORY_KEYS[cmd.category]),
+        searchTerms: [
+            t(cmd.descriptionKey),
+            t(CATEGORY_KEYS[cmd.category]),
+            ...(cmd.aliases ?? []),
+        ],
+    })),
+)
 
 const currentCommand = computed(() =>
     selectedCommandId.value ? (findCommand(selectedCommandId.value) ?? null) : null,
@@ -205,6 +166,13 @@ const currentGuide = computed(() =>
         ? (findGuide(selectedCommandId.value, selectedVersion.value) ?? null)
         : null,
 )
+
+const wikiUrl = computed(() => {
+    if (!currentCommand.value) return '#'
+    const isZh = locale.value.startsWith('zh')
+    const base = isZh ? 'https://zh.minecraft.wiki/w/命令/' : 'https://minecraft.wiki/w/Commands/'
+    return `${base}${currentCommand.value.id}`
+})
 
 const uiArguments = computed<CommandArgument[]>(() => {
     const args = currentCommand.value ? getActiveArguments(currentCommand.value, values.value) : []
@@ -221,7 +189,7 @@ const uiArguments = computed<CommandArgument[]>(() => {
 const permissionName = computed(() => {
     if (!currentCommand.value) return ''
     const level = currentCommand.value.permissionLevel
-    return `${permissionLabel(level)} (${level})`
+    return `${PERMISSION_LABELS[level] ?? level} (${level})`
 })
 
 const permissionTooltip = computed(() => {
@@ -232,7 +200,10 @@ const permissionTooltip = computed(() => {
             'In multiplayer, /seed requires permission level 2.',
         )
     }
-    return permissionDescription(currentCommand.value.permissionLevel)
+    return t(
+        PERMISSION_DESC_KEYS[currentCommand.value.permissionLevel],
+        PERMISSION_DESCRIPTIONS[currentCommand.value.permissionLevel],
+    )
 })
 
 const isChainCommand = computed(() => currentCommand.value?.isChainCommand === true)
@@ -283,18 +254,8 @@ watch(
     { deep: true },
 )
 
-/** 解析别名 value，回落到主命令 id */
-function resolveCommandId(raw: unknown): string {
-    const value = String(raw ?? '')
-    if (value.startsWith('alias:')) {
-        const parts = value.split(':')
-        return parts[1] ?? ''
-    }
-    return value
-}
-
 function onCommandChange(id: unknown) {
-    selectedCommandId.value = resolveCommandId(id)
+    selectedCommandId.value = String(id)
     copied.value = false
     executeChainOutput.value = ''
     if (!selectedCommandId.value) {
@@ -351,6 +312,18 @@ async function copy() {
         }, 1600)
     } catch {
         showToast(formatMessage(messages.copyFailed))
+    }
+}
+
+function openWiki() {
+    if (currentCommand.value) {
+        const a = document.createElement('a')
+        a.href = wikiUrl.value
+        a.target = '_blank'
+        a.rel = 'noopener noreferrer'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
     }
 }
 
@@ -581,21 +554,20 @@ async function jumpToPreset(preset: UserPreset) {
                                 <div class="flex min-w-0 flex-col gap-1">
                                     <span class="flex flex-wrap items-baseline gap-1.5">
                                         <span class="font-mono font-semibold"
-                                            >/{{ item.label }}</span
+                                            >/{{ item.value }}</span
                                         >
                                         <span
-                                            v-if="asCommandOption(item).isAlias"
-                                            class="inline-flex items-center rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
+                                            v-for="alias in aliasesOf(item.value)"
+                                            :key="alias"
+                                            class="inline-flex items-center gap-1 rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
                                         >
-                                            {{
-                                                formatMessage(
-                                                    {
-                                                        id: 'app.lab.command-generator.alias-of',
-                                                        defaultMessage: "{command}'s alias",
-                                                    },
-                                                    { command: asCommandOption(item).aliasOf },
+                                            <span class="font-mono">/{{ alias }}</span>
+                                            <span>{{
+                                                t(
+                                                    'app.lab.command-generator.alias-hint',
+                                                    'Alias',
                                                 )
-                                            }}
+                                            }}</span>
                                         </span>
                                     </span>
                                     <span class="text-xs text-[var(--color-text-tertiary)]">{{
@@ -747,20 +719,31 @@ async function jumpToPreset(preset: UserPreset) {
                             }}</Button
                         >
                     </div>
+
+                    <!-- 预设和 Wiki 链接按钮区域 -->
                     <div
                         v-if="currentCommand"
-                        class="mt-4 border-0 border-t border-solid border-surface-4 pt-3"
+                        class="mt-4 flex flex-wrap items-center gap-2 border-0 border-t border-solid border-surface-4 pt-3"
                     >
                         <Button
                             type="quiet"
                             size="sm"
                             :aria-expanded="showPresetInput"
                             @click="showPresetInput = !showPresetInput"
-                            ><BookmarkIcon />{{ formatMessage(messages.savePreset) }}</Button
                         >
+                            <BookmarkIcon />{{ formatMessage(messages.savePreset) }}
+                        </Button>
+                        <Button
+                            type="quiet"
+                            size="sm"
+                            @click="openWiki"
+                        >
+                            <BookIcon class="h-4 w-4" />
+                            {{ t('app.lab.command-generator.view-on-wiki', 'View on Wiki') }}
+                        </Button>
                         <form
                             v-if="showPresetInput"
-                            class="mt-3 flex min-w-0 flex-wrap items-center gap-2"
+                            class="mt-3 flex w-full min-w-0 flex-wrap items-center gap-2"
                             @submit.prevent="saveCurrentAsPreset"
                         >
                             <StyledInput
@@ -774,6 +757,7 @@ async function jumpToPreset(preset: UserPreset) {
                             }}</Button>
                         </form>
                     </div>
+
                     <p
                         v-if="toast"
                         role="status"
