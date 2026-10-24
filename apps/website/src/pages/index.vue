@@ -84,9 +84,10 @@ const {
     },
 })
 
-// 降级源：本站服务器代理 GitLink（浏览器直连会被 CORS 拦截）。
-// 只在 auto 模式指向 update-server、且主源没有可用制品时才请求，避免每次访问多打一次函数。
+// GitLink 数据来自本站服务器代理（浏览器直连会被 CORS 拦截）。
+// 两种情形需要它：用户明确选择了 GitLink，或 auto/update-server 下主源没有可用制品。
 const useGitlinkFallback = computed(() => {
+    if (resolvedSource.value === 'gitlink') return true
     if (resolvedSource.value !== 'update-server') return false
     if (primaryReleaseStatus.value === 'pending') return false
     return !hasLauncherDownloads(
@@ -115,6 +116,11 @@ watch(
 )
 
 const launcherReleaseStatus = computed<DownloadStatus>(() => {
+    // 手动选择 GitLink 时主源不参与判定，否则 update-server 的失败会掩盖可用的镜像。
+    if (resolvedSource.value === 'gitlink') {
+        if (gitlinkReleaseStatus.value === 'pending') return 'pending'
+        return gitlinkReleaseStatus.value === 'success' ? 'success' : 'error'
+    }
     if (primaryReleaseStatus.value === 'pending') return 'pending'
     if (primaryReleaseStatus.value === 'success') return 'success'
     // 主源请求失败时，降级源的最终失败才决定页面进入失败态，
@@ -124,8 +130,19 @@ const launcherReleaseStatus = computed<DownloadStatus>(() => {
 })
 
 // 主源失败或没有可用制品时改用 GitLink；两者都不可用时保留主源形状（可能为空）。
-const releaseSelection = computed(() =>
-    selectLauncherRelease(
+const releaseSelection = computed(() => {
+    // 用户手动选择 GitLink 时不看主源：镜像不可用就是不可用，而不是悄悄回落到 update-server。
+    if (resolvedSource.value === 'gitlink') {
+        return selectLauncherRelease(
+            {
+                error: gitlinkReleaseStatus.value === 'error' ? true : undefined,
+                release: gitlinkReleaseStatus.value === 'success' ? gitlinkReleaseRaw.value : null,
+            },
+            null,
+            hasLauncherDownloads,
+        )
+    }
+    return selectLauncherRelease(
         {
             error: primaryReleaseStatus.value === 'error' ? true : undefined,
             release: primaryReleaseStatus.value === 'success' ? launcherReleaseRaw.value : null,
@@ -135,13 +152,13 @@ const releaseSelection = computed(() =>
             release: gitlinkReleaseStatus.value === 'success' ? gitlinkReleaseRaw.value : null,
         },
         hasLauncherDownloads,
-    ),
-)
+    )
+})
 const launcherRelease = computed<LauncherRelease | null>(() => releaseSelection.value.release)
 
-// 选中降级源时用 GitLink 自带的下载地址；用户手动选 GitHub 或主源可用时保持原有拼接规则。
+// GitLink 的制品地址只能取自它自带的附件链接；其他来源仍按各自的规则拼接。
 const downloadSource = computed<LauncherDownloadSource>(() =>
-    releaseSelection.value.source === 'gitlink' && resolvedSource.value === 'update-server'
+    resolvedSource.value === 'gitlink' || releaseSelection.value.source === 'gitlink'
         ? fallbackSource
         : resolvedSource.value,
 )
