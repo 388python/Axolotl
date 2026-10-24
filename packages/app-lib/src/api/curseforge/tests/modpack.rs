@@ -6,11 +6,12 @@ use super::fixtures::{
 };
 use crate::api::curseforge::catalog::unique_metadata_chunks;
 use crate::api::curseforge::dto::{
-    CurseForgeFileHash, CurseForgeManifestFile, CurseForgePackExpectedOverride,
-    CurseForgeProject,
+    CurseForgeFileHash, CurseForgeManifestFile, CurseForgeProject,
 };
 use crate::api::curseforge::mapping::project_type_for_class;
-use crate::api::curseforge::modpack::retry_modpack_file_install;
+use crate::api::curseforge::modpack::{
+    CurseForgePackExpectedOverride, retry_modpack_file_install,
+};
 use crate::api::curseforge::selection::{
     curseforge_modpack_h2_range_concurrency, install_modpack_world_file,
     managed_project_type, modpack_target_folder,

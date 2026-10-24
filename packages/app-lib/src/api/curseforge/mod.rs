@@ -40,26 +40,24 @@ pub(crate) use self::constants::{
     FABRIC_API_CURSEFORGE_PROJECT_ID, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
 };
 pub(crate) use self::content_change::prepare_curseforge_content_change_action;
-pub(crate) use self::dto::StagedCurseForgeUpgrade;
-pub(crate) use self::dto::{
-    CurseForgeManifestFile, CurseForgePackExpectedContent,
-    CurseForgePackExpectedMember, CurseForgePackExpectedOverride,
-    get_modpack_expected_members,
-};
-pub(crate) use self::dto::{
-    apply_staged_curseforge_upgrade_file,
-    apply_staged_curseforge_upgrade_file_with_state,
-    stage_curseforge_upgrade_file,
-};
+pub(crate) use self::dto::CurseForgeManifestFile;
 pub(crate) use self::manual::{
     import_pending_manual_download_from_path,
     reconcile_persisted_curseforge_waiting_jobs,
     scan_pending_manual_downloads_in,
 };
-pub(crate) use self::modpack::install_local_manifest_files;
+pub(crate) use self::modpack::{
+    CurseForgePackExpectedContent, CurseForgePackExpectedMember,
+    CurseForgePackExpectedOverride, get_modpack_expected_members,
+    install_local_manifest_files,
+};
 pub(crate) use self::transport::api_key;
 pub(crate) use self::update::loader_family;
-pub(crate) use self::update::update_managed_modpack_with_reporter;
+pub(crate) use self::update::{
+    StagedCurseForgeUpgrade, apply_staged_curseforge_upgrade_file,
+    apply_staged_curseforge_upgrade_file_with_state,
+    stage_curseforge_upgrade_file, update_managed_modpack_with_reporter,
+};
 pub(crate) use self::verify::{
     CurseForgeFingerprintHasher, compute_fingerprint,
 };
