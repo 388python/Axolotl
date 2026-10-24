@@ -1,7 +1,7 @@
 <script setup lang="ts">
 withDefaults(
     defineProps<{
-        variant?: 'content' | 'sidebar' | 'versions'
+        variant?: 'content' | 'sidebar' | 'versions' | 'description'
         title?: string
     }>(),
     {
@@ -42,6 +42,15 @@ withDefaults(
                 <div class="ml-auto h-4 w-16 animate-pulse rounded bg-surface-2" />
             </div>
         </div>
+    </div>
+
+    <div v-else-if="variant === 'description'" class="flex flex-col gap-3" aria-hidden="true">
+        <div
+            v-for="line in 8"
+            :key="line"
+            class="h-4 animate-pulse rounded bg-surface-2"
+            :class="line % 3 === 0 ? 'w-3/4' : 'w-full'"
+        />
     </div>
 
     <div v-else class="flex flex-col gap-4 p-6" :aria-hidden="title ? undefined : true">
