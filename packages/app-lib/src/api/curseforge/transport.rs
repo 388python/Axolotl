@@ -28,7 +28,7 @@ pub(crate) fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource) 
     resolve_api_key(curseforge_api_key_override_if_ready(), launcher_key)
 }
 
-fn resolve_api_key(
+pub(super) fn resolve_api_key(
     override_key: Option<String>,
     launcher_key: Option<String>,
 ) -> (Option<String>, CurseForgeApiKeySource) {
@@ -77,12 +77,12 @@ pub(crate) enum MirrorPolicy {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum RequestRouteSource {
+pub(super) enum RequestRouteSource {
     Official,
     Mirror,
 }
 
-struct RequestRoute {
+pub(super) struct RequestRoute {
     url: String,
     use_api_key: bool,
     use_system_proxy: bool,
@@ -90,7 +90,7 @@ struct RequestRoute {
 }
 
 #[cfg(test)]
-fn request_routes(
+pub(super) fn request_routes(
     path: &str,
     mirror_policy: MirrorPolicy,
 ) -> Vec<RequestRoute> {
@@ -287,7 +287,7 @@ pub(crate) async fn request_json<T: DeserializeOwned>(
     }))
 }
 
-fn should_try_next_route(
+pub(super) fn should_try_next_route(
     route: &RequestRoute,
     status: StatusCode,
     has_next_route: bool,

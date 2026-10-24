@@ -1060,7 +1060,7 @@ async fn install_preloaded_modpack_file(
     })
 }
 
-async fn retry_modpack_file_install(
+pub(super) async fn retry_modpack_file_install(
     instance_id: &str,
     manifest_file: &CurseForgeManifestFile,
     project_type: &str,

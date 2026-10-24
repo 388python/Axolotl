@@ -109,7 +109,7 @@ fn log_dependency_file_selection(
     );
 }
 
-fn dependency_target_game_version(game_version: Option<&str>) -> Option<&str> {
+pub(super) fn dependency_target_game_version(game_version: Option<&str>) -> Option<&str> {
     game_version.filter(|version| !version.trim().is_empty())
 }
 
@@ -480,7 +480,7 @@ impl From<CurseForgeDependencySelectionReason> for DependencySelectionReason {
     }
 }
 
-fn select_best_dependency_file(
+pub(super) fn select_best_dependency_file(
     files: Vec<CurseForgeFile>,
     game_version: Option<&str>,
     mod_loader_type: Option<u32>,
@@ -513,7 +513,7 @@ fn dependency_release_rank(file: &CurseForgeFile) -> u8 {
 }
 
 /// Checks unfiltered fallback candidates against the instance target.
-fn file_matches_dependency_target(
+pub(super) fn file_matches_dependency_target(
     file: &CurseForgeFile,
     game_version: Option<&str>,
     mod_loader_type: Option<u32>,
@@ -1018,7 +1018,7 @@ pub(crate) fn curseforge_file_page_url(
     Some(url.into())
 }
 
-fn validate_cdn_url(url: &reqwest::Url) -> crate::Result<()> {
+pub(super) fn validate_cdn_url(url: &reqwest::Url) -> crate::Result<()> {
     #[cfg(debug_assertions)]
     if url.scheme() == "http"
         && matches!(

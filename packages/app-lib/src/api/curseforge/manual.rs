@@ -153,7 +153,7 @@ pub async fn recognize_instance_files(
     Ok(result)
 }
 
-async fn verify_recognized_curseforge_file(
+pub(super) async fn verify_recognized_curseforge_file(
     path: &Path,
     expected_fingerprint: u64,
 ) -> crate::Result<Option<(u64, String)>> {
@@ -369,7 +369,7 @@ fn pending_manual_download(
 }
 
 #[derive(Clone, Debug)]
-struct CurseForgeManualDownloadIntegrityMetadata {
+pub(super) struct CurseForgeManualDownloadIntegrityMetadata {
     project_id: u32,
     file_id: u32,
     hashes: Vec<CurseForgeFileHash>,
@@ -416,7 +416,7 @@ async fn resolve_manual_download_integrity_metadata(
     Ok(get_file(project_id, file_id).await?.into())
 }
 
-async fn ensure_manual_download_integrity_metadata_with<F, Fut>(
+pub(super) async fn ensure_manual_download_integrity_metadata_with<F, Fut>(
     download: &CurseForgeManualDownload,
     resolve_metadata: F,
 ) -> crate::Result<CurseForgeManualDownload>
@@ -456,7 +456,7 @@ where
     Ok(hydrated)
 }
 
-async fn find_manual_download_candidate(
+pub(super) async fn find_manual_download_candidate(
     download_directory: &Path,
     download: &CurseForgeManualDownload,
 ) -> crate::Result<Option<(std::path::PathBuf, u64, String)>> {
@@ -533,7 +533,7 @@ async fn verify_manual_download_candidate(
     .await
 }
 
-async fn verify_manual_download_candidate_with_integrity(
+pub(super) async fn verify_manual_download_candidate_with_integrity(
     path: &Path,
     download: &CurseForgeManualDownload,
     require_matching_name: bool,
@@ -702,7 +702,7 @@ pub async fn import_pending_manual_download_file(
     .await
 }
 
-async fn import_pending_manual_download_file_with_integrity_resolver<F, Fut>(
+pub(super) async fn import_pending_manual_download_file_with_integrity_resolver<F, Fut>(
     instance_id: &str,
     project_id: u32,
     file_id: u32,
@@ -812,7 +812,7 @@ pub(crate) async fn reconcile_persisted_curseforge_waiting_jobs(
     .await
 }
 
-async fn reconcile_persisted_curseforge_waiting_jobs_with_resume<F, Fut>(
+pub(super) async fn reconcile_persisted_curseforge_waiting_jobs_with_resume<F, Fut>(
     state: &State,
     resume_job: &mut F,
 ) -> crate::Result<()>
@@ -832,7 +832,7 @@ where
     Ok(())
 }
 
-fn curseforge_waiting_job_instance_ids(
+pub(super) fn curseforge_waiting_job_instance_ids(
     jobs: &[crate::install::store::InstallJobRecord],
 ) -> Vec<String> {
     let mut instance_ids = jobs
@@ -846,7 +846,7 @@ fn curseforge_waiting_job_instance_ids(
     instance_ids
 }
 
-async fn reconcile_curseforge_waiting_jobs_for_instance_with_state(
+pub(super) async fn reconcile_curseforge_waiting_jobs_for_instance_with_state(
     instance_id: &str,
     state: &State,
 ) -> crate::Result<()> {
@@ -1046,7 +1046,7 @@ struct CurseForgeManualDownloadInconsistency {
 }
 
 #[derive(Debug, Default)]
-struct CurseForgeManualDownloadReconciliation {
+pub(super) struct CurseForgeManualDownloadReconciliation {
     recovered: Vec<InstallJobEventKind>,
     inconsistent: Vec<CurseForgeManualDownloadInconsistency>,
     manual_skipped_count: usize,
@@ -1060,7 +1060,7 @@ impl CurseForgeManualDownloadReconciliation {
     }
 }
 
-fn curseforge_manual_download_reconciliation(
+pub(super) fn curseforge_manual_download_reconciliation(
     items: &[crate::install::model::DownloadItemSnapshot],
     pending: &HashSet<(String, String)>,
     materialized: &HashSet<(String, String)>,

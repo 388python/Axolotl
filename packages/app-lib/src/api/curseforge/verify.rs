@@ -256,7 +256,7 @@ async fn finalize_curseforge_materializations(
     }
 }
 
-async fn verify_and_record_curseforge_modpack_file(
+pub(super) async fn verify_and_record_curseforge_modpack_file(
     task: CurseForgeVerificationTask,
     database_tx: mpsc::Sender<CurseForgeDatabaseTask>,
 ) -> crate::Result<()> {
@@ -417,7 +417,7 @@ pub(crate) fn spawn_curseforge_verification_worker(
     })
 }
 
-async fn persist_curseforge_database_batch(
+pub(super) async fn persist_curseforge_database_batch(
     batch: &[CurseForgeDatabaseTask],
     context: &CurseForgeVerificationContext,
 ) -> crate::Result<()> {
@@ -570,7 +570,7 @@ pub(crate) fn spawn_curseforge_database_worker(
     })
 }
 
-async fn receive_curseforge_database_batch<T>(
+pub(super) async fn receive_curseforge_database_batch<T>(
     receiver: &mut mpsc::Receiver<T>,
     cancellation: &CancellationToken,
 ) -> crate::Result<Option<Vec<T>>> {
@@ -773,7 +773,7 @@ pub(crate) async fn download_installed_file(
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CurseForgePendingCompletionProof {
+pub(super) enum CurseForgePendingCompletionProof {
     None,
     AuthoritativeSha1,
     AuthoritativeFingerprint,
@@ -1031,7 +1031,7 @@ async fn record_verified_curseforge_file_with_permit(
     }
 }
 
-fn is_curseforge_fingerprint_whitespace(byte: u8) -> bool {
+pub(super) fn is_curseforge_fingerprint_whitespace(byte: u8) -> bool {
     matches!(byte, 9 | 10 | 13 | 32)
 }
 

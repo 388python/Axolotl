@@ -490,7 +490,7 @@ struct ModpackOverrideTask {
     size: u64,
 }
 
-fn collect_modpack_override_tasks<R: Read + Seek>(
+pub(super) fn collect_modpack_override_tasks<R: Read + Seek>(
     archive: &mut zip::ZipArchive<R>,
     manifest: &CurseForgeModpackManifest,
     instance_path: &Path,
@@ -652,7 +652,7 @@ pub(crate) fn materialize_modpack_overrides(
 }
 
 #[cfg(test)]
-fn extract_modpack_overrides(
+pub(super) fn extract_modpack_overrides(
     archive_path: &Path,
     instance_path: &Path,
     cancellation: Option<&tokio_util::sync::CancellationToken>,
@@ -729,7 +729,7 @@ pub(crate) fn read_modpack_override_content<R: Read + Seek>(
     Ok(overrides)
 }
 
-fn curseforge_override_content(
+pub(super) fn curseforge_override_content(
     relative_path: &str,
 ) -> crate::Result<Option<CurseForgePackExpectedOverride>> {
     let relative_path = safe_archive_relative_path(relative_path)?;
@@ -831,7 +831,7 @@ pub(crate) fn modpack_zip_error(error: zip::result::ZipError) -> crate::Error {
     .into()
 }
 
-fn safe_archive_relative_path(value: &str) -> crate::Result<String> {
+pub(super) fn safe_archive_relative_path(value: &str) -> crate::Result<String> {
     let normalized = value.replace('\\', "/");
     let path = Path::new(&normalized);
     if normalized.is_empty()
@@ -862,7 +862,7 @@ pub(crate) fn loader_type(loader: &str) -> Option<u32> {
     }
 }
 
-fn looks_like_game_version(value: &str) -> bool {
+pub(super) fn looks_like_game_version(value: &str) -> bool {
     let value = value.trim();
     !value.is_empty()
         && value.as_bytes().first().is_some_and(u8::is_ascii_digit)

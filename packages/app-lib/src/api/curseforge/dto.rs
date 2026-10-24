@@ -671,14 +671,14 @@ fn default_overrides() -> String {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CurseForgeManifestMinecraft {
+pub(super) struct CurseForgeManifestMinecraft {
     version: String,
     #[serde(default)]
     mod_loaders: Vec<CurseForgeManifestLoader>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct CurseForgeManifestLoader {
+pub(super) struct CurseForgeManifestLoader {
     id: String,
     primary: bool,
 }
