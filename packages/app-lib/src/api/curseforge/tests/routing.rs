@@ -1,8 +1,8 @@
 //! CurseForge routing tests.
 
 use super::fixtures::category;
-use crate::api::curseforge::MINECRAFT_GAME_ID;
 use crate::api::curseforge::catalog::derived_curseforge_download_url;
+use crate::api::curseforge::constants::MINECRAFT_GAME_ID;
 use crate::api::curseforge::download::normalized_download_url;
 use crate::api::curseforge::dto::{
     CurseForgeApiKeySource, CurseForgeFile, CurseForgeProject, UnifiedSearchHit,

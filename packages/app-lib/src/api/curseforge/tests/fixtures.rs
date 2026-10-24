@@ -1,7 +1,7 @@
 //! Fixtures shared by the CurseForge tests.
 
 use crate::State;
-use crate::api::curseforge::MINECRAFT_GAME_ID;
+use crate::api::curseforge::constants::MINECRAFT_GAME_ID;
 use crate::api::curseforge::dto::{
     CurseForgeCategory, CurseForgeFile, CurseForgeFileHash,
     CurseForgeManualDownload,

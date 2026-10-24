@@ -4,6 +4,7 @@ use super::fixtures::{
     create_stage6_instance, stage8_curseforge_file,
     write_override_size_test_archive, write_override_test_archive,
 };
+use crate::api::curseforge::catalog::unique_metadata_chunks;
 use crate::api::curseforge::dto::{
     CurseForgeFileHash, CurseForgeManifestFile, CurseForgePackExpectedOverride,
     CurseForgeProject,
@@ -14,7 +15,6 @@ use crate::api::curseforge::selection::{
     curseforge_modpack_h2_range_concurrency, install_modpack_world_file,
     managed_project_type, modpack_target_folder,
 };
-use crate::api::curseforge::unique_metadata_chunks;
 use crate::api::curseforge::update::{
     collect_modpack_override_tasks, curseforge_override_content,
     extract_modpack_overrides, materialize_modpack_overrides,

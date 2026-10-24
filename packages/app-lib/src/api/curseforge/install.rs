@@ -1,6 +1,13 @@
 //! Content installation and dependency resolution.
 
 use super::catalog::{get_file, get_project};
+use super::constants::{
+    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
+    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
+    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
+    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
+    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+};
 use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{
     CurseForgeCrossSourceDependency, CurseForgeFailedDownload, CurseForgeFile,
@@ -10,6 +17,7 @@ use super::dto::{
 };
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::metrics::CurseForgeDownloadMetrics;
+use super::plans::DEPENDENCY_RESOLUTION_PLANS;
 use super::selection::{
     content_target_folder, curseforge_content_ref,
     curseforge_content_validation, curseforge_file_sha1,
@@ -21,14 +29,6 @@ use super::validation::{validate_file_name, validate_world_archive_name};
 use super::verify::{
     DownloadInstalledFileRequest, download_curseforge_path,
     download_installed_file,
-};
-use super::{
-    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
-    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
-    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
-    DEPENDENCY_RELATION_TOOL, DEPENDENCY_RESOLUTION_PLANS,
-    FABRIC_API_CURSEFORGE_PROJECT_ID, MAX_DEPENDENCY_DEPTH,
-    QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
 };
 use crate::install::InstallProgressReporter;
 use crate::state::{

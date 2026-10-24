@@ -1,6 +1,13 @@
 //! Install preview derived from a dependency plan.
 
 use super::catalog::{get_file, get_project};
+use super::constants::{
+    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
+    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
+    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
+    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
+    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+};
 use super::dto::{
     CurseForgeInstallRequest, CurseForgeProject, CurseForgeSkippedDependency,
     default_true,
@@ -16,13 +23,6 @@ use super::selection::{
     managed_project_type, preview_modrinth_fallbacks,
     resolve_modrinth_fallback_plan, select_dependency_file,
     store_dependency_resolution_plan,
-};
-use super::{
-    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
-    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
-    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
-    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
-    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
 };
 use crate::State;
 use crate::state::{

@@ -1,6 +1,11 @@
 //! CurseForge selection tests.
 
 use super::fixtures::stage8_curseforge_file;
+use crate::api::curseforge::constants::{
+    DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_INCLUDE,
+    DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_OPTIONAL,
+    DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL,
+};
 use crate::api::curseforge::dto::{
     CurseForgeManifestLoader, CurseForgeManifestMinecraft,
     CurseForgeModpackManifest, CurseForgeModpackTarget,
@@ -18,11 +23,6 @@ use crate::api::curseforge::selection::{
 };
 use crate::api::curseforge::update::{
     loader_family, loader_type, looks_like_game_version, modpack_target,
-};
-use crate::api::curseforge::{
-    DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_INCLUDE,
-    DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_OPTIONAL,
-    DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL,
 };
 use crate::state::{ModLoader, ProjectType};
 use content_management::DependencyPolicy;

@@ -1,6 +1,7 @@
 //! Dependency selection, target folders, and progress helpers.
 
 use super::catalog::get_files;
+use super::constants::{DEPENDENCY_PLAN_TTL, MAX_PAGE_SIZE};
 use super::dto::{
     CurseForgeFile, CurseForgeFilesRequest, CurseForgeInstallRequest,
     CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManualDownload,
@@ -10,11 +11,10 @@ use super::install::{
     CurseForgeModrinthFallbackPreview, dependency_policy, install_world_file,
 };
 use super::mapping::mod_loader_to_slug;
-use super::validation::{validate_file_name, validate_world_archive_name};
-use super::{
-    CachedDependencyResolutionPlan, DEPENDENCY_PLAN_TTL,
-    DEPENDENCY_RESOLUTION_PLANS, MAX_PAGE_SIZE,
+use super::plans::{
+    CachedDependencyResolutionPlan, DEPENDENCY_RESOLUTION_PLANS,
 };
+use super::validation::{validate_file_name, validate_world_archive_name};
 use crate::event::emit::emit_loading;
 use crate::install::{
     InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
@@ -25,7 +25,7 @@ use crate::state::{
     CurseForgeFileId, CurseForgeProjectId, DependencyResolutionEdge,
     DependencyResolutionIssue, DependencyResolutionNode,
     DependencyResolutionPlan, DependencySelectionReason, ModLoader,
-    ModrinthProjectId, ModrinthVersionId, ProjectType, ReleaseChannel,
+    ModrinthProjectId, ModrinthVersionId, ProjectType,
 };
 use crate::util::download::constants::{
     CURSEFORGE_H2_RANGE_THRESHOLD, CURSEFORGE_REQUESTED_H2_RANGES,

@@ -1,6 +1,5 @@
 //! Manual download recognition and reconciliation.
 
-use super::MANUAL_IMPORT_SCAN_LOCK;
 use super::auth::capability;
 use super::catalog::{get_file, get_projects, match_fingerprints};
 use super::dto::{
@@ -28,6 +27,10 @@ use crate::util::fetch::sha1_file_async;
 use crate::{ErrorKind, State};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+static MANUAL_IMPORT_SCAN_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 pub async fn recognize_instance_files(
     instance_id: &str,

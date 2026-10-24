@@ -1,14 +1,19 @@
 //! CurseForge API key capability detection.
 
+use super::constants::MINECRAFT_GAME_ID;
 use super::dto::{
     CurseForgeCapability, CurseForgeCapabilityStatus, CurseForgeProject,
     CurseForgeResponse,
 };
 use super::transport::{MirrorPolicy, api_key_with_source, request_json};
-use super::{API_KEY_GENERATION, MINECRAFT_GAME_ID, UNAUTHORIZED};
 use crate::State;
 use reqwest::Method;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+static UNAUTHORIZED: AtomicBool = AtomicBool::new(false);
+/// Bumped whenever the effective key is replaced. A response that arrives after
+/// that can only describe the previous key, so it must not change the flag.
+static API_KEY_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 pub fn capability() -> CurseForgeCapability {
     let (key, key_source) = api_key_with_source();

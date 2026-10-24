@@ -1,6 +1,7 @@
 //! Modpack archive installation.
 
 use super::catalog::{get_file, get_project};
+use super::catalog::{get_modpack_files, get_modpack_projects};
 use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{
     CurseForgeFailedDownload, CurseForgeFile, CurseForgeInstallRequest,
@@ -31,7 +32,6 @@ use super::verify::{
     download_installed_file, spawn_curseforge_database_worker,
     spawn_curseforge_verification_worker,
 };
-use super::{get_modpack_files, get_modpack_projects};
 use crate::api::content_search::{
     chinese_file_title_for_curseforge_slug, localized_content_file_name,
 };
