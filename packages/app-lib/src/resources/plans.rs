@@ -469,6 +469,7 @@ impl ResourceService {
         installed: &[InstalledResource],
         cancel: &CancellationToken,
         constraints: &[String],
+        ignore_version_constraints: bool,
     ) -> ResourceResult<
         Option<(ResourceRelease, ResourceArtifact, ReleaseSelectionBasis)>,
     > {
@@ -499,59 +500,93 @@ impl ResourceService {
             if !same_resource {
                 continue;
             }
-            let selected =
-                if matches!(selection.release, ReleaseSelection::Automatic) {
-                    let Some(reference) = &entry.artifact else {
-                        continue;
-                    };
-                    let release =
-                        self.release(&reference.release, None, cancel).await?;
-                    let assessment = assess_compatibility(
-                        &release,
-                        target,
-                        selection.resource_type,
-                    );
-                    if assessment.game_version != CompatibilityState::Compatible
-                        || assessment.loader != CompatibilityState::Compatible
-                        || !constraints.iter().all(|constraint| {
-                            matches_release_constraint(
-                                constraint,
-                                &release.version,
-                            )
-                        })
-                    {
-                        continue;
-                    }
-                    let Some(artifact) = release
-                        .artifacts
-                        .iter()
-                        .find(|artifact| {
-                            &artifact.reference == reference
-                                && identity::exact_integrity(
-                                    &entry.integrity,
-                                    &artifact.integrity,
-                                )
-                        })
-                        .cloned()
-                    else {
-                        continue;
-                    };
-                    (
-                        release,
-                        artifact,
-                        ReleaseSelectionBasis::InstalledCompatible,
-                    )
-                } else {
-                    self.selected_release_with_constraints(
-                        selection,
-                        target,
-                        &self.preferred_source().await?,
-                        cancel,
-                        None,
-                        constraints,
-                    )
-                    .await?
+            let selected = if ignore_version_constraints {
+                let Some(reference) = &entry.artifact else {
+                    continue;
                 };
+                let release =
+                    self.release(&reference.release, None, cancel).await?;
+                let assessment = assess_compatibility(
+                    &release,
+                    target,
+                    selection.resource_type,
+                );
+                if assessment.game_version != CompatibilityState::Compatible
+                    || assessment.loader != CompatibilityState::Compatible
+                {
+                    continue;
+                }
+                let Some(artifact) = release
+                    .artifacts
+                    .iter()
+                    .find(|artifact| {
+                        &artifact.reference == reference
+                            && identity::exact_integrity(
+                                &entry.integrity,
+                                &artifact.integrity,
+                            )
+                    })
+                    .cloned()
+                else {
+                    continue;
+                };
+                // An enabled local dependency is usable even when its release
+                // differs from the dependency metadata requested by newly
+                // selected content. Runtime compatibility remains checked.
+                (
+                    release,
+                    artifact,
+                    ReleaseSelectionBasis::InstalledCompatible,
+                )
+            } else if matches!(selection.release, ReleaseSelection::Automatic) {
+                let Some(reference) = &entry.artifact else {
+                    continue;
+                };
+                let release =
+                    self.release(&reference.release, None, cancel).await?;
+                let assessment = assess_compatibility(
+                    &release,
+                    target,
+                    selection.resource_type,
+                );
+                if assessment.game_version != CompatibilityState::Compatible
+                    || assessment.loader != CompatibilityState::Compatible
+                    || !constraints.iter().all(|constraint| {
+                        matches_release_constraint(constraint, &release.version)
+                    })
+                {
+                    continue;
+                }
+                let Some(artifact) = release
+                    .artifacts
+                    .iter()
+                    .find(|artifact| {
+                        &artifact.reference == reference
+                            && identity::exact_integrity(
+                                &entry.integrity,
+                                &artifact.integrity,
+                            )
+                    })
+                    .cloned()
+                else {
+                    continue;
+                };
+                (
+                    release,
+                    artifact,
+                    ReleaseSelectionBasis::InstalledCompatible,
+                )
+            } else {
+                self.selected_release_with_constraints(
+                    selection,
+                    target,
+                    &self.preferred_source().await?,
+                    cancel,
+                    None,
+                    constraints,
+                )
+                .await?
+            };
             if identity::exact_integrity(
                 &entry.integrity,
                 &selected.1.integrity,
@@ -1415,6 +1450,8 @@ impl ResourceService {
                             installed,
                             cancel,
                             &constraints,
+                            draft.plan.intent
+                                == ResourceOperationIntent::Install,
                         )
                         .await
                     {
@@ -2294,6 +2331,7 @@ impl ResourceService {
                     &installed,
                     cancel,
                     &constraints,
+                    draft.plan.intent == ResourceOperationIntent::Install,
                 )
                 .await
             {
@@ -2476,18 +2514,27 @@ impl ResourceService {
             let Some(artifact) = &node.artifact else {
                 continue;
             };
-            let version_matches =
-                if let Some(constraint) = &edge.version_constraint {
-                    let release = self
-                        .release(&artifact.reference.release, None, cancel)
-                        .await?;
-                    matches_release_constraint(constraint, &release.version)
-                } else {
-                    true
-                };
-            let mut selection_matches = true;
-            if let Some(selection) = &edge.release_selection
-                && !selection_matches_artifact(selection, Some(artifact))
+            let locally_satisfied = draft.plan.intent
+                == ResourceOperationIntent::Install
+                && node.state == DependencyNodeState::Satisfied
+                && !node.installed_entries.is_empty();
+            let version_matches = if locally_satisfied {
+                true
+            } else if let Some(constraint) = &edge.version_constraint {
+                let release = self
+                    .release(&artifact.reference.release, None, cancel)
+                    .await?;
+                matches_release_constraint(constraint, &release.version)
+            } else {
+                true
+            };
+            let mut selection_matches = locally_satisfied
+                || edge.release_selection.as_ref().is_none_or(|selection| {
+                    selection_matches_artifact(selection, Some(artifact))
+                });
+            if !locally_satisfied
+                && !selection_matches
+                && let Some(selection) = &edge.release_selection
             {
                 let release_ref = match selection {
                     ReleaseSelection::Release { reference } => reference,

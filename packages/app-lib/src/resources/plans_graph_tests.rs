@@ -156,7 +156,7 @@ async fn constraints_from_deeper_parents_reselect_the_shared_dependency_in_both_
 }
 
 #[tokio::test]
-async fn disabled_missing_and_outdated_dependencies_require_review_without_installing_an_extra_copy()
+async fn disabled_and_missing_dependencies_require_review_but_outdated_dependency_is_reused()
  {
     let mut a = release("root0000", "1", 'a');
     let old = release("depend00", "1", 'b');
@@ -169,11 +169,7 @@ async fn disabled_missing_and_outdated_dependencies_require_review_without_insta
     disabled.enabled = false;
     let mut missing = installed(&current, "missing", "mods/custom.jar");
     missing.missing = true;
-    for entry in [
-        disabled,
-        missing,
-        installed(&old, "outdated", "mods/custom.jar"),
-    ] {
+    for entry in [disabled, missing] {
         let plan = service
             .build_operation(
                 draft(
@@ -203,6 +199,26 @@ async fn disabled_missing_and_outdated_dependencies_require_review_without_insta
                 )
         }));
     }
+    let outdated = installed(&old, "outdated", "mods/custom.jar");
+    let plan = service
+        .build_operation(
+            draft(
+                vec![selection("a", &a, None)],
+                ResourceOperationIntent::Install,
+            ),
+            &target(),
+            &[outdated.clone()],
+            &CancellationToken::new(),
+        )
+        .await
+        .unwrap()
+        .plan;
+    assert!(plan.issues.is_empty(), "{:?}", plan.issues);
+    assert_eq!(plan.actions.len(), 1);
+    assert!(plan.nodes.iter().any(|node| {
+        node.installed_entries.contains(&outdated.entry_id)
+            && node.state == DependencyNodeState::Satisfied
+    }));
     let disabled = installed(&old, "disabled-root", "mods/custom.jar.disabled");
     let plan = service
         .build_operation(
