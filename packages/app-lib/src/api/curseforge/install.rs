@@ -225,7 +225,7 @@ pub struct CurseForgeModrinthFallbackPreview {
     pub required: bool,
 }
 
-pub(crate) async fn install_file_with_metrics(
+pub(super) async fn install_file_with_metrics(
     request: CurseForgeInstallRequest,
     download_metrics: Option<&CurseForgeDownloadMetrics>,
 ) -> crate::Result<CurseForgeInstallResult> {

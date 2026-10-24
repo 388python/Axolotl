@@ -64,34 +64,6 @@ pub(crate) fn manual_download_target_folder(
     .into())
 }
 
-pub(crate) async fn select_latest_compatible_file(
-    project_id: u32,
-    game_version: Option<String>,
-    mod_loader_type: Option<u32>,
-    release_channel: Option<ReleaseChannel>,
-) -> crate::Result<Option<CurseForgeFile>> {
-    let response = get_files(
-        project_id,
-        CurseForgeFilesRequest {
-            game_version,
-            mod_loader_type,
-            game_version_type_id: None,
-            index: 0,
-            page_size: MAX_PAGE_SIZE,
-        },
-    )
-    .await?;
-
-    Ok(response.files.into_iter().find(|file| {
-        file.is_available
-            && match release_channel {
-                Some(ReleaseChannel::Release) => file.release_type == 1,
-                Some(ReleaseChannel::Beta) => file.release_type <= 2,
-                Some(ReleaseChannel::Alpha) | None => true,
-            }
-    }))
-}
-
 /// Why a dependency file was selected. This makes fallback provenance
 /// explicit rather than allowing it to look like a native declaration.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -134,7 +106,7 @@ pub(super) fn dependency_target_game_version(
     game_version.filter(|version| !version.trim().is_empty())
 }
 
-pub(crate) async fn select_dependency_file(
+pub(super) async fn select_dependency_file(
     project_id: u32,
     game_version: Option<String>,
     mod_loader_type: Option<u32>,
