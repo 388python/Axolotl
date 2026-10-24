@@ -12,7 +12,7 @@ import {
     type LinkedModpackInfo,
     refresh_content,
 } from '@/helpers/instance'
-import { resourceCheckUpdates } from '@/helpers/resources'
+import { resourceCheckUpdates, type ResourceUpdateCheckOptions } from '@/helpers/resources'
 import type { CacheBehaviour } from '@/helpers/types'
 
 export type InstanceContentData = {
@@ -74,8 +74,6 @@ export async function loadInstanceContentInStages(
     cacheBehaviour: CacheBehaviour | undefined,
     showLocal: (data: InstanceContentData) => boolean,
 ): Promise<InstanceContentData | null> {
-    if (cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate')
-        return loadInstanceContentData(path, cacheBehaviour)
     const local = await loadInstanceContentData(path, undefined, undefined, true)
     if (!local || !showLocal(local)) return local
     return loadInstanceContentData(path, cacheBehaviour)
@@ -216,10 +214,11 @@ export async function loadInstanceContentData(
     }
 }
 
-/** Update discovery runs after the local content snapshot has been displayed. */
+/** Discover updates only for the supplied batch, after displaying local content. */
 export async function refreshInstanceContentUpdates(
     data: InstanceContentData,
     signal?: AbortSignal,
+    options?: ResourceUpdateCheckOptions,
 ): Promise<InstanceContentData> {
     if (signal?.aborted) return data
     const items = [...data.contentItems, ...data.linkedContentItems].map((item) => ({
@@ -235,12 +234,19 @@ export async function refreshInstanceContentUpdates(
         ),
     }
     const updateCheckFailedEntries = new Set<string>()
-    if (items.some((item) => item.instanceEntryId)) {
+    const entryIds =
+        options?.entryIds ??
+        items
+            .filter((item) => item.instanceMaterializationState === 'present')
+            .map((item) => item.instanceEntryId)
+            .filter((id): id is string => !!id)
+    const selected = new Set(entryIds)
+    if (entryIds.length) {
         try {
-            const updates = await resourceCheckUpdates(data.path, signal)
+            const updates = await resourceCheckUpdates(data.path, signal, { ...options, entryIds })
             if (signal?.aborted) return data
             for (const item of items) {
-                if (!item.instanceEntryId) continue
+                if (!item.instanceEntryId || !selected.has(item.instanceEntryId)) continue
                 if (
                     updates.failedEntries.includes(item.instanceEntryId) ||
                     updates.unresolved.includes(item.file_path ?? '')
@@ -262,7 +268,8 @@ export async function refreshInstanceContentUpdates(
         } catch (error) {
             if (signal?.aborted) return data
             for (const item of items) {
-                if (item.instanceEntryId) updateCheckFailedEntries.add(item.instanceEntryId)
+                if (item.instanceEntryId && selected.has(item.instanceEntryId))
+                    updateCheckFailedEntries.add(item.instanceEntryId)
             }
             snapshot.warnings.push({
                 code: 'resource_update_unavailable',
