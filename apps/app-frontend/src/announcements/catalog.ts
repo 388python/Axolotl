@@ -30,6 +30,40 @@ export const ANNOUNCEMENT_CHANGE_TYPES: readonly AnnouncementChangeType[] = [
 
 export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
     {
+        id: 'launcher-1.10.1-beta.1',
+        version: '1.10.1-beta.1',
+        publishedAt: '2026-10-24',
+        title: {
+            'en-US': 'Axolotl Launcher 1.10.1-beta.1',
+            'zh-CN': 'Axolotl Launcher 1.10.1-beta.1',
+        },
+        changes: {
+            changed: [
+                {
+                    'en-US':
+                        'Updated the sticky instance bar on content details pages to match the frosted background on Discover.',
+                    'zh-CN': '内容详情页的实例吸附栏改用与发现页一致的磨砂背景。',
+                },
+            ],
+            fixed: [
+                {
+                    'en-US': 'Fixed slow opening of Java settings for instances.',
+                    'zh-CN': '修复实例 Java 设置打开缓慢的问题。',
+                },
+                {
+                    'en-US':
+                        'Fixed slow mod details when opened from an instance, including aggregated Modrinth and CurseForge descriptions.',
+                    'zh-CN':
+                        '修复从实例打开模组详情时加载缓慢的问题，包括 Modrinth 与 CurseForge 聚合简介。',
+                },
+                {
+                    'en-US': 'Fixed excessive width in the instance three-dot action menu.',
+                    'zh-CN': '修复实例页面三点操作菜单过宽的问题。',
+                },
+            ],
+        },
+    },
+    {
         id: 'launcher-1.10.0',
         version: '1.10.0',
         publishedAt: '2026-10-23',
