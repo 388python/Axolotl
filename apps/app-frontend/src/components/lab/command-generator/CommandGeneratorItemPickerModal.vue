@@ -4,6 +4,7 @@ import { ref, useTemplateRef } from 'vue'
 
 import advancementsData from '@/lab/command-generator/data/advancements.json'
 import effectsData from '@/lab/command-generator/data/effects.json'
+import itemNameIndexData from '@/lab/recipe-generator/assets/vanilla/item-name-index.json' with { type: 'json' }
 import { getSlotDisplay } from '@/lab/recipe-generator/display'
 import { resolveRecipeItemName } from '@/lab/recipe-generator/item-names.ts'
 import {
@@ -91,217 +92,22 @@ const EXTRA_BLOCKS_META: ExtraBlockMeta[] = [
     { id: 'minecraft:light', nameKey: 'app.lab.command-generator.block.light' },
 ]
 
-function isNonBlockItem(rawId: string): boolean {
-    const name = rawId.includes(':') ? rawId.split(':')[1] : rawId
-    if (!name) return true
-
-    const ACTUAL_BLOCKS = new Set([
-        'kelp',
-        'bamboo',
-        'sugar_cane',
-        'turtle_egg',
-        'frogspawn',
-        'sculk_vein',
-        'cocoa',
-        'nether_wart',
-        'chorus_flower',
-        'sea_pickle',
-        'tall_grass',
-        'short_grass',
-        'fern',
-        'large_fern',
-        'dead_bush',
-        'sweet_berry_bush',
-        'crimson_roots',
-        'warped_roots',
-        'nether_sprouts',
-        'chorus_plant',
-        'weeping_vines',
-        'twisting_vines',
-        'vine',
-        'glow_lichen',
-        'hanging_roots',
-        'big_dripleaf',
-        'small_dripleaf',
-        'spore_blossom',
-        'azalea',
-        'flowering_azalea',
-        'mangrove_propagule',
-        'pink_petals',
-        'torchflower_seeds',
-        'cake',
-    ])
-    if (ACTUAL_BLOCKS.has(name)) return false
-
-    if (name.endsWith('_spawn_egg') || name === 'spawn_egg') return true
-    if (name.endsWith('_bucket') || name === 'bucket') return true
-    if (name.endsWith('_horse_armor') || name === 'wolf_armor') return true
-    if (name.endsWith('_boat') || name.endsWith('_chest_boat')) return true
-    if (name.endsWith('_raft') || name.endsWith('_chest_raft')) return true
-    if (name.endsWith('_minecart')) return true
-    if (name.startsWith('music_disc_')) return true
-    if (name.endsWith('_pottery_sherd')) return true
-    if (name.endsWith('_smithing_template')) return true
-    if (name.endsWith('_banner_pattern')) return true
-    if (
-        name.includes('potion') ||
-        name.includes('tipped_arrow') ||
-        name === 'arrow' ||
-        name === 'spectral_arrow'
-    )
-        return true
-    if (/(_sword|_pickaxe|_shovel|_hoe|_axe|_helmet|_chestplate|_leggings|_boots)$/.test(name))
-        return true
-    if (/(_ingot|_nugget|_dust|_dye|_seeds|_shard|_scute|_sherd|_fragment)$/.test(name)) return true
-
-    const NON_BLOCKS = new Set([
-        'apple',
-        'golden_apple',
-        'enchanted_golden_apple',
-        'bread',
-        'beef',
-        'cooked_beef',
-        'porkchop',
-        'cooked_porkchop',
-        'chicken',
-        'cooked_chicken',
-        'mutton',
-        'cooked_mutton',
-        'rabbit',
-        'cooked_rabbit',
-        'cod',
-        'cooked_cod',
-        'salmon',
-        'cooked_salmon',
-        'tropical_fish',
-        'pufferfish',
-        'potato',
-        'baked_potato',
-        'poisonous_potato',
-        'carrot',
-        'golden_carrot',
-        'beetroot',
-        'beetroot_soup',
-        'wheat',
-        'sugar',
-        'melon_slice',
-        'cookie',
-        'pumpkin_pie',
-        'chorus_fruit',
-        'popped_chorus_fruit',
-        'honey_bottle',
-        'mushroom_stew',
-        'rabbit_stew',
-        'suspicious_stew',
-        'rotten_flesh',
-        'spider_eye',
-        'fermented_spider_eye',
-        'dried_kelp',
-        'glistering_melon_slice',
-        'sweet_berries',
-        'glow_berries',
-        'stick',
-        'coal',
-        'charcoal',
-        'diamond',
-        'emerald',
-        'lapis_lazuli',
-        'quartz',
-        'amethyst_shard',
-        'echo_shard',
-        'netherite_scrap',
-        'brick',
-        'nether_brick',
-        'clay_ball',
-        'flint',
-        'feather',
-        'leather',
-        'rabbit_hide',
-        'string',
-        'slime_ball',
-        'magma_cream',
-        'blaze_rod',
-        'breeze_rod',
-        'blaze_powder',
-        'gunpowder',
-        'fire_charge',
-        'ink_sac',
-        'glow_ink_sac',
-        'bone',
-        'bone_meal',
-        'nautilus_shell',
-        'shulker_shell',
-        'prismarine_shard',
-        'prismarine_crystals',
-        'phantom_membrane',
-        'dragon_breath',
-        'glowstone_dust',
-        'redstone',
-        'paper',
-        'book',
-        'writable_book',
-        'written_book',
-        'name_tag',
-        'lead',
-        'item_frame',
-        'glow_item_frame',
-        'painting',
-        'armor_stand',
-        'experience_bottle',
-        'firework_rocket',
-        'firework_star',
-        'nether_star',
-        'heart_of_the_sea',
-        'disc_fragment_5',
-        'trial_key',
-        'ominous_trial_key',
-        'armadillo_scute',
-        'turtle_scute',
-        'wind_charge',
-        'raw_iron',
-        'raw_gold',
-        'raw_copper',
-        'bundle',
-        'spyglass',
-        'brush',
-        'goat_horn',
-        'map',
-        'filled_map',
-        'compass',
-        'recovery_compass',
-        'clock',
-        'honeycomb',
-        'knowledge_book',
-        'ender_pearl',
-        'ender_eye',
-        'saddle',
-        'snowball',
-        'egg',
-        'ominous_bottle',
-        'heavy_core',
-        'glass_bottle',
-        'rabbit_foot',
-        'ghast_tear',
-        'enchanted_book',
-        'bowl',
-        'totem_of_undying',
-        'debug_stick',
-        'command_block_minecart',
-        'shield',
-        'bow',
-        'crossbow',
-        'trident',
-        'mace',
-        'shears',
-        'fishing_rod',
-        'flint_and_steel',
-        'carrot_on_a_stick',
-        'warped_fungus_on_a_stick',
-        'elytra',
-    ])
-
-    return NON_BLOCKS.has(name)
+// ================= 依赖语言文件的方块判断 =================
+const itemNameIndex = itemNameIndexData as {
+    en_us: Record<string, string>
+    zh_cn: Record<string, string>
 }
+
+function isBlockItemId(id: string): boolean {
+    const normalized = id.trim().toLowerCase()
+    const namespaced = normalized.includes(':') ? normalized : `minecraft:${normalized}`
+    if (!namespaced.startsWith('minecraft:') || /:\d+$/.test(namespaced)) return false
+    const path = namespaced.slice('minecraft:'.length)
+    if (!path) return false
+    const blockKey = `block.minecraft.${path}`
+    return blockKey in itemNameIndex.en_us || blockKey in itemNameIndex.zh_cn
+}
+// ==========================================================
 
 function isVersionAtLeast(current: string, target: string): boolean {
     const cur = current.split('.').map(Number)
@@ -427,13 +233,16 @@ async function show() {
         let extraBlocks: SourceItem[] = []
 
         if (props.kind === 'block') {
+            // 直接依赖 isBlockItemId 进行过滤，丢弃所有不存在 block.minecraft.* 的条目
             sourceItems = (resources.items as unknown as SourceItem[]).filter((item) => {
-                return !isNonBlockItem(item.id || item.name || '')
+                return item.id && isBlockItemId(item.id)
             })
 
-            extraBlocks = EXTRA_BLOCKS_META.map((meta) => {
-                return { id: meta.id, __extraMeta: meta }
-            })
+            // 去重：避免 EXTRA_BLOCKS_META 里的一些方块（如 water, lava）在列表中出现两次
+            const seen = new Set(sourceItems.map((item) => item.id))
+            extraBlocks = EXTRA_BLOCKS_META
+                .filter((meta) => !seen.has(meta.id))
+                .map((meta) => ({ id: meta.id, __extraMeta: meta }))
 
             sourceItems = [...sourceItems, ...extraBlocks]
         }

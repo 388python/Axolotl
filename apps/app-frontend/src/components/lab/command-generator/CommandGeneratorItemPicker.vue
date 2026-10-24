@@ -43,19 +43,19 @@ const messages = defineMessages({
         defaultMessage: 'No matches found.',
     },
     pickItem: {
-        id: 'app.lab.command-generator.item-picker.pick-item',
+        id: 'app.lab.command-generator.item-picker.button',
         defaultMessage: 'Pick item',
     },
     pickBlock: {
-        id: 'app.lab.command-generator.item-picker.pick-block',
+        id: 'app.lab.command-generator.block-picker.button',
         defaultMessage: 'Pick block',
     },
     pickEffect: {
-        id: 'app.lab.command-generator.item-picker.pick-effect',
+        id: 'app.lab.command-generator.effect-picker.button',
         defaultMessage: 'Pick effect',
     },
     pickAdvancement: {
-        id: 'app.lab.command-generator.item-picker.pick-advancement',
+        id: 'app.lab.command-generator.advancement-picker.button',
         defaultMessage: 'Pick advancement',
     },
 })
