@@ -174,15 +174,16 @@ pub(crate) async fn install_world_file(
 }
 
 #[derive(Clone, Copy)]
-struct PendingCurseForgeFile {
-    project_id: u32,
-    file_id: u32,
-    item_type: ProjectType,
-    dependency: bool,
-    parent_project_id: Option<u32>,
-    parent_file_id: Option<u32>,
-    dependency_kind: Option<crate::state::instances::ContentDependencyKind>,
-    depth: usize,
+pub(super) struct PendingCurseForgeFile {
+    pub(super) project_id: u32,
+    pub(super) file_id: u32,
+    pub(super) item_type: ProjectType,
+    pub(super) dependency: bool,
+    pub(super) parent_project_id: Option<u32>,
+    pub(super) parent_file_id: Option<u32>,
+    pub(super) dependency_kind:
+        Option<crate::state::instances::ContentDependencyKind>,
+    pub(super) depth: usize,
 }
 
 #[derive(Clone)]
@@ -195,19 +196,19 @@ pub(crate) struct PreviewPendingCurseForgeFile {
 }
 
 #[derive(Clone)]
-struct CurseForgeDependencyEdgeCandidate {
-    parent_project_id: u32,
-    parent_file_id: u32,
-    child_project_id: u32,
-    child_file_id: u32,
-    dependency_kind: crate::state::instances::ContentDependencyKind,
+pub(super) struct CurseForgeDependencyEdgeCandidate {
+    pub(super) parent_project_id: u32,
+    pub(super) parent_file_id: u32,
+    pub(super) child_project_id: u32,
+    pub(super) child_file_id: u32,
+    pub(super) dependency_kind: crate::state::instances::ContentDependencyKind,
 }
 
 #[derive(Clone)]
-struct ModrinthFallbackPlan {
-    parent_project_id: u32,
-    parent_file_id: u32,
-    plan: content_management::ResolveContentPlan,
+pub(super) struct ModrinthFallbackPlan {
+    pub(super) parent_project_id: u32,
+    pub(super) parent_file_id: u32,
+    pub(super) plan: content_management::ResolveContentPlan,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

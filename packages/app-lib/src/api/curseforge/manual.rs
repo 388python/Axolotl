@@ -383,11 +383,11 @@ fn pending_manual_download(
 
 #[derive(Clone, Debug)]
 pub(super) struct CurseForgeManualDownloadIntegrityMetadata {
-    project_id: u32,
-    file_id: u32,
-    hashes: Vec<CurseForgeFileHash>,
-    file_length: u64,
-    file_fingerprint: u64,
+    pub(super) project_id: u32,
+    pub(super) file_id: u32,
+    pub(super) hashes: Vec<CurseForgeFileHash>,
+    pub(super) file_length: u64,
+    pub(super) file_fingerprint: u64,
 }
 
 impl From<CurseForgeFile> for CurseForgeManualDownloadIntegrityMetadata {
@@ -1057,7 +1057,7 @@ where
 }
 
 #[derive(Debug)]
-struct CurseForgeManualDownloadInconsistency {
+pub(super) struct CurseForgeManualDownloadInconsistency {
     pub(super) path: String,
     pub(super) project_id: String,
     pub(super) file_id: String,

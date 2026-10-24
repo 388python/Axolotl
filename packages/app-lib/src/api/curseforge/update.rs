@@ -286,9 +286,9 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     Ok(result)
 }
 
-struct CurseForgeUpdateBackup {
-    _directory: tempfile::TempDir,
-    files: Vec<(String, String, std::path::PathBuf)>,
+pub(super) struct CurseForgeUpdateBackup {
+    pub(super) _directory: tempfile::TempDir,
+    pub(super) files: Vec<(String, String, std::path::PathBuf)>,
 }
 
 async fn create_curseforge_update_backup(
@@ -491,7 +491,7 @@ pub(crate) async fn cache_instance_icon_from_url(
     .await
 }
 
-struct ModpackOverrideTask {
+pub(super) struct ModpackOverrideTask {
     pub(super) index: usize,
     pub(super) target: PathBuf,
     pub(super) size: u64,

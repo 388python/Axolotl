@@ -116,37 +116,38 @@ pub(crate) async fn download_curseforge_archive(
 }
 
 pub(crate) struct DownloadInstalledFileRequest<'a> {
-    instance_id: &'a str,
-    url: &'a str,
-    file: &'a CurseForgeFile,
-    project_type: ProjectType,
-    world_name: Option<&'a str>,
-    project_id: u32,
-    file_id: u32,
-    project_slug: &'a str,
-    ownership_kind: crate::state::instances::ContentOwnershipKind,
-    download_metrics: Option<&'a CurseForgeDownloadMetrics>,
-    defer_persistence: bool,
-    verification_tx: Option<&'a mpsc::Sender<CurseForgeVerificationTask>>,
-    pre_resolved_relative_path: Option<&'a str>,
-    expected_file_name: Option<&'a str>,
+    pub(super) instance_id: &'a str,
+    pub(super) url: &'a str,
+    pub(super) file: &'a CurseForgeFile,
+    pub(super) project_type: ProjectType,
+    pub(super) world_name: Option<&'a str>,
+    pub(super) project_id: u32,
+    pub(super) file_id: u32,
+    pub(super) project_slug: &'a str,
+    pub(super) ownership_kind: crate::state::instances::ContentOwnershipKind,
+    pub(super) download_metrics: Option<&'a CurseForgeDownloadMetrics>,
+    pub(super) defer_persistence: bool,
+    pub(super) verification_tx:
+        Option<&'a mpsc::Sender<CurseForgeVerificationTask>>,
+    pub(super) pre_resolved_relative_path: Option<&'a str>,
+    pub(super) expected_file_name: Option<&'a str>,
 }
 
-struct DownloadedCurseForgeFile {
+pub(super) struct DownloadedCurseForgeFile {
     pub(super) relative_path: String,
 }
 
 pub(crate) struct CurseForgeVerificationTask {
-    instance_id: String,
-    relative_path: String,
-    download_path: PathBuf,
-    full_path: PathBuf,
-    file: CurseForgeFile,
-    project_type: ProjectType,
-    ownership_kind: crate::state::instances::ContentOwnershipKind,
-    expected_bytes: u64,
-    download_result: Option<crate::util::fetch::DownloadResult>,
-    cancellation: CancellationToken,
+    pub(super) instance_id: String,
+    pub(super) relative_path: String,
+    pub(super) download_path: PathBuf,
+    pub(super) full_path: PathBuf,
+    pub(super) file: CurseForgeFile,
+    pub(super) project_type: ProjectType,
+    pub(super) ownership_kind: crate::state::instances::ContentOwnershipKind,
+    pub(super) expected_bytes: u64,
+    pub(super) download_result: Option<crate::util::fetch::DownloadResult>,
+    pub(super) cancellation: CancellationToken,
 }
 
 impl Drop for CurseForgeVerificationTask {
@@ -160,29 +161,30 @@ impl Drop for CurseForgeVerificationTask {
 
 #[derive(Clone)]
 pub(crate) struct CurseForgeVerificationContext {
-    reporter: Option<InstallProgressReporter>,
-    loading_bar: Option<Arc<crate::event::LoadingBarId>>,
-    details: InstallPhaseDetails,
-    files_done: Arc<AtomicU64>,
-    bytes_done: Arc<AtomicU64>,
-    active_downloads: Arc<AtomicU64>,
-    total_files: u64,
-    total_bytes: u64,
-    cancellation: CancellationToken,
+    pub(super) reporter: Option<InstallProgressReporter>,
+    pub(super) loading_bar: Option<Arc<crate::event::LoadingBarId>>,
+    pub(super) details: InstallPhaseDetails,
+    pub(super) files_done: Arc<AtomicU64>,
+    pub(super) bytes_done: Arc<AtomicU64>,
+    pub(super) active_downloads: Arc<AtomicU64>,
+    pub(super) total_files: u64,
+    pub(super) total_bytes: u64,
+    pub(super) cancellation: CancellationToken,
 }
 
 pub(crate) struct CurseForgeDatabaseTask {
-    instance_id: String,
-    record: crate::state::instances::commands::ProjectFileRecord,
-    verified_pending: Option<(CurseForgeProjectId, CurseForgeFileId)>,
-    expected_bytes: u64,
-    full_path: PathBuf,
-    previous_path: Option<PathBuf>,
+    pub(super) instance_id: String,
+    pub(super) record: crate::state::instances::commands::ProjectFileRecord,
+    pub(super) verified_pending:
+        Option<(CurseForgeProjectId, CurseForgeFileId)>,
+    pub(super) expected_bytes: u64,
+    pub(super) full_path: PathBuf,
+    pub(super) previous_path: Option<PathBuf>,
 }
 
 pub(crate) struct ActiveCurseForgeDownload {
-    counter: Arc<AtomicU64>,
-    active: bool,
+    pub(super) counter: Arc<AtomicU64>,
+    pub(super) active: bool,
 }
 
 impl ActiveCurseForgeDownload {
@@ -797,7 +799,7 @@ pub(super) enum CurseForgePendingCompletionProof {
     AuthoritativeFingerprint,
 }
 
-struct VerifiedInstalledCurseForgeFile {
+pub(super) struct VerifiedInstalledCurseForgeFile {
     pub(super) size: u64,
     pub(super) sha1: String,
     pub(super) pending_completion: CurseForgePendingCompletionProof,
@@ -1054,9 +1056,9 @@ pub(super) fn is_curseforge_fingerprint_whitespace(byte: u8) -> bool {
 }
 
 pub(crate) struct CurseForgeFingerprintHasher {
-    hash: u32,
-    tail: [u8; 4],
-    tail_len: usize,
+    pub(super) hash: u32,
+    pub(super) tail: [u8; 4],
+    pub(super) tail_len: usize,
 }
 
 impl CurseForgeFingerprintHasher {
