@@ -691,8 +691,8 @@ pub(super) struct CurseForgeManifestMinecraft {
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct CurseForgeManifestLoader {
-    id: String,
-    primary: bool,
+    pub(super) id: String,
+    pub(super) primary: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

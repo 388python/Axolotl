@@ -4,7 +4,7 @@
 use super::LOCAL_CLIENT;
 use super::auth::{api_key_generation, record_key_response};
 use super::dto::CurseForgeApiKeySource;
-use super::{API_BASE_URL, CLIENT, UNAUTHORIZED};
+use super::{API_BASE_URL, CLIENT};
 use crate::state::{
     DownloadSourceMode, curseforge_api_key_override_if_ready,
     curseforge_settings,
