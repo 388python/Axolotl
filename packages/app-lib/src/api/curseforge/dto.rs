@@ -1,6 +1,24 @@
 //! CurseForge API wire types and modpack manifest shapes.
 
-use crate::install::{InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress, InstallProgressReporter};
+use super::catalog::{get_file, get_files_many, get_project, get_projects};
+use super::mapping::{project_type_for_class, recognized_project_type};
+use super::selection::{
+    content_target_folder, curseforge_content_validation, managed_project_type,
+    manual_download_from_file,
+};
+use super::update::{
+    modpack_zip_error, read_modpack_manifest, read_modpack_override_content,
+};
+use super::validation::validate_file_name;
+use super::verify::{
+    CurseForgeVerificationTask, download_curseforge_archive,
+    download_curseforge_path, record_installed_curseforge_file_with_permit,
+    verify_installed_curseforge_file,
+};
+use crate::install::{
+    InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
+    InstallProgressReporter,
+};
 use crate::state::{ContentProvider, ModLoader, ProjectType};
 use crate::util::fetch::FetchProgressFn;
 use crate::{ErrorKind, State};
@@ -10,12 +28,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use super::catalog::{get_project, get_projects, get_file, get_files_many};
-use super::update::{read_modpack_manifest, read_modpack_override_content, modpack_zip_error};
-use super::selection::{managed_project_type, content_target_folder, manual_download_from_file, curseforge_content_validation};
-use super::verify::{download_curseforge_path, download_curseforge_archive, CurseForgeVerificationTask, verify_installed_curseforge_file, record_installed_curseforge_file_with_permit};
-use super::validation::validate_file_name;
-use super::mapping::{project_type_for_class, recognized_project_type};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -957,4 +969,3 @@ pub struct CurseForgeFingerprintResult {
     #[serde(default)]
     pub unmatched_fingerprints: Vec<u64>,
 }
-

@@ -1,17 +1,33 @@
 //! CurseForge verify tests.
 
+use super::fixtures::{
+    murmur2, stage6_state, stage8_curseforge_file, stage8_integrity_metadata,
+    stage8_legacy_manual_download,
+};
+use crate::api::curseforge::dto::CurseForgeFileHash;
+use crate::api::curseforge::manual::{
+    ensure_manual_download_integrity_metadata_with,
+    verify_manual_download_candidate_with_integrity,
+    verify_recognized_curseforge_file,
+};
+use crate::api::curseforge::verify::{
+    ActiveCurseForgeDownload, CurseForgeDatabaseTask,
+    CurseForgeFingerprintHasher, CurseForgePendingCompletionProof,
+    CurseForgeVerificationContext, CurseForgeVerificationTask,
+    compute_fingerprint, fingerprint_and_sha1_file,
+    is_curseforge_fingerprint_whitespace, persist_curseforge_database_batch,
+    receive_curseforge_database_batch, spawn_curseforge_database_worker,
+    verify_and_record_curseforge_modpack_file,
+    verify_installed_curseforge_file,
+};
 use crate::install::InstallPhaseDetails;
 use crate::state::{ContentSourceKind, ProjectType};
 use crate::util::fetch::DownloadRouteSource;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use super::fixtures::{murmur2, stage6_state, stage8_legacy_manual_download, stage8_integrity_metadata, stage8_curseforge_file};
-use crate::api::curseforge::dto::{CurseForgeFileHash};
-use crate::api::curseforge::manual::{verify_recognized_curseforge_file, ensure_manual_download_integrity_metadata_with, verify_manual_download_candidate_with_integrity};
-use crate::api::curseforge::verify::{CurseForgeVerificationTask, CurseForgeVerificationContext, CurseForgeDatabaseTask, ActiveCurseForgeDownload, verify_and_record_curseforge_modpack_file, persist_curseforge_database_batch, spawn_curseforge_database_worker, receive_curseforge_database_batch, CurseForgePendingCompletionProof, fingerprint_and_sha1_file, verify_installed_curseforge_file, is_curseforge_fingerprint_whitespace, CurseForgeFingerprintHasher, compute_fingerprint};
 
 #[tokio::test]
 async fn staged_digest_proof_is_reused_only_for_the_unchanged_file() {
@@ -57,16 +73,10 @@ async fn staged_digest_proof_is_reused_only_for_the_unchanged_file() {
             .await,
         cfg!(unix)
     );
-    let (verified, scans) =
-        crate::util::download::verified_file::track_scans(
-            verify_installed_curseforge_file(
-                &staged,
-                &file,
-                None,
-                Some(&download),
-            ),
-        )
-        .await;
+    let (verified, scans) = crate::util::download::verified_file::track_scans(
+        verify_installed_curseforge_file(&staged, &file, None, Some(&download)),
+    )
+    .await;
     let verified = verified.unwrap();
     assert_eq!(scans, usize::from(!cfg!(unix)));
     assert_eq!(verified.sha1, sha1);
@@ -78,36 +88,24 @@ async fn staged_digest_proof_is_reused_only_for_the_unchanged_file() {
     let restored: crate::util::fetch::DownloadResult =
         serde_json::from_value(serialized).unwrap();
     assert!(restored.verified_file.is_none());
-    let (rescanned, scans) =
-        crate::util::download::verified_file::track_scans(
-            verify_installed_curseforge_file(
-                &staged,
-                &file,
-                None,
-                Some(&restored),
-            ),
-        )
-        .await;
+    let (rescanned, scans) = crate::util::download::verified_file::track_scans(
+        verify_installed_curseforge_file(&staged, &file, None, Some(&restored)),
+    )
+    .await;
     assert!(rescanned.is_ok());
     assert_eq!(scans, 1);
     tokio::fs::write(&other, b"corrupted other bytes")
         .await
         .unwrap();
     assert!(
-        verify_installed_curseforge_file(
-            &other,
-            &file,
-            None,
-            Some(&download)
-        )
-        .await
-        .is_err()
+        verify_installed_curseforge_file(&other, &file, None, Some(&download))
+            .await
+            .is_err()
     );
     tokio::fs::write(&staged, b"corrupted staged file")
         .await
         .unwrap();
-    let handle =
-        std::fs::File::options().write(true).open(&staged).unwrap();
+    let handle = std::fs::File::options().write(true).open(&staged).unwrap();
     handle
         .set_times(std::fs::FileTimes::new().set_modified(
             std::time::SystemTime::UNIX_EPOCH
@@ -115,24 +113,14 @@ async fn staged_digest_proof_is_reused_only_for_the_unchanged_file() {
         ))
         .unwrap();
     assert!(
-        verify_installed_curseforge_file(
-            &staged,
-            &file,
-            None,
-            Some(&download)
-        )
-        .await
-        .is_err()
+        verify_installed_curseforge_file(&staged, &file, None, Some(&download))
+            .await
+            .is_err()
     );
     assert!(
-        verify_installed_curseforge_file(
-            &staged,
-            &file,
-            None,
-            Some(&restored)
-        )
-        .await
-        .is_err()
+        verify_installed_curseforge_file(&staged, &file, None, Some(&restored))
+            .await
+            .is_err()
     );
 }
 
@@ -159,13 +147,9 @@ async fn staged_digest_proof_never_skips_fingerprint_verification() {
             )
             .await,
     };
-    let result = verify_installed_curseforge_file(
-        &staged,
-        &file,
-        None,
-        Some(&download),
-    )
-    .await;
+    let result =
+        verify_installed_curseforge_file(&staged, &file, None, Some(&download))
+            .await;
     assert!(result.err().unwrap().to_string().contains("fingerprint"));
 }
 
@@ -415,8 +399,7 @@ async fn curseforge_hydrated_fingerprint_verifies_candidate() {
     let path = directory.path().join("fingerprint.jar");
     let bytes = b"legacy fingerprint content";
     crate::util::io::write(&path, bytes).await.unwrap();
-    let download =
-        stage8_legacy_manual_download(13, 301, "fingerprint.jar");
+    let download = stage8_legacy_manual_download(13, 301, "fingerprint.jar");
     let metadata = stage8_integrity_metadata(
         &download,
         Vec::new(),

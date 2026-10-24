@@ -1,11 +1,16 @@
 //! CurseForge API key capability detection.
 
+use super::dto::{
+    CurseForgeCapability, CurseForgeCapabilityStatus, CurseForgeProject,
+    CurseForgeResponse,
+};
+use super::transport::{
+    MirrorPolicy, api_key, api_key_with_source, request_json,
+};
+use super::{API_KEY_GENERATION, MINECRAFT_GAME_ID, UNAUTHORIZED};
 use crate::State;
 use reqwest::Method;
 use std::sync::atomic::Ordering;
-use super::{MINECRAFT_GAME_ID, UNAUTHORIZED, API_KEY_GENERATION};
-use super::dto::{CurseForgeCapabilityStatus, CurseForgeCapability, CurseForgeResponse, CurseForgeProject};
-use super::transport::{api_key, api_key_with_source, MirrorPolicy, request_json};
 
 pub fn capability() -> CurseForgeCapability {
     let (key, key_source) = api_key_with_source();
@@ -76,4 +81,3 @@ pub async fn validate_credentials() -> crate::Result<CurseForgeCapability> {
     record_key_response(generation, false);
     Ok(capability())
 }
-

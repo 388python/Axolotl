@@ -1,16 +1,23 @@
 //! Read-only CurseForge API queries.
 
-use crate::state::{CacheBehaviour, CachedEntry, ContentProvider, CurseForgeProjectId};
+use super::download::{normalized_download_url, resolve_download_url};
+use super::dto::{
+    CurseForgeCategory, CurseForgeFile, CurseForgeFilesRequest,
+    CurseForgeFilesResponse, CurseForgeFingerprintResult, CurseForgePagination,
+    CurseForgeProject, CurseForgeResponse, CurseForgeSearchRequest,
+    UnifiedSearchHit, UnifiedSearchResponse,
+};
+use super::mapping::{filter_categories, push_query};
+use super::transport::{MirrorPolicy, api_key, request_json};
+use super::validation::validate_file_name;
+use super::{CATEGORY_CACHE, MAX_PAGE_SIZE, MINECRAFT_GAME_ID};
+use crate::state::{
+    CacheBehaviour, CachedEntry, ContentProvider, CurseForgeProjectId,
+};
 use crate::{ErrorKind, State};
 use reqwest::Method;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
-use super::{MINECRAFT_GAME_ID, MAX_PAGE_SIZE, CATEGORY_CACHE};
-use super::dto::{CurseForgePagination, CurseForgeResponse, CurseForgeSearchRequest, UnifiedSearchResponse, UnifiedSearchHit, CurseForgeCategory, CurseForgeProject, CurseForgeFile, CurseForgeFilesRequest, CurseForgeFilesResponse, CurseForgeFingerprintResult};
-use super::transport::{api_key, MirrorPolicy, request_json};
-use super::validation::validate_file_name;
-use super::download::{normalized_download_url, resolve_download_url};
-use super::mapping::{filter_categories, push_query};
 
 pub async fn search_projects(
     request: CurseForgeSearchRequest,
@@ -395,4 +402,3 @@ pub(crate) async fn resource_request(
 ) -> crate::Result<Value> {
     request_json(method, path, query, body, MirrorPolicy::MirrorFirst).await
 }
-

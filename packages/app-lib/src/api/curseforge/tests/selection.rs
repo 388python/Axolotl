@@ -1,14 +1,31 @@
 //! CurseForge selection tests.
 
+use super::fixtures::stage8_curseforge_file;
+use crate::api::curseforge::dto::{
+    CurseForgeManifestLoader, CurseForgeManifestMinecraft,
+    CurseForgeModpackManifest, CurseForgeModpackTarget,
+    CurseForgeSortableGameVersion,
+};
+use crate::api::curseforge::install::{
+    dependency_policy, should_resolve_dependency,
+};
+use crate::api::curseforge::mapping::{
+    project_type_for_class, recognized_project_type,
+};
+use crate::api::curseforge::selection::{
+    dependency_target_game_version, file_matches_dependency_target,
+    select_best_dependency_file,
+};
+use crate::api::curseforge::update::{
+    loader_family, loader_type, looks_like_game_version, modpack_target,
+};
+use crate::api::curseforge::{
+    DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_INCLUDE,
+    DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_OPTIONAL,
+    DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL,
+};
 use crate::state::{ModLoader, ProjectType};
 use content_management::DependencyPolicy;
-use super::fixtures::{stage8_curseforge_file};
-use crate::api::curseforge::{DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL, DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_INCLUDE};
-use crate::api::curseforge::dto::{CurseForgeSortableGameVersion, CurseForgeModpackTarget, CurseForgeModpackManifest, CurseForgeManifestMinecraft, CurseForgeManifestLoader};
-use crate::api::curseforge::install::{dependency_policy, should_resolve_dependency};
-use crate::api::curseforge::update::{modpack_target, loader_family, loader_type, looks_like_game_version};
-use crate::api::curseforge::selection::{dependency_target_game_version, select_best_dependency_file, file_matches_dependency_target};
-use crate::api::curseforge::mapping::{project_type_for_class, recognized_project_type};
 
 #[test]
 fn content_updates_only_resolve_required_dependencies() {
@@ -28,10 +45,7 @@ fn content_updates_only_resolve_required_dependencies() {
     ] {
         assert!(!should_resolve_dependency(relation, operation));
     }
-    assert_eq!(
-        dependency_policy(operation),
-        DependencyPolicy::RequiredOnly
-    );
+    assert_eq!(dependency_policy(operation), DependencyPolicy::RequiredOnly);
 }
 
 #[test]
@@ -69,14 +83,8 @@ fn dependency_fallback_requires_the_target_game_and_loader() {
     newer_game_file.game_versions =
         vec!["26.1.2".to_string(), "NeoForge".to_string()];
 
-    let mut wrong_loader_file = stage8_curseforge_file(
-        1,
-        103,
-        "wrong-loader.jar",
-        0,
-        Vec::new(),
-        0,
-    );
+    let mut wrong_loader_file =
+        stage8_curseforge_file(1, 103, "wrong-loader.jar", 0, Vec::new(), 0);
     wrong_loader_file.game_versions =
         vec!["1.21.1".to_string(), "Fabric".to_string()];
 
@@ -134,8 +142,7 @@ fn dependency_selection_requires_a_minecraft_target() {
 fn dependency_selection_prefers_a_stable_target_match_over_newer_beta() {
     let mut stable =
         stage8_curseforge_file(1, 101, "stable.jar", 0, Vec::new(), 0);
-    stable.game_versions =
-        vec!["1.21.1".to_string(), "NeoForge".to_string()];
+    stable.game_versions = vec!["1.21.1".to_string(), "NeoForge".to_string()];
     stable.release_type = 1;
     stable.file_date = "2026-08-01T00:00:00Z".to_string();
 

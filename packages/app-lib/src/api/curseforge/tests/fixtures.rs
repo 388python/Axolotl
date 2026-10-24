@@ -1,15 +1,23 @@
 //! Fixtures shared by the CurseForge tests.
 
+use crate::State;
+use crate::api::curseforge::MINECRAFT_GAME_ID;
+use crate::api::curseforge::dto::{
+    CurseForgeCategory, CurseForgeFile, CurseForgeFileHash,
+    CurseForgeManualDownload,
+};
+use crate::api::curseforge::manual::{
+    CurseForgeManualDownloadIntegrityMetadata,
+    CurseForgeManualDownloadReconciliation,
+    curseforge_manual_download_reconciliation,
+    import_pending_manual_download_file,
+};
 use crate::install::InstallJobEventKind;
 use crate::state::{InstanceLink, ModLoader};
-use crate::State;
 use serde_json::json;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use crate::api::curseforge::{MINECRAFT_GAME_ID};
-use crate::api::curseforge::dto::{CurseForgeCategory, CurseForgeFileHash, CurseForgeFile, CurseForgeManualDownload};
-use crate::api::curseforge::manual::{CurseForgeManualDownloadIntegrityMetadata, import_pending_manual_download_file, CurseForgeManualDownloadReconciliation, curseforge_manual_download_reconciliation};
 
 #[cfg(test)]
 fn murmur2(data: &[u8], seed: u32) -> u32 {
@@ -90,8 +98,7 @@ fn write_override_size_test_archive(path: &Path, entries: &[(&str, u32)]) {
         .collect::<Vec<_>>();
     assert_eq!(headers.len(), entries.len() + 1);
     for (offset, (_, size)) in headers.into_iter().skip(1).zip(entries) {
-        bytes[offset + 24..offset + 28]
-            .copy_from_slice(&size.to_le_bytes());
+        bytes[offset + 24..offset + 28].copy_from_slice(&size.to_le_bytes());
     }
     std::fs::write(path, bytes).unwrap();
 }
@@ -162,8 +169,7 @@ fn apply_recovered_events(
     events: &[InstallJobEventKind],
 ) {
     for event in events {
-        let InstallJobEventKind::ContentFileRecovered { path, bytes } =
-            event
+        let InstallJobEventKind::ContentFileRecovered { path, bytes } = event
         else {
             continue;
         };
@@ -179,17 +185,11 @@ fn reconcile_and_simulate_resume(
     materialized: &HashSet<(String, String)>,
     resume_count: &mut usize,
 ) -> CurseForgeManualDownloadReconciliation {
-    let result = curseforge_manual_download_reconciliation(
-        items,
-        pending,
-        materialized,
-    );
+    let result =
+        curseforge_manual_download_reconciliation(items, pending, materialized);
     apply_recovered_events(items, &result.recovered);
-    let latest = curseforge_manual_download_reconciliation(
-        items,
-        pending,
-        materialized,
-    );
+    let latest =
+        curseforge_manual_download_reconciliation(items, pending, materialized);
     if latest.should_resume() {
         *resume_count += 1;
     }
@@ -377,12 +377,13 @@ fn stage6_waiting_manual_job_state(
     let mut state = crate::install::model::InstallJobState::new(
         crate::install::model::InstallRequest::InstallPackToExistingInstance {
             instance_id: instance_id.to_string(),
-            location: crate::api::pack::install_from::CreatePackLocation::FromFile {
-                path: PathBuf::from(format!(
-                    "missing-stage-6-{}.mrpack",
-                    uuid::Uuid::new_v4()
-                )),
-            },
+            location:
+                crate::api::pack::install_from::CreatePackLocation::FromFile {
+                    path: PathBuf::from(format!(
+                        "missing-stage-6-{}.mrpack",
+                        uuid::Uuid::new_v4()
+                    )),
+                },
             post_install_edit: None,
         },
     );
@@ -401,9 +402,7 @@ fn stage6_waiting_manual_job_state(
             reason: "manual download required".to_string(),
             project_id: Some((*project_id).to_string()),
             version_id: Some((*file_id).to_string()),
-            manual_url: Some(
-                "https://www.curseforge.com/download".to_string(),
-            ),
+            manual_url: Some("https://www.curseforge.com/download".to_string()),
         });
     }
     let reason =

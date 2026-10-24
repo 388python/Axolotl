@@ -1,20 +1,33 @@
 //! Manual download recognition and reconciliation.
 
-use crate::api::content_search::{chinese_file_title_for_curseforge_slug, localized_content_file_name};
+use super::MANUAL_IMPORT_SCAN_LOCK;
+use super::auth::capability;
+use super::catalog::{get_file, get_projects, match_fingerprints};
+use super::dto::{
+    CurseForgeCapabilityStatus, CurseForgeFile, CurseForgeFileHash,
+    CurseForgeInstalledFile, CurseForgeManualDownload,
+    CurseForgeManualDownloadImport, CurseForgeManualDownloadImportError,
+    CurseForgeManualDownloadScanResult, CurseForgeRecognitionResult,
+};
+use super::mapping::recognized_project_type;
+use super::selection::{
+    complete_manual_world_download, managed_project_type,
+    manual_download_target_folder,
+};
+use super::validation::{validate_file_name, validate_world_archive_name};
+use super::verify::{compute_fingerprint, fingerprint_and_sha1_file};
+use crate::api::content_search::{
+    chinese_file_title_for_curseforge_slug, localized_content_file_name,
+};
 use crate::install::{InstallJobEventKind, InstallProgressReporter};
-use crate::state::{ContentProvider, ContentSourceKind, CurseForgeFileId, CurseForgeProjectId, ProjectType};
+use crate::state::{
+    ContentProvider, ContentSourceKind, CurseForgeFileId, CurseForgeProjectId,
+    ProjectType,
+};
 use crate::util::fetch::sha1_file_async;
 use crate::{ErrorKind, State};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use super::MANUAL_IMPORT_SCAN_LOCK;
-use super::dto::{CurseForgeCapabilityStatus, CurseForgeFileHash, CurseForgeFile, CurseForgeInstalledFile, CurseForgeManualDownload, CurseForgeManualDownloadImport, CurseForgeManualDownloadImportError, CurseForgeManualDownloadScanResult, CurseForgeRecognitionResult};
-use super::auth::capability;
-use super::catalog::{get_projects, get_file, match_fingerprints};
-use super::selection::{manual_download_target_folder, managed_project_type, complete_manual_world_download};
-use super::verify::{fingerprint_and_sha1_file, compute_fingerprint};
-use super::validation::{validate_file_name, validate_world_archive_name};
-use super::mapping::recognized_project_type;
 
 pub async fn recognize_instance_files(
     instance_id: &str,
@@ -702,7 +715,10 @@ pub async fn import_pending_manual_download_file(
     .await
 }
 
-pub(super) async fn import_pending_manual_download_file_with_integrity_resolver<F, Fut>(
+pub(super) async fn import_pending_manual_download_file_with_integrity_resolver<
+    F,
+    Fut,
+>(
     instance_id: &str,
     project_id: u32,
     file_id: u32,
@@ -812,7 +828,10 @@ pub(crate) async fn reconcile_persisted_curseforge_waiting_jobs(
     .await
 }
 
-pub(super) async fn reconcile_persisted_curseforge_waiting_jobs_with_resume<F, Fut>(
+pub(super) async fn reconcile_persisted_curseforge_waiting_jobs_with_resume<
+    F,
+    Fut,
+>(
     state: &State,
     resume_job: &mut F,
 ) -> crate::Result<()>
@@ -1384,4 +1403,3 @@ pub(crate) async fn mark_pack_member_version_override(
     tx.commit().await?;
     Ok(())
 }
-

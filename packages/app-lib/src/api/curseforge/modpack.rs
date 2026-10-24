@@ -1,11 +1,55 @@
 //! Modpack archive installation.
 
-use crate::api::content_search::{chinese_file_title_for_curseforge_slug, localized_content_file_name};
+use super::catalog::{get_file, get_project};
+use super::dto::{
+    CurseForgeFailedDownload, CurseForgeFile, CurseForgeInstallRequest,
+    CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManifestFile,
+    CurseForgeManualDownload, CurseForgeModpackInstallRequest,
+    CurseForgeModpackInstallResult, CurseForgeModpackManifest,
+    CurseForgeModpackTarget, CurseForgeProject, get_modpack_expected_members,
+};
+use super::install::install_file_with_metrics;
+use super::mapping::project_type_for_class;
+use super::metrics::CurseForgeDownloadMetrics;
+use super::selection::{
+    content_target_folder, curseforge_file_page_url, format_bytes,
+    install_modpack_world_file, managed_project_type,
+    manual_download_from_file, modpack_target_folder, persist_manual_download,
+    report_modpack_progress,
+};
+use super::update::{
+    cache_instance_icon_from_url, loader_type, materialize_modpack_overrides,
+    merge_install_result, modpack_target, modpack_zip_error,
+    read_modpack_manifest, settle_materialized_modpack_overrides,
+};
+use super::validation::validate_file_name;
+use super::verify::{
+    ActiveCurseForgeDownload, CurseForgeDatabaseTask,
+    CurseForgeVerificationContext, CurseForgeVerificationTask,
+    DownloadInstalledFileRequest, download_curseforge_archive,
+    download_installed_file, spawn_curseforge_database_worker,
+    spawn_curseforge_verification_worker,
+};
+use super::{get_modpack_files, get_modpack_projects};
+use crate::api::content_search::{
+    chinese_file_title_for_curseforge_slug, localized_content_file_name,
+};
 use crate::event::LoadingBarType;
-use crate::event::emit::{emit_loading, init_loading, loading_try_for_each_concurrent};
-use crate::install::{InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress, InstallProgressReporter, InstallProgressSecondary};
-use crate::state::{ContentSourceKind, EditInstance, InstanceInstallStage, InstanceLink, ModLoader, ProjectType, Settings};
-use crate::util::download::constants::{MODPACK_DATABASE_QUEUE_CAPACITY, MODPACK_FILE_INSTALL_ATTEMPTS, MODPACK_VERIFICATION_QUEUE_CAPACITY};
+use crate::event::emit::{
+    emit_loading, init_loading, loading_try_for_each_concurrent,
+};
+use crate::install::{
+    InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
+    InstallProgressReporter, InstallProgressSecondary,
+};
+use crate::state::{
+    ContentSourceKind, EditInstance, InstanceInstallStage, InstanceLink,
+    ModLoader, ProjectType, Settings,
+};
+use crate::util::download::constants::{
+    MODPACK_DATABASE_QUEUE_CAPACITY, MODPACK_FILE_INSTALL_ATTEMPTS,
+    MODPACK_VERIFICATION_QUEUE_CAPACITY,
+};
 use crate::util::fetch::FetchProgressFn;
 use crate::{ErrorKind, State};
 use futures::stream;
@@ -17,16 +61,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use super::{get_modpack_projects, get_modpack_files};
-use super::dto::{CurseForgeProject, CurseForgeFile, CurseForgeInstallRequest, CurseForgeInstalledFile, CurseForgeManualDownload, CurseForgeFailedDownload, CurseForgeInstallResult, CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult, CurseForgeModpackTarget, CurseForgeModpackManifest, CurseForgeManifestFile, get_modpack_expected_members};
-use super::catalog::{get_project, get_file};
-use super::install::install_file_with_metrics;
-use super::update::{cache_instance_icon_from_url, materialize_modpack_overrides, settle_materialized_modpack_overrides, read_modpack_manifest, modpack_target, modpack_zip_error, loader_type, merge_install_result};
-use super::selection::{modpack_target_folder, install_modpack_world_file, managed_project_type, content_target_folder, manual_download_from_file, persist_manual_download, format_bytes, report_modpack_progress, curseforge_file_page_url};
-use super::verify::{download_curseforge_archive, DownloadInstalledFileRequest, CurseForgeVerificationTask, CurseForgeVerificationContext, CurseForgeDatabaseTask, ActiveCurseForgeDownload, spawn_curseforge_verification_worker, spawn_curseforge_database_worker, download_installed_file};
-use super::validation::validate_file_name;
-use super::metrics::CurseForgeDownloadMetrics;
-use super::mapping::project_type_for_class;
 
 pub async fn install_modpack(
     request: CurseForgeModpackInstallRequest,
@@ -1787,4 +1821,3 @@ pub(crate) async fn install_local_manifest_files(
         })
         .map_err(Into::into)
 }
-

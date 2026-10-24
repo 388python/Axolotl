@@ -1,7 +1,20 @@
 //! Managed modpack updates, backups, and overrides.
 
+use super::catalog::get_file;
+use super::content_change::install_selected_file;
+use super::dto::{
+    CurseForgeInstallResult, CurseForgeInstalledFile,
+    CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult,
+    CurseForgeModpackManifest, CurseForgeModpackTarget,
+    CurseForgePackExpectedOverride, get_modpack_expected_members_with_reporter,
+};
+use super::modpack::install_modpack_with_reporter;
+use super::selection::persist_manual_download;
 use crate::install::{InstallJobEventKind, InstallProgressReporter};
-use crate::state::{ContentProviderRef, ContentSourceKind, CurseForgeFileId, CurseForgeProjectId, EditInstance, InstanceLink, ModLoader};
+use crate::state::{
+    ContentProviderRef, ContentSourceKind, CurseForgeFileId,
+    CurseForgeProjectId, EditInstance, InstanceLink, ModLoader,
+};
 use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::util::fetch::sha1_file_async;
 use crate::{ErrorKind, State};
@@ -11,11 +24,6 @@ use std::io::{Read, Seek};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
-use super::dto::{CurseForgeInstalledFile, CurseForgeInstallResult, CurseForgeModpackInstallRequest, CurseForgeModpackInstallResult, CurseForgeModpackTarget, CurseForgeModpackManifest, CurseForgePackExpectedOverride, get_modpack_expected_members_with_reporter};
-use super::catalog::get_file;
-use super::modpack::install_modpack_with_reporter;
-use super::content_change::install_selected_file;
-use super::selection::persist_manual_download;
 
 pub async fn update_managed_modpack(
     instance_id: &str,
@@ -960,4 +968,3 @@ pub async fn switch_installed_file_version(
     )
     .await
 }
-

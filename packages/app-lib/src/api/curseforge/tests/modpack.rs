@@ -1,5 +1,26 @@
 //! CurseForge modpack tests.
 
+use super::fixtures::{
+    create_stage6_instance, stage8_curseforge_file,
+    write_override_size_test_archive, write_override_test_archive,
+};
+use crate::api::curseforge::dto::{
+    CurseForgeFileHash, CurseForgeManifestFile, CurseForgePackExpectedOverride,
+    CurseForgeProject,
+};
+use crate::api::curseforge::mapping::project_type_for_class;
+use crate::api::curseforge::modpack::retry_modpack_file_install;
+use crate::api::curseforge::selection::{
+    curseforge_modpack_h2_range_concurrency, install_modpack_world_file,
+    managed_project_type, modpack_target_folder,
+};
+use crate::api::curseforge::unique_metadata_chunks;
+use crate::api::curseforge::update::{
+    collect_modpack_override_tasks, curseforge_override_content,
+    extract_modpack_overrides, materialize_modpack_overrides,
+    read_modpack_manifest, safe_archive_relative_path,
+};
+use crate::api::curseforge::validation::validate_world_archive_name;
 use crate::state::ProjectType;
 use futures::stream;
 use serde_json::json;
@@ -8,14 +29,6 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio_util::sync::CancellationToken;
-use super::fixtures::{write_override_test_archive, write_override_size_test_archive, create_stage6_instance, stage8_curseforge_file};
-use crate::api::curseforge::{unique_metadata_chunks};
-use crate::api::curseforge::dto::{CurseForgeProject, CurseForgeFileHash, CurseForgeManifestFile, CurseForgePackExpectedOverride};
-use crate::api::curseforge::modpack::{retry_modpack_file_install};
-use crate::api::curseforge::update::{collect_modpack_override_tasks, materialize_modpack_overrides, extract_modpack_overrides, read_modpack_manifest, curseforge_override_content, safe_archive_relative_path};
-use crate::api::curseforge::selection::{modpack_target_folder, install_modpack_world_file, managed_project_type, curseforge_modpack_h2_range_concurrency};
-use crate::api::curseforge::validation::{validate_world_archive_name};
-use crate::api::curseforge::mapping::{project_type_for_class};
 
 #[test]
 fn modpack_manifest_worlds_use_the_save_importer_instead_of_the_mod_file_installer()
@@ -36,8 +49,7 @@ fn modpack_manifest_worlds_use_the_save_importer_instead_of_the_mod_file_install
 async fn modpack_manifest_imports_world_archives_and_preserves_existing_saves_on_retry()
  {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let (state, instance_id) =
-        create_stage6_instance("manifest world").await;
+    let (state, instance_id) = create_stage6_instance("manifest world").await;
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     archive
         .start_file(
@@ -54,8 +66,7 @@ async fn modpack_manifest_imports_world_archives_and_preserves_existing_saves_on
         .unwrap();
     archive.write_all(b"region bytes").unwrap();
     let bytes = archive.finish().unwrap().into_inner();
-    let server =
-        tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("http://{}/world.zip", server.local_addr().unwrap());
     let response_bytes = bytes.clone();
     let server_task = tokio::spawn(async move {
@@ -65,8 +76,8 @@ async fn modpack_manifest_imports_world_archives_and_preserves_existing_saves_on
             tokio::spawn(async move {
                 let mut request = [0; 8192];
                 let n = stream.read(&mut request).await.unwrap();
-                let head = String::from_utf8_lossy(&request[..n])
-                    .starts_with("HEAD ");
+                let head =
+                    String::from_utf8_lossy(&request[..n]).starts_with("HEAD ");
                 stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/zip\r\nConnection: close\r\n\r\n", bytes.len()).as_bytes()).await.unwrap();
                 if !head {
                     stream.write_all(&bytes).await.unwrap();
@@ -96,11 +107,25 @@ async fn modpack_manifest_imports_world_archives_and_preserves_existing_saves_on
         file_id: file.id,
         required: true,
     };
-    let installed = tokio::time::timeout(Duration::from_secs(10), retry_modpack_file_install(
-        &instance_id, &manifest_file, "world", "1.21.1", Some(6),
-        crate::state::instances::ManualDownloadOperationKind::PackInstall,
-        None, &file.file_name, CancellationToken::new(), None, None, Some((project.clone(), file.clone())),
-    )).await.unwrap();
+    let installed = tokio::time::timeout(
+        Duration::from_secs(10),
+        retry_modpack_file_install(
+            &instance_id,
+            &manifest_file,
+            "world",
+            "1.21.1",
+            Some(6),
+            crate::state::instances::ManualDownloadOperationKind::PackInstall,
+            None,
+            &file.file_name,
+            CancellationToken::new(),
+            None,
+            None,
+            Some((project.clone(), file.clone())),
+        ),
+    )
+    .await
+    .unwrap();
     server_task.abort();
     let result = installed.0.unwrap_or_else(|| panic!("{}", installed.2));
     assert_eq!(result.installed[0].relative_path, "saves/Pack world");
@@ -112,15 +137,11 @@ async fn modpack_manifest_imports_world_archives_and_preserves_existing_saves_on
         b"world level data"
     );
     assert_eq!(
-        std::fs::read(root.join("saves/Pack world/region/r.0.0.mca"))
-            .unwrap(),
+        std::fs::read(root.join("saves/Pack world/region/r.0.0.mca")).unwrap(),
         b"region bytes"
     );
-    std::fs::write(
-        root.join("saves/Pack world/level.dat"),
-        b"player progress",
-    )
-    .unwrap();
+    std::fs::write(root.join("saves/Pack world/level.dat"), b"player progress")
+        .unwrap();
     install_modpack_world_file(
         &instance_id,
         &project,
@@ -199,9 +220,8 @@ fn curseforge_overrides_publish_after_all_entries_validate() {
     bytes[offset] ^= 0xff;
     std::fs::write(&archive_path, bytes).unwrap();
 
-    let error =
-        extract_modpack_overrides(&archive_path, &instance_path, None)
-            .unwrap_err();
+    let error = extract_modpack_overrides(&archive_path, &instance_path, None)
+        .unwrap_err();
 
     assert!(
         error.to_string().contains("CRC")
@@ -209,9 +229,7 @@ fn curseforge_overrides_publish_after_all_entries_validate() {
     );
     assert_eq!(std::fs::read(&first).unwrap(), b"old-first");
     assert_eq!(std::fs::read(&second).unwrap(), b"old-second");
-    assert!(
-        !PathBuf::from(format!("{}.installing", first.display())).exists()
-    );
+    assert!(!PathBuf::from(format!("{}.installing", first.display())).exists());
     assert!(
         !PathBuf::from(format!("{}.installing", second.display())).exists()
     );
@@ -229,10 +247,9 @@ fn curseforge_overrides_accept_sizes_above_two_gib_up_to_shared_limit() {
             &archive_path,
             &[("a", sizes[0]), ("b", sizes[1]), ("c", sizes[2])],
         );
-        let mut archive = zip::ZipArchive::new(
-            std::fs::File::open(&archive_path).unwrap(),
-        )
-        .unwrap();
+        let mut archive =
+            zip::ZipArchive::new(std::fs::File::open(&archive_path).unwrap())
+                .unwrap();
         let manifest = read_modpack_manifest(&mut archive).unwrap();
         let tasks = collect_modpack_override_tasks(
             &mut archive,
@@ -316,8 +333,7 @@ fn curseforge_overrides_commit_successful_parallel_staging() {
     );
 
     let written =
-        extract_modpack_overrides(&archive_path, &instance_path, None)
-            .unwrap();
+        extract_modpack_overrides(&archive_path, &instance_path, None).unwrap();
 
     assert_eq!(written, 1);
     assert_eq!(std::fs::read(&target).unwrap(), b"replacement");
@@ -359,11 +375,8 @@ fn curseforge_overrides_restore_after_later_stage_failure() {
     assert_eq!(std::fs::read(&existing).unwrap(), b"old-existing");
     assert!(!created.exists());
     assert!(
-        !PathBuf::from(format!(
-            "{}.installing.previous",
-            existing.display()
-        ))
-        .exists()
+        !PathBuf::from(format!("{}.installing.previous", existing.display()))
+            .exists()
     );
 }
 

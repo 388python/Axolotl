@@ -1,15 +1,20 @@
 //! CurseForge routing tests.
 
+use super::fixtures::category;
+use crate::api::curseforge::MINECRAFT_GAME_ID;
+use crate::api::curseforge::catalog::derived_curseforge_download_url;
+use crate::api::curseforge::download::normalized_download_url;
+use crate::api::curseforge::dto::{
+    CurseForgeApiKeySource, CurseForgeFile, CurseForgeProject, UnifiedSearchHit,
+};
+use crate::api::curseforge::mapping::filter_categories;
+use crate::api::curseforge::selection::validate_cdn_url;
+use crate::api::curseforge::transport::{
+    MirrorPolicy, RequestRoute, RequestRouteSource, request_routes,
+    resolve_api_key, should_try_next_route,
+};
 use reqwest::StatusCode;
 use serde_json::json;
-use super::fixtures::{category};
-use crate::api::curseforge::{MINECRAFT_GAME_ID};
-use crate::api::curseforge::dto::{CurseForgeApiKeySource, UnifiedSearchHit, CurseForgeProject, CurseForgeFile};
-use crate::api::curseforge::catalog::{derived_curseforge_download_url};
-use crate::api::curseforge::selection::{validate_cdn_url};
-use crate::api::curseforge::transport::{resolve_api_key, MirrorPolicy, RequestRouteSource, RequestRoute, request_routes, should_try_next_route};
-use crate::api::curseforge::download::{normalized_download_url};
-use crate::api::curseforge::mapping::{filter_categories};
 
 #[test]
 fn unified_search_hit_accepts_null_gallery() {
@@ -63,8 +68,7 @@ fn curseforge_file_accepts_null_modules() {
 
 #[test]
 fn official_only_requests_exclude_mirror_routes() {
-    let routes =
-        request_routes("/v1/mods/search", MirrorPolicy::OfficialOnly);
+    let routes = request_routes("/v1/mods/search", MirrorPolicy::OfficialOnly);
 
     assert!(
         routes
@@ -159,10 +163,8 @@ fn category_cache_can_be_filtered_for_each_project_class() {
 fn cdn_urls_are_restricted_to_forgecdn() {
     assert!(
         validate_cdn_url(
-            &reqwest::Url::parse(
-                "https://edge.forgecdn.net/files/1/2/a.jar"
-            )
-            .unwrap()
+            &reqwest::Url::parse("https://edge.forgecdn.net/files/1/2/a.jar")
+                .unwrap()
         )
         .is_ok()
     );
@@ -191,11 +193,8 @@ fn blank_download_urls_are_treated_as_unavailable() {
 #[test]
 fn derived_download_urls_follow_curseforge_file_id_layout() {
     assert_eq!(
-        derived_curseforge_download_url(
-            6_767_951,
-            "jei 1.21.5+neoforge.jar"
-        )
-        .unwrap(),
+        derived_curseforge_download_url(6_767_951, "jei 1.21.5+neoforge.jar")
+            .unwrap(),
         "https://edge.forgecdn.net/files/6767/951/jei%201.21.5%2Bneoforge.jar"
     );
     assert_eq!(
@@ -203,8 +202,7 @@ fn derived_download_urls_follow_curseforge_file_id_layout() {
         "https://edge.forgecdn.net/files/1234/5/example.jar"
     );
     assert!(
-        derived_curseforge_download_url(1_234_005, "../example.jar")
-            .is_err()
+        derived_curseforge_download_url(1_234_005, "../example.jar").is_err()
     );
 }
 

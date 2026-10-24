@@ -1,15 +1,37 @@
 //! Install preview derived from a dependency plan.
 
-use crate::state::{ContentProvider, DependencyResolutionEdge, DependencyResolutionIssue, DependencyResolutionNode, DependencyResolutionPlan, DependencyResolutionTarget};
+use super::catalog::{get_file, get_project};
+use super::dto::{
+    CurseForgeInstallRequest, CurseForgeProject, CurseForgeSkippedDependency,
+    default_true,
+};
+use super::install::{
+    CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
+    should_resolve_dependency,
+};
+use super::mapping::{mod_loader_to_slug, recognized_project_type};
+use super::selection::{
+    CurseForgeDependencySelectionReason, append_modrinth_fallback_plan,
+    curseforge_content_ref, curseforge_file_sha1, instance_content_revision,
+    managed_project_type, preview_modrinth_fallbacks,
+    resolve_modrinth_fallback_plan, select_dependency_file,
+    store_dependency_resolution_plan,
+};
+use super::{
+    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
+    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
+    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
+    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
+    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+};
 use crate::State;
+use crate::state::{
+    ContentProvider, DependencyResolutionEdge, DependencyResolutionIssue,
+    DependencyResolutionNode, DependencyResolutionPlan,
+    DependencyResolutionTarget,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use super::{DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL, DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_INCLUDE, FABRIC_API_CURSEFORGE_PROJECT_ID, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID, CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH};
-use super::dto::{CurseForgeProject, CurseForgeInstallRequest, CurseForgeSkippedDependency, default_true};
-use super::catalog::{get_project, get_file};
-use super::install::{PreviewPendingCurseForgeFile, CurseForgeModrinthFallbackPreview, should_resolve_dependency};
-use super::selection::{CurseForgeDependencySelectionReason, select_dependency_file, resolve_modrinth_fallback_plan, preview_modrinth_fallbacks, append_modrinth_fallback_plan, curseforge_content_ref, curseforge_file_sha1, instance_content_revision, store_dependency_resolution_plan, managed_project_type};
-use super::mapping::{mod_loader_to_slug, recognized_project_type};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -429,4 +451,3 @@ pub async fn preview_install_file(
         incompatible_dependencies: incompatible,
     })
 }
-

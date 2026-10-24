@@ -1,14 +1,14 @@
 //! Content version changes.
 
+use super::catalog::{get_file, get_project};
+use super::dto::{CurseForgeInstallRequest, CurseForgeInstallResult};
+use super::install::{install_file, install_file_with_reporter};
+use super::manual::mark_pack_member_version_override;
+use super::preview::preview_install_file;
+use super::selection::curseforge_file_sha1;
 use crate::install::InstallProgressReporter;
 use crate::state::ContentProvider;
 use crate::{ErrorKind, State};
-use super::dto::{CurseForgeInstallRequest, CurseForgeInstallResult};
-use super::catalog::{get_project, get_file};
-use super::install::{install_file, install_file_with_reporter};
-use super::preview::preview_install_file;
-use super::manual::mark_pack_member_version_override;
-use super::selection::curseforge_file_sha1;
 
 pub(crate) async fn prepare_curseforge_content_change_action(
     instance_id: &str,
@@ -320,4 +320,3 @@ pub(crate) async fn install_selected_file(
     }
     Ok(result)
 }
-

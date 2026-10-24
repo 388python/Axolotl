@@ -1,22 +1,42 @@
 //! Dependency selection, target folders, and progress helpers.
 
+use super::catalog::{get_files, get_project};
+use super::dto::{
+    CurseForgeFile, CurseForgeFilesRequest, CurseForgeInstallRequest,
+    CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManualDownload,
+    CurseForgeProject, CurseForgeWorldInstallResult,
+};
+use super::install::{
+    CurseForgeModrinthFallbackPreview, dependency_policy, install_world_file,
+};
+use super::mapping::mod_loader_to_slug;
+use super::update::loader_type;
+use super::validation::{validate_file_name, validate_world_archive_name};
+use super::{
+    CachedDependencyResolutionPlan, DEPENDENCY_PLAN_TTL,
+    DEPENDENCY_RESOLUTION_PLANS, MAX_PAGE_SIZE,
+};
 use crate::event::emit::emit_loading;
-use crate::install::{InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress, InstallProgressReporter, InstallProgressSecondary};
-use crate::state::{CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef, CurseForgeFileId, CurseForgeProjectId, DependencyResolutionEdge, DependencyResolutionIssue, DependencyResolutionNode, DependencyResolutionPlan, DependencySelectionReason, ModLoader, ModrinthProjectId, ModrinthVersionId, ProjectType, ReleaseChannel};
-use crate::util::download::constants::{CURSEFORGE_H2_RANGE_THRESHOLD, CURSEFORGE_REQUESTED_H2_RANGES};
+use crate::install::{
+    InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
+    InstallProgressReporter, InstallProgressSecondary,
+};
+use crate::state::{
+    CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef,
+    CurseForgeFileId, CurseForgeProjectId, DependencyResolutionEdge,
+    DependencyResolutionIssue, DependencyResolutionNode,
+    DependencyResolutionPlan, DependencySelectionReason, ModLoader,
+    ModrinthProjectId, ModrinthVersionId, ProjectType, ReleaseChannel,
+};
+use crate::util::download::constants::{
+    CURSEFORGE_H2_RANGE_THRESHOLD, CURSEFORGE_REQUESTED_H2_RANGES,
+};
 use crate::util::fetch::{ContentValidation, Integrity};
 use crate::{ErrorKind, State};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
-use super::{MAX_PAGE_SIZE, DEPENDENCY_PLAN_TTL, DEPENDENCY_RESOLUTION_PLANS, CachedDependencyResolutionPlan};
-use super::dto::{CurseForgeProject, CurseForgeFile, CurseForgeFilesRequest, CurseForgeInstallRequest, CurseForgeInstalledFile, CurseForgeManualDownload, CurseForgeInstallResult, CurseForgeWorldInstallResult};
-use super::catalog::{get_project, get_files};
-use super::install::{install_world_file, CurseForgeModrinthFallbackPreview, dependency_policy};
-use super::update::loader_type;
-use super::validation::{validate_file_name, validate_world_archive_name};
-use super::mapping::mod_loader_to_slug;
 
 pub(crate) fn manual_download_target_folder(
     download: &CurseForgeManualDownload,
@@ -109,7 +129,9 @@ fn log_dependency_file_selection(
     );
 }
 
-pub(super) fn dependency_target_game_version(game_version: Option<&str>) -> Option<&str> {
+pub(super) fn dependency_target_game_version(
+    game_version: Option<&str>,
+) -> Option<&str> {
     game_version.filter(|version| !version.trim().is_empty())
 }
 
@@ -548,7 +570,9 @@ pub(super) fn file_matches_dependency_target(
     game_version_matches && mod_loader_matches
 }
 
-pub(crate) fn modpack_target_folder(project_type: &str) -> crate::Result<String> {
+pub(crate) fn modpack_target_folder(
+    project_type: &str,
+) -> crate::Result<String> {
     if project_type == "world" {
         Ok("saves".into())
     } else {
@@ -1040,7 +1064,9 @@ pub(super) fn validate_cdn_url(url: &reqwest::Url) -> crate::Result<()> {
     Ok(())
 }
 
-pub(crate) fn curseforge_content_validation(file_name: &str) -> ContentValidation {
+pub(crate) fn curseforge_content_validation(
+    file_name: &str,
+) -> ContentValidation {
     match Path::new(file_name)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -1073,7 +1099,9 @@ pub(crate) fn curseforge_integrity(
     }
 }
 
-pub(crate) const fn curseforge_modpack_h2_range_concurrency(size: u64) -> Option<usize> {
+pub(crate) const fn curseforge_modpack_h2_range_concurrency(
+    size: u64,
+) -> Option<usize> {
     if size >= CURSEFORGE_H2_RANGE_THRESHOLD {
         Some(CURSEFORGE_REQUESTED_H2_RANGES)
     } else {
@@ -1081,7 +1109,9 @@ pub(crate) const fn curseforge_modpack_h2_range_concurrency(size: u64) -> Option
     }
 }
 
-pub(crate) fn curseforge_candidate_urls(url: &str) -> crate::Result<Vec<String>> {
+pub(crate) fn curseforge_candidate_urls(
+    url: &str,
+) -> crate::Result<Vec<String>> {
     let parsed = reqwest::Url::parse(url).map_err(|_| {
         ErrorKind::InputError(
             "CurseForge returned an invalid download URL".to_string(),
@@ -1112,4 +1142,3 @@ pub(crate) fn curseforge_candidate_urls(url: &str) -> crate::Result<Vec<String>>
     }
     Ok(candidates)
 }
-

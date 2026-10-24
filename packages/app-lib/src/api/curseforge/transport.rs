@@ -1,16 +1,23 @@
 //! Credential resolution, mirror routing, and request plumbing.
 
-use crate::state::{DownloadSourceMode, curseforge_api_key_override_if_ready, curseforge_settings};
-use crate::util::fetch::{DownloadRouteSource, ProxyPolicy, ResourceClass, resolve_download_routes_for};
+#[cfg(debug_assertions)]
+use super::LOCAL_CLIENT;
+use super::auth::{api_key_generation, record_key_response};
+use super::dto::CurseForgeApiKeySource;
+use super::{API_BASE_URL, CLIENT, UNAUTHORIZED};
+use crate::state::{
+    DownloadSourceMode, curseforge_api_key_override_if_ready,
+    curseforge_settings,
+};
+use crate::util::fetch::{
+    DownloadRouteSource, ProxyPolicy, ResourceClass,
+    resolve_download_routes_for,
+};
 use crate::{ErrorKind, State};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::time::{Duration, Instant};
-use super::{API_BASE_URL, UNAUTHORIZED, CLIENT};
-use super::dto::CurseForgeApiKeySource;
-use super::auth::{api_key_generation, record_key_response};
-#[cfg(debug_assertions)] use super::LOCAL_CLIENT;
 
 pub(crate) fn api_key() -> Option<String> {
     api_key_with_source().0
@@ -20,7 +27,8 @@ pub(crate) fn api_key() -> Option<String> {
 /// turn wins over the one this build was given. Either of the launcher sources
 /// can be absent: builds without `CURSEFORGE_API_KEY` stay valid, they just
 /// cannot reach the official API until a key is provided.
-pub(crate) fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource) {
+pub(crate) fn api_key_with_source() -> (Option<String>, CurseForgeApiKeySource)
+{
     let launcher_key = std::env::var("AXOLOTL_CURSEFORGE_API_KEY")
         .ok()
         .or_else(|| option_env!("CURSEFORGE_API_KEY").map(str::to_string));
@@ -317,4 +325,3 @@ fn response_error_message(status: StatusCode, bytes: &[u8]) -> String {
                 .to_string()
         })
 }
-

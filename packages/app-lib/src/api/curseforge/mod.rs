@@ -33,17 +33,33 @@ pub use self::transport::*;
 pub use self::update::*;
 pub use self::verify::*;
 
-pub(crate) use self::catalog::{derived_curseforge_download_url, resource_request};
+pub(crate) use self::catalog::{
+    derived_curseforge_download_url, resource_request,
+};
 pub(crate) use self::content_change::StagedCurseForgeUpgrade;
 pub(crate) use self::content_change::prepare_curseforge_content_change_action;
-pub(crate) use self::dto::{CurseForgeManifestFile, CurseForgePackExpectedContent, CurseForgePackExpectedMember, CurseForgePackExpectedOverride};
-pub(crate) use self::install::{apply_staged_curseforge_upgrade_file, apply_staged_curseforge_upgrade_file_with_state, stage_curseforge_upgrade_file};
-pub(crate) use self::manual::{import_pending_manual_download_from_path, reconcile_persisted_curseforge_waiting_jobs, scan_pending_manual_downloads_in};
+pub(crate) use self::dto::{
+    CurseForgeManifestFile, CurseForgePackExpectedContent,
+    CurseForgePackExpectedMember, CurseForgePackExpectedOverride,
+};
+pub(crate) use self::install::{
+    apply_staged_curseforge_upgrade_file,
+    apply_staged_curseforge_upgrade_file_with_state,
+    stage_curseforge_upgrade_file,
+};
+pub(crate) use self::manual::{
+    import_pending_manual_download_from_path,
+    reconcile_persisted_curseforge_waiting_jobs,
+    scan_pending_manual_downloads_in,
+};
 pub(crate) use self::modpack::install_local_manifest_files;
 pub(crate) use self::update::loader_family;
-pub(crate) use self::verify::{compute_fingerprint, CurseForgeFingerprintHasher};
+pub(crate) use self::verify::{
+    CurseForgeFingerprintHasher, compute_fingerprint,
+};
 
-
+use self::catalog::{get_files_many, get_project, get_projects};
+use self::dto::{CurseForgeCategory, CurseForgeFile, CurseForgeProject};
 use crate::state::DependencyResolutionPlan;
 use crate::util::download::constants::MODPACK_METADATA_CONCURRENCY;
 use dashmap::DashMap;
@@ -52,8 +68,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{LazyLock, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use self::dto::{CurseForgeCategory, CurseForgeProject, CurseForgeFile};
-use self::catalog::{get_project, get_projects, get_files_many};
 
 const API_BASE_URL: &str = "https://api.curseforge.com";
 const MINECRAFT_GAME_ID: u32 = 432;
@@ -169,4 +183,3 @@ static LOCAL_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .build()
         .expect("Local CurseForge client configuration should be valid")
 });
-

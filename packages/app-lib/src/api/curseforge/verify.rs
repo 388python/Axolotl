@@ -1,26 +1,44 @@
 //! Download verification, fingerprinting, and database batching.
 
-use crate::api::content_search::{chinese_file_title_for_curseforge_slug, localized_content_file_name};
+use super::dto::{CurseForgeFile, CurseForgeProject, UnifiedSearchHit};
+use super::mapping::{mod_loader_to_slug, project_type_for_class};
+use super::metrics::CurseForgeDownloadMetrics;
+use super::selection::{
+    content_target_folder, curseforge_candidate_urls,
+    curseforge_content_validation, curseforge_integrity,
+    curseforge_modpack_h2_range_concurrency, format_bytes, is_forge_cdn_url,
+};
+use super::transport::api_key;
+use super::validation::validate_file_name;
+use crate::api::content_search::{
+    chinese_file_title_for_curseforge_slug, localized_content_file_name,
+};
 use crate::event::emit::emit_loading;
-use crate::install::{InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress, InstallProgressReporter, InstallProgressSecondary};
-use crate::state::{ContentProvider, ContentProviderRef, ContentSourceKind, CurseForgeFileId, CurseForgeProjectId, ProjectType};
-use crate::util::download::constants::{MODPACK_DATABASE_BATCH_SIZE, MODPACK_DATABASE_FLUSH_INTERVAL, MODPACK_VERIFICATION_CONCURRENCY};
-use crate::util::fetch::{ContentValidation, DownloadRequest, FetchProgressFn, ResourceClass, download_to_path, sha1_file_async, sha1_file_cancellable};
+use crate::install::{
+    InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
+    InstallProgressReporter, InstallProgressSecondary,
+};
+use crate::state::{
+    ContentProvider, ContentProviderRef, ContentSourceKind, CurseForgeFileId,
+    CurseForgeProjectId, ProjectType,
+};
+use crate::util::download::constants::{
+    MODPACK_DATABASE_BATCH_SIZE, MODPACK_DATABASE_FLUSH_INTERVAL,
+    MODPACK_VERIFICATION_CONCURRENCY,
+};
+use crate::util::fetch::{
+    ContentValidation, DownloadRequest, FetchProgressFn, ResourceClass,
+    download_to_path, sha1_file_async, sha1_file_cancellable,
+};
 use crate::{ErrorKind, State};
 use futures::stream;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use super::dto::{UnifiedSearchHit, CurseForgeProject, CurseForgeFile};
-use super::selection::{content_target_folder, format_bytes, is_forge_cdn_url, curseforge_content_validation, curseforge_integrity, curseforge_modpack_h2_range_concurrency, curseforge_candidate_urls};
-use super::transport::api_key;
-use super::validation::validate_file_name;
-use super::metrics::CurseForgeDownloadMetrics;
-use super::mapping::{mod_loader_to_slug, project_type_for_class};
 
 pub(crate) async fn download_curseforge_path(
     url: &str,
@@ -1172,4 +1190,3 @@ impl From<CurseForgeProject> for UnifiedSearchHit {
         }
     }
 }
-

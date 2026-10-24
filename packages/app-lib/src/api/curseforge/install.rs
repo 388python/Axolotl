@@ -1,20 +1,45 @@
 //! Content installation and dependency resolution.
 
+use super::catalog::{get_file, get_project};
+use super::dto::{
+    CurseForgeCrossSourceDependency, CurseForgeFailedDownload, CurseForgeFile,
+    CurseForgeInstallRequest, CurseForgeInstallResult, CurseForgeInstalledFile,
+    CurseForgeProject, CurseForgeSkippedDependency,
+    CurseForgeWorldInstallRequest, CurseForgeWorldInstallResult, default_true,
+};
+use super::mapping::{mod_loader_to_slug, recognized_project_type};
+use super::metrics::CurseForgeDownloadMetrics;
+use super::selection::{
+    content_target_folder, curseforge_content_ref,
+    curseforge_content_validation, curseforge_file_sha1,
+    instance_content_revision, managed_project_type, manual_download_from_file,
+    persist_manual_download, resolve_modrinth_fallback_plan,
+    select_dependency_file,
+};
+use super::validation::{validate_file_name, validate_world_archive_name};
+use super::verify::{
+    DownloadInstalledFileRequest, download_curseforge_path,
+    download_installed_file,
+};
+use super::{
+    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
+    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
+    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
+    DEPENDENCY_RELATION_TOOL, DEPENDENCY_RESOLUTION_PLANS,
+    FABRIC_API_CURSEFORGE_PROJECT_ID, MAX_DEPENDENCY_DEPTH,
+    QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+};
 use crate::install::InstallProgressReporter;
-use crate::state::{CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef, CurseForgeFileId, DependencyResolutionNode, DependencyResolutionPlan, DependencyResolutionTarget, InstanceInstallStage, ProjectType};
+use crate::state::{
+    CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef,
+    CurseForgeFileId, DependencyResolutionNode, DependencyResolutionPlan,
+    DependencyResolutionTarget, InstanceInstallStage, ProjectType,
+};
 use crate::{ErrorKind, State};
 use content_management::{DependencyPolicy, DependencyType};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
-use super::{DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL, DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_INCLUDE, FABRIC_API_CURSEFORGE_PROJECT_ID, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID, CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH, DEPENDENCY_RESOLUTION_PLANS};
-use super::dto::{CurseForgeProject, CurseForgeFile, CurseForgeInstallRequest, CurseForgeWorldInstallRequest, CurseForgeInstalledFile, CurseForgeFailedDownload, CurseForgeSkippedDependency, CurseForgeInstallResult, CurseForgeCrossSourceDependency, CurseForgeWorldInstallResult, default_true};
-use super::catalog::{get_project, get_file};
-use super::selection::{select_dependency_file, resolve_modrinth_fallback_plan, curseforge_content_ref, curseforge_file_sha1, instance_content_revision, managed_project_type, content_target_folder, manual_download_from_file, persist_manual_download, curseforge_content_validation};
-use super::verify::{download_curseforge_path, DownloadInstalledFileRequest, download_installed_file};
-use super::validation::{validate_file_name, validate_world_archive_name};
-use super::metrics::CurseForgeDownloadMetrics;
-use super::mapping::{mod_loader_to_slug, recognized_project_type};
 
 pub async fn install_file(
     request: CurseForgeInstallRequest,
@@ -1461,4 +1486,3 @@ async fn persist_modrinth_fallback_dependency_edges(
     drop(database_permit);
     Ok(())
 }
-
