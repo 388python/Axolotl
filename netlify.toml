@@ -19,3 +19,8 @@ status = 200
 from = "/api/downloads/prepare"
 to = "/.netlify/functions/downloads-prepare"
 status = 200
+
+[[redirects]]
+from = "/api/releases/gitlink"
+to = "/.netlify/functions/releases-gitlink"
+status = 200
