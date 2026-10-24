@@ -9,7 +9,7 @@ import {
 
 test('a successful response without a platform package is unavailable, not still loading', () => {
     const links = resolveLauncherDownloads(
-        { tag_name: 'v1.0-beta', assets: ['Axolotl_universal.dmg'] },
+        { tag_name: 'v1.0-beta', assets: [{ name: 'Axolotl_universal.dmg' }] },
         'update-server',
     )
     assert.equal(getDownloadAvailability('success', links.windows), 'unavailable')
@@ -29,7 +29,11 @@ test('a successful response without a platform package is unavailable, not still
 test('download links use only the supplied release and source, and fallback respects the channel', () => {
     const release = {
         tag_name: 'v2.0-beta.1',
-        assets: ['Axolotl_x64-setup.exe', 'Axolotl_amd64.AppImage', 'Axolotl_amd64.deb'],
+        assets: [
+            { name: 'Axolotl_x64-setup.exe', sha256: 'a'.repeat(64) },
+            { name: 'Axolotl_amd64.AppImage', sha256: 'b'.repeat(64) },
+            { name: 'Axolotl_amd64.deb', sha256: 'c'.repeat(64) },
+        ],
     }
     assert.equal(
         resolveLauncherDownloads(release, 'github').windows,
@@ -39,6 +43,10 @@ test('download links use only the supplied release and source, and fallback resp
     assert.equal(
         resolveLauncherDownloads(release, 'update-server').deb,
         'https://update.axlmc.org/dist/2.0-beta.1/Axolotl_amd64.deb',
+    )
+    assert.equal(
+        resolveLauncherDownloads(release, 'update-server').appImage,
+        'https://update.axlmc.org/dist/2.0-beta.1/Axolotl_amd64.AppImage',
     )
     assert.equal(
         getReleasePage('beta', release),

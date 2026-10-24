@@ -38,6 +38,8 @@ struct UpdatePreferences {
 mod macos;
 
 #[cfg(feature = "updater")]
+mod updater_fallback;
+#[cfg(feature = "updater")]
 mod updater_impl;
 #[cfg(not(feature = "updater"))]
 mod updater_impl_noop;
