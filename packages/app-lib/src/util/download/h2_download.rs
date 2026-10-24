@@ -799,8 +799,6 @@ async fn verify_and_finalize(
 /// A single small file (a Minecraft asset object) to download over a shared
 /// HTTP/2 connection. All items in one batch must share the same authority.
 pub(crate) struct H2BatchAsset {
-    /// Canonical asset URL used to rebuild routes after batch failure.
-    pub original_url: String,
     /// Route-resolved URL for the asset.
     pub url: String,
     /// Destination for the object (`assets/objects/<hh>/<hash>`).
@@ -832,18 +830,12 @@ enum AssetBatchItemOutcome {
     LocalObjectFailed {
         error: crate::Error,
     },
-    /// The server answered with a redirect status that only the regular
-    /// per-file download layer can explain: it owns Location following, hop
-    /// limits and route selection. The item is handed straight back to that
-    /// layer, never counted as a line-level transfer failure and never
-    /// retried inside the batch.
-    RedirectFallback,
+    Redirect,
 }
 
 impl Clone for H2BatchAsset {
     fn clone(&self) -> Self {
         Self {
-            original_url: self.original_url.clone(),
             url: self.url.clone(),
             destination: self.destination.clone(),
             legacy_destinations: self.legacy_destinations.clone(),
@@ -994,8 +986,6 @@ mod tests {
             .unwrap();
         let legacy = blocked_parent.join("resource");
         let item = H2BatchAsset {
-            original_url: "https://resources.download.minecraft.net/aa/object"
-                .into(),
             url: "https://resources.download.minecraft.net/aa/object".into(),
             destination: destination.clone(),
             legacy_destinations: vec![legacy.clone()],
@@ -1037,21 +1027,18 @@ mod tests {
 
 /// Downloads a batch of small files over a shared HTTP/2 connection group,
 /// multiplexing up to `concurrency` logical workers. Physical H2 streams are
-/// governed by the shared authority stream and global transfer budgets. The group begins with one
+/// governed by the shared authority stream budget. The group begins with one
 /// connection and may add one sibling only for a sustained saturated batch;
 /// it never creates one connection per file. Items that cannot be downloaded
-/// after internal retries are returned so the caller can retry them through
-/// the regular per-file path (which performs route fallback).
-/// Returned items have exhausted every batch pass, so downstream can treat
-/// them as persistently failing against the chosen route.
+/// after internal retries fail the batch instead of switching to per-file
+/// network downloads.
 pub(crate) async fn download_asset_batch_via_h2<F>(
     route: &DownloadRoute,
     items: Vec<H2BatchAsset>,
     concurrency: usize,
     apply_native_policy: bool,
-    native_semaphore: Option<&fetch::FetchSemaphore>,
     on_completed: F,
-) -> crate::Result<Vec<H2BatchAsset>>
+) -> crate::Result<()>
 where
     F: Fn(H2BatchAsset) -> Pin<Box<dyn Future<Output = ()> + Send>>
         + Send
@@ -1063,7 +1050,6 @@ where
         items,
         concurrency,
         apply_native_policy,
-        native_semaphore,
         on_completed,
     ))
     .await
@@ -1074,9 +1060,8 @@ async fn download_asset_batch_inner<F>(
     items: Vec<H2BatchAsset>,
     concurrency: usize,
     apply_native_policy: bool,
-    native_semaphore: Option<&fetch::FetchSemaphore>,
     on_completed: F,
-) -> crate::Result<Vec<H2BatchAsset>>
+) -> crate::Result<()>
 where
     F: Fn(H2BatchAsset) -> Pin<Box<dyn Future<Output = ()> + Send>>
         + Send
@@ -1085,9 +1070,12 @@ where
 {
     let concurrency = concurrency.max(1);
     if apply_native_policy
-        && super::native::h2_ineligible_reason(route).is_some()
+        && let Some(reason) = super::native::h2_ineligible_reason(route)
     {
-        return Ok(items);
+        return Err(crate::ErrorKind::NetworkError(format!(
+            "Minecraft asset route cannot use HTTP/2 batching: {reason:?}"
+        ))
+        .into());
     }
     // Local object I/O failures are deterministic per destination; remember the
     // first one and keep draining the batch so siblings already in flight or
@@ -1117,7 +1105,10 @@ where
                     None,
                 );
             }
-            return Ok(items);
+            return Err(crate::ErrorKind::NetworkError(format!(
+                "Could not establish an HTTP/2 asset batch connection: {failure:?}"
+            ))
+            .into());
         }
     };
     let connections = Arc::new(AssetBatchConnectionGroup::new(
@@ -1167,7 +1158,6 @@ where
                         &item,
                         route,
                         apply_native_policy,
-                        native_semaphore,
                         pass > 0,
                     )
                     .await;
@@ -1222,16 +1212,12 @@ where
                         local_object_error = Some(error);
                     }
                 }
-                Ok(AssetBatchItemOutcome::RedirectFallback) => {
+                Ok(AssetBatchItemOutcome::Redirect) => {
                     tracing::debug!(
                         url = %fetch::sanitize_url_for_log(&item.url),
-                        "Asset batch received a redirect status; deferring to the regular download path"
+                    "Asset batch received a redirect status"
                     );
-                    // Redirect responses are explained by the regular per-file
-                    // layer (Location following, hop limit, route fallback).
-                    // Do not spend another batch pass on them and do not count
-                    // them as transfer failures: #487 keeps original_url so the
-                    // ordinary path can rebuild official and mirror candidates.
+                    // The batch intentionally has no per-file network fallback.
                     failed.push(item);
                 }
                 Err(error) => {
@@ -1280,8 +1266,14 @@ where
             failed.len(),
             route.source.as_str(),
         );
+        return Err(crate::ErrorKind::NetworkError(format!(
+            "{} Minecraft assets failed in the HTTP/2 batch on route {}",
+            failed.len(),
+            route.source.as_str(),
+        ))
+        .into());
     }
-    Ok(failed)
+    Ok(())
 }
 
 async fn prepare_asset_part_path(
@@ -1300,7 +1292,6 @@ async fn download_asset_item(
     item: &H2BatchAsset,
     route: &DownloadRoute,
     apply_native_policy: bool,
-    native_semaphore: Option<&fetch::FetchSemaphore>,
     rescue: bool,
 ) -> crate::Result<AssetBatchItemOutcome> {
     let integrity = Integrity {
@@ -1362,11 +1353,7 @@ async fn download_asset_item(
         Some(
             tokio::time::timeout(
                 ASSET_RESOURCE_WAIT_TIMEOUT,
-                super::h2_stream_budget::acquire_download(
-                    route,
-                    native_semaphore,
-                    true,
-                ),
+                super::h2_stream_budget::acquire_download(route, None, true),
             )
             .await
             .map_err(|_| {
@@ -1403,7 +1390,7 @@ async fn download_asset_item(
         // failures. 304 is deliberately excluded: it is not a downloadable
         // redirect for these objects.
         if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
-            return Ok(AssetBatchItemOutcome::RedirectFallback);
+            return Ok(AssetBatchItemOutcome::Redirect);
         }
         return Err(crate::ErrorKind::OtherError(format!(
             "HTTP/2 GET failed with status {}",
