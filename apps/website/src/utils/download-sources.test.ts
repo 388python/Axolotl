@@ -88,7 +88,7 @@ test('registered URL builders use catalog fields and encode each path segment ex
         downloadSources.map((source) => [source.id, source.assetUrl(release, release.assets[0])]),
     )
     assert.deepEqual(urls, {
-        'update-server': 'https://update.axlmc.org/dist/1.10.0-beta.5/Axolotl%20x64-setup.exe',
+        'update-server': 'https://dist.axlmc.org/dist/1.10.0-beta.5/Axolotl%20x64-setup.exe',
         github: 'https://github.com/Mystic-Stars/Axolotl/releases/download/v1.10.0-beta.5/Axolotl%20x64-setup.exe',
         gitlink:
             'https://www.gitlink.org.cn/xinvxueyuan/Axolotl/releases/download/v1.10.0-beta.5/Axolotl%20x64-setup.exe',
@@ -105,7 +105,29 @@ test('registered URL builders use catalog fields and encode each path segment ex
     )!
     assert.equal(
         getDownloadSource('update-server').assetUrl(nested, nested.assets[0]),
-        'https://update.axlmc.org/dist/1.10.0-beta.5/windows/file%25name.exe',
+        'https://dist.axlmc.org/dist/1.10.0-beta.5/windows/file%25name.exe',
+    )
+})
+
+test('catalog download URLs may already use the official distribution origin', () => {
+    const release = normalizeDownloadCatalog(
+        catalog({
+            downloads: [
+                {
+                    filename: 'Axolotl x64-setup.exe',
+                    url: 'https://dist.axlmc.org/dist/1.10.0-beta.5/Axolotl%20x64-setup.exe',
+                },
+            ],
+        }),
+    )!
+    assert.equal(release.assets[0].relative_path, 'dist/1.10.0-beta.5/Axolotl x64-setup.exe')
+    assert.equal(
+        getDownloadSource('update-server').assetUrl(release, release.assets[0]),
+        'https://dist.axlmc.org/dist/1.10.0-beta.5/Axolotl%20x64-setup.exe',
+    )
+    assert.equal(
+        getDownloadCatalogUrl('release'),
+        'https://update.axlmc.org/api/downloads/latest?channel=release',
     )
 })
 

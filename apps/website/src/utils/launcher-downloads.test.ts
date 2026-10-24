@@ -46,7 +46,7 @@ test('each source builds links from the exact same release and attachment names'
     )
     assert.equal(
         resolveLauncherDownloads(catalog, 'update-server').deb,
-        'https://update.axlmc.org/dist/2.0.0-beta.1/Axolotl_amd64.deb',
+        'https://dist.axlmc.org/dist/2.0.0-beta.1/Axolotl_amd64.deb',
     )
     assert.equal(
         resolveLauncherDownloads(catalog, 'gitlink').deb,

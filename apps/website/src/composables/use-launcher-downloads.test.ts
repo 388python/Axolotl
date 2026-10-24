@@ -59,7 +59,7 @@ test('source changes reuse one authoritative catalog and only change the file ho
     const f = setup(t)
     const release = f.result.release.value
     assert.equal(f.calls.length, 1)
-    assert.equal(new URL(f.result.links.value.windows!).hostname, 'update.axlmc.org')
+    assert.equal(new URL(f.result.links.value.windows!).hostname, 'dist.axlmc.org')
     f.source.value = 'gitlink'
     assert.equal(new URL(f.result.links.value.windows!).hostname, 'www.gitlink.org.cn')
     f.source.value = 'github'

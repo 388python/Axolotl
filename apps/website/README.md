@@ -9,6 +9,8 @@ The browser reads release metadata only from
 download sources keeps that catalog and its version tag, attachment names and
 relative paths; it only changes the generated file URLs. No Netlify Functions or
 GitHub/GitLink release-list requests are used.
+The Update Server download source serves files from
+`https://dist.axlmc.org/<relative_path>` while keeping metadata on Update Server.
 
 Sources are registered in `src/utils/download-sources.ts` with an identity,
 localized label and description, and an asset URL builder. The settings list and

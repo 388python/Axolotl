@@ -20,6 +20,7 @@ interface DownloadSourceDefinition {
 }
 
 export const UPDATE_SERVER_BASE_URL = 'https://update.axlmc.org'
+export const UPDATE_ARTIFACT_BASE_URL = 'https://dist.axlmc.org'
 export const GITHUB_RELEASES_BASE_URL = 'https://github.com/Mystic-Stars/Axolotl/releases'
 
 function encodePath(value: string) {
@@ -39,7 +40,7 @@ export const downloadSources = [
             defaultMessage: 'Download through the official Axolotl update service.',
         },
         assetUrl: (_release, asset) =>
-            UPDATE_SERVER_BASE_URL + '/' + encodePath(asset.relative_path),
+            UPDATE_ARTIFACT_BASE_URL + '/' + encodePath(asset.relative_path),
     },
     {
         id: 'github',
@@ -107,7 +108,7 @@ function relativePath(download: Record<string, unknown>, version: string, filena
     if (value === undefined && typeof download.url === 'string') {
         const url = new URL(download.url, UPDATE_SERVER_BASE_URL)
         if (
-            url.origin !== UPDATE_SERVER_BASE_URL ||
+            ![UPDATE_SERVER_BASE_URL, UPDATE_ARTIFACT_BASE_URL].includes(url.origin) ||
             url.username ||
             url.password ||
             url.search ||
