@@ -40,7 +40,14 @@ vi.mock('@/helpers/tags', () => ({
 vi.mock('@/helpers/events', () => ({ process_listener: async () => () => {} }))
 vi.mock('@/helpers/content-search', () => ({ resolveMcmodUrl: async () => null }))
 vi.mock('@/helpers/instance', () => ({
-    get: async () => null,
+    get: async () => ({
+        id: 'target-instance',
+        name: 'Target',
+        loader: 'fabric',
+        game_version: '1.21.1',
+        install_stage: 'installed',
+        icon_path: null,
+    }),
     get_projects: async () => [],
     list: async () => [],
     kill: vi.fn(),

@@ -933,7 +933,11 @@ watch(
     [fromBrowse, fromInstanceContent, instanceId],
     async ([fromBrowseEnabled, fromInstanceContentEnabled, preferredInstanceId]) => {
         if (fromBrowseEnabled || fromInstanceContentEnabled) {
-            await contentSelection.refreshInstances(preferredInstanceId)
+            const version = projectRequestVersion
+            const isCurrent = () =>
+                version === projectRequestVersion && instanceId.value === preferredInstanceId
+            await contentSelection.refreshInstances(preferredInstanceId, isCurrent)
+            if (!isCurrent()) return
             if (fromInstanceContentEnabled && preferredInstanceId) {
                 const preferredInstance = contentSelection.instances.value.find(
                     (instance) => instance.id === preferredInstanceId,

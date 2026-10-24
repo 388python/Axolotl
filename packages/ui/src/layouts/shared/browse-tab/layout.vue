@@ -197,6 +197,7 @@ const skeletonCount = computed(() => {
             <div class="flex min-w-0 flex-wrap items-center gap-2">
                 <StyledInput
                     v-model="ctx.query.value"
+                    :disabled="ctx.filtersReady?.value === false"
                     :icon="SearchIcon"
                     type="text"
                     autocomplete="off"
@@ -224,6 +225,7 @@ const skeletonCount = computed(() => {
                         content: formatMessage(commonMessages.sortByLabel),
                         triggers: ['hover'],
                     }"
+                    :disabled="ctx.filtersReady?.value === false"
                     width="content"
                     :options="sortTypeOptions"
                     trigger-class="!min-h-10"
@@ -241,6 +243,7 @@ const skeletonCount = computed(() => {
                 <Combobox
                     v-model="ctx.maxResults.value"
                     v-tooltip="{ content: formatMessage(messages.viewPrefix), triggers: ['hover'] }"
+                    :disabled="ctx.filtersReady?.value === false"
                     width="content"
                     :options="maxResultsOptions"
                     trigger-class="!min-h-10"

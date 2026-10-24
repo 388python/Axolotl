@@ -908,8 +908,10 @@ const cartProjectSelected = computed(
 
 async function syncContentSelectionTarget() {
     if (!fromBrowse.value && !route.query.i) return
-    await contentSelection.refreshInstances(instance.value?.id ?? null)
-    await contentSelection.refreshInstalledIdentities()
+    const version = projectLoadVersion
+    const isCurrent = () => version === projectLoadVersion
+    await contentSelection.refreshInstances(instance.value?.id ?? null, isCurrent)
+    if (isCurrent()) await contentSelection.refreshInstalledIdentities()
 }
 
 const projectInstallContext = computed(() => {
@@ -1224,6 +1226,7 @@ async function loadSupplementalProjectData(project, requestedInstanceId, isCurre
                     if (!isCurrent()) return
                     instance.value = selectedInstance
                     instanceReady.value = !!selectedInstance
+                    if (!selectedInstance) supplementalFailed.value = true
                     const installedFile = Object.values(projects ?? {}).find((file) =>
                         file.provider_refs?.some(
                             (reference) =>

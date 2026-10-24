@@ -256,6 +256,7 @@ async function ensureCurseForgeCategories(projectTypeValue: ProjectType) {
     if (pending) return pending
     const request = getCurseForgeCategories(classId)
         .then((classCategories) => {
+            if (isUnmounted) return
             curseForgeCategoriesByClass.value = {
                 ...curseForgeCategoriesByClass.value,
                 [classId]: classCategories,
@@ -322,10 +323,8 @@ async function loadFilterMetadata() {
 
 async function refreshMcArchiveGameVersions() {
     if (mcArchiveGameVersions.value.length > 0) return
-    mcArchiveGameVersions.value = await getMcArchiveGameVersions().catch((error) => {
-        handleError(error)
-        return []
-    })
+    const versions = await getMcArchiveGameVersions()
+    if (!isUnmounted) mcArchiveGameVersions.value = versions
 }
 
 const curseForgeCategoryTags = computed(() => {
@@ -497,6 +496,7 @@ async function refreshInstalledProjectIds() {
         const worlds = await get_instance_worlds(requestInstanceId).catch(handleError)
         if (!worlds) return false
         if (
+            isUnmounted ||
             requestId !== installedProjectRequestId ||
             activeInstance.value?.id !== requestInstanceId
         )
@@ -517,6 +517,7 @@ async function refreshInstalledProjectIds() {
     const ids = await getInstalledProjectIds(requestInstanceId).catch(handleError)
     if (
         ids &&
+        !isUnmounted &&
         requestId === installedProjectRequestId &&
         activeInstance.value?.id === requestInstanceId
     ) {
@@ -542,7 +543,15 @@ function sameProjectIds(previous: string[] | null, current: string[]) {
     )
 }
 
+let instanceContextVersion = 0
 async function initInstanceContext() {
+    const version = ++instanceContextVersion
+    initialInstanceFilterPromise = Promise.resolve()
+    initialInstalledProjectsPromise = Promise.resolve(false)
+    const requestedInstanceId = route.query.i
+    const isCurrent = () =>
+        !isUnmounted && version === instanceContextVersion && route.query.i === requestedInstanceId
+
     debugLog('initInstanceContext', {
         queryI: route.query.i,
         queryAi: route.query.ai,
@@ -551,10 +560,17 @@ async function initInstanceContext() {
         queryFrom: route.query.from,
     })
     await initServerContext()
-    await contentSelection.refreshInstances((route.query.i as string | undefined) ?? undefined)
+    if (!isCurrent()) return
+    await contentSelection.refreshInstances(
+        (requestedInstanceId as string | undefined) ?? undefined,
+        isCurrent,
+    )
+    if (!isCurrent()) return
 
-    if (route.query.i) {
-        instance.value = (await getInstance(route.query.i as string)) ?? null
+    if (requestedInstanceId) {
+        const selectedInstance = await getInstance(requestedInstanceId as string)
+        if (!isCurrent()) return
+        instance.value = selectedInstance ?? null
         if (!instance.value) throw new Error('The selected instance could not be loaded.')
         if (
             instance.value?.install_stage === 'installed' &&
@@ -581,7 +597,7 @@ async function initInstanceContext() {
             debugLog('checking linked project for server status', projectId)
             initialInstanceFilterPromise = get_project_v3(projectId, 'must_revalidate')
                 .then((projectV3) => {
-                    if (projectV3?.minecraft_server != null) {
+                    if (isCurrent() && projectV3?.minecraft_server != null) {
                         debugLog('instance is a server instance')
                         isServerInstance.value = true
                     }
@@ -597,7 +613,7 @@ async function initInstanceContext() {
         isServerInstance.value = isServerProjectLink(activeInstance.value?.link)
         initialInstanceFilterPromise = get_project_v3(activeProjectId, 'must_revalidate')
             .then((projectV3) => {
-                isServerInstance.value = projectV3?.minecraft_server != null
+                if (isCurrent()) isServerInstance.value = projectV3?.minecraft_server != null
             })
             .catch((error) => {
                 handleError(error)
@@ -2382,6 +2398,17 @@ async function initializeBrowse() {
     searchEnabled.value = false
     searchState.loading.value = true
     searchState.searchError.value = null
+    const contextKey = () =>
+        JSON.stringify([
+            route.params.projectType,
+            route.query.i,
+            route.query.sid,
+            route.query.wid,
+            route.query.from,
+            route.query.source,
+        ])
+    const requestedContext = contextKey()
+    let restart = false
     initialization = (async () => {
         try {
             const [capability, planetAvailable] = await Promise.all([
@@ -2391,6 +2418,10 @@ async function initializeBrowse() {
                 initInstanceContext(),
             ])
             if (isUnmounted) return
+            if (contextKey() !== requestedContext) {
+                restart = true
+                return
+            }
             curseForgeCapability.value = capability
             planetMinecraftAvailable.value = planetAvailable
             contentSource.value = resolveInitialContentSource()
@@ -2416,6 +2447,10 @@ async function initializeBrowse() {
                     throw new Error('Installed content could not be loaded.')
             }
             if (isUnmounted) return
+            if (contextKey() !== requestedContext) {
+                restart = true
+                return
+            }
             searchState.initializeFilters()
             if (!hasExplicitFilterQuery()) applyRememberedFilters(projectType.value, false)
             await nextTick()
@@ -2432,12 +2467,17 @@ async function initializeBrowse() {
                 pendingRouteInstanceSwitch.value = null
             }
         } catch (error) {
+            if (contextKey() !== requestedContext) {
+                restart = true
+                return
+            }
             if (!isUnmounted) {
                 searchState.loading.value = false
                 searchState.searchError.value = resourceOperationError(error, formatMessage)
             }
         } finally {
             initialization = null
+            if (restart && !isUnmounted) void initializeBrowse()
         }
     })()
     return initialization
