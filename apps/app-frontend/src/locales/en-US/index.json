@@ -1,4 +1,7 @@
 {
+  "app.project.additional-details-failed": {
+    "message": "Some project details could not be loaded."
+  },
   "app.account.modrinth-account": {
     "message": "Modrinth account"
   },

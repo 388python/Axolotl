@@ -5,6 +5,8 @@ import Project from './Index.vue'
 
 const api = vi.hoisted(() => ({
     project: vi.fn(),
+    projectV3: vi.fn().mockResolvedValue(null),
+    background: false,
     versions: vi.fn().mockResolvedValue([]),
     push: vi.fn(),
     query: { b: '/browse/mod?q=kept', i: 'target-instance' },
@@ -24,7 +26,7 @@ vi.mock('vue-router', () => ({
 }))
 vi.mock('@/helpers/cache.js', () => ({
     get_project: api.project,
-    get_project_v3: async () => null,
+    get_project_v3: api.projectV3,
     get_team: async () => [],
     get_version_many: api.versions,
     get_version: vi.fn(),
@@ -63,7 +65,9 @@ vi.mock('@/helpers/translation', () => ({
 vi.mock('@/i18n.config', async () => ({
     default: { global: { locale: (await import('vue')).ref('en-US') } },
 }))
-vi.mock('@/store/state.js', () => ({ useTheming: () => ({ featureFlags: {} }) }))
+vi.mock('@/store/state.js', () => ({
+    useTheming: () => ({ featureFlags: { project_background: api.background } }),
+}))
 vi.mock('@/store/breadcrumbs', () => ({
     useBreadcrumbs: () => ({ setName: vi.fn(), setNameIcon: vi.fn(), setContext: vi.fn() }),
 }))
@@ -290,6 +294,67 @@ it('shows the project while release data is still loading', async () => {
         expect(wrapper.find('[data-testid="project-skeleton"]').exists()).toBe(false)
         resolveVersions([])
         await flushPromises()
+    } finally {
+        wrapper.unmount()
+    }
+})
+
+it('shows the header before v3 classification even with the project background enabled', async () => {
+    api.background = true
+    api.project
+        .mockReset()
+        .mockResolvedValue({
+            id: 'one',
+            slug: 'one',
+            title: 'Pack',
+            project_type: 'modpack',
+            versions: [],
+            team: 'team',
+            categories: [],
+            game_versions: [],
+            loaders: [],
+            gallery: [],
+        })
+    let resolve!: (value: unknown) => void
+    api.projectV3.mockImplementationOnce(
+        () =>
+            new Promise((done) => {
+                resolve = done
+            }),
+    )
+    const wrapper = mount(Project, {
+        global: { stubs: { Teleport: true, RouterView: true }, directives: { tooltip: {} } },
+    })
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true),
+        )
+        expect(wrapper.find('[data-testid="project-skeleton"]').exists()).toBe(false)
+        resolve({ minecraft_server: { region: 'asia' } })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true)
+    } finally {
+        wrapper.unmount()
+        api.background = false
+    }
+})
+
+it('keeps the title and offers local recovery when v3 details fail', async () => {
+    api.projectV3.mockRejectedValueOnce(new Error('v3 unavailable'))
+    const wrapper = mount(Project, {
+        global: { stubs: { Teleport: true, RouterView: true }, directives: { tooltip: {} } },
+    })
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.text()).toContain('Some project details could not be loaded.'),
+        )
+        expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Retry')!
+            .trigger('click')
+        await flushPromises()
+        expect(wrapper.text()).not.toContain('Some project details could not be loaded.')
     } finally {
         wrapper.unmount()
     }

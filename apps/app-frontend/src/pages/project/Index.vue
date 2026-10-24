@@ -24,7 +24,7 @@
         <UpgradeProjectReturnBar />
         <Teleport to="#sidebar-teleport-target">
             <ProjectSidebarCompatibility
-                v-if="!isServerProject"
+                v-if="projectClassificationReady && !isServerProject"
                 :project="data"
                 :tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
                 :project-v3="projectV3"
@@ -89,7 +89,6 @@
                     <ProjectBackgroundGradient :project="data" />
                 </Teleport>
                 <ProjectHeader
-                    v-else
                     :project="data"
                     :project-v3="projectV3"
                     :ping="serverPing"
@@ -192,7 +191,7 @@
                             </template>
                         </OverflowMenu>
                     </template>
-                    <template v-else #actions>
+                    <template v-else-if="projectClassificationReady" #actions>
                         <Button
                             type="quiet"
                             size="xl"
@@ -341,6 +340,21 @@
                         </OverflowMenu>
                     </template>
                 </ProjectHeader>
+                <div
+                    v-if="classificationFailed || supplementalFailed"
+                    role="alert"
+                    class="flex items-center gap-3"
+                >
+                    <span>{{ formatMessage(messages.additionalDetailsFailed) }}</span>
+                    <Button
+                        @click="
+                            classificationFailed
+                                ? retryProjectClassification()
+                                : retrySupplementalData()
+                        "
+                        >{{ formatMessage(commonMessages.retryButton) }}</Button
+                    >
+                </div>
                 <NavTabs
                     :links="[
                         {
@@ -351,12 +365,14 @@
                             label: formatMessage(commonProjectSettingsMessages.versions),
                             href: versionsHref,
                             subpages: ['version'],
-                            shown: projectV3?.minecraft_server == null,
+                            shown:
+                                projectClassificationReady && projectV3?.minecraft_server == null,
                         },
                         {
                             label: formatMessage(commonMessages.changelogLabel),
                             href: projectChangelogHref,
-                            shown: projectV3?.minecraft_server == null,
+                            shown:
+                                projectClassificationReady && projectV3?.minecraft_server == null,
                         },
                         {
                             label: formatMessage(commonProjectSettingsMessages.gallery),
@@ -573,6 +589,10 @@ const contentFavorites = useContentFavorites()
 void contentFavorites.load().catch(handleError)
 
 const messages = defineMessages({
+    additionalDetailsFailed: {
+        id: 'app.project.additional-details-failed',
+        defaultMessage: 'Some project details could not be loaded.',
+    },
     comingSoon: { id: 'app.project.coming-soon', defaultMessage: 'Coming soon' },
     loadFailed: {
         id: 'app.project.load-failed',
@@ -695,6 +715,11 @@ const browseInstanceSelector = ref()
 const data = shallowRef(null)
 const mcmodUrl = ref(null)
 const versions = shallowRef([])
+const projectClassificationReady = ref(false)
+const classificationFailed = ref(false)
+const supplementalFailed = ref(false)
+const versionsReady = ref(false)
+const instanceReady = ref(false)
 const members = shallowRef([])
 const organization = shallowRef(null)
 const instance = ref(null)
@@ -988,7 +1013,12 @@ const installButtonInstalled = computed(() =>
               contentSelection.isInstalledIdentity('modrinth', data.value.id, data.value.slug)),
 )
 const installButtonDisabled = computed(
-    () => installButtonInstalled.value || installButtonLoading.value,
+    () =>
+        !projectClassificationReady.value ||
+        !versionsReady.value ||
+        !instanceReady.value ||
+        installButtonInstalled.value ||
+        installButtonLoading.value,
 )
 const installButtonLabel = computed(() => {
     if (installButtonInstalled.value) return formatMessage(commonMessages.installedLabel)
@@ -1065,11 +1095,14 @@ async function handleClickPlay() {
 
 async function updateServerPlayState() {
     if (!isServerProject.value || !data.value) return
+    const currentProject = data.value
     const packs = await listInstances()
-    const inst = packs.find((p) => p.link?.project_id === data.value.id)
+    if (data.value !== currentProject) return
+    const inst = packs.find((p) => p.link?.project_id === currentProject.id)
     if (inst) {
         serverInstancePath.value = inst.id
         const processes = await get_by_instance_id(inst.id).catch(() => [])
+        if (data.value !== currentProject) return
         serverPlaying.value = Array.isArray(processes) && processes.length > 0
     } else {
         serverInstancePath.value = null
@@ -1101,12 +1134,9 @@ async function fetchProjectData() {
     translationActive.value = false
     translationLoading.value = false
     translations.value = {}
-    const [project, projectV3Result] = await Promise.all([
-        get_project(requestedProjectId, 'revalidate'),
-        get_project_v3(requestedProjectId, 'revalidate').catch(handleError),
-    ])
+    void loadProjectClassification(requestedProjectId, requestVersion)
+    const project = await get_project(requestedProjectId, 'revalidate')
     if (!isCurrent()) return
-    projectV3.value = projectV3Result
 
     if (!project) {
         throw new Error('Project not found')
@@ -1117,26 +1147,61 @@ async function fetchProjectData() {
     void resolveMcmodUrl(project.slug, 'modrinth').then((url) => {
         if (isCurrent()) mcmodUrl.value = url
     })
-    isServerProject.value = projectV3.value?.minecraft_server != null
-    serverStatusOnline.value = !!projectV3.value?.minecraft_java_server?.ping?.data
 
     breadcrumbs.setName('Project', data.value.title)
     breadcrumbs.setNameIcon('Project', data.value.icon_url)
 
     void loadSupplementalProjectData(project, requestedInstanceId, isCurrent).catch(handleError)
-    fetchDeferredServerData(project)
+    if (projectClassificationReady.value) fetchDeferredServerData(project, isCurrent)
     void maybeAutoTranslate()
+}
+
+let classificationRequestVersion = 0
+async function loadProjectClassification(projectId, loadVersion) {
+    const requestVersion = ++classificationRequestVersion
+    classificationFailed.value = false
+    const isCurrent = () =>
+        loadVersion === projectLoadVersion && requestVersion === classificationRequestVersion
+    try {
+        const result = await get_project_v3(projectId, 'revalidate')
+        if (!isCurrent()) return
+        projectV3.value = result
+        isServerProject.value = result?.minecraft_server != null
+        serverStatusOnline.value = !!result?.minecraft_java_server?.ping?.data
+        projectClassificationReady.value = true
+        if (data.value) fetchDeferredServerData(data.value, isCurrent)
+    } catch {
+        if (isCurrent()) classificationFailed.value = true
+    }
+}
+function retryProjectClassification() {
+    void loadProjectClassification(String(route.params.id), projectLoadVersion)
+}
+function retrySupplementalData() {
+    const version = projectLoadVersion
+    supplementalFailed.value = false
+    void loadSupplementalProjectData(
+        data.value,
+        route.query.i,
+        () => version === projectLoadVersion,
+    ).catch(handleError)
 }
 
 async function loadSupplementalProjectData(project, requestedInstanceId, isCurrent) {
     const updates = [
         get_version_many(project.versions, 'must_revalidate')
-            .catch(handleError)
             .then((result) => {
                 if (!isCurrent()) return
+                versionsReady.value = true
                 versions.value = (result ?? []).sort(
                     (a, b) => dayjs(b.date_published) - dayjs(a.date_published),
                 )
+            })
+            .catch((error) => {
+                if (isCurrent()) {
+                    supplementalFailed.value = true
+                    handleError(error)
+                }
             }),
         get_team(project.team)
             .catch(handleError)
@@ -1147,28 +1212,33 @@ async function loadSupplementalProjectData(project, requestedInstanceId, isCurre
 
     if (requestedInstanceId) {
         updates.push(
-            getInstance(requestedInstanceId)
-                .catch(handleError)
-                .then((result) => {
-                    if (isCurrent()) instance.value = result
-                }),
-            getInstanceProjects(requestedInstanceId)
-                .catch(handleError)
-                .then((result) => {
+            Promise.all([
+                getInstance(requestedInstanceId),
+                getInstanceProjects(requestedInstanceId),
+            ])
+                .then(([selectedInstance, projects]) => {
                     if (!isCurrent()) return
-                    const installedFile = Object.values(result ?? {}).find((file) =>
+                    instance.value = selectedInstance
+                    instanceReady.value = !!selectedInstance
+                    const installedFile = Object.values(projects ?? {}).find((file) =>
                         file.provider_refs?.some(
                             (reference) =>
                                 reference.provider === 'modrinth' &&
                                 String(reference.project_id) === project.id,
                         ),
                     )
-                    if (installedFile) {
-                        installed.value = true
-                        installedVersion.value = installedFile.modrinth?.version_id ?? null
+                    installed.value = !!installedFile
+                    installedVersion.value = installedFile?.modrinth?.version_id ?? null
+                })
+                .catch((error) => {
+                    if (isCurrent()) {
+                        supplementalFailed.value = true
+                        handleError(error)
                     }
                 }),
         )
+    } else {
+        instanceReady.value = true
     }
 
     if (project.organization) {
@@ -1278,7 +1348,7 @@ function toggleTranslation() {
     void translateProject()
 }
 
-function fetchDeferredServerData(project) {
+function fetchDeferredServerData(project, isCurrent = () => true) {
     const serverAddress = projectV3.value?.minecraft_java_server?.address
     if (serverAddress) {
         const cachedStatus = getFreshCachedServerStatus(queryClient, serverAddress)
@@ -1291,7 +1361,11 @@ function fetchDeferredServerData(project) {
 
         fetchCachedServerStatus(queryClient, serverAddress)
             .then((status) => {
-                if (projectV3.value?.minecraft_java_server?.address !== serverAddress) return
+                if (
+                    !isCurrent() ||
+                    projectV3.value?.minecraft_java_server?.address !== serverAddress
+                )
+                    return
                 serverPing.value = status.ping
                 serverStatusOnline.value = true
             })
@@ -1305,7 +1379,7 @@ function fetchDeferredServerData(project) {
         get_version(content.version_id, 'bypass')
             .catch(handleError)
             .then(async (modpackVersion) => {
-                if (!modpackVersion) return
+                if (!isCurrent() || !modpackVersion) return
                 serverRecommendedVersion.value = modpackVersion.game_versions?.[0] ?? null
                 serverModpackLoaders.value = modpackVersion.mrpack_loaders ?? []
                 if (modpackVersion.project_id) {
@@ -1313,7 +1387,7 @@ function fetchDeferredServerData(project) {
                         modpackVersion.project_id,
                         'must_revalidate',
                     ).catch(handleError)
-                    if (modpackProject) {
+                    if (isCurrent() && modpackProject) {
                         const primaryFile =
                             modpackVersion.files?.find((f) => f.primary) ??
                             modpackVersion.files?.[0]
@@ -1362,6 +1436,17 @@ async function loadProjectPage() {
     loadFailed.value = false
     data.value = null
     projectV3.value = null
+    isServerProject.value = false
+    projectClassificationReady.value = false
+    classificationFailed.value = false
+    supplementalFailed.value = false
+    versionsReady.value = false
+    instanceReady.value = !route.query.i
+    serverPing.value = undefined
+    serverRequiredContent.value = null
+    serverRecommendedVersion.value = null
+    serverSupportedVersions.value = []
+    serverModpackLoaders.value = []
     versions.value = []
     members.value = []
     organization.value = null
@@ -1398,6 +1483,9 @@ process_listener((e) => {
 })
 
 onUnmounted(() => {
+    projectLoadVersion++
+    classificationRequestVersion++
+    translationRequestVersion++
     unlistenProcesses?.()
 })
 
@@ -1408,6 +1496,7 @@ watch([() => route.params.id, () => route.query.i], () => {
 })
 
 async function install(version) {
+    if (!projectClassificationReady.value || !versionsReady.value || !instanceReady.value) return
     if (serverProjectInstallContext.value && data.value) {
         if (serverProjectSelected.value) {
             serverInstallContent.removeQueuedServerInstall(data.value.id)
