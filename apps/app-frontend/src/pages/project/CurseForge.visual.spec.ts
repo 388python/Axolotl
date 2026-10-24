@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { h, reactive, ref } from 'vue'
+import type { VNode } from 'vue'
+import { defineComponent, h, reactive, ref } from 'vue'
 
 import CurseForge from './CurseForge.vue'
 
@@ -72,9 +73,9 @@ vi.mock('@/components/ui/ResourceDescription.vue', () => ({
     default: {
         name: 'ResourceDescription',
         setup:
-            (_: unknown, { slots }: { slots: { default: () => unknown } }) =>
+            (_: unknown, { slots }: { slots: { default?: () => VNode[] } }) =>
             () =>
-                h('div', slots.default()),
+                h('div', slots.default?.()),
     },
 }))
 vi.mock('@/components/ui/TranslatedProjectDescription.vue', () => ({
@@ -110,7 +111,7 @@ vi.mock('@modrinth/ui', () => ({
             {
                 name,
                 setup:
-                    (_: unknown, { slots }: { slots: { default?: () => unknown } }) =>
+                    (_: unknown, { slots }: { slots: { default?: () => VNode[] } }) =>
                     () =>
                         h('div', slots.default?.()),
             },
@@ -135,31 +136,30 @@ const stubs = {
     ProjectSidebarTags: true,
     ProjectSidebarCreators: true,
     ProjectSidebarDetails: true,
-    ProjectHeader: {
+    ProjectHeader: defineComponent({
         props: ['project'],
-        setup: (props: { project: { title: string } }) => () => h('h1', props.project.title),
-    },
-    ProjectPageSkeleton: {
+        setup: (props) => () => h('h1', props.project.title),
+    }),
+    ProjectPageSkeleton: defineComponent({
         props: ['variant'],
-        setup: (props: { variant: string }) => () =>
-            h('div', { 'data-loading': props.variant ?? 'page' }),
-    },
-    ResourceDescription: {
+        setup: (props) => () => h('div', { 'data-loading': props.variant ?? 'page' }),
+    }),
+    ResourceDescription: defineComponent({
         setup:
-            (_: unknown, { slots }: { slots: { default: () => unknown } }) =>
+            (_: unknown, { slots }: { slots: { default?: () => VNode[] } }) =>
             () =>
-                h('div', slots.default()),
-    },
-    TranslatedProjectDescription: {
+                h('div', slots.default?.()),
+    }),
+    TranslatedProjectDescription: defineComponent({
         props: ['description'],
-        setup: (props: { description: string }) => () => h('p', props.description),
-    },
-    Button: {
+        setup: (props) => () => h('p', props.description),
+    }),
+    Button: defineComponent({
         setup:
-            (_: unknown, { slots }: { slots: { default: () => unknown } }) =>
+            (_: unknown, { slots }: { slots: { default?: () => VNode[] } }) =>
             () =>
                 h('button', slots.default?.()),
-    },
+    }),
     NavTabs: true,
     ProjectPageVersions: true,
 }

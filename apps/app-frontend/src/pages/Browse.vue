@@ -50,6 +50,7 @@ import {
     usesTargetGameVersion,
     useVIntl,
 } from '@modrinth/ui'
+import type { Ref } from 'vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { LocationQuery } from 'vue-router'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
@@ -188,6 +189,7 @@ const curseForgeClassIds: Partial<Record<ProjectType, number>> = {
 
 const searchEnabled = ref(false)
 const filtersReady = ref(false)
+const browseInitialized = ref(false)
 const curseForgeCapability = ref<Awaited<ReturnType<typeof getCurseForgeCapability>>>({
     status: 'missing_key',
     configured: false,
@@ -1074,7 +1076,7 @@ watch(
 
 onBeforeRouteLeave((to) => {
     try {
-        const currentPage = searchState.currentPage.value
+        const currentPage = searchState.committed.value?.page ?? searchState.currentPage.value
         if (isBrowseReturnSourcePath(to.path)) {
             const viewport = document.querySelector<HTMLElement>('.app-viewport')
             navReturn.saveBrowseReturnSnapshot({
@@ -1889,6 +1891,7 @@ async function search(requestParams: string, signal: AbortSignal) {
               )
             : null
     signal.throwIfAborted()
+    if (categoryFailure) throw new Error(formatMessage(messages.categoriesFailed))
     const query: ResourceSearchQuery = {
         filter: parseResourceSearchFilter(
             filters,
@@ -1999,7 +2002,6 @@ async function search(requestParams: string, signal: AbortSignal) {
         per_page: limit,
         page: resourceSearchPages.indexOf(page) + 1,
         resourceNotice: [
-            ...(categoryFailure ? [formatMessage(messages.categoriesFailed)] : []),
             ...page.sourceFailures.map((failure) =>
                 formatMessage(messages.sourceFailed, {
                     source: resourceSourceName(failure.source),
@@ -2232,45 +2234,23 @@ function toggleTranslation() {
 }
 
 let sourceRequestVersion = 0
-watch(
-    contentSource,
-    async (source) => {
-        if (!filtersReady.value) return
-        const version = ++sourceRequestVersion
-        searchEnabled.value = false
-        searchState.loading.value = true
-        searchState.currentPage.value = 1
-        searchState.currentFilters.value = searchState.currentFilters.value.filter(
-            (filter) => !filter.type.startsWith('category_'),
-        )
+let initializedFilterType = projectType.value
+let initializedFilterSource = contentSource.value
+let normalizingSource = false
+async function prepareBrowseContext(previousType = projectType.value) {
+    const type = projectType.value
+    const version = ++sourceRequestVersion
+    filtersReady.value = false
+    searchEnabled.value = false
+    searchState.loading.value = true
+    searchState.searchError.value = null
+    try {
+        normalizingSource = true
         try {
-            if (source === 'curseforge' || source === 'all')
-                await ensureCurseForgeCategories(projectType.value)
-            if (source === 'mcarchive') await refreshMcArchiveGameVersions()
-            if (version !== sourceRequestVersion || isUnmounted) return
-            searchEnabled.value = true
-            await searchState.refreshSearch()
-        } catch (error) {
-            if (version !== sourceRequestVersion || isUnmounted) return
-            searchState.loading.value = false
-            searchState.searchError.value = resourceOperationError(error, formatMessage)
-        }
-    },
-    { flush: 'sync' },
-)
-
-watch(
-    projectType,
-    async (type, previousType) => {
-        if (!filtersReady.value) return
-        const version = ++sourceRequestVersion
-        searchEnabled.value = false
-        searchState.loading.value = true
-        try {
-            if (type === WORLD_BROWSE_PROJECT_TYPE) {
+            if (type === WORLD_BROWSE_PROJECT_TYPE && previousType !== type) {
                 sourceBeforeWorldMapBrowse.value = contentSource.value
                 if (curseForgeCapability.value.configured) contentSource.value = 'curseforge'
-            } else if (previousType === WORLD_BROWSE_PROJECT_TYPE) {
+            } else if (previousType === WORLD_BROWSE_PROJECT_TYPE && type !== previousType) {
                 contentSource.value = sourceBeforeWorldMapBrowse.value
             }
             if (
@@ -2280,18 +2260,38 @@ watch(
                 contentSource.value = 'all'
                 setLastBrowseContentSource('all')
             }
-            if (contentSource.value === 'curseforge' || contentSource.value === 'all')
-                await ensureCurseForgeCategories(type)
-            if (version !== sourceRequestVersion || isUnmounted) return
-            applyRememberedFilters(type, true)
-            await nextTick()
-            searchEnabled.value = true
-            await searchState.refreshSearch()
-        } catch (error) {
-            if (version !== sourceRequestVersion || isUnmounted) return
-            searchState.loading.value = false
-            searchState.searchError.value = resourceOperationError(error, formatMessage)
+        } finally {
+            normalizingSource = false
         }
+        if (contentSource.value === 'curseforge' || contentSource.value === 'all')
+            await ensureCurseForgeCategories(type)
+        if (contentSource.value === 'mcarchive') await refreshMcArchiveGameVersions()
+        if (version !== sourceRequestVersion || isUnmounted) return
+        if (type !== initializedFilterType) applyRememberedFilters(type, true)
+        else if (contentSource.value !== initializedFilterSource) {
+            searchState.currentFilters.value = searchState.currentFilters.value.filter(
+                (filter) => !filter.type.startsWith('category_'),
+            )
+        }
+        searchState.currentPage.value = 1
+        await nextTick()
+        if (version !== sourceRequestVersion || isUnmounted) return
+        initializedFilterType = type
+        initializedFilterSource = contentSource.value
+        filtersReady.value = true
+        searchEnabled.value = true
+        await searchState.refreshSearch()
+    } catch (error) {
+        if (version !== sourceRequestVersion || isUnmounted) return
+        searchState.loading.value = false
+        searchState.searchError.value = resourceOperationError(error, formatMessage)
+    }
+}
+watch(
+    [projectType, contentSource],
+    (_, [previousType]) => {
+        if (normalizingSource || !browseInitialized.value) return
+        void prepareBrowseContext(previousType)
     },
     { flush: 'sync' },
 )
@@ -2421,6 +2421,9 @@ async function initializeBrowse() {
             await nextTick()
             restoreBrowseReturnPage()
             await nextTick()
+            initializedFilterType = projectType.value
+            initializedFilterSource = contentSource.value
+            browseInitialized.value = true
             filtersReady.value = true
             searchEnabled.value = true
             await searchState.refreshSearch()
@@ -2441,7 +2444,10 @@ async function initializeBrowse() {
 }
 
 async function refreshBrowse() {
-    if (!searchEnabled.value) return initializeBrowse()
+    if (!searchEnabled.value) {
+        if (browseInitialized.value) return prepareBrowseContext()
+        return initializeBrowse()
+    }
     await searchState.refreshSearch()
 }
 
@@ -2651,7 +2657,7 @@ provideBrowseManager({
                                 :key="option.id"
                                 :type="contentSource === option.id ? 'colored' : 'quiet'"
                                 class="flex w-full items-center gap-2 !justify-start text-left"
-                                :disabled="!filtersReady"
+                                :disabled="!browseInitialized"
                                 @click="selectContentSource(option.id)"
                             >
                                 <component :is="option.icon" class="h-4 w-4" />
