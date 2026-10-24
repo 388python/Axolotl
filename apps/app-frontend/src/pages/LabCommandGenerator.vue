@@ -49,6 +49,7 @@ import {
     saveUserPreset,
     type UserPreset,
 } from '@/lab/command-generator/presets.ts'
+import { openUrl } from '@tauri-apps/plugin-opener'
 
 const { formatMessage, locale } = useVIntl()
 
@@ -576,15 +577,12 @@ async function jumpToPreset(preset: UserPreset) {
     showToast(formatMessage(messages.toastPresetLoaded, { name: preset.name }))
 }
 
-function openWiki() {
-    if (currentCommand.value) {
-        const a = document.createElement('a')
-        a.href = wikiUrl.value
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
+async function openWiki() {
+    if (!currentCommand.value) return
+    try {
+        await openUrl(wikiUrl.value)
+    } catch (e) {
+        console.error('Failed to open wiki link:', e)
     }
 }
 </script>
