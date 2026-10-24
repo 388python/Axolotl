@@ -240,9 +240,10 @@ async function show() {
 
             // 去重：避免 EXTRA_BLOCKS_META 里的一些方块（如 water, lava）在列表中出现两次
             const seen = new Set(sourceItems.map((item) => item.id))
-            extraBlocks = EXTRA_BLOCKS_META
-                .filter((meta) => !seen.has(meta.id))
-                .map((meta) => ({ id: meta.id, __extraMeta: meta }))
+            extraBlocks = EXTRA_BLOCKS_META.filter((meta) => !seen.has(meta.id)).map((meta) => ({
+                id: meta.id,
+                __extraMeta: meta,
+            }))
 
             sourceItems = [...sourceItems, ...extraBlocks]
         }
