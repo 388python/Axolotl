@@ -1058,10 +1058,10 @@ where
 
 #[derive(Debug)]
 struct CurseForgeManualDownloadInconsistency {
-    path: String,
-    project_id: String,
-    file_id: String,
-    reason: &'static str,
+    pub(super) path: String,
+    pub(super) project_id: String,
+    pub(super) file_id: String,
+    pub(super) reason: &'static str,
 }
 
 #[derive(Debug, Default)]
