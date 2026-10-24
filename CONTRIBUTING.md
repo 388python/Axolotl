@@ -156,9 +156,7 @@ node scripts/axolotl/create-release-notes.mjs v1.10.0-beta.4 release-preview.md
 3. 使用仓库 Secrets 中的 Tauri 私钥生成签名更新包。
 4. 生成并校验包含全部桌面平台的 `latest.json`。
 5. 校验成功后将草稿 Release 转为正式发布。
-6. GitHub Release 发布完成后，将安装包、更新清单和 Release 信息镜像到 CNB，并同步镜像到 GitLink。
-
-GitLink 节点与 CNB 同级，但**只保留最新正式版与最新 beta**两条记录：每次运行会上传缺失资产（按附件名去重、断流重试），并把不在该策略内的版本记录删除。镜像需要仓库 Secret `GITLINK_TOKEN`；仓库变量 `GITLINK_REPO_SLUG` 可覆盖默认的 `xinvxueyuan/Axolotl`。可用 `node scripts/axolotl/gitlink-release.mjs verify <tag>` 在不带 token 的情况下做只读校验。
+6. GitHub Release 发布完成后，将安装包、更新清单和 Release 信息镜像到 CNB，并同步镜像到 Gitlink、OSS。
 
 源码分支和标签也由 GitHub Actions 在 push 和删除事件后直接同步到 CNB。CNB 仓库不运行定时同步或标签流水线，避免在 GitHub 构建尚未完成时占用 CNB 构建时长。
 
