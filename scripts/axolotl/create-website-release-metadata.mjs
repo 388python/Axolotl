@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 
+import { isExcludedRelease } from './release-policy.mjs'
 import { assetSha256, releaseVersion, verifyRelease } from './release-utils.mjs'
 
 // 从 GitHub release 元数据生成网站下载元数据（tag + 每个 asset 的名字与 SHA-256）。
@@ -22,8 +23,9 @@ if (releaseVersion(release.tag_name).includes('-')) {
 if (fs.existsSync(outputPath)) {
     const current = JSON.parse(fs.readFileSync(outputPath, 'utf8'))
     const nextParts = releaseVersion(release.tag_name).split('.').map(Number)
-    const currentVersion = releaseVersion(current.tag_name)
-    if (!currentVersion.includes('-') && !release.tag_name.includes('-')) {
+    // Excluded test releases are not a baseline for stable downloads.
+    const currentVersion = isExcludedRelease(current.tag_name) ? null : releaseVersion(current.tag_name)
+    if (currentVersion && !currentVersion.includes('-') && !release.tag_name.includes('-')) {
         const currentParts = currentVersion.split('.').map(Number)
         const difference = nextParts
             .map((value, index) => value - currentParts[index])

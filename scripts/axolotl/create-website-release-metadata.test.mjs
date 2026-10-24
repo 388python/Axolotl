@@ -87,6 +87,39 @@ test('website recovery records asset names with SHA-256, preserves newer downloa
     assert.equal(JSON.parse(fs.readFileSync(catalogPath, 'utf8')).announcements[0].id, 'fixture')
 })
 
+for (const tag of ['v1.9.8', 'v1.10.0']) {
+    test(`website metadata replaces the excluded baseline with ${tag}`, (t) => {
+        const directory = temporaryDirectory(t)
+        const releasePath = path.join(directory, 'release.json')
+        const outputPath = path.join(directory, 'latest.json')
+        fs.writeFileSync(outputPath, JSON.stringify({ tag_name: 'v1.9.9', assets: [] }))
+        fs.writeFileSync(releasePath, JSON.stringify(release(tag, [asset(tag, 'installer.exe')])))
+
+        const result = run('create-website-release-metadata.mjs', [releasePath, outputPath])
+
+        assert.equal(result.status, 0, result.stderr)
+        assert.deepEqual(JSON.parse(fs.readFileSync(outputPath, 'utf8')), {
+            tag_name: tag,
+            assets: [{ name: 'installer.exe', sha256: 'a'.repeat(64) }],
+        })
+    })
+}
+
+test('website metadata rejects an excluded incoming release without changing downloads', (t) => {
+    const directory = temporaryDirectory(t)
+    const releasePath = path.join(directory, 'release.json')
+    const outputPath = path.join(directory, 'latest.json')
+    const original = JSON.stringify({ tag_name: 'v1.9.8', assets: [] })
+    fs.writeFileSync(outputPath, original)
+    fs.writeFileSync(releasePath, JSON.stringify(release('v1.9.9', [])))
+
+    const result = run('create-website-release-metadata.mjs', [releasePath, outputPath])
+
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /Expected an eligible version tag, received v1\.9\.9/)
+    assert.equal(fs.readFileSync(outputPath, 'utf8'), original)
+})
+
 test('website metadata fails when an asset has no SHA-256 digest', (t) => {
     const directory = temporaryDirectory(t)
     const releasePath = path.join(directory, 'release.json')
