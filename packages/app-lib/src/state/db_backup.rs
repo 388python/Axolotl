@@ -109,9 +109,15 @@ async fn check_database_integrity(
     db_path: &Path,
 ) -> crate::Result<IntegrityStatus> {
     let started = std::time::Instant::now();
-    tracing::info!(database = %db_path.display(),
-        bytes = tokio::fs::metadata(db_path).await?.len(),
-        "Checking app database integrity; large databases may take longer");
+    // The await must happen before the macro: a temporary created inside the
+    // field list would be held across the await point and make the caller's
+    // future non-Send, which breaks every Tauri command that reaches it.
+    let bytes = tokio::fs::metadata(db_path).await?.len();
+    tracing::info!(
+        database = %db_path.display(),
+        bytes,
+        "Checking app database integrity; large databases may take longer"
+    );
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .busy_timeout(Duration::from_secs(30))
