@@ -493,9 +493,9 @@ pub(crate) async fn cache_instance_icon_from_url(
 }
 
 struct ModpackOverrideTask {
-    index: usize,
-    target: PathBuf,
-    size: u64,
+    pub(super) index: usize,
+    pub(super) target: PathBuf,
+    pub(super) size: u64,
 }
 
 pub(super) fn collect_modpack_override_tasks<R: Read + Seek>(

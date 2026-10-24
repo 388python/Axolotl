@@ -91,10 +91,10 @@ pub(super) enum RequestRouteSource {
 }
 
 pub(super) struct RequestRoute {
-    url: String,
-    use_api_key: bool,
-    use_system_proxy: bool,
-    source: RequestRouteSource,
+    pub(super) url: String,
+    pub(super) use_api_key: bool,
+    pub(super) use_system_proxy: bool,
+    pub(super) source: RequestRouteSource,
 }
 
 #[cfg(test)]

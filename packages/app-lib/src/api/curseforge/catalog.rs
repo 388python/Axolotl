@@ -1,6 +1,6 @@
 //! Read-only CurseForge API queries.
 
-use super::download::{normalized_download_url, resolve_download_url};
+use super::download::normalized_download_url;
 use super::dto::{
     CurseForgeCategory, CurseForgeFile, CurseForgeFilesRequest,
     CurseForgeFilesResponse, CurseForgeFingerprintResult, CurseForgePagination,
@@ -335,8 +335,6 @@ pub async fn get_download_url(
     .await?;
     Ok(normalized_download_url(response.data))
 }
-
-use super::download::resolve_download_url as resolve_curseforge_download_url;
 
 pub(crate) fn derived_curseforge_download_url(
     file_id: u32,

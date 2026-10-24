@@ -1,6 +1,7 @@
 //! Content installation and dependency resolution.
 
 use super::catalog::{get_file, get_project};
+use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{
     CurseForgeCrossSourceDependency, CurseForgeFailedDownload, CurseForgeFile,
     CurseForgeInstallRequest, CurseForgeInstallResult, CurseForgeInstalledFile,
@@ -186,11 +187,11 @@ struct PendingCurseForgeFile {
 
 #[derive(Clone)]
 pub(crate) struct PreviewPendingCurseForgeFile {
-    project_id: u32,
-    file_id: u32,
-    item_type: ProjectType,
-    depth: usize,
-    ancestors: HashSet<(u32, u32)>,
+    pub(super) project_id: u32,
+    pub(super) file_id: u32,
+    pub(super) item_type: ProjectType,
+    pub(super) depth: usize,
+    pub(super) ancestors: HashSet<(u32, u32)>,
 }
 
 #[derive(Clone)]

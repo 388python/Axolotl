@@ -1,6 +1,7 @@
 //! CurseForge API wire types and modpack manifest shapes.
 
 use super::catalog::{get_file, get_files_many, get_project, get_projects};
+use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::mapping::{project_type_for_class, recognized_project_type};
 use super::selection::{
     content_target_folder, curseforge_content_validation, managed_project_type,
@@ -67,9 +68,9 @@ pub struct CurseForgePagination {
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct CurseForgeResponse<T> {
-    data: T,
+    pub(super) data: T,
     #[serde(default)]
-    pagination: Option<CurseForgePagination>,
+    pub(super) pagination: Option<CurseForgePagination>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -666,15 +667,15 @@ pub struct CurseForgeModpackTarget {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CurseForgeModpackManifest {
-    minecraft: CurseForgeManifestMinecraft,
+    pub(super) minecraft: CurseForgeManifestMinecraft,
     #[serde(default)]
-    files: Vec<CurseForgeManifestFile>,
+    pub(super) files: Vec<CurseForgeManifestFile>,
     #[serde(default = "default_overrides")]
-    overrides: String,
+    pub(super) overrides: String,
     #[serde(default)]
-    name: Option<String>,
+    pub(super) name: Option<String>,
     #[serde(default)]
-    version: Option<String>,
+    pub(super) version: Option<String>,
 }
 
 fn default_overrides() -> String {

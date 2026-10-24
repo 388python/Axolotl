@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 #[cfg(test)]
-fn murmur2(data: &[u8], seed: u32) -> u32 {
+pub(super) fn murmur2(data: &[u8], seed: u32) -> u32 {
     const M: u32 = 0x5bd1e995;
     const R: u32 = 24;
     let mut hash = seed ^ data.len() as u32;
@@ -62,7 +62,10 @@ fn murmur2(data: &[u8], seed: u32) -> u32 {
     hash
 }
 
-fn write_override_test_archive(path: &Path, entries: &[(&str, &[u8])]) {
+pub(super) fn write_override_test_archive(
+    path: &Path,
+    entries: &[(&str, &[u8])],
+) {
     let file = std::fs::File::create(path).unwrap();
     let mut archive = zip::ZipWriter::new(file);
     let options = zip::write::SimpleFileOptions::default()
@@ -82,7 +85,10 @@ fn write_override_test_archive(path: &Path, entries: &[(&str, &[u8])]) {
     archive.finish().unwrap();
 }
 
-fn write_override_size_test_archive(path: &Path, entries: &[(&str, u32)]) {
+pub(super) fn write_override_size_test_archive(
+    path: &Path,
+    entries: &[(&str, u32)],
+) {
     let contents = entries
         .iter()
         .map(|(name, _)| (*name, b"x".as_slice()))
@@ -103,7 +109,7 @@ fn write_override_size_test_archive(path: &Path, entries: &[(&str, u32)]) {
     std::fs::write(path, bytes).unwrap();
 }
 
-fn skipped_curseforge_manual_item(
+pub(super) fn skipped_curseforge_manual_item(
     id: &str,
     project_id: &str,
     version_id: &str,
@@ -125,7 +131,7 @@ fn skipped_curseforge_manual_item(
     }
 }
 
-fn waiting_manual_job_record(
+pub(super) fn waiting_manual_job_record(
     instance_id: &str,
     request: crate::install::model::InstallRequest,
 ) -> crate::install::store::InstallJobRecord {
@@ -164,7 +170,7 @@ fn waiting_manual_job_record(
     }
 }
 
-fn apply_recovered_events(
+pub(super) fn apply_recovered_events(
     items: &mut [crate::install::model::DownloadItemSnapshot],
     events: &[InstallJobEventKind],
 ) {
@@ -179,7 +185,7 @@ fn apply_recovered_events(
     }
 }
 
-fn reconcile_and_simulate_resume(
+pub(super) fn reconcile_and_simulate_resume(
     items: &mut [crate::install::model::DownloadItemSnapshot],
     pending: &HashSet<(String, String)>,
     materialized: &HashSet<(String, String)>,
@@ -197,7 +203,7 @@ fn reconcile_and_simulate_resume(
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn stage6_state() -> std::sync::Arc<State> {
+pub(super) async fn stage6_state() -> std::sync::Arc<State> {
     crate::event::EventState::init().await.unwrap();
     let state_root = tempfile::tempdir().unwrap().keep();
     State::init_for_test(state_root.to_string_lossy().to_string())
@@ -206,7 +212,7 @@ async fn stage6_state() -> std::sync::Arc<State> {
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn create_stage6_instance(
+pub(super) async fn create_stage6_instance(
     label: &str,
 ) -> (std::sync::Arc<State>, String) {
     let state = stage6_state().await;
@@ -226,7 +232,7 @@ async fn create_stage6_instance(
 }
 
 #[cfg(not(feature = "tauri"))]
-fn stage6_manual_download(
+pub(super) fn stage6_manual_download(
     project_id: u32,
     file_id: u32,
     file_name: &str,
@@ -253,7 +259,7 @@ fn stage6_manual_download(
     }
 }
 
-fn stage8_legacy_manual_download(
+pub(super) fn stage8_legacy_manual_download(
     project_id: u32,
     file_id: u32,
     file_name: &str,
@@ -276,7 +282,7 @@ fn stage8_legacy_manual_download(
     }
 }
 
-fn stage8_integrity_metadata(
+pub(super) fn stage8_integrity_metadata(
     download: &CurseForgeManualDownload,
     hashes: Vec<CurseForgeFileHash>,
     file_length: u64,
@@ -291,7 +297,7 @@ fn stage8_integrity_metadata(
     }
 }
 
-fn stage8_curseforge_file(
+pub(super) fn stage8_curseforge_file(
     project_id: u32,
     file_id: u32,
     file_name: &str,
@@ -330,7 +336,7 @@ fn stage8_curseforge_file(
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn stage8_pending_keys(
+pub(super) async fn stage8_pending_keys(
     state: &State,
     instance_id: &str,
 ) -> HashSet<(String, String)> {
@@ -351,7 +357,7 @@ async fn stage8_pending_keys(
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn import_stage6_manual_download(
+pub(super) async fn import_stage6_manual_download(
     instance_id: &str,
     download: &CurseForgeManualDownload,
     bytes: &[u8],
@@ -370,7 +376,7 @@ async fn import_stage6_manual_download(
 }
 
 #[cfg(not(feature = "tauri"))]
-fn stage6_waiting_manual_job_state(
+pub(super) fn stage6_waiting_manual_job_state(
     instance_id: &str,
     items: &[(&str, &str, &str)],
 ) -> crate::install::model::InstallJobState {
@@ -416,7 +422,7 @@ fn stage6_waiting_manual_job_state(
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn insert_stage6_waiting_manual_job(
+pub(super) async fn insert_stage6_waiting_manual_job(
     state: &State,
     instance_id: &str,
     items: &[(&str, &str, &str)],
@@ -435,7 +441,7 @@ async fn insert_stage6_waiting_manual_job(
 }
 
 #[cfg(not(feature = "tauri"))]
-async fn assert_stage6_job_is_unresolved(
+pub(super) async fn assert_stage6_job_is_unresolved(
     state: &State,
     job_id: uuid::Uuid,
     item_path: &str,
@@ -469,7 +475,7 @@ async fn assert_stage6_job_is_unresolved(
     );
 }
 
-fn category(
+pub(super) fn category(
     id: u32,
     class_id: Option<u32>,
     is_class: bool,

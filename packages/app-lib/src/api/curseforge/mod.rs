@@ -36,14 +36,14 @@ pub use self::verify::*;
 pub(crate) use self::catalog::{
     derived_curseforge_download_url, resource_request,
 };
-pub(crate) use self::content_change::StagedCurseForgeUpgrade;
 pub(crate) use self::content_change::prepare_curseforge_content_change_action;
+pub(crate) use self::dto::StagedCurseForgeUpgrade;
 pub(crate) use self::dto::{
     CurseForgeManifestFile, CurseForgePackExpectedContent,
     CurseForgePackExpectedMember, CurseForgePackExpectedOverride,
     get_modpack_expected_members,
 };
-pub(crate) use self::install::{
+pub(crate) use self::dto::{
     apply_staged_curseforge_upgrade_file,
     apply_staged_curseforge_upgrade_file_with_state,
     stage_curseforge_upgrade_file,
@@ -61,11 +61,10 @@ pub(crate) use self::verify::{
     CurseForgeFingerprintHasher, compute_fingerprint,
 };
 
-use self::catalog::{get_files_many, get_project, get_projects};
-use self::dto::{CurseForgeCategory, CurseForgeFile, CurseForgeProject};
 use crate::state::DependencyResolutionPlan;
 use crate::util::download::constants::MODPACK_METADATA_CONCURRENCY;
 use dashmap::DashMap;
+use futures::StreamExt;
 use futures::stream;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};

@@ -37,6 +37,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -133,7 +134,7 @@ pub(crate) struct DownloadInstalledFileRequest<'a> {
 }
 
 struct DownloadedCurseForgeFile {
-    relative_path: String,
+    pub(super) relative_path: String,
 }
 
 pub(crate) struct CurseForgeVerificationTask {
@@ -186,7 +187,7 @@ pub(crate) struct ActiveCurseForgeDownload {
 }
 
 impl ActiveCurseForgeDownload {
-    fn start(counter: Arc<AtomicU64>) -> Self {
+    pub(super) fn start(counter: Arc<AtomicU64>) -> Self {
         counter.fetch_add(1, Ordering::Relaxed);
         Self {
             counter,
@@ -194,7 +195,7 @@ impl ActiveCurseForgeDownload {
         }
     }
 
-    fn finish(&mut self) {
+    pub(super) fn finish(&mut self) {
         if self.active {
             self.counter.fetch_sub(1, Ordering::Relaxed);
             self.active = false;
@@ -798,9 +799,9 @@ pub(super) enum CurseForgePendingCompletionProof {
 }
 
 struct VerifiedInstalledCurseForgeFile {
-    size: u64,
-    sha1: String,
-    pending_completion: CurseForgePendingCompletionProof,
+    pub(super) size: u64,
+    pub(super) sha1: String,
+    pub(super) pending_completion: CurseForgePendingCompletionProof,
 }
 
 async fn read_curseforge_verification_chunk(

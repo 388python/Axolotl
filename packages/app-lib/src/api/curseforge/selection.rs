@@ -104,8 +104,8 @@ pub enum CurseForgeDependencySelectionReason {
 
 /// A CurseForge file selected for a dependency after local target validation.
 struct SelectedDependencyFile {
-    file: CurseForgeFile,
-    reason: CurseForgeDependencySelectionReason,
+    pub(super) file: CurseForgeFile,
+    pub(super) reason: CurseForgeDependencySelectionReason,
 }
 
 #[cfg(debug_assertions)]

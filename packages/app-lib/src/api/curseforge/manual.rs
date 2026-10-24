@@ -1066,15 +1066,15 @@ struct CurseForgeManualDownloadInconsistency {
 
 #[derive(Debug, Default)]
 pub(super) struct CurseForgeManualDownloadReconciliation {
-    recovered: Vec<InstallJobEventKind>,
-    inconsistent: Vec<CurseForgeManualDownloadInconsistency>,
-    manual_skipped_count: usize,
-    materialized_exact_match_count: usize,
-    unresolved_pending_count: usize,
+    pub(super) recovered: Vec<InstallJobEventKind>,
+    pub(super) inconsistent: Vec<CurseForgeManualDownloadInconsistency>,
+    pub(super) manual_skipped_count: usize,
+    pub(super) materialized_exact_match_count: usize,
+    pub(super) unresolved_pending_count: usize,
 }
 
 impl CurseForgeManualDownloadReconciliation {
-    fn should_resume(&self) -> bool {
+    pub(super) fn should_resume(&self) -> bool {
         self.unresolved_pending_count == 0 && self.inconsistent.is_empty()
     }
 }

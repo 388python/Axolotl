@@ -1,6 +1,7 @@
 //! Content version changes.
 
 use super::catalog::{get_file, get_project};
+use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{CurseForgeInstallRequest, CurseForgeInstallResult};
 use super::install::{install_file, install_file_with_reporter};
 use super::manual::mark_pack_member_version_override;

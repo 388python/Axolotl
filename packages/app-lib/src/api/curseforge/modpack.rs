@@ -1,6 +1,7 @@
 //! Modpack archive installation.
 
 use super::catalog::{get_file, get_project};
+use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{
     CurseForgeFailedDownload, CurseForgeFile, CurseForgeInstallRequest,
     CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManifestFile,
