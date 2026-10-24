@@ -17,6 +17,7 @@ import {
     Toggle,
     useVIntl,
 } from '@modrinth/ui'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
@@ -49,7 +50,6 @@ import {
     saveUserPreset,
     type UserPreset,
 } from '@/lab/command-generator/presets.ts'
-import { openUrl } from '@tauri-apps/plugin-opener'
 
 const { formatMessage, locale } = useVIntl()
 
