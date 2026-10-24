@@ -48,6 +48,18 @@ export const launcherAnnouncements: readonly LauncherAnnouncement[] = [
             fixed: [
                 {
                     'en-US':
+                        'Fixed slow opening of the Skin selector by showing saved skins before online updates finish.',
+                    'zh-CN':
+                        '修复皮肤选择器打开缓慢的问题，先显示已保存的皮肤，再在后台同步在线状态。',
+                },
+                {
+                    'en-US':
+                        'Fixed the player nametag in the Skin selector to use the bundled Minecraft font.',
+                    'zh-CN':
+                        '修复皮肤选择器中玩家模型顶部名称标签的字体，恢复为内置 Minecraft 字体。',
+                },
+                {
+                    'en-US':
                         'Fixed launcher slowdowns with large screenshot folders by loading thumbnails only for visible images and the next two.',
                     'zh-CN':
                         '修复截图文件夹包含大量高分辨率图片时启动器卡顿的问题，仅加载可见截图及下方两张的缩略图。',
