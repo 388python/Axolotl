@@ -158,6 +158,11 @@ vi.mock('@modrinth/ui', async () => {
                 },
             ]),
         ),
+        ProjectPageSkeleton: {
+            props: ['title'],
+            setup: (props: { title?: string }) => () =>
+                h('div', { 'data-testid': 'project-skeleton' }, props.title),
+        },
         commonMessages: {
             retryButton: { defaultMessage: 'Retry' },
             backButton: { defaultMessage: 'Back' },
@@ -301,20 +306,18 @@ it('shows the project while release data is still loading', async () => {
 
 it('shows the header before v3 classification even with the project background enabled', async () => {
     api.background = true
-    api.project
-        .mockReset()
-        .mockResolvedValue({
-            id: 'one',
-            slug: 'one',
-            title: 'Pack',
-            project_type: 'modpack',
-            versions: [],
-            team: 'team',
-            categories: [],
-            game_versions: [],
-            loaders: [],
-            gallery: [],
-        })
+    api.project.mockReset().mockResolvedValue({
+        id: 'one',
+        slug: 'one',
+        title: 'Pack',
+        project_type: 'modpack',
+        versions: [],
+        team: 'team',
+        categories: [],
+        game_versions: [],
+        loaders: [],
+        gallery: [],
+    })
     let resolve!: (value: unknown) => void
     api.projectV3.mockImplementationOnce(
         () =>
@@ -357,5 +360,31 @@ it('keeps the title and offers local recovery when v3 details fail', async () =>
         expect(wrapper.text()).not.toContain('Some project details could not be loaded.')
     } finally {
         wrapper.unmount()
+    }
+})
+
+it('shows the navigation title before the main project request completes', async () => {
+    let resolve!: (value: unknown) => void
+    api.project.mockReset().mockImplementationOnce(
+        () =>
+            new Promise((done) => {
+                resolve = done
+            }),
+    )
+    window.history.replaceState(
+        { projectPreview: { targetPath: '/project/one', title: 'Known title' } },
+        '',
+    )
+    const wrapper = mount(Project, {
+        global: { stubs: { Teleport: true, RouterView: true }, directives: { tooltip: {} } },
+    })
+    try {
+        expect(wrapper.text()).toContain('Known title')
+        wrapper.unmount()
+        resolve({ id: 'one', title: 'Late project' })
+        await flushPromises()
+    } finally {
+        wrapper.unmount()
+        window.history.replaceState({}, '')
     }
 })

@@ -546,6 +546,7 @@ import {
 } from '@/helpers/instance'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
+import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { get_by_instance_id } from '@/helpers/process'
 import { projectGalleryTranslationSegments } from '@/helpers/project-gallery'
 import { createProjectBrowseLocation } from '@/helpers/project-links'
@@ -1134,8 +1135,9 @@ async function fetchProjectData() {
     translationActive.value = false
     translationLoading.value = false
     translations.value = {}
+    const projectRequest = get_project(requestedProjectId, 'revalidate')
     void loadProjectClassification(requestedProjectId, requestVersion)
-    const project = await get_project(requestedProjectId, 'revalidate')
+    const project = await projectRequest
     if (!isCurrent()) return
 
     if (!project) {
@@ -1153,7 +1155,9 @@ async function fetchProjectData() {
 
     void loadSupplementalProjectData(project, requestedInstanceId, isCurrent).catch(handleError)
     if (projectClassificationReady.value) fetchDeferredServerData(project, isCurrent)
-    void maybeAutoTranslate()
+    runAfterPageTransitionSettle(() => {
+        if (isCurrent()) void maybeAutoTranslate()
+    })
 }
 
 let classificationRequestVersion = 0
@@ -1275,6 +1279,7 @@ async function translateProject() {
 
     try {
         const settings = await getTranslationSettings()
+        if (requestVersion !== translationRequestVersion) return
         translationMode.value = settings.mode
         translationStyle.value = settings.style
         const prepared = prepareDescription(data.value.body ?? '')
@@ -1320,9 +1325,11 @@ async function translateProject() {
 }
 
 async function maybeAutoTranslate() {
+    const requestVersion = projectLoadVersion
     try {
         const settings = await getTranslationSettings()
-        if (settings.auto_translate) await translateProject()
+        if (requestVersion === projectLoadVersion && settings.auto_translate)
+            await translateProject()
     } catch (error) {
         handleError(error)
     }

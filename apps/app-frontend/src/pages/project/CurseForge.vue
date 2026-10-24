@@ -339,6 +339,7 @@ import {
     getCurseForgeImageUrl,
     getCurseForgeProject,
 } from '@/helpers/curseforge'
+import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { projectGalleryTranslationSegments } from '@/helpers/project-gallery'
 import { createProjectBrowseLocation, type ProjectBrowseFilter } from '@/helpers/project-links'
 import { readProjectPreviewTitle } from '@/helpers/project-preview'
@@ -808,11 +809,12 @@ async function loadProject(projectId: number) {
     filesFailed.value = false
     tagsFailed.value = false
     descriptionReady.value = false
+    const projectRequest = getCurseForgeProject(projectId)
     void loadDescription(projectId, requestVersion)
     void loadInitialFiles(projectId, requestVersion)
     void loadProjectTags(requestVersion)
     try {
-        const projectData = await getCurseForgeProject(projectId)
+        const projectData = await projectRequest
         if (requestVersion !== projectRequestVersion) return
         project.value = projectData
         breadcrumbs.setName('Project', projectData.name)
@@ -1121,7 +1123,11 @@ async function translateProject() {
 }
 
 watch([() => project.value?.id, descriptionReady], ([projectId, ready]) => {
-    if (projectId && ready) void maybeAutoTranslate()
+    const requestVersion = projectRequestVersion
+    if (projectId && ready)
+        runAfterPageTransitionSettle(() => {
+            if (requestVersion === projectRequestVersion) void maybeAutoTranslate()
+        })
 })
 
 async function maybeAutoTranslate() {
