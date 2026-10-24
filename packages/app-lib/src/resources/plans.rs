@@ -511,8 +511,8 @@ impl ResourceService {
                     target,
                     selection.resource_type,
                 );
-                if assessment.game_version != CompatibilityState::Compatible
-                    || assessment.loader != CompatibilityState::Compatible
+                if assessment.game_version == CompatibilityState::Incompatible
+                    || assessment.loader == CompatibilityState::Incompatible
                 {
                     continue;
                 }
@@ -532,7 +532,8 @@ impl ResourceService {
                 };
                 // An enabled local dependency is usable even when its release
                 // differs from the dependency metadata requested by newly
-                // selected content. Runtime compatibility remains checked.
+                // selected content. Explicit compatibility mismatches remain
+                // blocking; missing compatibility metadata does not.
                 (
                     release,
                     artifact,
@@ -1329,6 +1330,12 @@ impl ResourceService {
                 if let Some(previous) =
                     draft.plan.nodes.iter().find(|node| node.id == selection.id)
                 {
+                    if draft.plan.intent == ResourceOperationIntent::Install
+                        && previous.state == DependencyNodeState::Satisfied
+                        && !previous.installed_entries.is_empty()
+                    {
+                        continue;
+                    }
                     let selected = previous.artifact.clone();
                     let matches = if selection_matches_artifact(
                         &selection.release,
@@ -1439,6 +1446,13 @@ impl ResourceService {
             let requirements = self
                 .requirements_for(&selection, &draft.retained_requirements)
                 .await?;
+            let ignore_local_version_constraints = draft.plan.intent
+                == ResourceOperationIntent::Install
+                && !draft.plan.active_roots.contains(&selection.id)
+                && draft.plan.edges.iter().any(|edge| {
+                    edge.child == selection.id
+                        && edge.kind == ResourceDependencyKind::Required
+                });
             let satisfied_dependency =
                 if selection.id.as_str().starts_with("dependency:")
                     && selection.entry_id.is_none()
@@ -1450,8 +1464,7 @@ impl ResourceService {
                             installed,
                             cancel,
                             &constraints,
-                            draft.plan.intent
-                                == ResourceOperationIntent::Install,
+                            ignore_local_version_constraints,
                         )
                         .await
                     {
@@ -1483,6 +1496,8 @@ impl ResourceService {
                 } else {
                     None
                 };
+            let locally_satisfied_dependency = ignore_local_version_constraints
+                && satisfied_dependency.is_some();
             let (release, artifact, basis) = match if let Some(selected) =
                 satisfied_dependency
             {
@@ -1543,31 +1558,42 @@ impl ResourceService {
                     continue;
                 }
             };
-            let local_requirements_match = match self
-                .local_requirements_accept(&release, &requirements, cancel)
-                .await
-            {
-                Ok(matches) => matches,
-                Err(ResourceError::Canceled) => {
-                    return Err(ResourceError::Canceled);
-                }
-                Err(error)
-                    if draft.plan.intent
-                        == ResourceOperationIntent::Install =>
+            let local_requirements_match = if locally_satisfied_dependency {
+                true
+            } else {
+                match self
+                    .local_requirements_accept(&release, &requirements, cancel)
+                    .await
                 {
-                    dependency_analysis_issue(
-                        &mut draft.plan,
-                        &selection.id,
-                        error.to_string(),
-                    );
-                    true
+                    Ok(matches) => matches,
+                    Err(ResourceError::Canceled) => {
+                        return Err(ResourceError::Canceled);
+                    }
+                    Err(error)
+                        if draft.plan.intent
+                            == ResourceOperationIntent::Install =>
+                    {
+                        dependency_analysis_issue(
+                            &mut draft.plan,
+                            &selection.id,
+                            error.to_string(),
+                        );
+                        true
+                    }
+                    Err(error) => return Err(error),
                 }
-                Err(error) => return Err(error),
             };
-            if !requirements
-                .iter()
-                .all(|requirement| requirement.accepts(&release))
-                || !local_requirements_match
+            let retained_requirements_match =
+                requirements.iter().all(|requirement| {
+                    if locally_satisfied_dependency {
+                        !requirement.incompatible
+                            || requirement.accepts(&release)
+                    } else {
+                        requirement.accepts(&release)
+                    }
+                });
+            if !retained_requirements_match
+                || (!locally_satisfied_dependency && !local_requirements_match)
             {
                 issue(
                     &mut draft.plan,
@@ -1750,6 +1776,11 @@ impl ResourceService {
                 (CompatibilityDimension::Loader, assessment.loader),
             ] {
                 if value == CompatibilityState::Compatible {
+                    continue;
+                }
+                if locally_satisfied_dependency
+                    && value == CompatibilityState::Unknown
+                {
                     continue;
                 }
                 let accepted = draft.plan.exceptions.iter().any(|exception| {
@@ -2205,7 +2236,11 @@ impl ResourceService {
                     .unwrap_or_else(|| child.id.clone());
                 if let Some(existing) = resolved.get(&key).and_then(|id| {
                     draft.plan.nodes.iter().find(|node| &node.id == id)
-                }) && dependency.kind == ResourceDependencyKind::Required
+                }) && !(draft.plan.intent
+                    == ResourceOperationIntent::Install
+                    && existing.state == DependencyNodeState::Satisfied
+                    && !existing.installed_entries.is_empty())
+                    && dependency.kind == ResourceDependencyKind::Required
                     && !selection_matches_artifact(
                         &child.release,
                         existing.artifact.as_ref(),
@@ -2324,6 +2359,13 @@ impl ResourceService {
                 .filter(|edge| edge.child == candidate.id)
                 .filter_map(|edge| edge.version_constraint.clone())
                 .collect();
+            let ignore_local_version_constraints = draft.plan.intent
+                == ResourceOperationIntent::Install
+                && !draft.plan.active_roots.contains(&candidate.id)
+                && draft.plan.edges.iter().any(|edge| {
+                    edge.child == candidate.id
+                        && edge.kind == ResourceDependencyKind::Required
+                });
             let satisfied_artifact = match self
                 .installed_dependency(
                     &candidate,
@@ -2331,7 +2373,7 @@ impl ResourceService {
                     &installed,
                     cancel,
                     &constraints,
-                    draft.plan.intent == ResourceOperationIntent::Install,
+                    ignore_local_version_constraints,
                 )
                 .await
             {
@@ -2516,6 +2558,7 @@ impl ResourceService {
             };
             let locally_satisfied = draft.plan.intent
                 == ResourceOperationIntent::Install
+                && edge.kind == ResourceDependencyKind::Required
                 && node.state == DependencyNodeState::Satisfied
                 && !node.installed_entries.is_empty();
             let version_matches = if locally_satisfied {
