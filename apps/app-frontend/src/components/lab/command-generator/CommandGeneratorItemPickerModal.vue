@@ -32,6 +32,8 @@ interface AdvancementData {
 interface ExtraBlockMeta {
     id: string
     nameKey: string
+    /** 该方块首次出现的 Java 版本，低于此版本的实例不显示。 */
+    since?: string
 }
 
 interface SourceItem {
@@ -75,6 +77,7 @@ const messages = defineMessages({
     },
 })
 
+// 仅给 1.17+ 的方块加上 since 字段
 const EXTRA_BLOCKS_META: ExtraBlockMeta[] = [
     { id: 'minecraft:air', nameKey: 'app.lab.command-generator.block.air' },
     { id: 'minecraft:cave_air', nameKey: 'app.lab.command-generator.block.cave_air' },
@@ -89,7 +92,7 @@ const EXTRA_BLOCKS_META: ExtraBlockMeta[] = [
     { id: 'minecraft:moving_piston', nameKey: 'app.lab.command-generator.block.moving_piston' },
     { id: 'minecraft:piston_head', nameKey: 'app.lab.command-generator.block.piston_head' },
     { id: 'minecraft:frosted_ice', nameKey: 'app.lab.command-generator.block.frosted_ice' },
-    { id: 'minecraft:light', nameKey: 'app.lab.command-generator.block.light' },
+    { id: 'minecraft:light', nameKey: 'app.lab.command-generator.block.light', since: '1.17' },
 ]
 
 // ================= 依赖语言文件的方块判断 =================
@@ -233,17 +236,19 @@ async function show() {
         let extraBlocks: SourceItem[] = []
 
         if (props.kind === 'block') {
-            // 直接依赖 isBlockItemId 进行过滤，丢弃所有不存在 block.minecraft.* 的条目
+            // 依赖 isBlockItemId 过滤常规方块
             sourceItems = (resources.items as unknown as SourceItem[]).filter((item) => {
                 return item.id && isBlockItemId(item.id)
             })
 
-            // 去重：避免 EXTRA_BLOCKS_META 里的一些方块（如 water, lava）在列表中出现两次
+            // 去重，并按 since 字段过滤硬编码的额外方块
             const seen = new Set(sourceItems.map((item) => item.id))
-            extraBlocks = EXTRA_BLOCKS_META.filter((meta) => !seen.has(meta.id)).map((meta) => ({
-                id: meta.id,
-                __extraMeta: meta,
-            }))
+            extraBlocks = EXTRA_BLOCKS_META.filter((meta) => !seen.has(meta.id))
+                .filter((meta) => !meta.since || isVersionAtLeast(props.version, meta.since))
+                .map((meta) => ({
+                    id: meta.id,
+                    __extraMeta: meta,
+                }))
 
             sourceItems = [...sourceItems, ...extraBlocks]
         }
