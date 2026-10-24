@@ -24,18 +24,6 @@ const UPDATE_SERVER_BASE: &str = "https://update.axlmc.org/";
 const UPDATE_DOWNLOAD_TIMEOUT: std::time::Duration =
     std::time::Duration::from_secs(15 * 60);
 
-// 降级源的 release 列表只是决定「去哪个 tag 取清单」，卡住它没有意义。
-// 这个上限只约束 GitLink 列表请求本身，不参与是否降级的判断。
-const UPDATE_CHECK_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_secs(15);
-
-// 主源「慢」的判定阈值：成功但耗时超过它就只在下载前改选 GitLink 镜像主机。
-// 它不参与签名校验（清单里的 signature 原值照旧由插件在下载完成后校验），
-// 也不改变降级源的判定（是否降级仍然只看主源的错误 / None）。
-// 3 秒是经验值，不读环境变量：没有实测依据的机器不该走另一条下载主机。
-const UPDATE_MIRROR_LATENCY_THRESHOLD: std::time::Duration =
-    std::time::Duration::from_secs(3);
-
 // ── Shared types ─────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -171,15 +159,11 @@ async fn fetch_apt_deb_asset(version: &str) -> Result<AptDebAsset> {
 fn update_channel(channel: &str) -> Result<&str> {
     match channel {
         "release" | "beta" => Ok(channel),
-        _ => Err(update_channel_error(channel)),
+        _ => Err(theseus::Error::from(theseus::ErrorKind::OtherError(
+            format!("Unknown update channel: {channel}"),
+        ))
+        .into()),
     }
-}
-
-fn update_channel_error(channel: &str) -> crate::api::TheseusSerializableError {
-    let error = theseus::Error::from(theseus::ErrorKind::OtherError(format!(
-        "Unknown update channel: {channel}"
-    )));
-    error.into()
 }
 
 fn update_platform() -> Result<&'static str> {
@@ -205,39 +189,10 @@ fn update_endpoint() -> Result<Url> {
     })
 }
 
-/// 记录一次更新源检查的结果。
-///
-/// 是否降级只看结果（错误 / `None`），不看耗时，因此这里不设任何超时阈值。
-/// 耗时只决定主源成功时「下载前选哪个主机」（见
-/// `UPDATE_MIRROR_LATENCY_THRESHOLD`），与本函数的判定无关。
-fn log_check_outcome(
-    source: &str,
-    tag: Option<&str>,
-    elapsed: std::time::Duration,
-    failure: Option<&str>,
-) {
-    match failure {
-        Some(failure) => tracing::warn!(
-            source,
-            tag = tag.unwrap_or_default(),
-            elapsed_ms = elapsed.as_millis(),
-            failure,
-            "Update source check failed"
-        ),
-        None => tracing::info!(
-            source,
-            tag = tag.unwrap_or_default(),
-            elapsed_ms = elapsed.as_millis(),
-            "Update source check finished"
-        ),
-    }
-}
-
 /// Build the platform-updater with the given endpoints and run a check.
 async fn check_with_endpoints<R: Runtime>(
     webview: &Webview<R>,
     channel: &str,
-    endpoints: Vec<Url>,
 ) -> Result<Option<Update>> {
     let channel = update_channel(channel)?;
     let platform = update_platform()?;
@@ -245,7 +200,7 @@ async fn check_with_endpoints<R: Runtime>(
         webview.app_handle().package_info().version.to_string();
     let mut updater = webview
         .updater_builder()
-        .endpoints(endpoints)?
+        .endpoints(vec![update_endpoint()?])?
         .header("Accept", "application/json")?
         .header("X-Axolotl-Channel", channel)?
         .header("X-Axolotl-Platform", platform)?
@@ -281,278 +236,14 @@ async fn check_with_endpoints<R: Runtime>(
     updater.check().await.map_err(Into::into)
 }
 
-/// Check the updater manifest through the configured Update Server endpoint,
-/// falling back to GitLink only when that endpoint is unusable.
+/// Check the updater manifest through the configured Update Server endpoint.
 async fn check_with_updater<R: Runtime>(
     webview: &Webview<R>,
     channel: &str,
 ) -> Result<Option<UpdateMetadata>> {
-    // 未知通道是配置错误，保持既有错误语义，不去尝试降级源。
-    let source = crate::updater_fallback::UpdateChannel::parse(channel)
-        .ok_or_else(|| update_channel_error(channel))?;
-
-    let started = Instant::now();
-    let primary =
-        check_with_endpoints(webview, channel, vec![update_endpoint()?]).await;
-
-    match primary {
-        Ok(Some(mut update)) => {
-            let elapsed = started.elapsed();
-            log_check_outcome(
-                "update-server",
-                Some(&update.version),
-                elapsed,
-                None,
-            );
-
-            // 主源成功但很慢时，仍然先把下载地址改到 GitLink 镜像：这只决定
-            // 「下载开始前用哪个主机」，签名照旧由插件校验。快速路径不进入这个
-            // 分支，因此正常检查不会多发一次 GitLink 列表请求。
-            if crate::updater_fallback::is_slow_source(
-                elapsed,
-                UPDATE_MIRROR_LATENCY_THRESHOLD,
-            ) {
-                let tag =
-                    crate::updater_fallback::tag_for_version(&update.version);
-                // 列表拉取失败不算错误：保持原地址，主源结果不受影响。
-                let releases = fetch_gitlink_releases().await;
-                let mirrored = match releases.as_result() {
-                    Ok(body) => {
-                        crate::updater_fallback::mirrored_filenames(body, &tag)
-                    }
-                    Err(_) => Vec::new(),
-                };
-                let original = update.download_url.clone();
-                apply_gitlink_mirror(&mut update, &tag, &mirrored);
-                tracing::info!(
-                    source = "update-server",
-                    elapsed_ms = elapsed.as_millis(),
-                    threshold_ms = UPDATE_MIRROR_LATENCY_THRESHOLD.as_millis(),
-                    advised_tag = %tag,
-                    mirror_hit = update.download_url != original,
-                    "Slow update source, checked the GitLink mirror"
-                );
-            }
-
-            build_update_metadata(webview, update).await
-        }
-        // 主源可用且明确表示没有更新。此时不查降级源：降级源的版本来自
-        // tag 排序，不是 Update Server 认可过的最新版本，主动去找会误报到
-        // 未经验证的版本。
-        Ok(None) => {
-            log_check_outcome("update-server", None, started.elapsed(), None);
-            Ok(None)
-        }
-        Err(error) => {
-            let reason = error.to_string();
-            log_check_outcome(
-                "update-server",
-                None,
-                started.elapsed(),
-                Some(&reason),
-            );
-
-            let fallback_started = Instant::now();
-            let fallback = check_with_fallback_endpoint(webview, source).await;
-            match fallback {
-                Some(update) => {
-                    log_check_outcome(
-                        "gitlink",
-                        Some(&update.version),
-                        fallback_started.elapsed(),
-                        None,
-                    );
-                    build_update_metadata(webview, update).await
-                }
-                None => {
-                    // 两条都失败时保留主源错误语义，由调用方按原有方式呈现。
-                    log_check_outcome(
-                        "gitlink",
-                        None,
-                        fallback_started.elapsed(),
-                        Some("no usable release"),
-                    );
-                    Err(error)
-                }
-            }
-        }
-    }
-}
-
-/// 把降级清单里指向 GitHub 的下载地址改写成 GitLink 镜像地址。
-///
-/// 之所以可以改写：GitLink 镜像复刻的是同一条流水线的同一份字节，而 minisign 签名
-/// 覆盖整个文件内容、与 URL 无关——只要字节一致，清单里的 `signature` 原值就仍能
-/// 通过校验。因此这里只替换 `download_url`，不碰 `signature`，也不动 `timeout`、
-/// `headers` 等其它字段。
-///
-/// 若镜像字节与签名目标不一致（同步了别的构建、文件被替换、传输被截断），下载完成
-/// 后的签名校验会失败，插件放弃安装、不会装上任何东西。这是期望的安全失败：这里
-/// 不放宽校验，也不做「签名失败就换回 GitHub 重试」的兜底。
-///
-/// 镜像缺该文件时保持清单原地址，行为与引入改写之前一致。
-fn apply_gitlink_mirror(update: &mut Update, tag: &str, mirrored: &[String]) {
-    // apt 分支稍后会用 Update Server 目录里的 deb 覆盖 `download_url`，并以
-    // 那份目录自带的 sha256/size 校验为准；这里不介入那条路径。
-    if is_apt_linux() {
-        return;
-    }
-
-    let original = update.download_url.clone();
-    match crate::updater_fallback::mirror_download_url_for(
-        &original, tag, mirrored,
-    ) {
-        Some(mirrored_url) => {
-            tracing::info!(
-                source = "gitlink",
-                tag,
-                original = %original,
-                mirrored = %mirrored_url,
-                "Rewriting the update download to the GitLink mirror"
-            );
-            update.download_url = mirrored_url;
-        }
-        None => {
-            tracing::debug!(
-                source = "gitlink",
-                tag,
-                original = %original,
-                "GitLink mirror does not provide this file, keeping the manifest url"
-            );
-        }
-    }
-}
-
-/// 用 GitLink 推导出的端点再跑一次 updater 检查。
-///
-/// 任何失败都返回 `None`：降级源不可用不等于整个检查失败，主源错误已经
-/// 由调用方保留。
-async fn check_with_fallback_endpoint<R: Runtime>(
-    webview: &Webview<R>,
-    source: crate::updater_fallback::UpdateChannel,
-) -> Option<Update> {
-    let releases = fetch_gitlink_releases().await;
-    let endpoint = crate::updater_fallback::endpoint_from_releases(
-        releases.as_result(),
-        source,
-    )?;
-
-    let manifest_url = endpoint.url.clone();
-    if !crate::updater_fallback::probe_manifest(&manifest_url).await {
-        tracing::warn!(
-            source = "gitlink",
-            tag = %endpoint.tag,
-            url = %manifest_url,
-            "GitLink latest.json is not a release manifest"
-        );
-        return None;
-    }
-
-    let channel = match source {
-        crate::updater_fallback::UpdateChannel::Release => "release",
-        crate::updater_fallback::UpdateChannel::Beta => "beta",
+    let Some(mut update) = check_with_endpoints(webview, channel).await? else {
+        return Ok(None);
     };
-    let fallback_check =
-        check_with_endpoints(webview, channel, vec![endpoint.url]).await;
-
-    match fallback_check {
-        Ok(Some(mut update)) => {
-            // 镜像清单 `platforms[*].url` 仍指向 github.com，只降级检查阶段的话
-            // 下载还是会回到 GitHub，因此命中降级后把下载地址换到镜像。
-            let mirrored = match releases.as_result() {
-                Ok(body) => crate::updater_fallback::mirrored_filenames(
-                    body,
-                    &endpoint.tag,
-                ),
-                Err(_) => Vec::new(),
-            };
-            apply_gitlink_mirror(&mut update, &endpoint.tag, &mirrored);
-            Some(update)
-        }
-        Ok(None) => {
-            tracing::info!(
-                source = "gitlink",
-                tag = %endpoint.tag,
-                "GitLink reports no newer version"
-            );
-            None
-        }
-        Err(error) => {
-            tracing::warn!(
-                source = "gitlink",
-                tag = %endpoint.tag,
-                failure = %error,
-                "GitLink manifest is unusable"
-            );
-            None
-        }
-    }
-}
-
-/// 拉取 GitLink 的 release 列表。
-async fn fetch_gitlink_releases() -> ReleaseList {
-    match request_gitlink_releases().await {
-        Ok(body) => ReleaseList::Fetched(body),
-        Err(reason) => ReleaseList::Unavailable(reason),
-    }
-}
-
-async fn request_gitlink_releases() -> std::result::Result<String, String> {
-    let response = ClientBuilder::new()
-        .user_agent(launcher_user_agent())
-        .timeout(UPDATE_CHECK_TIMEOUT)
-        .build()
-        .map_err(|error| {
-            format!("failed to build the GitLink client: {error}")
-        })?
-        .get(crate::updater_fallback::releases_url())
-        .header(ACCEPT, HeaderValue::from_static("application/json"))
-        .send()
-        .await
-        .map_err(|error| {
-            format!("GitLink release list request failed: {error}")
-        })?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "GitLink release list returned {}",
-            response.status()
-        ));
-    }
-
-    let body = response.text().await.map_err(|error| {
-        format!("failed to read the GitLink release list: {error}")
-    })?;
-
-    // GitLink 用 HTTP 200 掩盖业务错误，状态码通过后仍要按响应体判定。
-    if !crate::updater_fallback::looks_like_release_list(&body) {
-        return Err(
-            "GitLink release list body is not a release list".to_string()
-        );
-    }
-
-    Ok(body)
-}
-/// GitLink release 列表的拉取结果；两种状态都自持数据，可跨 await 使用。
-enum ReleaseList {
-    Fetched(String),
-    Unavailable(String),
-}
-
-impl ReleaseList {
-    fn as_result(&self) -> std::result::Result<&str, &str> {
-        match self {
-            Self::Fetched(body) => Ok(body.as_str()),
-            Self::Unavailable(reason) => Err(reason.as_str()),
-        }
-    }
-}
-
-/// 把插件给出的 `Update` 转成前端契约里的元数据。
-async fn build_update_metadata<R: Runtime>(
-    webview: &Webview<R>,
-    mut update: Update,
-) -> Result<Option<UpdateMetadata>> {
     update.timeout = Some(UPDATE_DOWNLOAD_TIMEOUT);
 
     // On Debian and derivatives the plugin's minisign signature check cannot
