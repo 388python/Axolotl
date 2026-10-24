@@ -10,6 +10,7 @@ use super::constants::{
     H2_RANGE_FILE_THRESHOLD, MAX_H2_RANGES_PER_FILE,
 };
 use super::h2_pool::{H2ConnectFailureKind, SharedH2Connection};
+use super::retired_sources;
 use crate::util::download::constants::{
     API_KEY_HEADER, CURSEFORGE_API_HOST, DOWNLOAD_FAIR_SHARE_DIVISOR,
     DOWNLOAD_META_HEADER, DOWNLOAD_SCHEDULER_INTERVAL, H2_DOWNLOAD_ASSET,
@@ -21,7 +22,8 @@ use crate::util::download::constants::{
     H2_DOWNLOAD_RANGE_STREAM, H2_DOWNLOAD_SEGMENT,
     H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_DESTINATION_LOCK,
     H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT,
-    IDENTITY_ENCODING, PARTIAL_FILE_SUFFIX,
+    IDENTITY_ENCODING, MAX_DOWNLOAD_REDIRECTS, MAX_REDIRECT_LOCATION_BYTES,
+    PARTIAL_FILE_SUFFIX,
 };
 use crate::util::fetch;
 use crate::util::fetch::{
@@ -29,7 +31,7 @@ use crate::util::fetch::{
     Integrity,
 };
 use futures::StreamExt;
-use http::header::{ACCEPT_ENCODING, RANGE, USER_AGENT};
+use http::header::{ACCEPT_ENCODING, LOCATION, RANGE, USER_AGENT};
 use http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use std::path::Path;
 use std::pin::Pin;
@@ -830,7 +832,6 @@ enum AssetBatchItemOutcome {
     LocalObjectFailed {
         error: crate::Error,
     },
-    Redirect,
 }
 
 impl Clone for H2BatchAsset {
@@ -866,9 +867,13 @@ impl AssetBatchConnectionGroup {
         }
     }
 
-    async fn connection(&self, rescue: bool) -> Arc<SharedH2Connection> {
+    async fn connection_for(
+        &self,
+        route: &DownloadRoute,
+        rescue: bool,
+    ) -> Arc<SharedH2Connection> {
         match super::h2_pool::shared_batch_connection(
-            &self.route,
+            route,
             self.reserve_native_budget,
         )
         .await
@@ -883,6 +888,10 @@ impl AssetBatchConnectionGroup {
                 Arc::clone(&self.primary)
             }
         }
+    }
+
+    async fn connection(&self, rescue: bool) -> Arc<SharedH2Connection> {
+        self.connection_for(&self.route, rescue).await
     }
 }
 
@@ -1212,14 +1221,6 @@ where
                         local_object_error = Some(error);
                     }
                 }
-                Ok(AssetBatchItemOutcome::Redirect) => {
-                    tracing::debug!(
-                        url = %fetch::sanitize_url_for_log(&item.url),
-                    "Asset batch received a redirect status"
-                    );
-                    // The batch intentionally has no per-file network fallback.
-                    failed.push(item);
-                }
                 Err(error) => {
                     network_failures = network_failures.saturating_add(1);
                     tracing::debug!(
@@ -1349,49 +1350,118 @@ async fn download_asset_item(
             return Ok(AssetBatchItemOutcome::LocalObjectFailed { error });
         }
     };
-    let _stream_permit = if apply_native_policy {
-        Some(
-            tokio::time::timeout(
-                ASSET_RESOURCE_WAIT_TIMEOUT,
-                super::h2_stream_budget::acquire_download(route, None, true),
-            )
-            .await
-            .map_err(|_| {
-                crate::ErrorKind::NetworkError(
-                    H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT
-                        .to_string(),
+    let mut current_uri = uri.clone();
+    let mut current_route = route.clone();
+    let mut redirect_count = 0;
+    let (connection, _stream_permit, _connection_stream, response, mut stream) = loop {
+        let _stream_permit = if apply_native_policy {
+            Some(
+                tokio::time::timeout(
+                    ASSET_RESOURCE_WAIT_TIMEOUT,
+                    super::h2_stream_budget::acquire_download(
+                        &current_route,
+                        None,
+                        true,
+                    ),
                 )
-            })??,
-        )
-    } else {
-        None
-    };
-    let connection = connections.connection(rescue).await;
-    let _connection_stream = connection.track_stream();
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        USER_AGENT,
-        HeaderValue::from_str(&crate::launcher_user_agent()).unwrap_or_else(
-            |_| HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER),
-        ),
-    );
-    headers
-        .insert(ACCEPT_ENCODING, HeaderValue::from_static(IDENTITY_ENCODING));
+                .await
+                .map_err(|_| {
+                    crate::ErrorKind::NetworkError(
+                        H2_DOWNLOAD_TIMED_OUT_WAITING_FOR_ASSET_HTTP_2_STREAM_PERMIT
+                            .to_string(),
+                    )
+                })??,
+            )
+        } else {
+            None
+        };
+        let connection =
+            connections.connection_for(&current_route, rescue).await;
+        let connection_stream = connection.track_stream();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_str(&crate::launcher_user_agent())
+                .unwrap_or_else(|_| {
+                    HeaderValue::from_static(H2_DOWNLOAD_AXOLOTL_LAUNCHER)
+                }),
+        );
+        headers.insert(
+            ACCEPT_ENCODING,
+            HeaderValue::from_static(IDENTITY_ENCODING),
+        );
 
-    let (response, mut stream) = open_stream(&connection, uri, headers).await?;
+        let (response, mut stream) =
+            open_stream(&connection, &current_uri, headers).await?;
+        super::native_breaker::record_response_status_failure(
+            &current_route,
+            response.status().as_u16(),
+            fetch::retry_after_headers(response.headers()),
+        );
+        if !response.status().is_redirection() {
+            break (
+                connection,
+                _stream_permit,
+                connection_stream,
+                response,
+                stream,
+            );
+        }
+        if !matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "HTTP/2 GET failed with status {}",
+                response.status()
+            ))
+            .into());
+        }
+        let location = response
+            .headers()
+            .get(LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| {
+                crate::ErrorKind::OtherError(format!(
+                    "Redirect from {current_uri} did not include a valid Location header"
+                ))
+            })?;
+        if location.len() > MAX_REDIRECT_LOCATION_BYTES
+            || location.chars().any(char::is_control)
+        {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "Redirect from {current_uri} included an unsafe Location header"
+            ))
+            .into());
+        }
+        let current_url = Url::parse(&current_uri.to_string())?;
+        let next_url =
+            retired_sources::normalize_parsed(current_url.join(location)?)?;
+        if !fetch::is_allowed_download_redirect(&next_url) {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "Refusing insecure redirect from {current_url} to {next_url}"
+            ))
+            .into());
+        }
+        if redirect_count >= MAX_DOWNLOAD_REDIRECTS {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "Too many redirects while downloading {}",
+                route.url
+            ))
+            .into());
+        }
+        drain_body(&mut stream).await;
+        current_uri = next_url.as_str().parse().map_err(|error| {
+            crate::ErrorKind::OtherError(format!(
+                "Invalid redirect target {next_url}: {error}"
+            ))
+        })?;
+        current_route.url = next_url.into();
+        redirect_count += 1;
+    };
     super::native_breaker::record_response_status_failure(
-        route,
+        &current_route,
         response.status().as_u16(),
         fetch::retry_after_headers(response.headers()),
     );
     if !response.status().is_success() {
-        // 301/302/303/307/308 are redirect responses that must be interpreted
-        // by the redirect-handling layer, not treated as line-level transfer
-        // failures. 304 is deliberately excluded: it is not a downloadable
-        // redirect for these objects.
-        if matches!(response.status().as_u16(), 301 | 302 | 303 | 307 | 308) {
-            return Ok(AssetBatchItemOutcome::Redirect);
-        }
         return Err(crate::ErrorKind::OtherError(format!(
             "HTTP/2 GET failed with status {}",
             response.status()
