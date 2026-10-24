@@ -4,6 +4,8 @@ import { expect, it, vi } from 'vitest'
 import Browse from './Browse.vue'
 
 const api = vi.hoisted(() => ({
+    instance: vi.fn().mockResolvedValue(null),
+    handleError: vi.fn(),
     capability: vi.fn(),
     categories: vi.fn(),
     refresh: vi.fn(),
@@ -102,7 +104,7 @@ vi.mock('@/helpers/content-search', () => ({
 }))
 vi.mock('@/helpers/instance', () => ({
     get_installed_project_ids: async () => [],
-    get: async () => null,
+    get: api.instance,
     get_projects: async () => [],
     list: async () => [],
     kill: vi.fn(),
@@ -313,7 +315,10 @@ vi.mock('@modrinth/ui', async () => {
                 () =>
                     h('button', slots.default?.()),
         }),
-        injectNotificationManager: () => ({ handleError: vi.fn(), addNotification: vi.fn() }),
+        injectNotificationManager: () => ({
+            handleError: api.handleError,
+            addNotification: vi.fn(),
+        }),
         injectPopupNotificationManager: () => ({ addPopupNotification: vi.fn() }),
         useVIntl: () => ({
             formatMessage: (message: { defaultMessage: string }) => message.defaultMessage,
@@ -381,6 +386,8 @@ it('retries the selected source and clears the previous source categories after 
             refreshSearch: () => Promise<void>
         }
         context.currentFilters.value = [{ type: 'category_main', option: 'magic' }]
+        await flushPromises()
+        api.saveMemory.mockClear()
         const page = wrapper.vm as unknown as { selectContentSource: (source: string) => void }
         page.selectContentSource('curseforge')
         await flushPromises()
@@ -388,6 +395,11 @@ it('retries the selected source and clears the previous source categories after 
         expect((api.enabled as { value: boolean }).value).toBe(false)
         await context.refreshSearch()
         expect(context.currentFilters.value).toEqual([])
+        expect(api.saveMemory).toHaveBeenLastCalledWith('mod', {
+            filters: [],
+            toggledGroups: [],
+            overriddenProvidedFilterTypes: [],
+        })
         expect((api.extraQuery as () => { source: string })().source).toBe('curseforge')
         expect(api.refresh).toHaveBeenCalledTimes(2)
     } finally {
@@ -395,3 +407,40 @@ it('retries the selected source and clears the previous source categories after 
         api.source = 'all'
     }
 })
+
+it.each(['missing', 'unavailable'])(
+    'continues browsing when the linked instance is %s',
+    async (failure) => {
+        const { useRoute } = await import('vue-router')
+        const route = useRoute()
+        route.params.projectType = 'mod'
+        route.query.i = 'deleted-instance'
+        api.source = 'modrinth'
+        api.refresh.mockClear()
+        api.handleError.mockClear()
+        api.instance.mockReset()
+        if (failure === 'missing') api.instance.mockResolvedValue(null)
+        else api.instance.mockRejectedValue(new Error('Instance unavailable'))
+        api.capability.mockResolvedValue({
+            status: 'available',
+            configured: true,
+            key_source: 'user',
+        })
+        const wrapper = mount(Browse, {
+            global: { stubs: { Teleport: true }, directives: { tooltip: {} } },
+        })
+        try {
+            await flushPromises()
+            expect(api.instance).toHaveBeenCalledWith('deleted-instance')
+            expect(api.handleError).toHaveBeenCalledTimes(1)
+            expect((api.enabled as { value: boolean }).value).toBe(true)
+            expect(api.refresh).toHaveBeenCalledTimes(1)
+            expect(wrapper.find('input').exists()).toBe(true)
+        } finally {
+            wrapper.unmount()
+            delete route.query.i
+            api.source = 'all'
+            api.instance.mockReset().mockResolvedValue(null)
+        }
+    },
+)

@@ -568,10 +568,16 @@ async function initInstanceContext() {
     if (!isCurrent()) return
 
     if (requestedInstanceId) {
-        const selectedInstance = await getInstance(requestedInstanceId as string)
-        if (!isCurrent()) return
-        instance.value = selectedInstance ?? null
-        if (!instance.value) throw new Error('The selected instance could not be loaded.')
+        try {
+            const selectedInstance = await getInstance(requestedInstanceId as string)
+            if (!isCurrent()) return
+            instance.value = selectedInstance ?? null
+            if (!instance.value) throw new Error('The selected instance could not be loaded.')
+        } catch (error) {
+            if (!isCurrent()) return
+            instance.value = null
+            handleError(error)
+        }
         if (
             instance.value?.install_stage === 'installed' &&
             (contentSelection.selectedCount.value === 0 ||
@@ -2184,6 +2190,7 @@ function applyRememberedFilters(type: ProjectType, resetWhenMissing: boolean) {
 watch(
     [
         projectType,
+        filtersReady,
         searchState.currentFilters,
         searchState.toggledGroups,
         searchState.overriddenProvidedFilterTypes,

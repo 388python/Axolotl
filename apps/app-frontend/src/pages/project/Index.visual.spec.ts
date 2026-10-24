@@ -144,9 +144,7 @@ vi.mock('@modrinth/ui', async () => {
                 'NavTabs',
                 'OverflowMenu',
                 'ProjectBackgroundGradient',
-                'ProjectHeader',
                 'ProjectPageSkeleton',
-                'ProjectSidebarCompatibility',
                 'ProjectSidebarCreators',
                 'ProjectSidebarDetails',
                 'ProjectSidebarLinks',
@@ -157,14 +155,20 @@ vi.mock('@modrinth/ui', async () => {
                 name,
                 {
                     render: () =>
-                        name === 'ProjectHeader'
-                            ? h('div', { 'data-testid': 'project-header' })
-                            : name === 'ProjectPageSkeleton'
-                              ? h('div', { 'data-testid': 'project-skeleton' })
-                              : null,
+                        name === 'ProjectPageSkeleton'
+                            ? h('div', { 'data-testid': 'project-skeleton' })
+                            : null,
                 },
             ]),
         ),
+        ProjectHeader: {
+            props: ['project'],
+            setup: (props: { project: { title: string } }) => () =>
+                h('h1', { 'data-testid': 'project-header' }, props.project.title),
+        },
+        ProjectSidebarCompatibility: {
+            render: () => h('section', { 'data-testid': 'project-compatibility' }),
+        },
         ProjectPageSkeleton: {
             props: ['title'],
             setup: (props: { title?: string }) => () =>
@@ -301,7 +305,7 @@ it('shows the project while release data is still loading', async () => {
     })
     try {
         await vi.waitFor(() =>
-            expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true),
+            expect(wrapper.get('[data-testid="project-header"]').text()).toBe('Pack'),
         )
         expect(wrapper.find('[data-testid="project-skeleton"]').exists()).toBe(false)
         resolveVersions([])
@@ -337,12 +341,12 @@ it('shows the header before v3 classification even with the project background e
     })
     try {
         await vi.waitFor(() =>
-            expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true),
+            expect(wrapper.get('[data-testid="project-header"]').text()).toBe('Pack'),
         )
         expect(wrapper.find('[data-testid="project-skeleton"]').exists()).toBe(false)
         resolve({ minecraft_server: { region: 'asia' } })
         await flushPromises()
-        expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="project-header"]').text()).toBe('Pack')
     } finally {
         wrapper.unmount()
         api.background = false
@@ -350,7 +354,10 @@ it('shows the header before v3 classification even with the project background e
 })
 
 it('keeps the title and offers local recovery when v3 details fail', async () => {
-    api.projectV3.mockRejectedValueOnce(new Error('v3 unavailable'))
+    api.projectV3
+        .mockReset()
+        .mockRejectedValueOnce(new Error('v3 unavailable'))
+        .mockResolvedValueOnce({ minecraft_server: null })
     const wrapper = mount(Project, {
         global: { stubs: { Teleport: true, RouterView: true }, directives: { tooltip: {} } },
     })
@@ -358,12 +365,17 @@ it('keeps the title and offers local recovery when v3 details fail', async () =>
         await vi.waitFor(() =>
             expect(wrapper.text()).toContain('Some project details could not be loaded.'),
         )
-        expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="project-header"]').text()).toBe('Pack')
+        expect(api.projectV3).toHaveBeenCalledTimes(1)
+        expect(wrapper.find('[data-testid="project-compatibility"]').exists()).toBe(false)
         await wrapper
             .findAll('button')
             .find((button) => button.text() === 'Retry')!
             .trigger('click')
         await flushPromises()
+        expect(api.projectV3).toHaveBeenCalledTimes(2)
+        expect(api.projectV3).toHaveBeenLastCalledWith('one', 'revalidate')
+        expect(wrapper.find('[data-testid="project-compatibility"]').exists()).toBe(true)
         expect(wrapper.text()).not.toContain('Some project details could not be loaded.')
     } finally {
         wrapper.unmount()
