@@ -403,6 +403,7 @@ import {
     isWorldSaveContentItem,
     loadInstanceContentInStages,
     localContentIconUrl,
+    preserveContentUpdateState,
     refreshInstanceContentUpdates,
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
@@ -1447,7 +1448,14 @@ async function flushVisibleMetadataRefresh() {
                             },
                         )
                         if (!isCurrent()) return
-                        for (const item of updated.contentItems) mergeVisibleUpdate(item)
+                        const failedEntries = new Set(updated.updateCheckFailedEntries ?? [])
+                        for (const item of [
+                            ...updated.contentItems,
+                            ...updated.linkedContentItems,
+                        ]) {
+                            if (item.instanceEntryId && !failedEntries.has(item.instanceEntryId))
+                                mergeVisibleUpdate(item)
+                        }
                         for (const path of paths) contentUpdateLoadingPaths.value.delete(path)
                         if (contentSnapshot.value) {
                             contentSnapshot.value = {
@@ -3075,10 +3083,27 @@ function applyContentData(contentData: InstanceContentData) {
             !contentUpdateLoadingPaths.value.has(item.file_path),
     )
     contentSnapshot.value = contentData.snapshot
-    let contentItems = contentData.contentItems.filter((item) => !isWorldSaveContentItem(item))
-    let linkedContentItems = contentData.linkedContentItems.filter(
-        (item) => !isWorldSaveContentItem(item),
+    const previousItems = new Map(
+        [...projects.value, ...linkedModpackContentItems.value]
+            .filter((item) => item.instanceEntryId)
+            .map((item) => [item.instanceEntryId, item]),
     )
+    const preserveUpdateState = (item: ContentItem) => {
+        const previous = item.instanceEntryId ? previousItems.get(item.instanceEntryId) : undefined
+        if (
+            !previous ||
+            previous.file_path !== item.file_path ||
+            previous.version?.id !== item.version?.id
+        )
+            return item
+        return hasContentOperation(previous) ? item : preserveContentUpdateState(previous, item)
+    }
+    let contentItems = contentData.contentItems
+        .filter((item) => !isWorldSaveContentItem(item))
+        .map(preserveUpdateState)
+    let linkedContentItems = contentData.linkedContentItems
+        .filter((item) => !isWorldSaveContentItem(item))
+        .map(preserveUpdateState)
     if (!contentData.modpack && !isPackLocked.value && linkedContentItems.length > 0) {
         contentItems = [...contentItems, ...linkedContentItems]
         linkedContentItems = []
