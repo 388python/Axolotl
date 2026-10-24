@@ -17366,6 +17366,9 @@
   "app.instance.mods.manage-backups": {
     "message": "旧文件与备份"
   },
+  "app.instance.mods.loading-online-information": {
+    "message": "正在加载在线信息，请稍后"
+  },
   "app.resources.backups.back": {
     "message": "返回选择"
   },
