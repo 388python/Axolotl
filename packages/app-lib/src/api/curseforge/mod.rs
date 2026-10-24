@@ -35,10 +35,6 @@ pub use self::update::*;
 pub(crate) use self::catalog::{
     derived_curseforge_download_url, resource_request,
 };
-pub(crate) use self::constants::{
-    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_REQUIRED,
-    FABRIC_API_CURSEFORGE_PROJECT_ID, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
-};
 pub(crate) use self::content_change::prepare_curseforge_content_change_action;
 pub(crate) use self::dto::CurseForgeManifestFile;
 pub(crate) use self::manual::{

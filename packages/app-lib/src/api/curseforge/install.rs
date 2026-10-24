@@ -1,19 +1,14 @@
 //! Content installation and dependency resolution.
 
 use super::catalog::{get_file, get_project};
-use super::constants::{
-    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
-    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
-    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
-    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
-    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
-};
+use super::constants::{CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH};
 use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{
     CurseForgeCrossSourceDependency, CurseForgeFailedDownload, CurseForgeFile,
     CurseForgeInstallRequest, CurseForgeInstallResult, CurseForgeInstalledFile,
     CurseForgeProject, CurseForgeSkippedDependency,
-    CurseForgeWorldInstallRequest, CurseForgeWorldInstallResult, default_true,
+    CurseForgeWorldInstallRequest, CurseForgeWorldInstallResult,
+    DependencyRelation, default_true,
 };
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::metrics::CurseForgeDownloadMetrics;
@@ -401,12 +396,12 @@ pub(crate) fn dependency_policy(
 }
 
 pub(crate) fn should_resolve_dependency(
-    relation_type: u32,
+    relation: DependencyRelation,
     operation: crate::state::instances::ManualDownloadOperationKind,
 ) -> bool {
-    let dependency_type = match relation_type {
-        DEPENDENCY_RELATION_REQUIRED => DependencyType::Required,
-        DEPENDENCY_RELATION_OPTIONAL | DEPENDENCY_RELATION_INCLUDE => {
+    let dependency_type = match relation {
+        DependencyRelation::Required => DependencyType::Required,
+        DependencyRelation::Optional | DependencyRelation::Include => {
             DependencyType::Optional
         }
         _ => return false,
@@ -444,16 +439,15 @@ async fn enqueue_curseforge_dependencies(
     }
 
     for dependency_ref in &file.dependencies {
-        match dependency_ref.relation_type {
-            DEPENDENCY_RELATION_EMBEDDED | DEPENDENCY_RELATION_TOOL => {
+        let relation = dependency_ref.relation();
+        match relation {
+            DependencyRelation::Embedded | DependencyRelation::Tool => {
                 result
                     .skipped_dependencies
                     .push(CurseForgeSkippedDependency {
                         project_id: dependency_ref.mod_id,
                         file_id: None,
-                        reason: if dependency_ref.relation_type
-                            == DEPENDENCY_RELATION_EMBEDDED
-                        {
+                        reason: if relation == DependencyRelation::Embedded {
                             "embedded"
                         } else {
                             "tool"
@@ -461,26 +455,21 @@ async fn enqueue_curseforge_dependencies(
                         .to_string(),
                     });
             }
-            DEPENDENCY_RELATION_INCOMPATIBLE => {
+            DependencyRelation::Incompatible => {
                 result.incompatible_dependencies.push(dependency_ref.mod_id)
             }
-            DEPENDENCY_RELATION_OPTIONAL
-            | DEPENDENCY_RELATION_INCLUDE
-            | DEPENDENCY_RELATION_REQUIRED => {
+            DependencyRelation::Optional
+            | DependencyRelation::Include
+            | DependencyRelation::Required => {
                 if !should_resolve_dependency(
-                    dependency_ref.relation_type,
+                    relation,
                     request.manual_operation_kind,
                 ) {
                     continue;
                 }
-                let dependency_project_id = if request.mod_loader_type
-                    == Some(CURSEFORGE_LOADER_QUILT)
-                    && dependency_ref.mod_id == FABRIC_API_CURSEFORGE_PROJECT_ID
-                {
-                    QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID
-                } else {
-                    dependency_ref.mod_id
-                };
+                let dependency_project_id = dependency_ref.target_project_id(
+                    request.mod_loader_type == Some(CURSEFORGE_LOADER_QUILT),
+                );
                 if request
                     .excluded_dependency_project_ids
                     .contains(&dependency_project_id)
@@ -546,9 +535,7 @@ async fn enqueue_curseforge_dependencies(
                         dependency: true,
                         parent_project_id: Some(project_id),
                         parent_file_id: Some(file_id),
-                        dependency_kind: Some(if dependency_ref.relation_type
-                            == DEPENDENCY_RELATION_REQUIRED
-                        {
+                        dependency_kind: Some(if relation.is_required() {
                             crate::state::instances::ContentDependencyKind::Required
                         } else {
                             crate::state::instances::ContentDependencyKind::Include

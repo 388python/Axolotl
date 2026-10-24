@@ -802,7 +802,7 @@ async fn persist_prepared_dependency_edges(
             dependency_kind: match downloaded.get(&parent.id) {
                 Some(DownloadedContent::CurseForge(staged)) if child.provider == ContentProvider::CurseForge => {
                     staged.file.dependencies.iter().find(|reference| reference.mod_id.to_string() == child.project_id)
-                        .map(|reference| if reference.relation_type == crate::api::curseforge::DEPENDENCY_RELATION_REQUIRED {
+                        .map(|reference| if reference.relation().is_required() {
                             crate::state::instances::ContentDependencyKind::Required
                         } else {
                             crate::state::instances::ContentDependencyKind::Include
