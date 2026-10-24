@@ -55,7 +55,7 @@ const messages = defineMessages({
     downloadSourceDescription: {
         id: 'axolotl-settings.download-source.description',
         defaultMessage:
-            'Automatic selection uses the Update Server, with GitHub available as a backup.',
+            'Automatic selection uses the Update Server and falls back to the GitLink mirror when it is unavailable.',
     },
     downloadSourceAuto: {
         id: 'axolotl-settings.download-source.auto',
@@ -80,6 +80,15 @@ const messages = defineMessages({
     downloadSourceGithubDescription: {
         id: 'axolotl-settings.download-source.github.description',
         defaultMessage: 'Download from the official GitHub release.',
+    },
+    downloadSourceGitlink: {
+        id: 'axolotl-settings.download-source.gitlink',
+        defaultMessage: 'GitLink',
+    },
+    downloadSourceGitlinkDescription: {
+        id: 'axolotl-settings.download-source.gitlink.description',
+        defaultMessage:
+            'Download from the GitLink mirror, which is usually faster in mainland China.',
     },
     currentDownloadSource: {
         id: 'axolotl-settings.download-source.current',
@@ -140,11 +149,17 @@ const downloadSourceOptions = computed<
         label: formatMessage(messages.downloadSourceGithub),
         subLabel: formatMessage(messages.downloadSourceGithubDescription),
     },
+    {
+        value: 'gitlink',
+        label: formatMessage(messages.downloadSourceGitlink),
+        subLabel: formatMessage(messages.downloadSourceGitlinkDescription),
+    },
 ])
 
 const resolvedDownloadSourceLabel = computed(() => {
     if (resolvedSource.value === 'update-server')
         return formatMessage(messages.downloadSourceUpdateServer)
+    if (resolvedSource.value === 'gitlink') return formatMessage(messages.downloadSourceGitlink)
     return formatMessage(messages.downloadSourceGithub)
 })
 

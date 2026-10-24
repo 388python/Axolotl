@@ -1,14 +1,15 @@
-export type DownloadSource = 'auto' | 'update-server' | 'github'
+export type DownloadSource = 'auto' | 'update-server' | 'github' | 'gitlink'
 export type ResolvedDownloadSource = Exclude<DownloadSource, 'auto'>
-// auto 模式在解析上的主源保持不变（update-server），GitLink 只是主源异常时的降级源，
-// 因此它是可被判定的描述，而不是一个需要用户选择的来源。
+// GitLink 既是可手动选择的来源，也是 auto 模式在主源异常时使用的降级源。
 export type FallbackDownloadSource = 'gitlink'
 
 export const fallbackSource: FallbackDownloadSource = 'gitlink'
 
 const DOWNLOAD_SOURCE_STORAGE_KEY = 'axolotl-download-source'
 function isDownloadSource(value: string | null): value is DownloadSource {
-    return value === 'auto' || value === 'update-server' || value === 'github'
+    return (
+        value === 'auto' || value === 'update-server' || value === 'github' || value === 'gitlink'
+    )
 }
 
 export function useDownloadSource() {

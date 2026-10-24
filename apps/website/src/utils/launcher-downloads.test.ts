@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
     getDownloadAvailability,
     getReleasePage,
+    hasLauncherDownloads,
     resolveLauncherDownloads,
 } from './launcher-downloads.ts'
 
@@ -57,4 +58,38 @@ test('download links use only the supplied release and source, and fallback resp
         getReleasePage('release'),
         'https://github.com/Mystic-Stars/Axolotl/releases/latest',
     )
+})
+
+test('the gitlink source downloads through the mirrored attachment urls', () => {
+    const release = {
+        tag_name: 'v2.0',
+        assets: [
+            {
+                name: 'Axolotl_2.0_x64_nsis-setup.exe',
+                url: '/xinvxueyuan/Axolotl/releases/download/v2.0/Axolotl_2.0_x64_nsis-setup.exe',
+            },
+            {
+                name: 'Axolotl_2.0_amd64.deb',
+                url: 'https://www.gitlink.org.cn/xinvxueyuan/Axolotl/releases/download/v2.0/Axolotl_2.0_amd64.deb',
+            },
+        ],
+    }
+    const links = resolveLauncherDownloads(release, 'gitlink')
+    assert.equal(
+        links.windows,
+        'https://www.gitlink.org.cn/xinvxueyuan/Axolotl/releases/download/v2.0/Axolotl_2.0_x64_nsis-setup.exe',
+    )
+    assert.equal(
+        links.deb,
+        'https://www.gitlink.org.cn/xinvxueyuan/Axolotl/releases/download/v2.0/Axolotl_2.0_amd64.deb',
+    )
+    // A release without mirrored urls cannot produce gitlink links.
+    assert.equal(
+        resolveLauncherDownloads(
+            { tag_name: 'v2.0', assets: [{ name: 'Axolotl_2.0_amd64.deb' }] },
+            'gitlink',
+        ).deb,
+        null,
+    )
+    assert(hasLauncherDownloads(release))
 })
