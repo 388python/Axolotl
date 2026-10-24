@@ -470,7 +470,7 @@ jobs:
             git -C website-publish commit -m "chore(website): update release data for ${RELEASE_TAG} [skip ci]"
             git -C website-publish push origin main
           fi
-      - name: Deploy prebuilt website and functions to Netlify
+      - name: Deploy prebuilt website to Netlify
         working-directory: website-publish
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
@@ -481,7 +481,6 @@ jobs:
             --no-build \
             --filter @axolotl/website \
             --dir "$PWD/apps/website/.output/public" \
-            --functions "$PWD/netlify/functions" \
             --site "$NETLIFY_SITE_ID" \
             --message "Launcher ${RELEASE_TAG} (GitHub Actions ${GITHUB_RUN_ID})" \
             --timeout 600

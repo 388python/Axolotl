@@ -27,23 +27,13 @@ import MultiplayerIcon from '~/components/landing/MultiplayerIcon.vue'
 import OfflineModeIcon from '~/components/landing/OfflineModeIcon.vue'
 import ProjectsShowcase from '~/components/landing/ProjectsShowcase.vue'
 import WindowsLogo from '~/components/landing/WindowsLogo.vue'
-import { getGitlinkReleasesUrl, selectLauncherRelease } from '~/utils/gitlink-releases'
+import type { ReleaseChannel } from '~/utils/download-sources'
 import { trackHeroGlow } from '~/utils/hero-glow'
 import {
-    type DownloadStatus,
     getDownloadAvailability,
     getReleasePage,
     hasLauncherDownloads,
-    type LauncherDownloadSource,
-    type LauncherRelease,
-    type ReleaseChannel,
-    resolveLauncherDownloads,
 } from '~/utils/launcher-downloads'
-
-interface UpdateServerDownloadMetadata {
-    version: string
-    downloads: Array<{ filename: string; url: string }>
-}
 
 type OSType = 'Mac' | 'Windows' | 'Linux' | null
 
@@ -58,114 +48,13 @@ onMounted(() => {
 })
 onBeforeUnmount(() => stopHeroGlow?.())
 
-const { resolvedSource, fallbackSource } = useDownloadSource()
-const UPDATE_SERVER_BASE_URL = 'https://update.axlmc.org'
 const releaseChannel = ref<ReleaseChannel>('release')
-const releaseApi = computed(
-    () => `${UPDATE_SERVER_BASE_URL}/api/downloads/latest?channel=${releaseChannel.value}`,
-)
-const gitlinkReleaseApi = computed(() => getGitlinkReleasesUrl(releaseChannel.value))
-
-// 使用 Update Server 的下载目录作为默认发布数据源；GitHub 保留为手动备用源。
 const {
-    data: launcherReleaseRaw,
-    status: primaryReleaseStatus,
-    refresh: refreshPrimaryRelease,
-} = await useFetch<UpdateServerDownloadMetadata>(releaseApi, {
-    // Download metadata is intentionally fetched in the browser. This keeps
-    // static generation independent from the update service's availability and
-    // lets every deployed page resolve the current release after loading.
-    server: false,
-    transform(data: UpdateServerDownloadMetadata) {
-        return {
-            tag_name: `v${data.version}`,
-            assets: data.downloads.map((download) => ({ name: download.filename })),
-        }
-    },
-})
-
-// GitLink 数据来自本站服务器代理（浏览器直连会被 CORS 拦截）。
-// 两种情形需要它：用户明确选择了 GitLink，或 auto/update-server 下主源没有可用制品。
-const useGitlinkFallback = computed(() => {
-    if (resolvedSource.value === 'gitlink') return true
-    if (resolvedSource.value !== 'update-server') return false
-    if (primaryReleaseStatus.value === 'pending') return false
-    return !hasLauncherDownloads(
-        primaryReleaseStatus.value === 'success' ? launcherReleaseRaw.value : null,
-    )
-})
-
-const {
-    data: gitlinkReleaseRaw,
-    status: gitlinkReleaseStatus,
-    refresh: refreshGitlinkRelease,
-} = await useFetch<LauncherRelease>(gitlinkReleaseApi, {
-    // 与主源一样在浏览器端取数，保持静态生成与两个源的可用性解耦。
-    // 请求失败只表现为该源不可用：这里的 status 是请求错误，本域函数返回 502 时也不抛异常。
-    server: false,
-    immediate: false,
-})
-
-watch(
-    useGitlinkFallback,
-    (needed) => {
-        if (!needed) return
-        refreshGitlinkRelease().catch(() => {})
-    },
-    { immediate: true },
-)
-
-const launcherReleaseStatus = computed<DownloadStatus>(() => {
-    // 手动选择 GitLink 时主源不参与判定，否则 update-server 的失败会掩盖可用的镜像。
-    if (resolvedSource.value === 'gitlink') {
-        if (gitlinkReleaseStatus.value === 'pending') return 'pending'
-        return gitlinkReleaseStatus.value === 'success' ? 'success' : 'error'
-    }
-    if (primaryReleaseStatus.value === 'pending') return 'pending'
-    if (primaryReleaseStatus.value === 'success') return 'success'
-    // 主源请求失败时，降级源的最终失败才决定页面进入失败态，
-    // 主源的 403/5xx/超时不会直接阻塞下载区。
-    if (gitlinkReleaseStatus.value === 'pending') return 'pending'
-    return 'error'
-})
-
-// 主源失败或没有可用制品时改用 GitLink；两者都不可用时保留主源形状（可能为空）。
-const releaseSelection = computed(() => {
-    // 用户手动选择 GitLink 时不看主源：镜像不可用就是不可用，而不是悄悄回落到 update-server。
-    if (resolvedSource.value === 'gitlink') {
-        return selectLauncherRelease(
-            {
-                error: gitlinkReleaseStatus.value === 'error' ? true : undefined,
-                release: gitlinkReleaseStatus.value === 'success' ? gitlinkReleaseRaw.value : null,
-            },
-            null,
-            hasLauncherDownloads,
-        )
-    }
-    return selectLauncherRelease(
-        {
-            error: primaryReleaseStatus.value === 'error' ? true : undefined,
-            release: primaryReleaseStatus.value === 'success' ? launcherReleaseRaw.value : null,
-        },
-        {
-            error: gitlinkReleaseStatus.value === 'error' ? true : undefined,
-            release: gitlinkReleaseStatus.value === 'success' ? gitlinkReleaseRaw.value : null,
-        },
-        hasLauncherDownloads,
-    )
-})
-const launcherRelease = computed<LauncherRelease | null>(() => releaseSelection.value.release)
-
-// GitLink 的制品地址只能取自它自带的附件链接；其他来源仍按各自的规则拼接。
-const downloadSource = computed<LauncherDownloadSource>(() =>
-    resolvedSource.value === 'gitlink' || releaseSelection.value.source === 'gitlink'
-        ? fallbackSource
-        : resolvedSource.value,
-)
-
-async function refreshLauncherRelease() {
-    await Promise.allSettled([refreshPrimaryRelease(), refreshGitlinkRelease()])
-}
+    release: launcherRelease,
+    status: launcherReleaseStatus,
+    refresh: refreshLauncherRelease,
+    links: downloadLinks,
+} = useLauncherDownloads(releaseChannel)
 
 // 下载链接的三种状态：获取中 / 就绪 / 失败。失败时主 CTA 降级为跳转下载区，
 // 下载区显示错误提示与 GitHub Releases 手动下载入口，避免点击死链接。
@@ -175,14 +64,6 @@ const downloadState = computed<'loading' | 'ready' | 'error'>(() => {
     return 'loading'
 })
 
-// 主源异常时改走降级源，制品的下载地址由降级源自带（GitLink 镜像路径与 GitHub 不同）。
-// 若日后要按下载速度切换来源，扩展点是这里：把 downloadSource 换成测速结果，不要写死阈值。
-const downloadLinks = computed(() =>
-    resolveLauncherDownloads(
-        launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
-        downloadSource.value,
-    ),
-)
 const windowsLink = computed(() => downloadLinks.value.windows)
 const macLinks = computed(() => ({ universal: downloadLinks.value.mac }))
 const linuxLinks = computed(() => ({
@@ -196,7 +77,7 @@ const releasePage = computed(() =>
         launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
     ),
 )
-// 请求成功但两个源都没有可用制品时，版本号行改为「版本信息暂不可用」，避免显示一个没有下载入口的版本号。
+// A valid catalog may have no packages for this channel or platform.
 const releaseUnavailable = computed(
     () => downloadState.value === 'ready' && !hasLauncherDownloads(launcherRelease.value),
 )
