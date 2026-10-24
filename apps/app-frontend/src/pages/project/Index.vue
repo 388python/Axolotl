@@ -533,7 +533,7 @@ import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { get_by_instance_id } from '@/helpers/process'
 import { projectGalleryTranslationSegments } from '@/helpers/project-gallery'
 import { createProjectBrowseLocation } from '@/helpers/project-links'
-import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
+import { get_game_versions, get_loaders } from '@/helpers/tags'
 import {
     autoTranslateHintMessages,
     getTranslationErrorKind,
@@ -694,10 +694,8 @@ const data = shallowRef(null)
 const mcmodUrl = ref(null)
 const versions = shallowRef([])
 const members = shallowRef([])
-const categories = shallowRef([])
 const organization = shallowRef(null)
 const instance = ref(null)
-const instanceProjects = ref(null)
 
 const favoriteSupported = computed(() => isFavoriteContentType(data.value?.project_type ?? ''))
 const favoritePending = computed(() =>
@@ -787,7 +785,7 @@ const translationStyle = ref('weakened')
 let translationRequestVersion = 0
 
 serverInstallContent.watchServerContextChanges()
-const serverContextReady = serverInstallContent.initServerContext().catch(handleError)
+void serverInstallContent.initServerContext().catch(handleError)
 
 const instanceFilters = computed(() => {
     if (!instance.value) {
@@ -1050,13 +1048,12 @@ function goToVersions() {
 
 const allLoaders = ref([])
 const allGameVersions = ref([])
-const tagsReady = Promise.all([
-    get_loaders().catch(handleError),
-    get_game_versions().catch(handleError),
-]).then(([loaders, gameVersions]) => {
-    allLoaders.value = loaders ?? []
-    allGameVersions.value = gameVersions ?? []
-})
+void Promise.all([get_loaders().catch(handleError), get_game_versions().catch(handleError)]).then(
+    ([loaders, gameVersions]) => {
+        allLoaders.value = loaders ?? []
+        allGameVersions.value = gameVersions ?? []
+    },
+)
 
 async function handleClickPlay() {
     if (!isServerProject.value) return
@@ -1118,52 +1115,71 @@ async function fetchProjectData() {
     void resolveMcmodUrl(project.slug, 'modrinth').then((url) => {
         if (isCurrent()) mcmodUrl.value = url
     })
-    const relatedData = await Promise.all([
-        get_version_many(project.versions, 'must_revalidate').catch(handleError),
-        get_team(project.team).catch(handleError),
-        get_categories().catch(handleError),
-        requestedInstanceId
-            ? getInstance(requestedInstanceId).catch(handleError)
-            : Promise.resolve(),
-        requestedInstanceId
-            ? getInstanceProjects(requestedInstanceId).catch(handleError)
-            : Promise.resolve(),
-    ])
-    if (!isCurrent()) return
-    ;[versions.value, members.value, categories.value, instance.value, instanceProjects.value] =
-        relatedData.map((value, index) => (index < 3 ? (value ?? []) : value))
-
-    versions.value = versions.value.sort(
-        (a, b) => dayjs(b.date_published) - dayjs(a.date_published),
-    )
-
-    if (instanceProjects.value) {
-        const installedFile = Object.values(instanceProjects.value).find((x) =>
-            x.provider_refs.some(
-                (reference) =>
-                    reference.provider === 'modrinth' &&
-                    String(reference.project_id) === data.value.id,
-            ),
-        )
-        if (installedFile) {
-            installed.value = true
-            installedVersion.value = installedFile.modrinth?.version_id ?? null
-        }
-    }
-    if (project.organization) {
-        const projectOrganization = await get_organization(project.organization).catch(handleError)
-        if (!isCurrent()) return
-        organization.value = projectOrganization
-    }
-
     isServerProject.value = projectV3.value?.minecraft_server != null
     serverStatusOnline.value = !!projectV3.value?.minecraft_java_server?.ping?.data
 
     breadcrumbs.setName('Project', data.value.title)
     breadcrumbs.setNameIcon('Project', data.value.icon_url)
 
+    void loadSupplementalProjectData(project, requestedInstanceId, isCurrent).catch(handleError)
     fetchDeferredServerData(project)
     void maybeAutoTranslate()
+}
+
+async function loadSupplementalProjectData(project, requestedInstanceId, isCurrent) {
+    const updates = [
+        get_version_many(project.versions, 'must_revalidate')
+            .catch(handleError)
+            .then((result) => {
+                if (!isCurrent()) return
+                versions.value = (result ?? []).sort(
+                    (a, b) => dayjs(b.date_published) - dayjs(a.date_published),
+                )
+            }),
+        get_team(project.team)
+            .catch(handleError)
+            .then((result) => {
+                if (isCurrent()) members.value = result ?? []
+            }),
+    ]
+
+    if (requestedInstanceId) {
+        updates.push(
+            getInstance(requestedInstanceId)
+                .catch(handleError)
+                .then((result) => {
+                    if (isCurrent()) instance.value = result
+                }),
+            getInstanceProjects(requestedInstanceId)
+                .catch(handleError)
+                .then((result) => {
+                    if (!isCurrent()) return
+                    const installedFile = Object.values(result ?? {}).find((file) =>
+                        file.provider_refs?.some(
+                            (reference) =>
+                                reference.provider === 'modrinth' &&
+                                String(reference.project_id) === project.id,
+                        ),
+                    )
+                    if (installedFile) {
+                        installed.value = true
+                        installedVersion.value = installedFile.modrinth?.version_id ?? null
+                    }
+                }),
+        )
+    }
+
+    if (project.organization) {
+        updates.push(
+            get_organization(project.organization)
+                .catch(handleError)
+                .then((result) => {
+                    if (isCurrent()) organization.value = result
+                }),
+        )
+    }
+
+    await Promise.all(updates)
 }
 
 function translationFailureMessage(error) {
@@ -1346,18 +1362,15 @@ async function loadProjectPage() {
     projectV3.value = null
     versions.value = []
     members.value = []
-    categories.value = []
     organization.value = null
     instance.value = null
-    instanceProjects.value = null
     installed.value = false
     installedVersion.value = null
 
     try {
-        await Promise.all([serverContextReady, tagsReady])
         await fetchProjectData()
         if (loadVersion !== projectLoadVersion) return
-        await syncContentSelectionTarget()
+        void syncContentSelectionTarget().catch(handleError)
     } catch (error) {
         if (loadVersion !== projectLoadVersion) return
         if (data.value) handleError(error)

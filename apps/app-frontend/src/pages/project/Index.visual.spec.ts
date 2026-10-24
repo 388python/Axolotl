@@ -142,7 +142,17 @@ vi.mock('@modrinth/ui', async () => {
                 'ProjectSidebarServerInfo',
                 'ProjectSidebarTags',
                 'SelectedProjectsFloatingBar',
-            ].map((name) => [name, { render: () => null }]),
+            ].map((name) => [
+                name,
+                {
+                    render: () =>
+                        name === 'ProjectHeader'
+                            ? h('div', { 'data-testid': 'project-header' })
+                            : name === 'ProjectPageSkeleton'
+                              ? h('div', { 'data-testid': 'project-skeleton' })
+                              : null,
+                },
+            ]),
         ),
         commonMessages: {
             retryButton: { defaultMessage: 'Retry' },
@@ -246,5 +256,41 @@ it('loads releases from the revalidated project index on each visit', async () =
         } finally {
             wrapper.unmount()
         }
+    }
+})
+
+it('shows the project while release data is still loading', async () => {
+    api.project.mockReset().mockResolvedValue({
+        id: 'one',
+        slug: 'one',
+        title: 'Pack',
+        project_type: 'modpack',
+        versions: ['release'],
+        team: 'team',
+        categories: [],
+        game_versions: [],
+        loaders: [],
+        gallery: [],
+    })
+    let resolveVersions!: (versions: unknown[]) => void
+    api.versions
+        .mockReset()
+        .mockImplementation(() => new Promise((resolve) => (resolveVersions = resolve)))
+
+    const wrapper = mount(Project, {
+        global: {
+            stubs: { Teleport: true, RouterView: true },
+            directives: { tooltip: {} },
+        },
+    })
+    try {
+        await vi.waitFor(() =>
+            expect(wrapper.find('[data-testid="project-header"]').exists()).toBe(true),
+        )
+        expect(wrapper.find('[data-testid="project-skeleton"]').exists()).toBe(false)
+        resolveVersions([])
+        await flushPromises()
+    } finally {
+        wrapper.unmount()
     }
 })
