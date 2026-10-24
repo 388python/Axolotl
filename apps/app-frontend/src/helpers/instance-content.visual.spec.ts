@@ -5,6 +5,7 @@ import {
     type InstanceContentData,
     loadInstanceContentData,
     loadInstanceContentInStages,
+    preserveContentUpdateState,
     refreshInstanceContentUpdates,
 } from './instance-content'
 import { resourceCheckUpdates } from './resources'
@@ -156,6 +157,39 @@ it('enriches updates separately and preserves the displayed snapshot', async () 
     expect(original.items[0].capabilities.canUpdate).toBe(true)
 })
 
+it('preserves a known update when a refresh temporarily clears enrichment fields', async () => {
+    vi.mocked(get_content_snapshot).mockResolvedValue(snapshot())
+    const previous = {
+        ...(await loadInstanceContentData('instance'))!.contentItems[0],
+        resourceUpdate: {
+            project: { source: 'modrinth', projectId: 'project' },
+            releaseId: 'new-release',
+        },
+        instanceCapabilities: {
+            canToggle: true,
+            canDelete: true,
+            canUpdate: true,
+            canChangeVersion: true,
+            canRestorePackDefault: false,
+        },
+    }
+    const refreshed = {
+        ...previous,
+        resourceUpdate: null,
+        instanceCapabilities: { ...previous.instanceCapabilities, canUpdate: false },
+    }
+
+    const preserved = preserveContentUpdateState(previous, refreshed)
+    expect(preserved.resourceUpdate?.releaseId).toBe('new-release')
+    expect(preserved.instanceCapabilities?.canUpdate).toBe(true)
+    expect(
+        preserveContentUpdateState(previous, {
+            ...refreshed,
+            version: { ...refreshed.version, id: 'new-file' },
+        }).resourceUpdate,
+    ).toBeNull()
+})
+
 it('keeps local content available when update discovery fails', async () => {
     vi.mocked(get_content_snapshot).mockResolvedValue(snapshot())
     vi.mocked(resourceCheckUpdates).mockRejectedValue(new Error('offline'))
@@ -163,6 +197,7 @@ it('keeps local content available when update discovery fails', async () => {
     const enriched = await refreshInstanceContentUpdates(data)
     expect(enriched.contentItems).toHaveLength(1)
     expect(enriched.snapshot.warnings[0].code).toBe('resource_update_unavailable')
+    expect(enriched.updateCheckFailedEntries).toEqual(['entry'])
     expect(data.snapshot.warnings).toHaveLength(0)
 })
 
