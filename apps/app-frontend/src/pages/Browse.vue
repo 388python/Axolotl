@@ -1988,18 +1988,9 @@ async function search(requestParams: string, signal: AbortSignal) {
             }
         })
         .filter((hit) => !shouldHideInstalledProject(hit.project_id))
-    const localizable = hits.filter(
-        (hit): hit is typeof hit & { provider: 'modrinth' | 'curseforge' } =>
-            hit.provider === 'modrinth' || hit.provider === 'curseforge',
-    )
-    const localized = await translateSearchHitTitles(localizable, i18n.global.locale.value)
-    const titles = new Map(localized.map((hit) => [hit.project_id, hit.title]))
     signal.throwIfAborted()
     return {
-        projectHits: hits.map((hit) => ({
-            ...hit,
-            title: titles.get(hit.project_id) ?? hit.title,
-        })),
+        projectHits: hits,
         serverHits: [],
         total_hits: page.total.value ?? hits.length,
         total_precision: page.total.precision,
@@ -2206,7 +2197,21 @@ const {
 } = useSearchResultTranslation({
     projectHits: searchState.projectHits,
     serverHits: searchState.serverHits,
-    projectType,
+    projectType: computed(() => searchState.committed.value?.projectType ?? projectType.value),
+    enrichTitles: async (hits, locale) => {
+        const localizable = hits.filter(
+            (hit): hit is typeof hit & { provider: 'modrinth' | 'curseforge' } =>
+                hit.provider === 'modrinth' || hit.provider === 'curseforge',
+        )
+        const localized = await translateSearchHitTitles(localizable, locale)
+        const titles = new Map(
+            localized.map((hit) => [`${hit.provider}:${hit.project_id}`, hit.title]),
+        )
+        return hits.map((hit) => ({
+            ...hit,
+            title: titles.get(`${hit.provider}:${hit.project_id}`) ?? hit.title,
+        }))
+    },
     locale: i18n.global.locale,
     onError: (error) => debugLog('Search result translation failed', error),
 })
