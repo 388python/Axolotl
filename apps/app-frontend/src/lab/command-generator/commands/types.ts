@@ -70,6 +70,7 @@ export interface CommandArgument {
      * 而非把 NBT 作为独立参数：
      *   /summon zombie ~ ~ ~ {IsBaby:1b}
      */
+    coordinatesOptionalTarget?: boolean
     attachToPrevious?: boolean
 }
 

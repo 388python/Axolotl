@@ -205,16 +205,9 @@ const isEffect = computed(() => props.arg.type === 'effect')
 const isAdvancement = computed(() => props.arg.type === 'advancement')
 
 const isCoordinates = computed(
-    () =>
-        props.arg.type === 'coordinates' ||
-        (props.arg as CommandArgument & { coordinatesOptionalTarget?: boolean })
-            .coordinatesOptionalTarget,
+    () => props.arg.type === 'coordinates' || props.arg.coordinatesOptionalTarget === true,
 )
-const isMixedCoordinates = computed(
-    () =>
-        (props.arg as CommandArgument & { coordinatesOptionalTarget?: boolean })
-            .coordinatesOptionalTarget === true,
-)
+const isMixedCoordinates = computed(() => props.arg.coordinatesOptionalTarget === true)
 
 const hasInlinePresets = computed(
     () =>
