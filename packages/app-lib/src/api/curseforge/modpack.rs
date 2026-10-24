@@ -44,8 +44,8 @@ use crate::install::{
     InstallProgressReporter, InstallProgressSecondary,
 };
 use crate::state::{
-    ContentSourceKind, EditInstance, InstanceInstallStage, InstanceLink,
-    ModLoader, ProjectType, Settings,
+    ContentSourceKind, EditInstance, InstanceLink, ModLoader, ProjectType,
+    Settings,
 };
 use crate::util::download::constants::{
     MODPACK_DATABASE_QUEUE_CAPACITY, MODPACK_FILE_INSTALL_ATTEMPTS,
@@ -54,7 +54,6 @@ use crate::util::download::constants::{
 use crate::util::fetch::FetchProgressFn;
 use crate::{ErrorKind, State};
 use futures::stream;
-use serde_json::json;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;

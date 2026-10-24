@@ -1,6 +1,6 @@
 //! Dependency selection, target folders, and progress helpers.
 
-use super::catalog::{get_files, get_project};
+use super::catalog::get_files;
 use super::dto::{
     CurseForgeFile, CurseForgeFilesRequest, CurseForgeInstallRequest,
     CurseForgeInstallResult, CurseForgeInstalledFile, CurseForgeManualDownload,
@@ -10,7 +10,6 @@ use super::install::{
     CurseForgeModrinthFallbackPreview, dependency_policy, install_world_file,
 };
 use super::mapping::mod_loader_to_slug;
-use super::update::loader_type;
 use super::validation::{validate_file_name, validate_world_archive_name};
 use super::{
     CachedDependencyResolutionPlan, DEPENDENCY_PLAN_TTL,

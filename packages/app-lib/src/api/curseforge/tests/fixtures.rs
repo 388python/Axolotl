@@ -14,11 +14,9 @@ use crate::api::curseforge::manual::{
 };
 use crate::install::InstallJobEventKind;
 use crate::state::{InstanceLink, ModLoader};
-use serde_json::json;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 #[cfg(test)]
 pub(super) fn murmur2(data: &[u8], seed: u32) -> u32 {

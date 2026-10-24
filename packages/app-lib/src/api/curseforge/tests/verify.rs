@@ -22,7 +22,6 @@ use crate::api::curseforge::verify::{
 };
 use crate::install::InstallPhaseDetails;
 use crate::state::{ContentSourceKind, ProjectType};
-use crate::util::fetch::DownloadRouteSource;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;

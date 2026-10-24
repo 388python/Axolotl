@@ -18,7 +18,6 @@ use crate::state::{
 use crate::util::download::constants::OVERRIDE_EXTRACTION_CONCURRENCY;
 use crate::util::fetch::sha1_file_async;
 use crate::{ErrorKind, State};
-use serde_json::json;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Seek};
 use std::path::{Component, Path, PathBuf};

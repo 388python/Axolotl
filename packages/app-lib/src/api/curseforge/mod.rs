@@ -22,16 +22,13 @@ mod tests;
 
 pub use self::auth::*;
 pub use self::catalog::*;
-pub use self::content_change::*;
 pub use self::dto::*;
 pub use self::install::*;
 pub use self::manual::*;
 pub use self::modpack::*;
 pub use self::preview::*;
 pub use self::selection::*;
-pub use self::transport::*;
 pub use self::update::*;
-pub use self::verify::*;
 
 pub(crate) use self::catalog::{
     derived_curseforge_download_url, resource_request,
@@ -68,7 +65,7 @@ use futures::StreamExt;
 use futures::stream;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64};
-use std::sync::{LazyLock, Mutex, RwLock};
+use std::sync::{LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
 const API_BASE_URL: &str = "https://api.curseforge.com";

@@ -17,7 +17,6 @@ use crate::state::{
 use crate::{ErrorKind, State};
 use reqwest::Method;
 use serde_json::{Value, json};
-use tokio_util::sync::CancellationToken;
 
 pub async fn search_projects(
     request: CurseForgeSearchRequest,

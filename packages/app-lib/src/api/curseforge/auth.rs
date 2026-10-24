@@ -4,9 +4,7 @@ use super::dto::{
     CurseForgeCapability, CurseForgeCapabilityStatus, CurseForgeProject,
     CurseForgeResponse,
 };
-use super::transport::{
-    MirrorPolicy, api_key, api_key_with_source, request_json,
-};
+use super::transport::{MirrorPolicy, api_key_with_source, request_json};
 use super::{API_KEY_GENERATION, MINECRAFT_GAME_ID, UNAUTHORIZED};
 use crate::State;
 use reqwest::Method;

@@ -36,8 +36,6 @@ use crate::state::{
 use crate::util::fetch::sha1_file_async;
 use crate::{ErrorKind, State};
 use std::collections::HashSet;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
 
 #[test]
 fn curseforge_final_manual_completion_recovers_and_resumes() {

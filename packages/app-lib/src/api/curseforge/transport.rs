@@ -16,7 +16,7 @@ use crate::util::fetch::{
 use crate::{ErrorKind, State};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::time::{Duration, Instant};
 
 pub(crate) fn api_key() -> Option<String> {
