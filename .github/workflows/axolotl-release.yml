@@ -18,6 +18,7 @@ on:
           - update-server
           - website
           - cnb
+          - gitlink
           - discord
   push:
     tags:
@@ -69,7 +70,7 @@ jobs:
         run: |
           node --test scripts/axolotl/release-policy.test.mjs
           node --test scripts/axolotl/set-version.test.mjs
-          node --test scripts/axolotl/update-manifest.test.mjs scripts/axolotl/finalize-github-release.test.mjs scripts/axolotl/publish-update-server.test.mjs scripts/axolotl/cnb-release.test.mjs scripts/axolotl/create-website-release-metadata.test.mjs
+          node --test scripts/axolotl/update-manifest.test.mjs scripts/axolotl/finalize-github-release.test.mjs scripts/axolotl/publish-update-server.test.mjs scripts/axolotl/cnb-release.test.mjs scripts/axolotl/gitlink-release.test.mjs scripts/axolotl/create-website-release-metadata.test.mjs
           node scripts/axolotl/create-update-server-catalog.test.mjs
           node scripts/axolotl/check-migrations.mjs --release
           node scripts/axolotl/brand-guard.mjs
@@ -529,3 +530,39 @@ jobs:
           node scripts/axolotl/cnb-release.mjs finalize "${RELEASE_TAG}" cnb-release/final
           node scripts/axolotl/verify-update-manifest.mjs \
             cnb-release/final/latest.json "${RELEASE_TAG}" cnb
+
+  mirror-gitlink:
+    needs: verify-and-publish
+    if: ${{ !cancelled() && needs.verify-and-publish.result == 'success' && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'gitlink') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+      - name: Download published release metadata
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: published-release-metadata
+          path: release-check
+      - name: Mirror published release to GitLink
+        env:
+          GITLINK_TOKEN: ${{ secrets.GITLINK_TOKEN }}
+          GITLINK_REPO_SLUG: ${{ vars.GITLINK_REPO_SLUG }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${GITLINK_TOKEN:-}" ]]; then
+            echo "GITLINK_TOKEN is not configured"
+            exit 1
+          fi
+
+          node scripts/axolotl/gitlink-release.mjs finalize "${RELEASE_TAG}" gitlink-release/final
+      - name: Verify mirrored GitLink release without a token
+        env:
+          GITLINK_REPO_SLUG: ${{ vars.GITLINK_REPO_SLUG }}
+        run: node scripts/axolotl/gitlink-release.mjs verify "${RELEASE_TAG}"
