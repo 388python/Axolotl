@@ -18,6 +18,8 @@ import { useServerSearch } from '#ui/utils/server-search'
 import type { BrowseDisplayMode, BrowseSearchResponse } from '../types'
 
 export interface UseBrowseSearchOptions {
+    enabled?: Ref<boolean>
+    deferInitialization?: boolean
     formatError?: (error: unknown) => string
     projectType: Ref<string>
     tags: Ref<Tags>
@@ -76,6 +78,7 @@ export interface BrowseSearchState {
     deprioritizedTags: ComputedRef<string[]>
     excludeLoaders: ComputedRef<boolean>
 
+    initializeFilters: () => void
     refreshSearch: () => Promise<void>
     setPage: (page: number) => Promise<void>
     clearSearch: () => void
@@ -112,12 +115,14 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         sortTypes,
         requestParams,
         createPageParams,
+        initializeQueryParams,
     } = useSearch(
         projectTypes,
         options.tags,
         options.providedFilters ?? computed(() => []),
         options.environmentOverride ?? computed(() => undefined),
         options.sortOptions,
+        options.deferInitialization,
     )
 
     const {
@@ -128,8 +133,10 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         serverFilterTypes,
         serverRequestParams,
         createServerPageParams,
+        initializeQueryParams: initializeServerQueryParams,
     } = useServerSearch({
         tags: options.tags,
+        deferInitialization: options.deferInitialization,
         query,
         maxResults,
         currentPage,
@@ -272,24 +279,45 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         { deep: true },
     )
 
-    watch(effectiveRequestParams, (newVal, oldVal) => {
-        debug('effectiveRequestParams changed', {
-            from: oldVal?.substring(0, 80),
-            to: newVal?.substring(0, 80),
-        })
-        loading.value = true
+    function invalidatePendingSearch() {
         searchVersion++
         searchAbortController?.abort()
         searchAbortController = null
         if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
-        searchDebounceTimer = setTimeout(() => {
-            searchDebounceTimer = null
-            refreshSearch(true)
-        }, 200)
-    })
+        searchDebounceTimer = null
+    }
+
+    watch(
+        effectiveRequestParams,
+        () => {
+            invalidatePendingSearch()
+            if (options.enabled?.value === false) return
+            loading.value = true
+            searchDebounceTimer = setTimeout(() => {
+                searchDebounceTimer = null
+                void refreshSearch(true)
+            }, 200)
+        },
+        { flush: 'sync' },
+    )
+
+    if (options.enabled)
+        watch(
+            options.enabled,
+            (enabled) => {
+                if (!enabled) invalidatePendingSearch()
+            },
+            { flush: 'sync' },
+        )
+
+    function initializeFilters() {
+        initializeQueryParams()
+        initializeServerQueryParams()
+    }
 
     async function refreshSearch(reuseCache = false) {
-        searchAbortController?.abort()
+        if (options.enabled?.value === false) return
+        invalidatePendingSearch()
         if (!reuseCache) options.invalidateSearch?.()
         const abortController = new AbortController()
         searchAbortController = abortController
@@ -436,6 +464,7 @@ export function useBrowseSearch(options: UseBrowseSearchOptions): BrowseSearchSt
         effectiveLayout,
         deprioritizedTags,
         excludeLoaders,
+        initializeFilters,
         refreshSearch,
         setPage,
         clearSearch,

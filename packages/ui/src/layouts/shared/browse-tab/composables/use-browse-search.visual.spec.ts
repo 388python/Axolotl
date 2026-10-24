@@ -32,6 +32,7 @@ vi.mock('#ui/utils/search', async () => {
                 filters: computed(() => []),
                 sortTypes: [],
                 requestParams: computed(() => `${query.value}:${currentPage.value}`),
+                initializeQueryParams: vi.fn(),
                 createPageParams: () => ({}),
             }
         },
@@ -47,6 +48,7 @@ vi.mock('#ui/utils/server-search', async () => {
             serverSortTypes: [],
             serverFilterTypes: computed(() => []),
             serverRequestParams: computed(() => ''),
+            initializeQueryParams: vi.fn(),
             createServerPageParams: () => ({}),
         }),
     }
@@ -117,6 +119,47 @@ it('retains the committed page through debounce, stale responses, failure and em
         expect(state.totalHits.value).toBe(0)
         expect(state.pageCount.value).toBe(1)
         expect(state.searchError.value).toBeNull()
+    } finally {
+        wrapper.unmount()
+        vi.useRealTimers()
+    }
+})
+
+it('does not search until prerequisites and restored filters are ready', async () => {
+    vi.useFakeTimers()
+    const enabled = ref(false)
+    const search = vi.fn().mockResolvedValue(response())
+    let state!: ReturnType<typeof useBrowseSearch>
+    const wrapper = mount(
+        defineComponent({
+            setup() {
+                state = useBrowseSearch({
+                    enabled,
+                    deferInitialization: true,
+                    projectType: ref('mod'),
+                    tags: ref({}),
+                    search,
+                    persistentQueryParams: [],
+                    syncQueryParams: false,
+                })
+                return () => null
+            },
+        }),
+    )
+    try {
+        state.query.value = 'restored'
+        await state.refreshSearch()
+        await vi.advanceTimersByTimeAsync(500)
+        expect(search).not.toHaveBeenCalled()
+        enabled.value = true
+        await state.refreshSearch()
+        await vi.advanceTimersByTimeAsync(500)
+        expect(search).toHaveBeenCalledTimes(1)
+        expect(search.mock.calls[0][0]).toBe('restored:1')
+        state.query.value = 'new'
+        enabled.value = false
+        await vi.advanceTimersByTimeAsync(500)
+        expect(search).toHaveBeenCalledTimes(1)
     } finally {
         wrapper.unmount()
         vi.useRealTimers()

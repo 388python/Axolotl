@@ -300,7 +300,7 @@ const skeletonCount = computed(() => {
             </div>
 
             <SearchFilterControl
-                v-if="ctx.isServerType.value"
+                v-if="ctx.filtersReady?.value !== false && ctx.isServerType.value"
                 v-model:selected-filters="ctx.serverCurrentFilters.value"
                 :filters="ctx.serverFilterTypes.value"
                 :provided-filters="[]"
@@ -308,7 +308,7 @@ const skeletonCount = computed(() => {
                 :project-type="ctx.projectType.value"
             />
             <SearchFilterControl
-                v-else
+                v-else-if="ctx.filtersReady?.value !== false"
                 v-model:selected-filters="ctx.currentFilters.value"
                 :filters="
                     ctx.filters.value.filter(

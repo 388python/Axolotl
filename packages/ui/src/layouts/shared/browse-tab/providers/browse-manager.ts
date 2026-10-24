@@ -29,6 +29,7 @@ export interface BrowseManagerContext {
     serverToggledGroups: Ref<string[]>
     effectiveSortTypes: ComputedRef<readonly SortType[]>
     effectiveCurrentSortType: Ref<SortType>
+    filtersReady?: Ref<boolean>
     committed?: ShallowRef<BrowseCommittedSearch | null>
     loading: Ref<boolean>
     searchError?: Ref<string | null>
