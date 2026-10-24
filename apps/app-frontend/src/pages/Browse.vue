@@ -102,6 +102,7 @@ import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { planetMinecraftConnectorAvailable } from '@/helpers/planet-minecraft'
 import { createProjectDetailsQuery } from '@/helpers/project-links'
+import { createProjectPreviewState } from '@/helpers/project-preview'
 import {
     isResourceOperationError,
     resourceOperationError,
@@ -2503,8 +2504,8 @@ provideBrowseManager({
             resource_entry?: { resourceId: string | null; status: string }
             provider_project_id?: string
         },
-    ) => ({
-        path:
+    ) => {
+        const path =
             result.resource_entry?.status === 'confirmed' && result.resource_entry.resourceId
                 ? `/resource/${result.resource_entry.resourceId}`
                 : result.provider === 'curseforge'
@@ -2515,13 +2516,21 @@ provideBrowseManager({
                       ? `/project/planet-minecraft/${result.provider_project_id}`
                       : result.provider === 'modrinth'
                         ? `/project/${result.project_id ?? result.slug}`
-                        : route.path,
-        query: getProjectBrowseQuery(),
-    }),
-    getServerProjectLink: (result: Labrinth.Search.v3.ResultSearchProject) => ({
-        path: `/project/${result.slug ?? result.project_id}`,
-        query: getProjectBrowseQuery(),
-    }),
+                        : route.path
+        return {
+            path,
+            query: getProjectBrowseQuery(),
+            state: createProjectPreviewState(path, result.title),
+        }
+    },
+    getServerProjectLink: (result: Labrinth.Search.v3.ResultSearchProject) => {
+        const path = `/project/${result.slug ?? result.project_id}`
+        return {
+            path,
+            query: getProjectBrowseQuery(),
+            state: createProjectPreviewState(path, result.name),
+        }
+    },
     selectableProjectTypes,
     showProjectTypeTabs: computed(() => !isServerContext.value),
     variant: 'app',

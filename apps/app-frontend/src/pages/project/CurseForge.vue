@@ -3,7 +3,7 @@
         <Teleport to="#sidebar-teleport-target">
             <ProjectPageSkeleton variant="sidebar" />
         </Teleport>
-        <ProjectPageSkeleton />
+        <ProjectPageSkeleton :title="previewTitle" />
     </template>
     <div v-else-if="data">
         <UpgradeProjectReturnBar />
@@ -324,6 +324,7 @@ import {
 } from '@/helpers/curseforge'
 import { projectGalleryTranslationSegments } from '@/helpers/project-gallery'
 import { createProjectBrowseLocation, type ProjectBrowseFilter } from '@/helpers/project-links'
+import { readProjectPreviewTitle } from '@/helpers/project-preview'
 import { get_game_versions, get_loaders } from '@/helpers/tags'
 import {
     autoTranslateHintMessages,
@@ -347,6 +348,7 @@ import Gallery from './Gallery.vue'
 import UpgradeProjectReturnBar from './UpgradeProjectReturnBar.vue'
 
 const route = useRoute()
+const previewTitle = computed(() => readProjectPreviewTitle(route.path))
 const router = useRouter()
 const breadcrumbs = useBreadcrumbs()
 const themeStore = useTheming()

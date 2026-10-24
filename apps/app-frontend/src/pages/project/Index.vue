@@ -3,7 +3,7 @@
         <Teleport to="#sidebar-teleport-target">
             <ProjectPageSkeleton variant="sidebar" />
         </Teleport>
-        <ProjectPageSkeleton />
+        <ProjectPageSkeleton :title="previewTitle" />
     </template>
     <EmptyState
         v-else-if="loadFailed"
@@ -533,6 +533,7 @@ import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { get_by_instance_id } from '@/helpers/process'
 import { projectGalleryTranslationSegments } from '@/helpers/project-gallery'
 import { createProjectBrowseLocation } from '@/helpers/project-links'
+import { readProjectPreviewTitle } from '@/helpers/project-preview'
 import { get_game_versions, get_loaders } from '@/helpers/tags'
 import {
     autoTranslateHintMessages,
@@ -561,6 +562,7 @@ const popupNotificationManager = injectPopupNotificationManager()
 const { install: installVersion } = injectContentInstall()
 const contentSelection = injectContentSelection()
 const route = useRoute()
+const previewTitle = computed(() => readProjectPreviewTitle(route.path))
 const router = useRouter()
 const queryClient = useQueryClient()
 const breadcrumbs = useBreadcrumbs()
