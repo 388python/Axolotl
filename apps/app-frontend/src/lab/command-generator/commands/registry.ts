@@ -68,11 +68,11 @@ export const PERMISSION_KEYS: Record<number, string> = {
  * 高等级继承低等级的全部权限。
  */
 export const PERMISSION_LABELS: Record<number, string> = {
-    0: 'All',
-    1: 'Moderator',
-    2: 'Gamemaster',
-    3: 'Admin',
-    4: 'Owner',
+    0: 'app.lab.command-generator.perm.0',
+    1: 'app.lab.command-generator.perm.1',
+    2: 'app.lab.command-generator.perm.2',
+    3: 'app.lab.command-generator.perm.3',
+    4: 'app.lab.command-generator.perm.4',
 }
 
 /** 权限等级描述的翻译键 */

@@ -6809,6 +6809,18 @@
   "app.lab.command-generator.subtitle": {
     "message": "Build Minecraft Java Edition commands visually."
   },
+  "app.lab.command-generator.error.unknown": {
+    "message": "Unknown error"
+  },
+  "app.lab.command-generator.coordinate.axis-label": {
+    "message": "{axis} coordinate"
+  },
+  "app.lab.command-generator.coordinate.use-coords": {
+    "message": "Coordinates"
+  },
+  "app.lab.command-generator.coordinate.use-entity": {
+    "message": "Entity"
+  },
   "app.lab.command-generator.select-version": {
     "message": "Game version"
   },

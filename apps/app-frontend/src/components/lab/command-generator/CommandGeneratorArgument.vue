@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { BoxIcon } from '@modrinth/assets'
-import { Button, Combobox, type ComboboxOption, StyledInput, Toggle, useVIntl } from '@modrinth/ui'
+import {
+    Button,
+    Combobox,
+    type ComboboxOption,
+    defineMessages,
+    StyledInput,
+    Toggle,
+    useVIntl,
+} from '@modrinth/ui'
 import { computed, ref, useId, useTemplateRef, watch } from 'vue'
 
 import RecipeItemIcon from '@/components/lab/recipe-generator/RecipeItemIcon.vue'
@@ -8,7 +16,6 @@ import { getCurrentVersion } from '@/lab/command-generator/commands/registry.ts'
 import type { ArgumentPreset, CommandArgument } from '@/lab/command-generator/commands/types.ts'
 import advancementsData from '@/lab/command-generator/data/advancements.json'
 import effectsData from '@/lab/command-generator/data/effects.json'
-import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 import type { SlotDisplay } from '@/lab/recipe-generator/display'
 import { getSlotDisplay } from '@/lab/recipe-generator/display'
 import {
@@ -36,8 +43,60 @@ const emit = defineEmits<{
 
 const { formatMessage } = useVIntl()
 
-function t(key: string, fallback?: string): string {
-    return formatMessage({ id: key, defaultMessage: fallback ?? key })
+const messages = defineMessages({
+    argRequired: {
+        id: 'app.lab.command-generator.arg.required',
+        defaultMessage: 'Required',
+    },
+    argSelectPlaceholder: {
+        id: 'app.lab.command-generator.arg.select-placeholder',
+        defaultMessage: 'Select…',
+    },
+    coordinateRelative: {
+        id: 'app.lab.command-generator.coordinate.relative',
+        defaultMessage: 'Relative (~)',
+    },
+    coordinateLocal: {
+        id: 'app.lab.command-generator.coordinate.local',
+        defaultMessage: 'Local (^)',
+    },
+    coordinateAbsolute: {
+        id: 'app.lab.command-generator.coordinate.absolute',
+        defaultMessage: 'Absolute',
+    },
+    coordinateAxisLabel: {
+        id: 'app.lab.command-generator.coordinate.axis-label',
+        defaultMessage: '{axis} coordinate',
+    },
+    coordinateUseCoords: {
+        id: 'app.lab.command-generator.coordinate.use-coords',
+        defaultMessage: 'Coordinates',
+    },
+    coordinateUseEntity: {
+        id: 'app.lab.command-generator.coordinate.use-entity',
+        defaultMessage: 'Entity',
+    },
+    pickItem: {
+        id: 'app.lab.command-generator.item-picker.button',
+        defaultMessage: 'Pick item',
+    },
+    pickBlock: {
+        id: 'app.lab.command-generator.block-picker.button',
+        defaultMessage: 'Pick block',
+    },
+    pickEffect: {
+        id: 'app.lab.command-generator.effect-picker.button',
+        defaultMessage: 'Pick effect',
+    },
+    pickAdvancement: {
+        id: 'app.lab.command-generator.advancement-picker.button',
+        defaultMessage: 'Pick advancement',
+    },
+})
+
+/** 数据文件里的动态 key（preset.labelKey、arg.displayNameKey、arg.descriptionKey）。 */
+function formatDynamic(id: string, fallback = ''): string {
+    return formatMessage({ id, defaultMessage: fallback || id })
 }
 
 const ENTITY_SELECTOR_DEFAULT_PRESETS: ArgumentPreset[] = [
@@ -299,7 +358,6 @@ watch(
             return
         }
 
-        // 1. 效果预览
         if (type === 'effect') {
             const shortId = id.split(':').pop()
             const effectData = effectsData.find((e) => e.id === shortId)
@@ -322,13 +380,10 @@ watch(
                     { kind: 'item', id: 'minecraft:potion' } as unknown as SlotValue,
                     itemCtx!,
                 )
-            if (currentRequest === requestId) {
-                inputDisplay.value = display || undefined
-            }
+            if (currentRequest === requestId) inputDisplay.value = display || undefined
             return
         }
 
-        // 2. 成就预览
         if (type === 'advancement') {
             const cleanId = id.replace('minecraft:', '')
             const adv = advancementsData.find((a) => a.id === cleanId)
@@ -351,13 +406,10 @@ watch(
                     { kind: 'item', id: 'minecraft:book' } as unknown as SlotValue,
                     itemCtx!,
                 )
-            if (currentRequest === requestId) {
-                inputDisplay.value = display || undefined
-            }
+            if (currentRequest === requestId) inputDisplay.value = display || undefined
             return
         }
 
-        // 3. 物品/方块预览
         if (FORCE_MISSING_ICONS.has(id) || !id.includes('minecraft:')) {
             inputDisplay.value = undefined
             return
@@ -380,9 +432,7 @@ watch(
         if (!display) {
             display = getSlotDisplay({ kind: 'block', id } as unknown as SlotValue, itemCtx!)
         }
-        if (currentRequest === requestId) {
-            inputDisplay.value = display || undefined
-        }
+        if (currentRequest === requestId) inputDisplay.value = display || undefined
     },
     { immediate: true },
 )
@@ -396,7 +446,6 @@ interface CoordinatePart {
 }
 
 const coordinateDimensions = computed<2 | 3>(() => props.arg.coordinatesDimensions ?? 3)
-
 const COORDINATE_AXES_3D = ['x', 'y', 'z'] as const
 const COORDINATE_AXES_2D = ['x', 'z'] as const
 const coordinateAxes = computed<readonly string[]>(() =>
@@ -448,7 +497,6 @@ const coordinateParts = ref<CoordinatePart[]>(
         : [],
 )
 
-// 如果外部尚未赋值（例如刚选中断头台），主动抛出默认的相对坐标，防止校验报错
 if (
     isCoordinates.value &&
     !mixedAsEntity.value &&
@@ -482,7 +530,6 @@ function cycleCoordinateMode(index: number) {
     else if (part.mode === 'local') nextMode = 'absolute'
     else nextMode = 'relative'
 
-    // Minecraft 不允许混合 ^ 和其他坐标。如果切到 ^，强制全部变 ^。
     if (nextMode === 'local') {
         coordinateParts.value.forEach((p) => {
             p.mode = 'local'
@@ -493,7 +540,6 @@ function cycleCoordinateMode(index: number) {
         if (part.mode === 'absolute' && part.value === '') {
             part.value = '0'
         }
-        // 把其他 ^ 重置为 ~
         coordinateParts.value.forEach((p, i) => {
             if (i !== index && p.mode === 'local') {
                 p.mode = 'relative'
@@ -532,13 +578,9 @@ function coordinateModeSymbol(mode: CoordinateMode): string {
 }
 
 function coordinateModeLabel(mode: CoordinateMode): string {
-    if (mode === 'relative') {
-        return t('app.lab.command-generator.coordinate.relative', 'Relative (~)')
-    }
-    if (mode === 'local') {
-        return t('app.lab.command-generator.coordinate.local', 'Local (^)')
-    }
-    return t('app.lab.command-generator.coordinate.absolute', 'Absolute')
+    if (mode === 'relative') return formatMessage(messages.coordinateRelative)
+    if (mode === 'local') return formatMessage(messages.coordinateLocal)
+    return formatMessage(messages.coordinateAbsolute)
 }
 </script>
 
@@ -549,13 +591,12 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                 <label
                     :for="fieldId"
                     class="text-sm font-semibold text-[var(--color-text-primary)]"
-                    >{{ t(arg.displayNameKey) }}</label
+                    >{{ formatDynamic(arg.displayNameKey, arg.name) }}</label
                 >
                 <span v-if="arg.required" class="text-xs text-[var(--color-text-tertiary)]">{{
                     formatMessage(messages.argRequired)
                 }}</span>
             </div>
-            <!-- 混合类型（坐标/实体）的切换开关 -->
             <div v-if="isMixedCoordinates" class="flex items-center gap-1">
                 <button
                     type="button"
@@ -567,7 +608,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                     "
                     @click="switchMixedMode(false)"
                 >
-                    {{ t('app.lab.command-generator.coordinate.use-coords', '坐标') }}
+                    {{ formatMessage(messages.coordinateUseCoords) }}
                 </button>
                 <button
                     type="button"
@@ -579,7 +620,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                     "
                     @click="switchMixedMode(true)"
                 >
-                    {{ t('app.lab.command-generator.coordinate.use-entity', '实体') }}
+                    {{ formatMessage(messages.coordinateUseEntity) }}
                 </button>
             </div>
         </div>
@@ -595,7 +636,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             v-else-if="isEnumDropdown"
             :model-value="String(modelValue ?? '')"
             :options="enumOptions"
-            :aria-label="t(arg.displayNameKey)"
+            :aria-label="formatDynamic(arg.displayNameKey, arg.name)"
             :placeholder="formatMessage(messages.argSelectPlaceholder)"
             width="full"
             @update:model-value="onEnumChange"
@@ -604,7 +645,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             v-else-if="arg.type === 'boolean'"
             :id="fieldId"
             :model-value="modelValue === true || modelValue === 'true'"
-            :aria-label="t(arg.displayNameKey)"
+            :aria-label="formatDynamic(arg.displayNameKey, arg.name)"
             @update:model-value="onCheckboxChange"
         />
         <div
@@ -625,7 +666,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                 <StyledInput
                     :id="fieldId"
                     :model-value="String(modelValue ?? '')"
-                    :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+                    :placeholder="arg.placeholder ?? formatDynamic(arg.descriptionKey)"
                     class="w-full pl-10"
                     :spellcheck="false"
                     @update:model-value="onTextInput(String($event ?? ''))"
@@ -633,14 +674,14 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             </div>
             <Button type="outlined" @click="openItemPicker">
                 {{
-                    t(
+                    formatMessage(
                         isBlock
-                            ? 'app.lab.command-generator.block-picker.button'
+                            ? messages.pickBlock
                             : isEffect
-                              ? 'app.lab.command-generator.effect-picker.button'
+                              ? messages.pickEffect
                               : isAdvancement
-                                ? 'app.lab.command-generator.advancement-picker.button'
-                                : 'app.lab.command-generator.item-picker.button',
+                                ? messages.pickAdvancement
+                                : messages.pickItem,
                     )
                 }}
             </Button>
@@ -649,7 +690,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             v-else-if="isMixedCoordinates && mixedAsEntity"
             :id="fieldId"
             :model-value="String(modelValue ?? '')"
-            :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+            :placeholder="arg.placeholder ?? formatDynamic(arg.descriptionKey)"
             class="w-full"
             :spellcheck="false"
             @update:model-value="onTextInput(String($event ?? ''))"
@@ -672,7 +713,11 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                     </button>
                     <StyledInput
                         :model-value="part.value"
-                        :aria-label="`${coordinateAxes[index] ?? '0'} coordinate`"
+                        :aria-label="
+                            formatMessage(messages.coordinateAxisLabel, {
+                                axis: coordinateAxes[index] ?? '0',
+                            })
+                        "
                         :placeholder="
                             part.mode === 'relative' ? '0' : (coordinateAxes[index] ?? '0')
                         "
@@ -688,7 +733,7 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             :id="fieldId"
             :model-value="String(modelValue ?? '')"
             :type="isNumber ? 'number' : 'text'"
-            :placeholder="arg.placeholder ?? t(arg.descriptionKey)"
+            :placeholder="arg.placeholder ?? formatDynamic(arg.descriptionKey)"
             :step="arg.type === 'integer' ? 1 : undefined"
             :min="arg.min"
             :max="arg.max"
@@ -697,17 +742,17 @@ function coordinateModeLabel(mode: CoordinateMode): string {
             @update:model-value="onTextInput(String($event ?? ''))"
         />
         <p v-if="!isNbt" class="m-0 text-xs leading-5 text-[var(--color-text-tertiary)]">
-            {{ t(arg.descriptionKey) }}
+            {{ formatDynamic(arg.descriptionKey) }}
         </p>
         <div v-if="showPresets" class="flex flex-wrap gap-1.5">
             <Button
                 v-for="preset in visiblePresets"
                 :key="preset.labelKey"
-                v-tooltip="preset.descriptionKey ? t(preset.descriptionKey) : undefined"
+                v-tooltip="preset.descriptionKey ? formatDynamic(preset.descriptionKey) : undefined"
                 type="quiet"
                 size="2xs"
                 @click="applyPreset(preset.value)"
-                >{{ t(preset.labelKey) }}</Button
+                >{{ formatDynamic(preset.labelKey) }}</Button
             >
             <Button
                 v-if="hiddenPresetCount > 0 && !showAllPresets"

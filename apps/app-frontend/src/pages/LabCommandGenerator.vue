@@ -8,7 +8,15 @@ import {
     TrashIcon,
     XIcon,
 } from '@modrinth/assets'
-import { Button, Combobox, type ComboboxOption, StyledInput, Toggle, useVIntl } from '@modrinth/ui'
+import {
+    Button,
+    Combobox,
+    type ComboboxOption,
+    defineMessages,
+    StyledInput,
+    Toggle,
+    useVIntl,
+} from '@modrinth/ui'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
 import CommandGeneratorArgument from '@/components/lab/command-generator/CommandGeneratorArgument.vue'
@@ -22,6 +30,7 @@ import {
     initializeRegistry,
     PERMISSION_DESC_KEYS,
     PERMISSION_DESCRIPTIONS,
+    PERMISSION_KEYS,
     PERMISSION_LABELS,
     switchVersion,
 } from '@/lab/command-generator/commands/registry.ts'
@@ -32,7 +41,6 @@ import {
     getDefaultValues,
     validateCommand,
 } from '@/lab/command-generator/generator.ts'
-import { commandGeneratorMessages as messages } from '@/lab/command-generator/i18n/messages.ts'
 import { loadManifest } from '@/lab/command-generator/loader.ts'
 import {
     applyPresetToValues,
@@ -44,8 +52,158 @@ import {
 
 const { formatMessage, locale } = useVIntl()
 
-function t(key: string, fallback?: string): string {
-    return formatMessage({ id: key, defaultMessage: fallback ?? key })
+const messages = defineMessages({
+    title: { id: 'app.lab.command-generator.title', defaultMessage: 'Command generator' },
+    subtitle: {
+        id: 'app.lab.command-generator.subtitle',
+        defaultMessage: 'Build Minecraft Java Edition commands visually.',
+    },
+    globalPresets: {
+        id: 'app.lab.command-generator.preset.global',
+        defaultMessage: 'All presets',
+    },
+    globalPresetsEmpty: {
+        id: 'app.lab.command-generator.preset.global-empty',
+        defaultMessage: 'No saved presets yet.',
+    },
+    deletePreset: {
+        id: 'app.lab.command-generator.preset.delete',
+        defaultMessage: 'Delete preset',
+    },
+    close: { id: 'app.lab.command-generator.close', defaultMessage: 'Close' },
+    selectVersion: {
+        id: 'app.lab.command-generator.select-version',
+        defaultMessage: 'Game version',
+    },
+    filters: { id: 'app.lab.command-generator.filters', defaultMessage: 'Filters' },
+    filterCategory: {
+        id: 'app.lab.command-generator.filter.category',
+        defaultMessage: 'Category',
+    },
+    filterPermission: {
+        id: 'app.lab.command-generator.filter.permission',
+        defaultMessage: 'Permission level',
+    },
+    filterAll: { id: 'app.lab.command-generator.filter.all', defaultMessage: 'All' },
+    selectCommand: {
+        id: 'app.lab.command-generator.select-command',
+        defaultMessage: 'Choose a command',
+    },
+    selectPlaceholder: {
+        id: 'app.lab.command-generator.select-placeholder',
+        defaultMessage: 'Search a command…',
+    },
+    aliasOf: {
+        id: 'app.lab.command-generator.alias-of',
+        defaultMessage: "{command}'s alias",
+    },
+    useDataComponents: {
+        id: 'app.lab.command-generator.version.use-data-components',
+        defaultMessage: 'Use data components (1.20.5+)',
+    },
+    startTitle: {
+        id: 'app.lab.command-generator.start-title',
+        defaultMessage: 'Choose a command to get started',
+    },
+    startHint: {
+        id: 'app.lab.command-generator.start-hint',
+        defaultMessage: 'Search by command name, or start with a common command.',
+    },
+    optional: { id: 'app.lab.command-generator.arg.optional', defaultMessage: 'Optional' },
+    parametersEmpty: {
+        id: 'app.lab.command-generator.parameters-empty',
+        defaultMessage: 'This command takes no arguments.',
+    },
+    result: { id: 'app.lab.command-generator.result', defaultMessage: 'Generated command' },
+    resultHint: {
+        id: 'app.lab.command-generator.result-hint',
+        defaultMessage: 'Fill in the parameters, then generate a command to copy into Minecraft.',
+    },
+    generate: { id: 'app.lab.command-generator.generate', defaultMessage: 'Generate' },
+    copy: { id: 'app.lab.command-generator.copy', defaultMessage: 'Copy' },
+    copied: { id: 'app.lab.command-generator.copied', defaultMessage: 'Copied' },
+    copyFailed: {
+        id: 'app.lab.command-generator.copy-failed',
+        defaultMessage: 'Could not copy the command. Select and copy the text manually.',
+    },
+    unknownError: {
+        id: 'app.lab.command-generator.error.unknown',
+        defaultMessage: 'Unknown error',
+    },
+    requiredError: {
+        id: 'app.lab.command-generator.error.required',
+        defaultMessage: 'Enter {name}.',
+    },
+    enumError: {
+        id: 'app.lab.command-generator.error.enum',
+        defaultMessage: 'Choose a valid value for {name}.',
+    },
+    numberError: {
+        id: 'app.lab.command-generator.error.number',
+        defaultMessage: 'Enter a number for {name}.',
+    },
+    integerError: {
+        id: 'app.lab.command-generator.error.integer',
+        defaultMessage: 'Enter a whole number for {name}.',
+    },
+    rangeError: {
+        id: 'app.lab.command-generator.error.range',
+        defaultMessage: 'Enter a value within the allowed range for {name}.',
+    },
+    savePreset: {
+        id: 'app.lab.command-generator.preset.save',
+        defaultMessage: 'Save as preset',
+    },
+    presetName: {
+        id: 'app.lab.command-generator.preset.name',
+        defaultMessage: 'Preset name',
+    },
+    save: { id: 'app.lab.command-generator.save', defaultMessage: 'Save' },
+    toastPresetNameRequired: {
+        id: 'app.lab.command-generator.preset.toast.name-required',
+        defaultMessage: 'Please enter a preset name',
+    },
+    toastPresetSaved: {
+        id: 'app.lab.command-generator.preset.toast.saved',
+        defaultMessage: 'Preset "{name}" saved',
+    },
+    toastPresetLoaded: {
+        id: 'app.lab.command-generator.preset.toast.loaded',
+        defaultMessage: 'Preset "{name}" loaded',
+    },
+    toastPresetDeleted: {
+        id: 'app.lab.command-generator.preset.toast.deleted',
+        defaultMessage: 'Preset "{name}" deleted',
+    },
+    toastPresetCommandMissing: {
+        id: 'app.lab.command-generator.preset.toast.command-missing',
+        defaultMessage:
+            'Preset "{name}" uses command "{command}" which does not exist in this version',
+    },
+    executeBuildFirst: {
+        id: 'app.lab.command-generator.execute.build-first',
+        defaultMessage: 'Please build the subcommand chain first',
+    },
+    seedMultiplayerNote: {
+        id: 'app.lab.command-generator.perm.seed.multiplayer-note',
+        defaultMessage: 'In multiplayer, /seed requires permission level 2.',
+    },
+    guideTitle: {
+        id: 'app.lab.command-generator.guide-title',
+        defaultMessage: 'Guide',
+    },
+    guideExamples: {
+        id: 'app.lab.command-generator.guide-examples',
+        defaultMessage: 'Examples',
+    },
+    viewOnWiki: {
+        id: 'app.lab.command-generator.view-on-wiki',
+        defaultMessage: 'View on Wiki',
+    },
+})
+
+function formatDynamic(id: string, fallback = ''): string {
+    return formatMessage({ id, defaultMessage: fallback || id })
 }
 
 type CommandComboboxOption = ComboboxOption<string> & {
@@ -76,7 +234,6 @@ const toast = ref('')
 const showGlobalPresets = ref(false)
 
 const userPresets = ref<UserPreset[]>([])
-
 const useDataComponents = ref(true)
 
 function isAtLeast(a: string, b: string): boolean {
@@ -107,14 +264,14 @@ const categoryOptions = computed<ComboboxOption<string>[]>(() => [
     { value: '', label: formatMessage(messages.filterAll) },
     ...(Object.keys(CATEGORY_KEYS) as CommandCategory[]).map((key) => ({
         value: key,
-        label: t(CATEGORY_KEYS[key]),
+        label: formatDynamic(CATEGORY_KEYS[key], key),
     })),
 ])
 
 const permissionOptions = computed<ComboboxOption<string>[]>(() =>
     ([0, 1, 2, 3, 4] as const).map((level) => ({
         value: String(level),
-        label: `${level} · ${PERMISSION_LABELS[level]} — ${t(
+        label: `${level} · ${formatDynamic(PERMISSION_KEYS[level], PERMISSION_LABELS[level])} — ${formatDynamic(
             PERMISSION_DESC_KEYS[level],
             PERMISSION_DESCRIPTIONS[level],
         )}`,
@@ -144,8 +301,8 @@ const filteredCommands = computed(() => {
 const commandOptions = computed<CommandComboboxOption[]>(() => {
     const list: CommandComboboxOption[] = []
     for (const cmd of filteredCommands.value) {
-        const description = t(cmd.descriptionKey)
-        const category = t(CATEGORY_KEYS[cmd.category])
+        const description = formatDynamic(cmd.descriptionKey, cmd.name)
+        const category = formatDynamic(CATEGORY_KEYS[cmd.category], cmd.category)
 
         list.push({
             value: cmd.id,
@@ -202,18 +359,15 @@ const uiArguments = computed<CommandArgument[]>(() => {
 const permissionName = computed(() => {
     if (!currentCommand.value) return ''
     const level = currentCommand.value.permissionLevel
-    return `${PERMISSION_LABELS[level] ?? level} (${level})`
+    return `${formatDynamic(PERMISSION_KEYS[level], PERMISSION_LABELS[level] ?? String(level))} (${level})`
 })
 
 const permissionTooltip = computed(() => {
     if (!currentCommand.value) return undefined
     if (currentCommand.value.id === 'seed') {
-        return t(
-            'app.lab.command-generator.perm.seed.multiplayer-note',
-            'In multiplayer, /seed requires permission level 2.',
-        )
+        return formatMessage(messages.seedMultiplayerNote)
     }
-    return t(
+    return formatDynamic(
         PERMISSION_DESC_KEYS[currentCommand.value.permissionLevel],
         PERMISSION_DESCRIPTIONS[currentCommand.value.permissionLevel],
     )
@@ -305,7 +459,9 @@ function generate() {
     }
 
     const validationErrors = validateCommand(selectedCommandId.value, values.value, (issue) =>
-        formatMessage(messages[issue.kind], { name: t(issue.argument.displayNameKey) }),
+        formatMessage(messages[issue.kind], {
+            name: formatDynamic(issue.argument.displayNameKey, issue.argument.name),
+        }),
     )
     if (validationErrors.length) {
         errors.value = validationErrors
@@ -316,7 +472,7 @@ function generate() {
     try {
         result.value = buildCommand(selectedCommandId.value, values.value)
     } catch (e) {
-        errors.value = [e instanceof Error ? e.message : 'Unknown error']
+        errors.value = [e instanceof Error ? e.message : formatMessage(messages.unknownError)]
         result.value = ''
     }
 }
@@ -367,7 +523,6 @@ function saveCurrentAsPreset() {
     }
 
     userPresets.value = getUserPresets()
-
     presetNameInput.value = ''
     showPresetInput.value = false
     showToast(formatMessage(messages.toastPresetSaved, { name }))
@@ -379,7 +534,6 @@ function removePreset(id: string) {
 
     deleteUserPreset(id)
     userPresets.value = getUserPresets()
-
     showToast(formatMessage(messages.toastPresetDeleted, { name: preset.name }))
 }
 
@@ -580,13 +734,9 @@ function openWiki() {
                                             class="inline-flex items-center rounded bg-surface-3 px-1.5 py-0.5 text-[0.65rem] leading-none text-[var(--color-text-tertiary)]"
                                         >
                                             {{
-                                                formatMessage(
-                                                    {
-                                                        id: 'app.lab.command-generator.alias-of',
-                                                        defaultMessage: "{command}'s alias",
-                                                    },
-                                                    { command: asCommandOption(item).aliasOf },
-                                                )
+                                                formatMessage(messages.aliasOf, {
+                                                    command: asCommandOption(item).aliasOf,
+                                                })
                                             }}
                                         </span>
                                     </span>
@@ -601,12 +751,10 @@ function openWiki() {
                         v-if="showDataComponentsToggle"
                         class="flex items-center justify-between gap-3 rounded-lg bg-surface-3 p-3 text-sm"
                     >
-                        <span>{{
-                            t('app.lab.command-generator.version.use-data-components')
-                        }}</span>
+                        <span>{{ formatMessage(messages.useDataComponents) }}</span>
                         <Toggle
                             v-model="useDataComponents"
-                            :aria-label="t('app.lab.command-generator.version.use-data-components')"
+                            :aria-label="formatMessage(messages.useDataComponents)"
                         />
                     </div>
                 </div>
@@ -640,7 +788,12 @@ function openWiki() {
                                 /{{ currentCommand.name }}
                             </h2>
                             <p class="m-0 mt-1 text-sm leading-6 text-[var(--color-text-tertiary)]">
-                                {{ t(currentCommand.descriptionKey) }}
+                                {{
+                                    formatDynamic(
+                                        currentCommand.descriptionKey,
+                                        currentCommand.name,
+                                    )
+                                }}
                             </p>
                         </div>
                         <span
@@ -667,7 +820,7 @@ function openWiki() {
                                 <summary
                                     class="cursor-pointer text-sm font-semibold text-[var(--color-text-primary)]"
                                 >
-                                    {{ t(arg.displayNameKey) }}
+                                    {{ formatDynamic(arg.displayNameKey, arg.name) }}
                                     <span
                                         class="ml-2 font-normal text-[var(--color-text-tertiary)]"
                                         >{{ formatMessage(messages.optional) }}</span
@@ -740,7 +893,6 @@ function openWiki() {
                         >
                     </div>
 
-                    <!-- 预设和 Wiki 链接按钮区域 -->
                     <div
                         v-if="currentCommand"
                         class="mt-4 flex flex-wrap items-center gap-2 border-0 border-t border-solid border-surface-4 pt-3"
@@ -754,13 +906,11 @@ function openWiki() {
                             <BookmarkIcon />{{ formatMessage(messages.savePreset) }}
                         </Button>
 
-                        <!-- Wiki 链接按钮 -->
                         <Button type="quiet" size="sm" @click="openWiki">
                             <BookIcon class="h-4 w-4" />
-                            {{ t('app.lab.command-generator.view-on-wiki', 'View on Wiki') }}
+                            {{ formatMessage(messages.viewOnWiki) }}
                         </Button>
 
-                        <!-- 预设表单 -->
                         <form
                             v-if="showPresetInput"
                             class="mt-3 flex w-full min-w-0 flex-wrap items-center gap-2"
@@ -792,14 +942,14 @@ function openWiki() {
                     class="rounded-xl border border-solid border-surface-4 bg-surface-2 p-4"
                 >
                     <h2 class="m-0 text-base font-semibold text-[var(--color-text-primary)]">
-                        {{ t('app.lab.command-generator.guide-title') }}
+                        {{ formatMessage(messages.guideTitle) }}
                     </h2>
                     <p class="m-0 mt-2 text-sm leading-6 text-[var(--color-text-tertiary)]">
-                        {{ t(currentGuide.summaryKey) }}
+                        {{ formatDynamic(currentGuide.summaryKey, currentGuide.commandId) }}
                     </p>
                     <details class="mt-3">
                         <summary class="cursor-pointer text-sm font-medium">
-                            {{ t('app.lab.command-generator.guide-examples') }}
+                            {{ formatMessage(messages.guideExamples) }}
                         </summary>
                         <div class="mt-3 flex flex-col gap-3">
                             <div
@@ -814,7 +964,7 @@ function openWiki() {
                                 <p
                                     class="m-0 mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]"
                                 >
-                                    {{ t(ex.explanationKey) }}
+                                    {{ formatDynamic(ex.explanationKey, ex.command) }}
                                 </p>
                             </div>
                             <p
@@ -822,7 +972,7 @@ function openWiki() {
                                 :key="tipKey"
                                 class="m-0 text-sm leading-6 text-[var(--color-text-tertiary)]"
                             >
-                                {{ t(tipKey) }}
+                                {{ formatDynamic(tipKey) }}
                             </p>
                         </div>
                     </details>

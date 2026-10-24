@@ -5768,6 +5768,18 @@
   "app.lab.command-generator.subtitle": {
     "message": "可视化构建 Minecraft Java 版命令。"
   },
+  "app.lab.command-generator.error.unknown": {
+    "message": "未知错误"
+  },
+  "app.lab.command-generator.coordinate.axis-label": {
+    "message": "{axis} 坐标"
+  },
+  "app.lab.command-generator.coordinate.use-coords": {
+    "message": "坐标"
+  },
+  "app.lab.command-generator.coordinate.use-entity": {
+    "message": "实体"
+  },
   "app.lab.command-generator.select-version": {
     "message": "游戏版本"
   },
