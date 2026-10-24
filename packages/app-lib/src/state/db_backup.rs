@@ -108,6 +108,10 @@ async fn restore_corrupt_app_db_from(
 async fn check_database_integrity(
     db_path: &Path,
 ) -> crate::Result<IntegrityStatus> {
+    let started = std::time::Instant::now();
+    tracing::info!(database = %db_path.display(),
+        bytes = tokio::fs::metadata(db_path).await?.len(),
+        "Checking app database integrity; large databases may take longer");
     let options = SqliteConnectOptions::new()
         .filename(db_path)
         .busy_timeout(Duration::from_secs(30))
@@ -135,6 +139,11 @@ async fn check_database_integrity(
         Err(error) => return Err(error.into()),
     };
     conn.close().await?;
+
+    tracing::info!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "App database integrity check finished"
+    );
 
     Ok(status)
 }
