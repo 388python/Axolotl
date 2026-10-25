@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use chrono::{DateTime, Utc};
 
 use crate::State;
-use crate::api::curseforge::DependencyRelation;
+use crate::state::instances::DependencyRelation;
 use crate::state::instances::{
     ContentItemCapabilities, ContentOwnershipKind, InstanceContentSnapshot,
     InstanceContentSnapshotItem, InstanceLink, LoaderComponentKind,

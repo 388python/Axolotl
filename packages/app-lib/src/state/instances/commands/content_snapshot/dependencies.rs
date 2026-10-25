@@ -1,6 +1,6 @@
 use super::*;
-use crate::api::curseforge::DependencyRelation;
 use crate::mod_metadata::LocalModMetadata;
+use crate::state::instances::DependencyRelation;
 use crate::state::instances::{
     ContentDependencyEdge, ContentDependencyKind, ContentEntry, ContentSet,
 };
@@ -594,11 +594,11 @@ mod tests {
         let dependencies = [
             crate::api::curseforge::CurseForgeFileDependency::new(
                 200,
-                crate::api::curseforge::DependencyRelation::Required,
+                crate::state::instances::DependencyRelation::Required,
             ),
             crate::api::curseforge::CurseForgeFileDependency::new(
                 300,
-                crate::api::curseforge::DependencyRelation::Required,
+                crate::state::instances::DependencyRelation::Required,
             ),
         ];
         let mut first = DependencyBackfill::default();

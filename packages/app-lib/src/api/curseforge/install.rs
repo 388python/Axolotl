@@ -7,8 +7,7 @@ use super::dto::{
     CurseForgeCrossSourceDependency, CurseForgeFailedDownload, CurseForgeFile,
     CurseForgeInstallRequest, CurseForgeInstallResult, CurseForgeInstalledFile,
     CurseForgeProject, CurseForgeSkippedDependency,
-    CurseForgeWorldInstallRequest, CurseForgeWorldInstallResult,
-    DependencyRelation, default_true,
+    CurseForgeWorldInstallRequest, CurseForgeWorldInstallResult, default_true,
 };
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::metrics::CurseForgeDownloadMetrics;
@@ -26,6 +25,7 @@ use super::verify::{
     download_installed_file,
 };
 use crate::install::InstallProgressReporter;
+use crate::state::instances::DependencyRelation;
 use crate::state::{
     CacheBehaviour, CachedEntry, ContentProvider, ContentProviderRef,
     CurseForgeFileId, DependencyResolutionNode, DependencyResolutionPlan,

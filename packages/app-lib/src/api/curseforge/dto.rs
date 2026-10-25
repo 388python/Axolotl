@@ -4,6 +4,7 @@ use super::constants::{
     FABRIC_API_CURSEFORGE_PROJECT_ID, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
 };
 use super::verify::CurseForgeVerificationTask;
+use crate::state::instances::DependencyRelation;
 use crate::state::{ContentProvider, ModLoader};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -226,49 +227,6 @@ pub struct CurseForgeFileHash {
 pub struct CurseForgeFileDependency {
     pub mod_id: u32,
     pub relation_type: u32,
-}
-
-/// The `relationType` CurseForge assigns to a file dependency.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DependencyRelation {
-    Embedded,
-    Optional,
-    Required,
-    Tool,
-    Incompatible,
-    Include,
-    /// A relation newer than this build; callers keep their own fallback.
-    Unknown(u32),
-}
-
-impl DependencyRelation {
-    pub(crate) fn from_raw(raw: u32) -> Self {
-        match raw {
-            1 => Self::Embedded,
-            2 => Self::Optional,
-            3 => Self::Required,
-            4 => Self::Tool,
-            5 => Self::Incompatible,
-            6 => Self::Include,
-            other => Self::Unknown(other),
-        }
-    }
-
-    pub(crate) fn is_required(self) -> bool {
-        self == Self::Required
-    }
-
-    pub(crate) fn as_raw(self) -> u32 {
-        match self {
-            Self::Embedded => 1,
-            Self::Optional => 2,
-            Self::Required => 3,
-            Self::Tool => 4,
-            Self::Incompatible => 5,
-            Self::Include => 6,
-            Self::Unknown(raw) => raw,
-        }
-    }
 }
 
 impl CurseForgeFileDependency {
