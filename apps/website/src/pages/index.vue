@@ -111,13 +111,18 @@ const latestVersion = computed(() => {
     return typeof tagName === 'string' ? tagName.replace(/^v/, '') : null
 })
 
-const requestHeaders = useRequestHeaders(['user-agent'])
+// The site is statically generated, so prerendering has no request headers to read.
+// Deriving the platform on the server therefore always disagrees with the browser and
+// produces a hydration mismatch on the hero call to action. Stay platform-neutral
+// until the component has mounted, then read the real user agent. Both renders emit
+// the same static markup, and the OS-specific icon appears one frame later.
+const hydrated = ref(false)
+onMounted(() => {
+    hydrated.value = true
+})
 const platform = computed<string>(() => {
-    if (import.meta.server) {
-        return requestHeaders['user-agent'] || ''
-    } else {
-        return navigator.userAgent || ''
-    }
+    if (!hydrated.value) return ''
+    return navigator.userAgent || ''
 })
 const os = computed<OSType>(() => {
     if (/(iPhone|iPad|Android|Mobile)/.test(platform.value)) {
@@ -353,13 +358,11 @@ const messages = defineMessages({
         id: 'axolotl-marketing.highlights.eyebrow',
         defaultMessage: 'Everything for your next world',
     },
-    highlightsTitle: {
-        id: 'axolotl-marketing.highlights.title',
-        defaultMessage: 'Manage Minecraft content',
-    },
-    highlightsTitleSecond: {
-        id: 'axolotl-marketing.highlights.title-second',
-        defaultMessage: 'without detours',
+    // One message instead of two fragments joined by <br />: the explicit break forced
+    // a fixed two-line heading and fought the balance rule on narrow viewports.
+    highlightsTitleCombined: {
+        id: 'axolotl-marketing.highlights.title-combined',
+        defaultMessage: 'Manage Minecraft content without detours',
     },
     highlightsDescription: {
         id: 'axolotl-marketing.highlights.description',
@@ -995,9 +998,7 @@ useHead(() => ({
                         {{ formatMessage(messages.openSourceBadge) }}
                     </div>
                 </div>
-                <h1
-                    class="main-header mb-8 mt-4 max-w-[52rem] text-balance text-[5.25rem] font-semibold leading-none text-[var(--color-contrast)]"
-                >
+                <h1 class="main-header mb-8 mt-4 max-w-[52rem] text-[var(--color-contrast)]">
                     {{ formatMessage(messages.downloadAxolotl) }}
                 </h1>
                 <p class="main-subheader">
@@ -1005,7 +1006,6 @@ useHead(() => ({
                 </p>
                 <div class="button-group mt-3 flex flex-wrap justify-end gap-2">
                     <Button
-                        v-if="os"
                         type="colored"
                         color="brand"
                         size="xl"
@@ -1053,8 +1053,7 @@ useHead(() => ({
                     formatMessage(messages.builtOnModrinth)
                 }}</span>
                 <h2 id="axolotl-highlights-title">
-                    {{ formatMessage(messages.highlightsTitle) }}<br />
-                    {{ formatMessage(messages.highlightsTitleSecond) }}
+                    {{ formatMessage(messages.highlightsTitleCombined) }}
                 </h2>
                 <p>{{ formatMessage(messages.highlightsDescription) }}</p>
             </div>
@@ -1722,9 +1721,9 @@ useHead(() => ({
     max-width: 46rem;
     margin: 0;
     color: var(--landing-color-subheading);
-    font-size: clamp(1rem, 1.6vw, 1.25rem);
-    font-weight: 450;
-    line-height: 1.65;
+    font-size: var(--landing-size-lead);
+    font-weight: var(--landing-weight-lead);
+    line-height: var(--landing-leading-lead);
     text-wrap: balance;
 }
 
@@ -1797,6 +1796,15 @@ useHead(() => ({
     }
 }
 
+.main-header {
+    font-size: var(--landing-size-display);
+    font-weight: var(--landing-weight-display);
+    letter-spacing: -0.03em;
+    line-height: var(--landing-leading-display);
+    word-break: keep-all;
+    text-wrap: balance;
+}
+
 .highlights-intro {
     max-width: 52rem;
     margin: 0 auto clamp(2.75rem, 6vw, 5rem);
@@ -1805,10 +1813,15 @@ useHead(() => ({
     h2 {
         margin: 0.7rem 0 1rem;
         color: var(--color-contrast);
-        font-size: clamp(2.5rem, 5.5vw, 4.75rem);
-        font-weight: 700;
-        letter-spacing: 0;
-        line-height: 1.04;
+        font-size: var(--landing-size-section);
+        font-weight: var(--landing-weight-section);
+        letter-spacing: -0.02em;
+        line-height: var(--landing-leading-section);
+        // CJK titles break inside a word ("内" / "容" on its own line) when the
+        // available width is narrow. Keep words whole and let balance decide where
+        // the line ends instead of a manual <br />.
+        word-break: keep-all;
+        text-wrap: balance;
     }
 
     p {
@@ -2464,14 +2477,6 @@ useHead(() => ({
     .website {
         grid-column: 1 / -1 !important;
     }
-
-    .main-header {
-        font-size: 4rem !important;
-    }
-
-    .main-subheader {
-        font-size: 1.25rem !important;
-    }
 }
 
 @media screen and (max-width: 746px) {
@@ -2529,14 +2534,6 @@ useHead(() => ({
             min-height: 0;
             aspect-ratio: 1280 / 743;
         }
-    }
-
-    .main-header {
-        font-size: 3rem !important;
-    }
-
-    .main-subheader {
-        font-size: 1.1rem !important;
     }
 }
 

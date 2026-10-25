@@ -85,8 +85,7 @@ export const siteLocaleMessages: Record<string, Record<string, string>> = {
 			'Axolotl Launcher 是一款免费、开源、无广告的跨平台 Minecraft Java 版启动器。发现并安装 Modrinth 与 CurseForge 的模组和整合包，沿用已有游戏目录，在一个地方完成下载、更新与备份，轻松开始下一次冒险。',
 		'axolotl-marketing.hero.screenshot-alt': 'Axolotl Launcher 主界面。',
 		'axolotl-marketing.highlights.eyebrow': '为你的下一个世界准备好',
-		'axolotl-marketing.highlights.title': '管理 Minecraft 内容',
-		'axolotl-marketing.highlights.title-second': '不再绕路',
+		'axolotl-marketing.highlights.title-combined': '管理 Minecraft 内容，不再绕路',
 		'axolotl-marketing.highlights.description':
 			'找一个模组，装一套整合包，或回到熟悉的世界。来自 Modrinth 与 CurseForge 的内容集中呈现，安装、依赖和更新都能在启动器中完成。',
 		'axolotl-marketing.highlights.ad-free.title': '免费、开源且独立',
