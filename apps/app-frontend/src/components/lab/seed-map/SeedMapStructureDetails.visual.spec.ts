@@ -229,8 +229,11 @@ it('loads original End city and ship geometry on demand and switches modes witho
     ;(wrapper.element as HTMLElement).style.cssText =
         'width: 430px; background: var(--surface-2); color: var(--color-text-primary); padding: 12px'
     const canvas = wrapper.get('canvas').element as HTMLCanvasElement
-    await vi.waitFor(() => expect(canvas.dataset.ready).toBe('true'))
-    await vi.waitFor(() => expect(Number(canvas.dataset.chestCount)).toBeGreaterThan(0))
+    // The first preview also imports Three.js and initializes WebGL on the CI runner.
+    await vi.waitFor(() => expect(canvas.dataset.ready).toBe('true'), { timeout: 10000 })
+    await vi.waitFor(() => expect(Number(canvas.dataset.chestCount)).toBeGreaterThan(0), {
+        timeout: 10000,
+    })
     expect(canvas.dataset.renderMode).toBe('frames')
     const gl = canvas.getContext('webgl2')!
     const pixels = () => {

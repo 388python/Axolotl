@@ -1,4 +1,7 @@
 {
+  "app.project.additional-details-failed": {
+    "message": "部分项目详情加载失败。"
+  },
   "app.content-favorites.browse-resources": {
     "message": "浏览资源"
   },
