@@ -48,17 +48,6 @@ const messages = defineMessages({
                             {{ formatMessage(messages.openSourceLink) }} </a
                         >.
                     </span>
-                    <a
-                        href="https://www.netlify.com"
-                        target="_blank"
-                        rel="noopener"
-                        class="netlify-badge"
-                    >
-                        <img
-                            src="https://www.netlify.com/assets/badges/netlify-badge-color-accent.svg"
-                            alt="Deploys by Netlify"
-                        />
-                    </a>
                 </p>
             </div>
 
@@ -127,17 +116,6 @@ const messages = defineMessages({
     a {
         color: var(--color-base);
         text-underline-offset: 0.15rem;
-    }
-
-    .netlify-badge {
-        display: inline-flex;
-        align-items: center;
-
-        img {
-            display: block;
-            height: 1.5rem;
-            width: auto;
-        }
     }
 }
 

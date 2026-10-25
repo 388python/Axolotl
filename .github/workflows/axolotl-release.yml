@@ -383,7 +383,7 @@ jobs:
             "${RELEASE_TAG}"
 
   publish-website:
-    name: Build and deploy website to Netlify
+    name: Build and deploy website to Cloudflare Pages
     needs: verify-and-publish
     if: ${{ !cancelled() && needs.verify-and-publish.result == 'success' && (github.event_name == 'push' || inputs.target == 'all' || inputs.target == 'website') }}
     runs-on: ubuntu-24.04
@@ -391,14 +391,16 @@ jobs:
     concurrency:
       group: website-production
       cancel-in-progress: false
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_PAGES_ACCOUNT_ID }}
+      CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
     steps:
-      - name: Check Netlify deployment credentials
+      - name: Check Cloudflare Pages deployment configuration
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
         run: |
-          if [[ -z "$NETLIFY_AUTH_TOKEN" || -z "$NETLIFY_SITE_ID" ]]; then
-            echo '::error::Configure NETLIFY_AUTH_TOKEN and NETLIFY_SITE_ID repository secrets. See apps/website/README.md.'
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_PAGES_PROJECT_NAME" ]]; then
+            echo '::error::Configure the CLOUDFLARE_PAGES_API_TOKEN secret and CLOUDFLARE_PAGES_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT_NAME variables. See apps/website/README.md.'
             exit 1
           fi
       - name: Checkout code
@@ -470,20 +472,16 @@ jobs:
             git -C website-publish commit -m "chore(website): update release data for ${RELEASE_TAG} [skip ci]"
             git -C website-publish push origin main
           fi
-      - name: Deploy prebuilt website to Netlify
+      - name: Deploy prebuilt website to Cloudflare Pages
         working-directory: website-publish
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
         run: |
-          pnpm --package=netlify-cli@27.13.0 dlx netlify deploy \
-            --prod \
-            --no-build \
-            --filter @axolotl/website \
-            --dir "$PWD/apps/website/.output/public" \
-            --site "$NETLIFY_SITE_ID" \
-            --message "Launcher ${RELEASE_TAG} (GitHub Actions ${GITHUB_RUN_ID})" \
-            --timeout 600
+          pnpm --package=wrangler@4.152.0 dlx wrangler pages deploy \
+            apps/website/.output/public \
+            --project-name "$CLOUDFLARE_PAGES_PROJECT_NAME" \
+            --branch main \
+            --commit-message "Launcher ${RELEASE_TAG} (GitHub Actions ${GITHUB_RUN_ID})"
 
   mirror-cnb:
     name: Mirror release to CNB
