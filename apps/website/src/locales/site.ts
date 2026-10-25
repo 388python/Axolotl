@@ -5,6 +5,8 @@ export const siteLocaleMessages: Record<string, Record<string, string>> = {
         'axolotl-marketing.download.package-unavailable': '此版本暂无对应安装包。',
         'axolotl-marketing.download.view-options': '查看下载选项',
         'axolotl-marketing.download.retry': '重试',
+        'axolotl-marketing.download.timeout-note':
+            '暂时无法获取版本信息，可直接在下方选择平台下载。',
         'axolotl-site.structured-data.feature.export': '支持 Modrinth MRPACK、CurseForge ZIP 与通用 ZIP 整合包导出',
         'axolotl-site.structured-data.feature.storage': '磁盘占用分析与缓存清理，保留已安装游戏、存档和备份',
         'axolotl-site.structured-data.feature.backups': '为支持的本地实例创建快照备份，恢复前预览文件变化',

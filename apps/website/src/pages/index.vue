@@ -38,6 +38,7 @@ import {
     getDownloadAvailability,
     getReleasePage,
     hasLauncherDownloads,
+    shouldDegradeDownload,
 } from '~/utils/launcher-downloads'
 
 type OSType = 'Mac' | 'Windows' | 'Linux' | null
@@ -139,6 +140,66 @@ const os = computed<OSType>(() => {
     }
 })
 
+const DOWNLOAD_WAIT_LIMIT_MS = 2500
+const DOWNLOAD_WAIT_TICK_MS = 250
+
+// The version service is a third party, so the hero call to action cannot assume a
+// reply ever arrives. A request that never settles used to leave the button
+// disabled and wordless for as long as it hung, with no way for the visitor to
+// act. Past the limit the button becomes usable and says why.
+const downloadWaitStartedAt = ref(0)
+const downloadWaitElapsedMs = ref(0)
+let downloadWaitTicker: ReturnType<typeof setInterval> | undefined
+
+function stopDownloadWaitTicker() {
+    if (downloadWaitTicker !== undefined) {
+        clearInterval(downloadWaitTicker)
+        downloadWaitTicker = undefined
+    }
+}
+
+function startDownloadWaitTicker() {
+    // Prerendering has no request in flight, and an interval started there would
+    // never be cleared.
+    if (typeof window === 'undefined') return
+    stopDownloadWaitTicker()
+    downloadWaitStartedAt.value = Date.now()
+    downloadWaitElapsedMs.value = 0
+    downloadWaitTicker = setInterval(() => {
+        downloadWaitElapsedMs.value = Date.now() - downloadWaitStartedAt.value
+    }, DOWNLOAD_WAIT_TICK_MS)
+}
+
+// Declared after `os` on purpose: this watcher evaluates the hero state during
+// setup, and `heroDownloadState` reads `os`.
+watch(
+    heroDownloadState,
+    (state) => {
+        if (state === 'loading') startDownloadWaitTicker()
+        else stopDownloadWaitTicker()
+    },
+    { immediate: true },
+)
+
+onBeforeUnmount(stopDownloadWaitTicker)
+
+const heroCtaDegraded = computed(() =>
+    shouldDegradeDownload(
+        heroDownloadState.value,
+        downloadWaitElapsedMs.value,
+        DOWNLOAD_WAIT_LIMIT_MS,
+    ),
+)
+
+// One line under the button, announced politely so a screen reader hears the
+// reason the button changed rather than only the new label.
+const heroDownloadNote = computed(() => {
+    if (downloadState.value === 'error') return formatMessage(messages.downloadLinksFailed)
+    if (releaseUnavailable.value) return formatMessage(messages.packageUnavailable)
+    if (heroCtaDegraded.value) return formatMessage(messages.downloadTimeoutNote)
+    return ''
+})
+
 const modManagementData = [
     {
         id: 'P7dR8mSH', // Todo: fetch name + author + icon from api
@@ -209,8 +270,11 @@ const removeMod = (index: number) => {
 }
 
 const handleDownload = () => {
-    if (heroDownloadState.value === 'loading') return
-    if (heroDownloadState.value !== 'ready' || os.value === 'Linux') {
+    // While the version service is still being asked the button only explains
+    // itself. Once it degrades, clicking takes the visitor to the download
+    // section, where every platform and mirror is listed.
+    if (heroDownloadState.value === 'loading' && !heroCtaDegraded.value) return
+    if (heroCtaDegraded.value || heroDownloadState.value !== 'ready' || os.value === 'Linux') {
         scrollToSection()
     } else if (os.value === 'Windows') {
         downloadWindows.value?.click()
@@ -244,6 +308,13 @@ const messages = defineMessages({
         defaultMessage: 'View download options',
     },
     retryDownloads: { id: 'axolotl-marketing.download.retry', defaultMessage: 'Retry' },
+    // Shown when the version service has not answered in time. Deliberately names
+    // the cause, because "something went wrong" leaves the visitor with no next
+    // step, while naming the wait points them at the options below.
+    downloadTimeoutNote: {
+        id: 'axolotl-marketing.download.timeout-note',
+        defaultMessage: 'Could not reach the version service in time — pick your platform below.',
+    },
     recentEyebrow: {
         id: 'axolotl-marketing.recent.eyebrow',
         defaultMessage: 'Made for everyday play',
@@ -1025,17 +1096,19 @@ useHead(() => ({
                         color="brand"
                         size="xl"
                         class="hero-download-button"
-                        :disabled="heroDownloadState === 'loading'"
+                        :disabled="heroDownloadState === 'loading' && !heroCtaDegraded"
                         @click="handleDownload"
                         ><LinuxIcon v-if="os === 'Linux'" />
                         <WindowsIcon v-else-if="os === 'Windows'" />
                         <AppleIcon v-else-if="os === 'Mac'" />
                         {{
-                            heroDownloadState === 'loading'
-                                ? formatMessage(messages.fetchingDownloadLinks)
-                                : heroDownloadState === 'ready'
-                                  ? formatMessage(messages.downloadAxolotlButton)
-                                  : formatMessage(messages.viewDownloads)
+                            heroCtaDegraded
+                                ? formatMessage(messages.viewDownloads)
+                                : heroDownloadState === 'loading'
+                                  ? formatMessage(messages.fetchingDownloadLinks)
+                                  : heroDownloadState === 'ready'
+                                    ? formatMessage(messages.downloadAxolotlButton)
+                                    : formatMessage(messages.viewDownloads)
                         }}
                     </Button>
                     <Button type="outlined" size="xl" @click="scrollToSection"
@@ -1043,6 +1116,9 @@ useHead(() => ({
                         {{ formatMessage(messages.moreDownloadOptions) }}
                     </Button>
                 </div>
+                <p v-if="heroDownloadNote" class="hero-download-note" aria-live="polite">
+                    {{ heroDownloadNote }}
+                </p>
             </div>
             <div class="hero-product">
                 <img
@@ -1778,6 +1854,15 @@ useHead(() => ({
             cursor: wait;
         }
     }
+}
+
+.hero-download-note {
+    max-width: 46rem;
+    margin: 1rem 0 0;
+    color: var(--landing-color-subheading);
+    font-size: var(--landing-size-caption);
+    line-height: var(--landing-leading-caption);
+    text-align: center;
 }
 
 .hero-product {
