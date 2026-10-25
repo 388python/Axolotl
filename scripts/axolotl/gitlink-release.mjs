@@ -500,13 +500,22 @@ async function pruneReleases(config, allowedTags) {
     }
     const pruned = []
     for (const release of candidates) {
-        const versionId = requireVersionId(release, release.tag_name)
-        assertGitlinkStatus(
-            await gitlinkRequest(config, releasePath(config, versionId), { method: 'DELETE' }),
-            `DELETE release ${release.tag_name}`,
-        )
-        pruned.push(release.tag_name)
-        console.log(`Pruned ${release.tag_name} (version_id ${versionId})`)
+        const tag = release.tag_name
+        const versionId = requireVersionId(release, tag)
+        // GitLink answers a business failure with HTTP 200 and {"status":-1,...}, and it also
+        // returns 删除失败 for an already-deleted record. The body therefore proves nothing:
+        // the only trustworthy signal is whether the release is still listed afterwards.
+        try {
+            await gitlinkRequest(config, releasePath(config, versionId), { method: 'DELETE' })
+        } catch (error) {
+            console.warn(`WARN DELETE release ${tag} (version_id ${versionId}) errored: ${error.message}`)
+        }
+        const remaining = await loadGitlinkReleases(config)
+        if (findReleaseByTag(remaining, tag)) {
+            throw new Error(`GitLink DELETE release ${tag} did not take effect; it is still present`)
+        }
+        pruned.push(tag)
+        console.log(`Pruned ${tag} (version_id ${versionId})`)
     }
     return pruned
 }
