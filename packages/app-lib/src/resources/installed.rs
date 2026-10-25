@@ -628,7 +628,7 @@ async fn hydrate_entries_with_service(
                 Ok((
                     hashes,
                     sha1.digest().to_string(),
-                    crate::api::curseforge::compute_fingerprint(&hash_bytes),
+                    crate::util::fingerprint::compute_fingerprint(&hash_bytes),
                 ))
             })
             .await
