@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use super::{ipc::*, *};
 
-mod curseforge;
+pub(crate) mod curseforge;
 pub(crate) mod legacy;
 mod mcarchive;
 mod modrinth;
@@ -13,6 +13,7 @@ pub(crate) mod search_filters;
 mod transport;
 
 pub use curseforge::CurseForgeProvider;
+pub(crate) use curseforge::derived_download_url;
 pub use mcarchive::McArchiveProvider;
 pub use modrinth::ModrinthProvider;
 pub use planet_minecraft::PlanetMinecraftProvider;

@@ -757,6 +757,22 @@ struct RemoteDependency {
     relation_type: u32,
 }
 
+/// CurseForge CDN layout for a file the API only exposes by id.
+pub(crate) fn derived_download_url(
+    file_id: u32,
+    file_name: &str,
+) -> ResourceResult<String> {
+    positive_id(&file_id.to_string())?;
+    crate::util::io::sanitize_download_file_name(file_name)
+        .map_err(|error| ResourceError::InvalidResponse(error.to_string()))?;
+    Ok(format!(
+        "https://edge.forgecdn.net/files/{}/{}/{}",
+        file_id / 1000,
+        file_id % 1000,
+        urlencoding::encode(file_name)
+    ))
+}
+
 impl RemoteFile {
     fn document_with_download_policy(
         self,
@@ -774,7 +790,7 @@ impl RemoteFile {
                 {
                     let file_id =
                         positive_id(artifact.reference.artifact_id.as_str())?;
-                    let url = crate::api::curseforge::derived_curseforge_download_url(file_id, filename)?;
+                    let url = derived_download_url(file_id, filename)?;
                     artifact.acquisition = acquisition(vec![url], None);
                 }
             }
