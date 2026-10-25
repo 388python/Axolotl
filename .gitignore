@@ -118,6 +118,10 @@ apps/app/resources/blockbench-skin/
 # Vitest visual-regression screenshots
 **/__screenshots__/
 
+# Playwright failure artifacts (traces, error contexts, reports)
+**/test-results/
+**/playwright-report/
+
 #local development script
 start-dev.ps1
 
