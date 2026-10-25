@@ -25,10 +25,20 @@ pub(crate) const DOWNLOAD_CONCURRENCY_HARD_MAX: usize = 256;
 
 /// Per-file Range splitting, retry and tail recovery.
 pub(crate) const ADAPTIVE_RANGE_BYTES: u64 = 4 * 1024 * 1024;
+pub(crate) const BULK_ADAPTIVE_RANGE_BYTES: u64 = 1024 * 1024;
+pub(crate) const BULK_SEGMENTED_DOWNLOAD_THRESHOLD: u64 = 10_000_000;
+pub(crate) const DOWNLOAD_RANGE_TARGET_TIME: Duration = Duration::from_secs(35);
+pub(crate) const DOWNLOAD_RANGE_CONNECTION_FLOOR: usize = 16;
+pub(crate) const DOWNLOAD_RANGE_RECOVERY_INTERVAL: Duration =
+    Duration::from_millis(500);
+pub(crate) const BATCH_DOWNLOAD_CONNECTION_FLOOR: usize = 8;
+pub(crate) const BATCH_TAIL_RECOVERY_WINDOW: Duration = Duration::from_secs(3);
+pub(crate) const BULK_DOWNLOAD_RESERVED_PERMITS: usize = 8;
+pub(crate) const INITIAL_BULK_SEGMENT_CONCURRENCY: usize = 16;
 pub(crate) const DOWNLOAD_FAIR_SHARE_DIVISOR: usize = 2;
 pub(crate) const INITIAL_SEGMENT_CONCURRENCY: usize = 4;
 pub(crate) const MAX_GLOBAL_TAIL_HEDGES: usize = 8;
-pub(crate) const MAX_SEGMENT_CONCURRENCY: usize = 16;
+pub(crate) const MAX_SEGMENT_CONCURRENCY: usize = 64;
 pub(crate) const MAX_TAIL_HEDGES_PER_FILE: usize = 2;
 pub(crate) const MIN_PARALLEL_RANGES: usize = 2;
 pub(crate) const MIN_SEGMENT_SIZE: u64 = 256 * 1024;
@@ -45,6 +55,8 @@ pub(crate) const SEGMENTED_DOWNLOAD_THRESHOLD: u64 = 4 * 1024 * 1024;
 pub(crate) const SEGMENT_EXPANSION_INTERVAL: Duration =
     Duration::from_millis(1500);
 pub(crate) const SEGMENT_EXPANSION_SAMPLE_COUNT: usize = 3;
+pub(crate) const SEGMENT_EXPANSION_GAIN_PERCENT: u128 = 115;
+pub(crate) const SEGMENT_EXPANSION_RETRY_SPEED_PERCENT: u128 = 50;
 pub(crate) const SEGMENT_RETRY_ATTEMPTS: usize = 3;
 #[cfg(not(test))]
 pub(crate) const TAIL_HEDGE_IDLE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -69,7 +81,7 @@ pub(crate) const CONNECTION_STABILITY_WINDOW: Duration =
     Duration::from_millis(500);
 pub(crate) const INITIAL_CONNECTION_TARGET: usize = 4;
 pub(crate) const MAX_ASSET_H2_STREAMS_PER_AUTHORITY: usize = 32;
-pub(crate) const MAX_CONNECTIONS_PER_AUTHORITY: usize = 32;
+pub(crate) const MAX_CONNECTIONS_PER_AUTHORITY: usize = 64;
 pub(crate) const MAX_CONNECTION_TARGET: usize = 64;
 pub(crate) const MAX_H2_STREAMS_PER_AUTHORITY: usize = 256;
 pub(crate) const MAX_PHYSICAL_DOWNLOAD_CONNECTIONS: usize = 256;
@@ -113,6 +125,7 @@ pub(crate) const STREAM_RECV_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Disk admission, pressure sampling and output buffering.
 pub(crate) const HDD_RANGE_CONCURRENCY: usize = 1;
+pub(crate) const HTTP1_SSD_RANGE_CONCURRENCY: usize = 64;
 pub(crate) const LOCAL_CPU_PRESSURE_PERCENT: u32 = 95;
 pub(crate) const LOCAL_FALLBACK_WRITE_CONCURRENCY: usize = 4;
 pub(crate) const LOCAL_PRESSURE_SAMPLE_TTL: Duration = Duration::from_secs(10);
@@ -296,7 +309,9 @@ pub(crate) const ENDPOINT_VALIDATION_CONCURRENCY: usize = 3;
 pub(crate) const ENDPOINT_VALIDATION_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) const FASTLY_CATALOG_LIFETIME: Duration =
     Duration::from_secs(90 * 24 * 60 * 60);
-pub(crate) const FASTLY_CATALOG_VERSION: u32 = 1;
+pub(crate) const FASTLY_CATALOG_VERSION: u32 = 2;
+pub(crate) const FASTLY_ATLAS_SEED_PREFIXES: [[u8; 3]; 3] =
+    [[146, 75, 21], [146, 75, 49], [146, 75, 25]];
 pub(crate) const FASTLY_POOL_THIRD_OCTETS: [u8; 4] = [1, 65, 129, 193];
 pub(crate) const FASTLY_REVIEWED_UNIX_SECONDS: u64 = 1_792_540_800;
 pub(crate) const FASTLY_SEED_PREFIXES: [[u8; 3]; 3] =
