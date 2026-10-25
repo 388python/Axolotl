@@ -4138,7 +4138,7 @@ function selectDimension(dimension: SeedMapDimension) {
 
 .seed-map-experience:fullscreen .seed-map-workspace-panes {
     /* The normal map has a 32rem minimum for usability; fullscreen must be able
-	 * to shrink so the toolbar and canvas do not push the surface past the viewport. */
+        * to shrink so the toolbar and canvas do not push the surface past the viewport. */
     min-height: 0;
 }
 

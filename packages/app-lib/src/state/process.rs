@@ -906,9 +906,9 @@ impl Process {
                                     )
                                     .await;
                                         if let Err(e) = Self::maybe_handle_server_join_logging(
-											instance_id,
-											&timestamp,
-											message,
+                                            instance_id,
+                                            &timestamp,
+                                            message,
                                         ).await {
                                             tracing::error!("Failed to handle server join logging: {e}");
                                         }
@@ -1248,20 +1248,20 @@ impl Process {
                 );
             }
             if let Err(e) =
-				crate::state::instances::commands::record_instance_daily_playtime(
-					instance_id,
-					started_at,
-					ended_at,
-					&state.pool,
-				)
-				.await
-			{
-				tracing::warn!(
-					"Failed to record daily playtime for instance {}: {}",
-					instance_id,
-					e
-				);
-			}
+                crate::state::instances::commands::record_instance_daily_playtime(
+                    instance_id,
+                    started_at,
+                    ended_at,
+                    &state.pool,
+                )
+                .await
+            {
+                tracing::warn!(
+                    "Failed to record daily playtime for instance {}: {}",
+                    instance_id,
+                    e
+                );
+            }
             *last_updated_playtime = Instant::now();
         }
 
