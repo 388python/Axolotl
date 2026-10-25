@@ -22,6 +22,13 @@ impl CurseForgeProvider {
         )
     }
 
+    /// Test constructor that pins the download policy instead of reading the
+    /// process-wide launcher state, which other tests may initialise.
+    #[cfg(test)]
+    pub(crate) fn for_tests(transport: Arc<dyn ProtocolTransport>) -> Self {
+        Self::with_download_restriction_policy(transport, Arc::new(|| false))
+    }
+
     pub(crate) fn with_download_restriction_policy(
         transport: Arc<dyn ProtocolTransport>,
         download_restriction_bypass: Arc<dyn Fn() -> bool + Send + Sync>,

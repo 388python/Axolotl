@@ -627,7 +627,7 @@ async fn changelog_curseforge_uses_release_html_and_rejects_other_projects() {
                 Ok(json!({"data": file}))
             }
         });
-        let provider = CurseForgeProvider::new(transport.clone());
+        let provider = CurseForgeProvider::for_tests(transport.clone());
         let query = ProviderQuery::Changelog {
             project_id: SourceProjectId::new(project).unwrap(),
             release_id: SourceReleaseId::new(&id).unwrap(),
@@ -1481,7 +1481,9 @@ async fn export_identification_reuses_fresh_multifile_release_and_rejects_finger
     let (_temp, cache) = cache().await;
     let service = ResourceService::new(
         cache,
-        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(cf))))],
+        vec![Arc::new(Available(Arc::new(
+            CurseForgeProvider::for_tests(cf),
+        )))],
     )
     .unwrap();
     let mut draft = crate::resources::export::refresh::ExportDraft::new(
@@ -1578,7 +1580,7 @@ async fn adapters_normalize_real_iris_and_balm_without_merging_different_bytes()
         slug: None,
     };
     let mr = ModrinthProvider::new(mr_transport);
-    let cf = CurseForgeProvider::new(cf_transport);
+    let cf = CurseForgeProvider::for_tests(cf_transport);
     let mr_results = mr
         .fetch_many(&[
             release_query("G5dd9TM4"),
@@ -1677,9 +1679,9 @@ async fn fingerprint_collision_and_unknown_size_do_not_confirm_identity() {
     let (_temp, cache) = cache().await;
     let service = ResourceService::new(
         cache.clone(),
-        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
-            transport,
-        ))))],
+        vec![Arc::new(Available(Arc::new(
+            CurseForgeProvider::for_tests(transport),
+        )))],
     )
     .unwrap();
     let local = LocalArtifactIdentity {
@@ -2140,7 +2142,7 @@ async fn curseforge_manual_links_use_project_urls_and_unavailable_files_remain_u
         release_id: SourceReleaseId::new(id.to_string()).unwrap(),
         slug: None,
     });
-    let results = CurseForgeProvider::new(transport.clone())
+    let results = CurseForgeProvider::for_tests(transport.clone())
         .fetch_many(&queries)
         .await;
     let ProviderValue::Release(document) = results[0].as_ref().unwrap() else {
@@ -2191,7 +2193,7 @@ async fn source_search_projections_preserve_variants_and_date_semantics() {
         cursor: None,
     };
     let mr = ModrinthProvider::new(mr_transport);
-    let cf = CurseForgeProvider::new(cf_transport);
+    let cf = CurseForgeProvider::for_tests(cf_transport);
     let mr_result = mr
         .fetch_many(std::slice::from_ref(&query))
         .await
@@ -2329,7 +2331,7 @@ async fn curseforge_last_window_page_is_bounded_and_does_not_claim_a_complete_to
         },
         cursor: Some("9990".into()),
     };
-    let result = CurseForgeProvider::new(transport)
+    let result = CurseForgeProvider::for_tests(transport)
         .fetch_many(&[query])
         .await
         .remove(0)
@@ -2362,7 +2364,7 @@ async fn curseforge_search_never_uses_game_version_sort_for_publication_dates()
             json!({"data":[{"id":238222,"name":"Sample","slug":"sample","classId":6,"dateCreated":"2015-11-23T23:00:41.923Z","dateReleased":"2026-10-12T14:05:52.453Z"}],"pagination":{"index":0,"resultCount":1,"totalCount":1}}),
         )
     });
-    let provider = CurseForgeProvider::new(transport);
+    let provider = CurseForgeProvider::for_tests(transport);
     let mut query = ipc::ResourceSearchQuery {
         filter: None,
         text: String::new(),
@@ -2433,7 +2435,7 @@ async fn curseforge_release_pages_filter_channels_client_side_without_losing_the
         cursor: None,
         page_size: 50,
     };
-    let provider = CurseForgeProvider::new(transport);
+    let provider = CurseForgeProvider::for_tests(transport);
     let results = provider
         .fetch_many(&[query(vec![ReleaseChannel::Release])])
         .await;
@@ -2529,9 +2531,9 @@ async fn source_validation_rejects_one_bad_id_without_poisoning_peer_results() {
     let (_temp, cache) = cache().await;
     let service = ResourceService::new(
         cache.clone(),
-        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
-            transport.clone(),
-        ))))],
+        vec![Arc::new(Available(Arc::new(
+            CurseForgeProvider::for_tests(transport.clone()),
+        )))],
     )
     .unwrap();
     let results = service
@@ -2605,7 +2607,7 @@ async fn project_probe_persists_historical_balm_confirmation_with_a_bounded_budg
         cache.clone(),
         vec![
             Arc::new(ModrinthProvider::new(mr_transport.clone())),
-            Arc::new(Available(Arc::new(CurseForgeProvider::new(
+            Arc::new(Available(Arc::new(CurseForgeProvider::for_tests(
                 cf_transport.clone(),
             )))),
         ],
