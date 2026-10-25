@@ -159,6 +159,18 @@ pub(crate) fn dependency_step(
     }
 }
 
+/// The dependency kind a manifest relation implies for the plan and results.
+pub(crate) fn content_dependency_kind(
+    relation: DependencyRelation,
+) -> crate::state::instances::ContentDependencyKind {
+    use crate::state::instances::ContentDependencyKind;
+    if relation.is_required() {
+        ContentDependencyKind::Required
+    } else {
+        ContentDependencyKind::Include
+    }
+}
+
 pub(crate) async fn enqueue_curseforge_dependencies(
     pending_file: &PendingCurseForgeFile,
     file: &CurseForgeFile,
@@ -238,13 +250,9 @@ pub(crate) async fn enqueue_curseforge_dependencies(
                 dependency: true,
                 parent_project_id: Some(project_id),
                 parent_file_id: Some(file_id),
-                dependency_kind: Some(
-                    if dependency_ref.relation().is_required() {
-                        crate::state::instances::ContentDependencyKind::Required
-                    } else {
-                        crate::state::instances::ContentDependencyKind::Include
-                    },
-                ),
+                dependency_kind: Some(content_dependency_kind(
+                    dependency_ref.relation(),
+                )),
                 depth: pending_file.depth + 1,
             });
         } else if fallback_parents.insert((project_id, file_id)) {

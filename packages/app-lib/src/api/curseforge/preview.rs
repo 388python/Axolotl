@@ -9,7 +9,9 @@ use super::dto::{
 use super::install::{
     CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
 };
-use super::install::{DependencyStep, dependency_action, dependency_step};
+use super::install::{
+    DependencyStep, content_dependency_kind, dependency_action, dependency_step,
+};
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::selection::{
     CurseForgeDependencySelectionReason, append_modrinth_fallback_plan,
@@ -261,32 +263,28 @@ pub async fn preview_install_file(
                     let parent_ref =
                         curseforge_content_ref(project_id, file_id)?;
                     plan.edges.push(DependencyResolutionEdge {
-                            parent: parent_ref.clone(),
-                            child: child_ref.clone(),
-                            relation: if dependency_ref.relation().is_required()
-                            {
-                                crate::state::instances::ContentDependencyKind::Required
-                            } else {
-                                crate::state::instances::ContentDependencyKind::Include
-                            },
-                            evidence_provider: ContentProvider::CurseForge,
-                        });
+                        parent: parent_ref.clone(),
+                        child: child_ref.clone(),
+                        relation: content_dependency_kind(
+                            dependency_ref.relation(),
+                        ),
+                        evidence_provider: ContentProvider::CurseForge,
+                    });
                     if !plan.nodes.iter().any(|node| node.content == child_ref)
                     {
                         plan.nodes.push(DependencyResolutionNode {
-                                content: child_ref,
-                                parent: Some(parent_ref),
-                            relation: if dependency_ref.relation().is_required()
-                            {
-                                crate::state::instances::ContentDependencyKind::Required
-                            } else {
-                                crate::state::instances::ContentDependencyKind::Include
-                            },
-                                source: ContentProvider::CurseForge,
-                                selection_reason: selected.reason.into(),
-                                expected_sha1: curseforge_file_sha1(&dependency_file),
-                                expected_size: Some(dependency_file.file_length),
-                            });
+                            content: child_ref,
+                            parent: Some(parent_ref),
+                            relation: content_dependency_kind(
+                                dependency_ref.relation(),
+                            ),
+                            source: ContentProvider::CurseForge,
+                            selection_reason: selected.reason.into(),
+                            expected_sha1: curseforge_file_sha1(
+                                &dependency_file,
+                            ),
+                            expected_size: Some(dependency_file.file_length),
+                        });
                     }
                     let existing = dependencies
                         .iter_mut()
