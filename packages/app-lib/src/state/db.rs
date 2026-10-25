@@ -1677,7 +1677,7 @@ async fn open_app_db_pool(db_path: &Path) -> crate::Result<Pool<Sqlite>> {
 async fn record_current_app_version(pool: &Pool<Sqlite>) -> crate::Result<()> {
     sqlx::query!(
         "
-		INSERT INTO app_metadata (key, value, updated_at)
+        INSERT INTO app_metadata (key, value, updated_at)
         VALUES ('app_version', ?, unixepoch())
         ON CONFLICT(key) DO UPDATE SET
             value = excluded.value,
@@ -1879,7 +1879,7 @@ mod tests {
             let content_set_id = format!("{id}-set");
             sqlx::query(
                 "INSERT INTO instances (
-					id, path, applied_content_set_id, install_stage,
+                    id, path, applied_content_set_id, install_stage,
                     launcher_feature_version, update_channel, name,
                     created, modified, submitted_time_played,
                     recent_time_played

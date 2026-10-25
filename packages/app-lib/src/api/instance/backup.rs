@@ -435,7 +435,7 @@ async fn create_persisted_operation(
     let persist_result: crate::Result<()> = async {
         let active_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM backup_operations WHERE instance_id = ?
-			 AND state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
+             AND state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
         )
         .bind(instance_id)
         .fetch_one(&pool)
@@ -448,8 +448,8 @@ async fn create_persisted_operation(
         }
         sqlx::query(
             "INSERT INTO backup_operations
-			 (id, operation_type, instance_id, snapshot_id, state, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, 'queued', ?, ?)",
+             (id, operation_type, instance_id, snapshot_id, state, created_at, updated_at)
+             VALUES (?, ?, ?, ?, 'queued', ?, ?)",
         )
         .bind(id.to_string())
         .bind(operation_type.as_str())
@@ -510,9 +510,9 @@ async fn update_persisted_operation(
     let finished_at = state.is_terminal().then_some(now);
     let _ = sqlx::query(
         "UPDATE backup_operations SET state = ?, processed_bytes = COALESCE(?, processed_bytes),
-		 total_bytes = COALESCE(?, total_bytes), cancellable = COALESCE(?, cancellable),
-		 error = COALESCE(?, error), snapshot_id = COALESCE(?, snapshot_id),
-		 updated_at = ?, finished_at = COALESCE(?, finished_at) WHERE id = ?",
+         total_bytes = COALESCE(?, total_bytes), cancellable = COALESCE(?, cancellable),
+         error = COALESCE(?, error), snapshot_id = COALESCE(?, snapshot_id),
+         updated_at = ?, finished_at = COALESCE(?, finished_at) WHERE id = ?",
     )
     .bind(state.as_str())
     .bind(processed_bytes.map(|value| value as i64))
@@ -566,10 +566,10 @@ pub async fn list_operations(
     };
     let mut query = String::from(
         "SELECT id, operation_type, instance_id, snapshot_id, state,
-		 processed_bytes, total_bytes, cancellable, cancel_requested, error,
-		 created_at, updated_at, finished_at, preview_added_files,
-		 preview_modified_files, preview_deleted_files, preview_plan_token
-		 FROM backup_operations WHERE 1 = 1",
+         processed_bytes, total_bytes, cancellable, cancel_requested, error,
+         created_at, updated_at, finished_at, preview_added_files,
+         preview_modified_files, preview_deleted_files, preview_plan_token
+         FROM backup_operations WHERE 1 = 1",
     );
     if instance_id.is_some() {
         query.push_str(" AND instance_id = ?");
@@ -611,9 +611,9 @@ pub async fn interrupt_active_operations() -> crate::Result<u64> {
     let now = Utc::now().timestamp_millis();
     let result = sqlx::query(
         "UPDATE backup_operations SET state = 'interrupted', cancellable = 0,
-		 error = COALESCE(error, 'The launcher exited while the operation was running'),
-		 updated_at = ?, finished_at = ?
-		 WHERE state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
+         error = COALESCE(error, 'The launcher exited while the operation was running'),
+         updated_at = ?, finished_at = ?
+         WHERE state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
     )
     .bind(now)
     .bind(now)
@@ -1578,9 +1578,9 @@ async fn create_snapshot_inner(
         let mut tx = pool.begin().await?;
         sqlx::query(
             "INSERT INTO backup_snapshots
-		 (id, instance_id, instance_name, created_at, file_count,
-		  symlink_count, logical_size, added_size, scope_mode)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'excluded_paths')",
+         (id, instance_id, instance_name, created_at, file_count,
+          symlink_count, logical_size, added_size, scope_mode)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'excluded_paths')",
         )
         .bind(&snapshot_id)
         .bind(instance_id)
@@ -1595,7 +1595,7 @@ async fn create_snapshot_inner(
         for exclusion in &exclusions {
             sqlx::query(
                 "INSERT INTO snapshot_exclusions (snapshot_id, path, kind)
-			 VALUES (?, ?, ?)",
+             VALUES (?, ?, ?)",
             )
             .bind(&snapshot_id)
             .bind(&exclusion.path)
@@ -2240,9 +2240,9 @@ pub async fn recover_repository() -> crate::Result<()> {
     let now = Utc::now().timestamp_millis();
     sqlx::query(
         "UPDATE backup_operations SET state = 'interrupted', cancellable = 0,
-		 error = COALESCE(error, 'The launcher exited while the operation was running'),
-		 updated_at = ?, finished_at = ?
-		 WHERE state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
+         error = COALESCE(error, 'The launcher exited while the operation was running'),
+         updated_at = ?, finished_at = ?
+         WHERE state NOT IN ('completed', 'cancelled', 'failed', 'interrupted')",
     )
     .bind(now)
     .bind(now)
@@ -4455,8 +4455,8 @@ mod tests {
         .unwrap();
         sqlx::query(
             "INSERT INTO backup_operations
-			 (id, operation_type, instance_id, state, created_at, updated_at)
-			 VALUES ('operation', 'create', 'instance', 'hashing', 1, 1)",
+             (id, operation_type, instance_id, state, created_at, updated_at)
+             VALUES ('operation', 'create', 'instance', 'hashing', 1, 1)",
         )
         .execute(&pool)
         .await

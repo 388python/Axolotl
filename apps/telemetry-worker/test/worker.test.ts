@@ -111,8 +111,8 @@ describe('telemetry worker', () => {
         const day = new Date().toISOString().slice(0, 10)
         await env.DB.prepare(
             `INSERT INTO ingestion_global_daily (day, accepted_batches)
-			VALUES (?, 99999)
-			ON CONFLICT (day) DO UPDATE SET accepted_batches = 99999`,
+            VALUES (?, 99999)
+            ON CONFLICT (day) DO UPDATE SET accepted_batches = 99999`,
         )
             .bind(day)
             .run()
@@ -183,10 +183,10 @@ describe('telemetry worker', () => {
 
         const counts = await env.DB.prepare(
             `SELECT
-				COUNT(DISTINCT CASE WHEN day = ? THEN installation_hash END) AS dau,
-				COUNT(DISTINCT CASE WHEN day >= date(?, '-6 days') THEN installation_hash END) AS wau,
-				COUNT(DISTINCT CASE WHEN day >= date(?, '-29 days') THEN installation_hash END) AS mau
-			FROM daily_active`,
+                COUNT(DISTINCT CASE WHEN day = ? THEN installation_hash END) AS dau,
+                COUNT(DISTINCT CASE WHEN day >= date(?, '-6 days') THEN installation_hash END) AS wau,
+                COUNT(DISTINCT CASE WHEN day >= date(?, '-29 days') THEN installation_hash END) AS mau
+            FROM daily_active`,
         )
             .bind(day(0), day(0), day(0))
             .first<{ dau: number; wau: number; mau: number }>()

@@ -281,12 +281,12 @@ async fn resolve_instance_identity(
 ) -> Result<(String, String, Option<String>)> {
     let row = sqlx::query!(
         "
-		SELECT id, path, game_dir_override
-		FROM instances
-		WHERE id = ? OR path = ?
-		ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END
-		LIMIT 1
-		",
+        SELECT id, path, game_dir_override
+        FROM instances
+        WHERE id = ? OR path = ?
+        ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END
+        LIMIT 1
+        ",
         instance,
         instance,
         instance,

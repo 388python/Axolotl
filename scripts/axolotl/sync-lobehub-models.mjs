@@ -30,7 +30,7 @@ function assertSponsoredProvidersPreserved(rustSource) {
 
 function usage() {
     console.log(`Usage: node --experimental-vm-modules scripts/axolotl/sync-lobehub-models.mjs \\
-	--upstream <lobehub checkout> [--commit <40-character SHA>] [--check]`)
+    --upstream <lobehub checkout> [--commit <40-character SHA>] [--check]`)
 }
 
 function parseArguments(arguments_) {
@@ -96,10 +96,10 @@ function createModelBankLoader(upstreamRoot) {
     const moduleCache = new Map()
     const schema = vm.runInContext(
         `(() => {
-			let schema
-			schema = new Proxy(function () { return schema }, { get() { return schema } })
-			return schema
-		})()`,
+            let schema
+            schema = new Proxy(function () { return schema }, { get() { return schema } })
+            return schema
+        })()`,
         context,
     )
     const zodModule = new vm.SyntheticModule(
@@ -281,12 +281,12 @@ if (!providersChanged) {
 }
 
 const nextCatalogText = `${JSON.stringify(
-	{
-		source: `LobeHub ${commit} model-bank chat models`,
-		providers,
-	},
-	null,
-	2,
+    {
+        source: `LobeHub ${commit} model-bank chat models`,
+        providers,
+    },
+    null,
+    2,
 )}\n`
 const nextRustSource = rustSource.replace(
     RUST_SOURCE_PATTERN,

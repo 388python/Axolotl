@@ -113,9 +113,9 @@ pub async fn list(
         SELECT provider, project_id, content_type, saved_at,
             (SELECT resource_id FROM resource_source_projects
                 WHERE source = content_favorites.provider AND project_id = content_favorites.project_id) AS resource_id
-		FROM content_favorites
-		ORDER BY saved_at DESC, provider ASC, project_id ASC
-		",
+        FROM content_favorites
+        ORDER BY saved_at DESC, provider ASC, project_id ASC
+        ",
     )
     .fetch_all(exec)
     .await?;
@@ -134,11 +134,11 @@ pub async fn add(
 
     sqlx::query(
         "
-		INSERT INTO content_favorites (provider, project_id, content_type, saved_at)
-		VALUES (?, ?, ?, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
-		ON CONFLICT (provider, project_id) DO UPDATE SET
-			content_type = excluded.content_type
-		",
+        INSERT INTO content_favorites (provider, project_id, content_type, saved_at)
+        VALUES (?, ?, ?, CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER))
+        ON CONFLICT (provider, project_id) DO UPDATE SET
+            content_type = excluded.content_type
+        ",
     )
     .bind(provider)
     .bind(project_id)
@@ -151,9 +151,9 @@ pub async fn add(
         SELECT provider, project_id, content_type, saved_at,
             (SELECT resource_id FROM resource_source_projects
                 WHERE source = content_favorites.provider AND project_id = content_favorites.project_id) AS resource_id
-		FROM content_favorites
-		WHERE provider = ? AND project_id = ?
-		",
+        FROM content_favorites
+        WHERE provider = ? AND project_id = ?
+        ",
     )
     .bind(provider)
     .bind(project_id)

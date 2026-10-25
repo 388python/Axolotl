@@ -190,10 +190,10 @@ async function reserveIngestion(
     const installation = await db
         .prepare(
             `INSERT INTO ingestion_daily (day, installation_hash, accepted_batches)
-			VALUES (?, ?, 1)
-			ON CONFLICT (day, installation_hash) DO UPDATE
-			SET accepted_batches = accepted_batches + 1
-			WHERE accepted_batches < ?`,
+            VALUES (?, ?, 1)
+            ON CONFLICT (day, installation_hash) DO UPDATE
+            SET accepted_batches = accepted_batches + 1
+            WHERE accepted_batches < ?`,
         )
         .bind(day, installationHash, limits.installation)
         .run()
@@ -205,10 +205,10 @@ async function reserveIngestion(
     const global = await db
         .prepare(
             `INSERT INTO ingestion_global_daily (day, accepted_batches)
-			VALUES (?, 1)
-			ON CONFLICT (day) DO UPDATE
-			SET accepted_batches = accepted_batches + 1
-			WHERE accepted_batches < ?`,
+            VALUES (?, 1)
+            ON CONFLICT (day) DO UPDATE
+            SET accepted_batches = accepted_batches + 1
+            WHERE accepted_batches < ?`,
         )
         .bind(day, limits.global)
         .run()
@@ -278,9 +278,9 @@ async function persistBatch(
         db
             .prepare(
                 `INSERT OR IGNORE INTO installations (
-					installation_hash, first_seen_at, last_seen_at,
-					first_seen_day, app_version, platform, arch
-				) VALUES (?, unixepoch(), unixepoch(), ?, ?, ?, ?)`,
+                    installation_hash, first_seen_at, last_seen_at,
+                    first_seen_day, app_version, platform, arch
+                ) VALUES (?, unixepoch(), unixepoch(), ?, ?, ?, ?)`,
             )
             .bind(
                 installationHash,
@@ -322,28 +322,28 @@ async function runMaintenance(db: D1Database): Promise<void> {
         db
             .prepare(
                 `INSERT INTO daily_totals (day, new_installations, active_installations)
-				VALUES (?,
-					(SELECT COUNT(*) FROM installations WHERE first_seen_day = ?),
-					(SELECT COUNT(*) FROM daily_active WHERE day = ?))
-				ON CONFLICT (day) DO UPDATE SET
-					new_installations = excluded.new_installations,
-					active_installations = excluded.active_installations`,
+                VALUES (?,
+                    (SELECT COUNT(*) FROM installations WHERE first_seen_day = ?),
+                    (SELECT COUNT(*) FROM daily_active WHERE day = ?))
+                ON CONFLICT (day) DO UPDATE SET
+                    new_installations = excluded.new_installations,
+                    active_installations = excluded.active_installations`,
             )
             .bind(yesterday, yesterday, yesterday),
         db
             .prepare(
                 `DELETE FROM wau_seen WHERE NOT EXISTS (
-					SELECT 1 FROM daily_active da
-					WHERE da.installation_hash = wau_seen.installation_hash AND da.day >= ?
-				)`,
+                    SELECT 1 FROM daily_active da
+                    WHERE da.installation_hash = wau_seen.installation_hash AND da.day >= ?
+                )`,
             )
             .bind(dayMinus(6)),
         db
             .prepare(
                 `DELETE FROM mau_seen WHERE NOT EXISTS (
-					SELECT 1 FROM daily_active da
-					WHERE da.installation_hash = mau_seen.installation_hash AND da.day >= ?
-				)`,
+                    SELECT 1 FROM daily_active da
+                    WHERE da.installation_hash = mau_seen.installation_hash AND da.day >= ?
+                )`,
             )
             .bind(dayMinus(29)),
         db.prepare("DELETE FROM daily_active WHERE day < date('now', '-35 days')"),

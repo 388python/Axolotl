@@ -215,48 +215,48 @@ pub(crate) async fn get_instance_install_candidates(
 ) -> crate::Result<Vec<InstanceInstallCandidate>> {
     let rows = sqlx::query_as::<_, InstanceInstallCandidateRow>(
         r#"
-		SELECT
-			i.id,
-			i.name,
-			i.icon_path,
-			cs.game_version,
-			cs.loader,
-			CASE
-				WHEN EXISTS (
-					SELECT 1
-					FROM instance_content_entries entry
-					INNER JOIN instance_files file
-						ON file.id = entry.file_id
-					WHERE entry.content_set_id = cs.id
-						AND EXISTS (
-							SELECT 1
-							FROM instance_content_provider_refs ref
-							WHERE ref.content_entry_id = entry.id
-								AND ref.provider = CASE
-									WHEN ? LIKE 'curseforge:%' THEN 'curseforge'
-									ELSE 'modrinth'
-								END
-								AND ref.provider_project_id = CASE
-									WHEN ? LIKE 'curseforge:%' THEN substr(?, 12)
-									ELSE ?
-									END
-						)
-						AND file.missing = 0
-				)
-					THEN 1
-				ELSE 0
-			END AS installed
-		FROM instances i
-		INNER JOIN instance_content_sets cs
-			ON cs.id = i.applied_content_set_id
-		LEFT JOIN instance_links link
-			ON link.instance_id = i.id
-		WHERE COALESCE(link.link_kind, 'unmanaged') NOT IN (
-			'server_project',
-			'server_project_modpack'
-		)
-		ORDER BY i.name ASC
-		"#,
+        SELECT
+            i.id,
+            i.name,
+            i.icon_path,
+            cs.game_version,
+            cs.loader,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM instance_content_entries entry
+                    INNER JOIN instance_files file
+                        ON file.id = entry.file_id
+                    WHERE entry.content_set_id = cs.id
+                        AND EXISTS (
+                            SELECT 1
+                            FROM instance_content_provider_refs ref
+                            WHERE ref.content_entry_id = entry.id
+                                AND ref.provider = CASE
+                                    WHEN ? LIKE 'curseforge:%' THEN 'curseforge'
+                                    ELSE 'modrinth'
+                                END
+                                AND ref.provider_project_id = CASE
+                                    WHEN ? LIKE 'curseforge:%' THEN substr(?, 12)
+                                    ELSE ?
+                                    END
+                        )
+                        AND file.missing = 0
+                )
+                    THEN 1
+                ELSE 0
+            END AS installed
+        FROM instances i
+        INNER JOIN instance_content_sets cs
+            ON cs.id = i.applied_content_set_id
+        LEFT JOIN instance_links link
+            ON link.instance_id = i.id
+        WHERE COALESCE(link.link_kind, 'unmanaged') NOT IN (
+            'server_project',
+            'server_project_modpack'
+        )
+        ORDER BY i.name ASC
+        "#,
     )
     .bind(project_id)
     .bind(project_id)

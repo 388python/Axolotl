@@ -145,9 +145,9 @@ async fn get_global_options_with_state(
     let mut options = GlobalSyncedOptions::default();
     let rows = sqlx::query!(
         r#"
-		SELECT feature, globally_enabled AS "globally_enabled!: bool"
-		FROM sync_feature_settings
-		"#,
+        SELECT feature, globally_enabled AS "globally_enabled!: bool"
+        FROM sync_feature_settings
+        "#,
     )
     .fetch_all(&state.pool)
     .await?;
@@ -484,13 +484,13 @@ async fn set_global_option_enabled_in_pool(
     let mut transaction = pool.begin().await?;
     sqlx::query(
         "
-		INSERT INTO sync_feature_settings
-			(feature, globally_enabled, new_instance_default)
-		VALUES (?, ?, ?)
-		ON CONFLICT(feature) DO UPDATE SET
-			globally_enabled = excluded.globally_enabled,
-			new_instance_default = excluded.new_instance_default
-		",
+        INSERT INTO sync_feature_settings
+            (feature, globally_enabled, new_instance_default)
+        VALUES (?, ?, ?)
+        ON CONFLICT(feature) DO UPDATE SET
+            globally_enabled = excluded.globally_enabled,
+            new_instance_default = excluded.new_instance_default
+        ",
     )
     .bind(option_name)
     .bind(enabled)
