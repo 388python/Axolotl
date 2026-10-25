@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import AppleIcon from '@modrinth/assets/external/apple.svg?component'
-import GithubIcon from '@modrinth/assets/external/github.svg?component'
 import LinuxIcon from '@modrinth/assets/external/linux.svg?component'
 import WindowsIcon from '@modrinth/assets/external/windows.svg?component'
 import ArrowDownIcon from '@modrinth/assets/icons/arrow-down.svg?component'
@@ -399,10 +398,6 @@ const messages = defineMessages({
     heroTrustLine: {
         id: 'axolotl-marketing.hero.trust-line',
         defaultMessage: 'Open source · GPL-3.0 · Free · No ads · Windows / macOS / Linux',
-    },
-    heroTrustLink: {
-        id: 'axolotl-marketing.hero.trust-link',
-        defaultMessage: 'View the source on GitHub',
     },
     oneLauncher: {
         id: 'axolotl-marketing.demo.one-launcher',
@@ -1072,18 +1067,7 @@ useHead(() => ({
         <div ref="hero" class="landing-hero">
             <div class="hero-grid" aria-hidden="true" />
             <div class="hero-content">
-                <div class="hero-kicker">
-                    <span>{{ formatMessage(messages.heroTrustLine) }}</span>
-                    <a
-                        class="hero-kicker-link"
-                        href="https://github.com/Mystic-Stars/Axolotl"
-                        target="_blank"
-                        rel="noopener"
-                        :aria-label="formatMessage(messages.heroTrustLink)"
-                    >
-                        <GithubIcon aria-hidden="true" />
-                    </a>
-                </div>
+                <div class="hero-kicker">{{ formatMessage(messages.heroTrustLine) }}</div>
                 <h1 class="main-header mb-8 mt-4 max-w-[52rem] text-[var(--color-contrast)]">
                     {{ formatMessage(messages.downloadAxolotl) }}
                 </h1>
@@ -1794,9 +1778,6 @@ useHead(() => ({
 // A trust line, not a badge: the pill treatment made a factual claim read as
 // decoration, and its blur and glow were the heaviest ornament above the fold.
 .hero-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
     width: fit-content;
     color: var(--color-brand);
     font-size: 0.78125rem;
@@ -1804,22 +1785,6 @@ useHead(() => ({
     letter-spacing: 0.06em;
     line-height: 1.4;
     text-align: center;
-
-    .hero-kicker-link {
-        display: inline-flex;
-        align-items: center;
-        color: inherit;
-        transition: opacity 0.2s ease;
-
-        &:hover {
-            opacity: 0.7;
-        }
-
-        svg {
-            width: 1rem;
-            height: 1rem;
-        }
-    }
 }
 
 // The brand pink is tuned for surfaces, not for small text: pink-600 on the light

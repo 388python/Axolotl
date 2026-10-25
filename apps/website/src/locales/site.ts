@@ -169,7 +169,6 @@ export const siteLocaleMessages: Record<string, Record<string, string>> = {
             '每个版本都会发布 Linux 软件包。请在<issues-link>发布页面</issues-link>查看架构详情；如果你的发行版需要额外配置，也可以<prism-link>报告问题</prism-link>。',
         'app-marketing.hero.app-screenshot-alt': 'Axolotl Launcher 实例内容预览。',
         'axolotl-marketing.hero.trust-line': '开源 · GPL-3.0 · 免费 · 无广告 · Windows / macOS / Linux',
-        'axolotl-marketing.hero.trust-link': '在 GitHub 上查看源码',
         'axolotl-marketing.demo.one-launcher': '一个启动器，承载每一个世界。',
         'axolotl-marketing.demo.everything-together': '配置、模组、存档和设置始终井然有序。',
         'axolotl-marketing.demo.included-mods': '包含的模组',
