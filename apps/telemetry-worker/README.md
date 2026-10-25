@@ -27,7 +27,7 @@ Configure these repository Actions settings:
 | Setting                 | Kind               | Purpose                                                                                           |
 | ----------------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`  | Secret             | Reuses the website token for Worker deployment and D1 migrations.                                 |
-| `CLOUDFLARE_ACCOUNT_ID` | Variable           | Reuses the website account ID; this account must contain `axolotl-telemetry` and its D1 database. |
+| `CLOUDFLARE_ACCOUNT_ID` | Secret             | Reuses the website account ID; this account must contain `axolotl-telemetry` and its D1 database. |
 | `CLOUDFLARE_ZONE_ID`    | Variable, optional | Required only when selecting `configure_rate_limit`.                                              |
 
 The token must be scoped to the correct account/zone and allow Workers script deployment, D1 edits/migrations, and management of the Worker's custom domain/routes. Configuring the optional edge rule additionally requires zone rate-limiting/WAF rule write access. The website and Telemetry workflows share this token and account configuration.

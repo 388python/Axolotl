@@ -58,9 +58,9 @@ GitHub Actions owns the build and publication order. Pages does not run a hosted
 - Reuse the repository Actions secret `CLOUDFLARE_API_TOKEN`, shared with the
   Telemetry Worker. Include **Account > Cloudflare Pages > Edit** permission
   for the owning account alongside its existing service permissions.
-- Add repository Actions variables `CLOUDFLARE_ACCOUNT_ID` (the owning
-  Cloudflare account ID) and `CLOUDFLARE_PAGES_PROJECT_NAME` (`axolotl-website`).
-  The workflow maps the shared token and account variable to Wrangler's
+- Add the repository Actions secret `CLOUDFLARE_ACCOUNT_ID` (the owning
+  Cloudflare account ID) and the variable `CLOUDFLARE_PAGES_PROJECT_NAME` (`axolotl-website`).
+  The workflow maps the shared token and account secrets to Wrangler's
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` environment variables.
 - After the first successful upload, associate `axlmc.org` and `www.axlmc.org`
   under **Pages > Custom domains**, then confirm the DNS changes. Keep the
