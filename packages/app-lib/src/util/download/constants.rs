@@ -346,6 +346,7 @@ pub(crate) const MODPACK_DATABASE_QUEUE_CAPACITY: usize = 128;
 pub(crate) const MODPACK_FILE_INSTALL_ATTEMPTS: usize = 3;
 pub(crate) const MODPACK_METADATA_CONCURRENCY: usize = 4;
 pub(crate) const MODPACK_REQUESTED_H2_RANGES: usize = 16;
+pub(crate) const MODPACK_RANGE_CONNECTION_FLOOR: usize = 32;
 pub(crate) const MODPACK_VERIFICATION_CONCURRENCY: usize = 4;
 pub(crate) const MODPACK_VERIFICATION_QUEUE_CAPACITY: usize = 128;
 pub(crate) const NATIVE_CONTENT_FINALIZE_CONCURRENCY: usize = 4;

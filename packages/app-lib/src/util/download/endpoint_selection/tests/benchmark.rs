@@ -556,7 +556,7 @@ async fn tail_floor_promotes_a_slow_small_http1_batch_file_to_multiple_connectio
 #[tokio::test]
 async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
 {
-    let size = 32 * 1024 * 1024;
+    let size = 64 * 1024 * 1024;
     let tail = size / 4;
     let stats = Arc::new(SocketStats::default());
     let server = EndpointFixture::start(
@@ -570,7 +570,7 @@ async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
     .await;
     let clients =
         fixtures::clients(SelectionMode::Off, &server, &server, false);
-    let request = fixtures::request(size, 0).with_batch_download_policy();
+    let request = fixtures::request(size, 0).with_range_connection_floor(32);
     let directory = tempfile::tempdir().unwrap();
     let destination = directory.path().join("last-quarter.bin");
     let part = destination.with_extension("bin.part");
@@ -607,8 +607,8 @@ async fn range_recovery_replenishes_the_last_quarter_during_an_endpoint_trial()
     );
     assert_eq!(result.size, size);
     assert!(
-        tail_requests > 4,
-        "the last four original ranges must borrow new connections"
+        tail_requests > 8,
+        "the last eight original ranges must borrow new connections"
     );
     assert!(!trial.valid(Instant::now()));
     assert_eq!(

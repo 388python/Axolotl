@@ -289,6 +289,8 @@ pub struct DownloadRequest {
     pub(crate) allow_http1_segmented_download: bool,
     pub(crate) batch_download: bool,
     pub(crate) prefer_http1: bool,
+    /// Minimum independent Range connections, bounded by data and resource limits.
+    pub(crate) range_connection_floor: Option<usize>,
     /// Requested H2 range streams when the file does not qualify for
     /// independent connections. Streams on one socket share its bandwidth.
     pub(crate) h2_range_concurrency: Option<usize>,
@@ -320,6 +322,7 @@ impl DownloadRequest {
             allow_http1_segmented_download: true,
             batch_download: false,
             prefer_http1: false,
+            range_connection_floor: None,
             h2_range_concurrency: None,
             cancellation: None,
             install_tracking: None,
@@ -350,6 +353,12 @@ impl DownloadRequest {
                 .integrity
                 .size
                 .is_some_and(|size| size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD);
+        self
+    }
+
+    pub(crate) fn with_range_connection_floor(mut self, floor: usize) -> Self {
+        self.range_connection_floor =
+            Some(floor.clamp(1, MAX_SEGMENT_CONCURRENCY));
         self
     }
 
@@ -3564,14 +3573,28 @@ fn resource_validator_changed(reason: &str) -> bool {
 fn validate_resource_version(
     expected: &Mutex<Option<ResourceValidator>>,
     response: &reqwest::Response,
+    integrity: &Integrity,
 ) -> bool {
     let candidate = response_validator(response);
     let mut expected = expected.lock();
     match expected.as_ref() {
         Some(expected) => {
-            (expected.etag.is_none() || expected.etag == candidate.etag)
+            let matches = (expected.etag.is_none()
+                || expected.etag == candidate.etag)
                 && (expected.last_modified.is_none()
-                    || expected.last_modified == candidate.last_modified)
+                    || expected.last_modified == candidate.last_modified);
+            if !matches && integrity.supports_resume() {
+                // CDN cache variants can have different validators. Every
+                // range still needs valid bounds; the expected whole-file
+                // hash, checked before publication, pins the actual content.
+                tracing::debug!(
+                    expected_validator = ?expected,
+                    candidate_validator = ?candidate,
+                    "Continuing ranges with different metadata; whole-file hash verification is required"
+                );
+                return true;
+            }
+            matches
         }
         None => {
             *expected = Some(candidate);
@@ -3776,6 +3799,18 @@ fn range_growth_can_retry(previous: u64, current: u64) -> bool {
     previous > 0
         && u128::from(current) * u128::from(DOWNLOAD_PERCENT_BASE)
             < u128::from(previous) * SEGMENT_EXPANSION_RETRY_SPEED_PERCENT
+}
+
+fn requested_range_floor(
+    request: &DownloadRequest,
+    remaining: u64,
+    cap: usize,
+) -> usize {
+    request.range_connection_floor.unwrap_or(1).min(cap).min(
+        usize::try_from(remaining / MIN_SEGMENT_SIZE)
+            .unwrap_or(usize::MAX)
+            .max(1),
+    )
 }
 
 fn range_connection_floor(
@@ -4523,6 +4558,7 @@ async fn download_tail_candidate(
     candidate_index: usize,
     system_client: &reqwest::Client,
     direct_client: &reqwest::Client,
+    integrity: &Integrity,
     validator: &Mutex<Option<ResourceValidator>>,
     redirect_target: Option<&AsyncMutex<Option<Url>>>,
 ) -> Result<TailCandidateCompletion, SegmentDownloadError> {
@@ -4561,7 +4597,7 @@ async fn download_tail_candidate(
             FETCH_INVALID_HEDGED_CONTENT_RANGE,
         ));
     }
-    if !validate_resource_version(validator, &response) {
+    if !validate_resource_version(validator, &response, integrity) {
         return Err(SegmentDownloadError::Protocol(
             FETCH_RESOURCE_VALIDATOR_CHANGED_DURING_TAIL_HEDGE,
         ));
@@ -4647,6 +4683,7 @@ async fn race_tail_candidates(
     part_path: &Path,
     system_client: &reqwest::Client,
     direct_client: &reqwest::Client,
+    integrity: &Integrity,
     validator: &Mutex<Option<ResourceValidator>>,
     redirect_target: Option<&AsyncMutex<Option<Url>>>,
 ) -> Result<(TailCandidateCompletion, usize), SegmentDownloadError> {
@@ -4663,6 +4700,7 @@ async fn race_tail_candidates(
         0,
         system_client,
         direct_client,
+        integrity,
         validator,
         redirect_target,
     );
@@ -4679,6 +4717,7 @@ async fn race_tail_candidates(
         1,
         system_client,
         direct_client,
+        integrity,
         validator,
         redirect_target,
     );
@@ -4817,7 +4856,8 @@ async fn download_segment(
                 FETCH_INVALID_CONTENT_RANGE,
             ));
         }
-        if !validate_resource_version(validator, &response) {
+        if !validate_resource_version(validator, &response, &request.integrity)
+        {
             return Err(SegmentDownloadError::Protocol(
                 FETCH_RESOURCE_VALIDATOR_CHANGED_BETWEEN_RANGES,
             ));
@@ -4889,6 +4929,7 @@ async fn download_segment(
                                 part_path,
                                 system_client,
                                 direct_client,
+                                &request.integrity,
                                 validator,
                                 redirect_target,
                             )
@@ -5315,10 +5356,13 @@ async fn try_segmented_download(
         route_cap,
         disk_cap,
         health.consecutive_failures,
-        request.batch_download && request.prefer_http1,
+        (request.batch_download && request.prefer_http1)
+            || request.range_connection_floor.is_some(),
     );
     let requested_initial_count =
-        initial_segment_count(remaining_size, concurrency_cap);
+        initial_segment_count(remaining_size, concurrency_cap).max(
+            requested_range_floor(request, remaining_size, concurrency_cap),
+        );
     if requested_initial_count < MIN_PARALLEL_RANGES {
         tracing::debug!(
             original_url = %sanitize_url_for_log(&route.url),
@@ -5583,7 +5627,8 @@ async fn try_segmented_download(
                     snapshot.recent_average.min(snapshot.aggregate_speed),
                 );
                 let floor_target = range_connection_floor(size, remaining_bytes, concurrency_cap,
-                    request.batch_download && request.prefer_http1);
+                    request.batch_download && request.prefer_http1)
+                    .max(requested_range_floor(request, remaining_bytes, concurrency_cap));
                 let below_floor = active_ranges < floor_target;
                 if !below_floor && ((expansion_exhausted.is_some() && active_ranges >= retained_ranges)
                     || remaining_time <= super::download::constants::NATIVE_SLOW_RECONNECT_OVERHEAD
@@ -6008,10 +6053,11 @@ async fn select_h2_download_route(
     // More streams on that socket cannot escape a per-connection speed limit.
     if request.allow_http1_segmented_download
         && request.integrity.supports_resume()
-        && request
-            .integrity
-            .size
-            .is_some_and(|size| size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD)
+        && request.integrity.size.is_some_and(|size| {
+            size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD
+                || (request.range_connection_floor.is_some()
+                    && size >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64)
+        })
         && h2_route.supports_range
         && range_splitting_allowed(&h2_route)
     {
@@ -6449,6 +6495,12 @@ async fn try_segmented_native_attempt(
         }
         _ => 0,
     };
+    let explicitly_parallel = request.range_connection_floor.is_some()
+        && request.integrity.supports_resume()
+        && request.integrity.size.is_some_and(|size| {
+            size.saturating_sub(resumable_part_bytes)
+                >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64
+        });
     let tail_recovery = request.prefer_http1
         && request.integrity.size.is_some_and(|size| {
             can_recover_batch_ranges(
@@ -6463,6 +6515,7 @@ async fn try_segmented_native_attempt(
         && range_splitting_allowed(route)
         && request.integrity.size.is_some_and(|size| {
             tail_recovery
+                || explicitly_parallel
                 || should_use_segmented_download(size, resumable_part_bytes)
         })
     {
@@ -8149,6 +8202,7 @@ mod tests {
         fail_first_range: bool,
         stall_first_range: bool,
         vary_mod_validators: bool,
+        vary_range_validators: bool,
     }
 
     async fn spawn_range_server(
@@ -8246,12 +8300,12 @@ mod tests {
                             &data[..],
                         )
                     };
-                    if behavior.vary_mod_validators
-                        && let Some(range) = requested_range
-                        && request
-                            .lines()
-                            .next()
-                            .is_some_and(|line| line.contains(".jar "))
+                    if let Some(range) = requested_range
+                        && (behavior.vary_range_validators
+                            || (behavior.vary_mod_validators
+                                && request.lines().next().is_some_and(
+                                    |line| line.contains(".jar "),
+                                )))
                     {
                         headers = headers.replace(
                             "\"fixture\"",
@@ -11201,8 +11255,13 @@ mod tests {
                     &part,
                     sysinfo::DiskKind::SSD,
                 );
+            let integrity = if file.ends_with(".mrpack") {
+                Integrity::sha1(&hash).with_size(size as u64)
+            } else {
+                Integrity::default().with_size(size as u64)
+            };
             let request = DownloadRequest::new(&file_url, ResourceClass::Other)
-                .with_integrity(Integrity::sha1(&hash).with_size(size as u64));
+                .with_integrity(integrity);
             let before = requests.load(Ordering::Relaxed);
             let result =
                 download_benchmark_fixture(request, &destination, &semaphore)
@@ -11226,6 +11285,63 @@ mod tests {
         }
 
         assert_eq!(semaphore.0.available_permits(), 32);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn hashed_pack_keeps_32_ranges_when_validators_differ() {
+        let _guard = RANGE_SPLITTING_TEST_LOCK.lock().await;
+        let size = 16 * 1024 * 1024;
+        let data = Arc::new(vec![31_u8; size]);
+        let hash = sha1_smol::Sha1::from(&data[..]).hexdigest();
+        let (url, requests, normal_requests, server) = spawn_range_server(
+            data.clone(),
+            RangeServerBehavior {
+                vary_range_validators: true,
+                ..Default::default()
+            },
+        )
+        .await;
+        let directory = tempfile::tempdir().unwrap();
+        let semaphore = FetchSemaphore(Semaphore::new(64));
+
+        for valid_hash in [true, false] {
+            let destination =
+                directory.path().join(format!("pack-{valid_hash}.mrpack"));
+            let part = suffixed_path(&destination, ".part");
+            let _disk =
+                super::super::download::local_resources::set_test_disk_kind(
+                    &part,
+                    sysinfo::DiskKind::SSD,
+                );
+            let request = DownloadRequest::new(&url, ResourceClass::Other)
+                .with_range_connection_floor(32)
+                .with_integrity(
+                    Integrity::sha1(if valid_hash {
+                        &hash
+                    } else {
+                        "0000000000000000000000000000000000000000"
+                    })
+                    .with_size(size as u64),
+                );
+            let before = requests.load(Ordering::Relaxed);
+            let result =
+                download_benchmark_fixture(request, &destination, &semaphore)
+                    .await;
+            assert!(requests.load(Ordering::Relaxed) - before >= 32);
+            assert_eq!(normal_requests.load(Ordering::Relaxed), 0);
+            if valid_hash {
+                assert_eq!(result.unwrap().size, size as u64);
+                assert_eq!(tokio::fs::read(&destination).await.unwrap(), *data);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "metadata tolerance must never publish content with the wrong hash"
+                );
+                assert!(!destination.exists());
+            }
+            assert_eq!(semaphore.0.available_permits(), 64);
+        }
         server.abort();
     }
 
