@@ -1,6 +1,6 @@
 //! Content version changes.
 
-use super::catalog::{get_file, get_project};
+use super::catalog::{get_file, get_modpack_files, get_modpack_projects};
 use super::download::resolve_download_url as resolve_curseforge_download_url;
 use super::dto::{CurseForgeInstallRequest, CurseForgeInstallResult};
 use super::install::{install_file, install_file_with_reporter};
@@ -121,12 +121,32 @@ pub(crate) async fn prepare_curseforge_content_change_action(
     action.files.clear();
     action.dependencies.clear();
 
-    for (index, item) in std::iter::once(&preview.primary)
+    let items: Vec<_> = std::iter::once(&preview.primary)
         .chain(preview.dependencies.iter())
-        .enumerate()
-    {
-        let file = get_file(item.project_id, item.file_id).await?;
-        let project = get_project(item.project_id).await?;
+        .collect();
+    let files =
+        get_modpack_files(items.iter().map(|item| item.file_id).collect())
+            .await?;
+    let projects = get_modpack_projects(
+        items.iter().map(|item| item.project_id).collect(),
+    )
+    .await?;
+
+    for (index, item) in items.into_iter().enumerate() {
+        let Some(file) = files.get(&item.file_id) else {
+            return Err(ErrorKind::OtherError(format!(
+                "CurseForge file {} was not returned by the metadata batch",
+                item.file_id
+            ))
+            .into());
+        };
+        let Some(project) = projects.get(&item.project_id) else {
+            return Err(ErrorKind::OtherError(format!(
+                "CurseForge project {} was not returned by the metadata batch",
+                item.project_id
+            ))
+            .into());
+        };
         let url = resolve_curseforge_download_url(
             item.project_id,
             item.file_id,
