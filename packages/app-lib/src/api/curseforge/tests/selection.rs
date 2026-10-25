@@ -1,6 +1,9 @@
 //! CurseForge selection tests.
 
 use super::fixtures::stage8_curseforge_file;
+use crate::api::curseforge::archive::{
+    loader_family, loader_type, looks_like_game_version, modpack_target,
+};
 use crate::api::curseforge::dto::{
     CurseForgeManifestLoader, CurseForgeManifestMinecraft,
     CurseForgeModpackManifest, CurseForgeModpackTarget,
@@ -15,9 +18,6 @@ use crate::api::curseforge::mapping::{
 use crate::api::curseforge::selection::{
     dependency_target_game_version, file_matches_dependency_target,
     select_best_dependency_file,
-};
-use crate::api::curseforge::update::{
-    loader_family, loader_type, looks_like_game_version, modpack_target,
 };
 use crate::state::instances::DependencyRelation;
 use crate::state::{ModLoader, ProjectType};

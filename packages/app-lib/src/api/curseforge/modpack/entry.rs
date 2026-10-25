@@ -1,6 +1,11 @@
 //! CurseForge modpack install entry.
 
 use super::*;
+use crate::api::curseforge::archive::{
+    cache_instance_icon_from_url, loader_type, materialize_modpack_overrides,
+    modpack_target, modpack_zip_error, read_modpack_manifest,
+    settle_materialized_modpack_overrides,
+};
 use crate::api::curseforge::catalog::{
     get_file, get_modpack_files, get_modpack_projects, get_project,
 };
@@ -13,11 +18,6 @@ use crate::api::curseforge::dto::{
 use crate::api::curseforge::metrics::CurseForgeDownloadMetrics;
 use crate::api::curseforge::selection::{
     curseforge_file_page_url, format_bytes, persist_manual_download,
-};
-use crate::api::curseforge::update::{
-    cache_instance_icon_from_url, loader_type, materialize_modpack_overrides,
-    modpack_target, modpack_zip_error, read_modpack_manifest,
-    settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::verify::download_curseforge_archive;
 use crate::event::LoadingBarType;

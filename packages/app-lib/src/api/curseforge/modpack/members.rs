@@ -4,6 +4,7 @@ use super::*;
 use crate::api::content_search::{
     chinese_file_title_for_curseforge_slug, localized_content_file_name,
 };
+use crate::api::curseforge::archive::merge_install_result;
 use crate::api::curseforge::dto::{
     CurseForgeFailedDownload, CurseForgeFile, CurseForgeInstallRequest,
     CurseForgeInstallResult, CurseForgeManifestFile, CurseForgeModpackManifest,
@@ -15,7 +16,6 @@ use crate::api::curseforge::metrics::CurseForgeDownloadMetrics;
 use crate::api::curseforge::selection::{
     install_modpack_world_file, modpack_target_folder, report_modpack_progress,
 };
-use crate::api::curseforge::update::merge_install_result;
 use crate::api::curseforge::verify::{
     ActiveCurseForgeDownload, CurseForgeDatabaseTask,
     CurseForgeVerificationContext, CurseForgeVerificationTask,

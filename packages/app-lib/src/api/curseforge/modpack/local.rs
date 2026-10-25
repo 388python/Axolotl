@@ -1,6 +1,11 @@
 //! CurseForge modpack install local.
 
 use super::*;
+use crate::api::curseforge::archive::{
+    loader_type, materialize_modpack_overrides, modpack_target,
+    modpack_zip_error, read_modpack_manifest,
+    settle_materialized_modpack_overrides,
+};
 use crate::api::curseforge::catalog::{
     get_modpack_files, get_modpack_projects,
 };
@@ -14,11 +19,6 @@ use crate::api::curseforge::metrics::CurseForgeDownloadMetrics;
 use crate::api::curseforge::selection::{
     content_target_folder, managed_project_type, manual_download_from_file,
     persist_manual_download,
-};
-use crate::api::curseforge::update::{
-    loader_type, materialize_modpack_overrides, modpack_target,
-    modpack_zip_error, read_modpack_manifest,
-    settle_materialized_modpack_overrides,
 };
 use crate::api::curseforge::validation::validate_file_name;
 use crate::api::curseforge::verify::{

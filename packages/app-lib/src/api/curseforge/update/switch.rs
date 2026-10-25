@@ -1,42 +1,11 @@
+//! CurseForge installed file version switching.
+
 //! CurseForge modpack update switch.
 
 use crate::api::curseforge::content_change::install_selected_file;
 use crate::api::curseforge::dto::CurseForgeInstallResult;
 use crate::install::InstallProgressReporter;
 use crate::{ErrorKind, State};
-
-pub(crate) async fn cache_instance_icon_from_url(
-    icon_url: &str,
-) -> crate::Result<std::path::PathBuf> {
-    let normalized =
-        crate::util::download::retired_sources::normalize(icon_url)?;
-    let icon_url = normalized.as_ref();
-    let state = State::get().await?;
-    // CurseForge avatar/CDN assets are frequently broken via local system
-    // proxies, so always download icons with a direct client.
-    let permit = state.fetch_semaphore.0.acquire().await?;
-    let response = crate::util::download::native_request::send_cdn_request(
-        crate::util::fetch::DIRECT_REQWEST_CLIENT.get(icon_url),
-    )
-    .await?;
-    drop(permit);
-    if !response.status().is_success() {
-        return Err(ErrorKind::OtherError(format!(
-            "CurseForge icon download failed with HTTP {}",
-            response.status().as_u16()
-        ))
-        .into());
-    }
-    let icon_bytes = response.bytes().await?;
-    let filename = icon_url.rsplit('/').next().unwrap_or("icon.png");
-    crate::util::fetch::write_cached_icon(
-        filename,
-        &state.directories.caches_dir(),
-        icon_bytes,
-        &state.io_semaphore,
-    )
-    .await
-}
 
 pub async fn switch_installed_file_version(
     instance_id: &str,

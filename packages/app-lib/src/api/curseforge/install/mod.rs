@@ -10,7 +10,8 @@ pub(crate) use self::dependencies::*;
 pub(crate) use self::edges::*;
 pub(crate) use self::entry::*;
 pub use self::entry::{
-    install_file, install_file_with_reporter, install_world_with_reporter,
+    CurseForgeModrinthFallbackPreview, install_file,
+    install_file_with_reporter, install_world_with_reporter,
 };
 pub(crate) use self::fallback::*;
 pub(crate) use self::plan::*;

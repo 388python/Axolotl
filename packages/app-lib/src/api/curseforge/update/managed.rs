@@ -1,6 +1,6 @@
 //! CurseForge modpack update managed.
 
-use super::*;
+use crate::api::curseforge::archive::{loader_type, looks_like_game_version};
 use crate::api::curseforge::catalog::get_file;
 use crate::api::curseforge::dto::{
     CurseForgeInstallResult, CurseForgeInstalledFile,

@@ -1,5 +1,8 @@
 //! CurseForge modpack install expected.
 
+use crate::api::curseforge::archive::{
+    modpack_zip_error, read_modpack_manifest, read_modpack_override_content,
+};
 use crate::api::curseforge::catalog::{
     get_file, get_files_many, get_project, get_projects,
 };
@@ -8,9 +11,6 @@ use crate::api::curseforge::dto::CurseForgeManualDownload;
 use crate::api::curseforge::mapping::project_type_for_class;
 use crate::api::curseforge::selection::{
     content_target_folder, managed_project_type, manual_download_from_file,
-};
-use crate::api::curseforge::update::{
-    modpack_zip_error, read_modpack_manifest, read_modpack_override_content,
 };
 use crate::api::curseforge::validation::validate_file_name;
 use crate::api::curseforge::verify::download_curseforge_archive;
