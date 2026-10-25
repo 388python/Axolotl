@@ -121,6 +121,44 @@ pub(crate) fn dependency_action(
     }
 }
 
+/// What a caller must record for one dependency decision.
+///
+/// Keeping the reporting here means the entry points cannot disagree about
+/// which project a record names.
+pub(crate) enum DependencyStep {
+    /// Nothing to record and nothing to resolve.
+    Continue,
+    /// Record the skip; it already names the resolved target project.
+    Skipped(CurseForgeSkippedDependency),
+    /// Record the declared project the parent marked incompatible.
+    Incompatible(u32),
+    /// Resolve this project as a dependency.
+    Resolve { target_project_id: u32 },
+}
+
+pub(crate) fn dependency_step(
+    dependency: &CurseForgeFileDependency,
+    action: DependencyAction,
+) -> DependencyStep {
+    match action {
+        DependencyAction::Skip {
+            reason,
+            target_project_id,
+        } => DependencyStep::Skipped(CurseForgeSkippedDependency {
+            project_id: target_project_id,
+            file_id: None,
+            reason: reason.to_string(),
+        }),
+        DependencyAction::Incompatible => {
+            DependencyStep::Incompatible(dependency.mod_id)
+        }
+        DependencyAction::Filtered => DependencyStep::Continue,
+        DependencyAction::Resolve { target_project_id } => {
+            DependencyStep::Resolve { target_project_id }
+        }
+    }
+}
+
 pub(crate) async fn enqueue_curseforge_dependencies(
     pending_file: &PendingCurseForgeFile,
     file: &CurseForgeFile,
@@ -151,29 +189,20 @@ pub(crate) async fn enqueue_curseforge_dependencies(
     }
 
     for dependency_ref in &file.dependencies {
-        let dependency_project_id = match dependency_action(
+        let dependency_project_id = match dependency_step(
             dependency_ref,
-            request,
-            installed_project_ids,
+            dependency_action(dependency_ref, request, installed_project_ids),
         ) {
-            DependencyAction::Skip { reason, .. } => {
-                result
-                    .skipped_dependencies
-                    .push(CurseForgeSkippedDependency {
-                        project_id: dependency_ref.mod_id,
-                        file_id: None,
-                        reason: reason.to_string(),
-                    });
+            DependencyStep::Skipped(skipped) => {
+                result.skipped_dependencies.push(skipped);
                 continue;
             }
-            DependencyAction::Incompatible => {
-                result.incompatible_dependencies.push(dependency_ref.mod_id);
+            DependencyStep::Incompatible(project_id) => {
+                result.incompatible_dependencies.push(project_id);
                 continue;
             }
-            DependencyAction::Filtered => continue,
-            DependencyAction::Resolve { target_project_id } => {
-                target_project_id
-            }
+            DependencyStep::Continue => continue,
+            DependencyStep::Resolve { target_project_id } => target_project_id,
         };
         let dependency_project = match projects.get(&dependency_project_id) {
             Some(project) => project.clone(),

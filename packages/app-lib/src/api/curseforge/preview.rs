@@ -9,7 +9,7 @@ use super::dto::{
 use super::install::{
     CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
 };
-use super::install::{DependencyAction, dependency_action};
+use super::install::{DependencyStep, dependency_action, dependency_step};
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::selection::{
     CurseForgeDependencySelectionReason, append_modrinth_fallback_plan,
@@ -134,28 +134,24 @@ pub async fn preview_install_file(
             && pending_file.depth < MAX_DEPENDENCY_DEPTH
         {
             for dependency_ref in &file.dependencies {
-                let dependency_project_id = match dependency_action(
+                let dependency_project_id = match dependency_step(
                     dependency_ref,
-                    &request,
-                    &installed_project_ids,
+                    dependency_action(
+                        dependency_ref,
+                        &request,
+                        &installed_project_ids,
+                    ),
                 ) {
-                    DependencyAction::Skip {
-                        reason,
-                        target_project_id,
-                    } => {
-                        skipped.push(CurseForgeSkippedDependency {
-                            project_id: target_project_id,
-                            file_id: None,
-                            reason: reason.to_string(),
-                        });
+                    DependencyStep::Skipped(skipped_dependency) => {
+                        skipped.push(skipped_dependency);
                         continue;
                     }
-                    DependencyAction::Incompatible => {
-                        incompatible.push(dependency_ref.mod_id);
+                    DependencyStep::Incompatible(project_id) => {
+                        incompatible.push(project_id);
                         continue;
                     }
-                    DependencyAction::Filtered => continue,
-                    DependencyAction::Resolve { target_project_id } => {
+                    DependencyStep::Continue => continue,
+                    DependencyStep::Resolve { target_project_id } => {
                         target_project_id
                     }
                 };

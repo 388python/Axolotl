@@ -372,3 +372,86 @@ fn quilted_fabric_api_dependency_uses_the_resolved_project() {
         _ => panic!("an excluded dependency must be skipped"),
     }
 }
+#[test]
+fn quilted_fabric_api_dependency_records_are_reported_by_the_shared_step() {
+    use crate::api::curseforge::constants::{
+        FABRIC_API_CURSEFORGE_PROJECT_ID,
+        QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+    };
+    use crate::api::curseforge::dto::{
+        CurseForgeFileDependency, CurseForgeInstallRequest,
+    };
+    use crate::api::curseforge::install::{
+        DependencyStep, dependency_action, dependency_step,
+    };
+    use crate::state::instances::{
+        ContentOwnershipKind, ManualDownloadOperationKind,
+    };
+
+    let request = |excluded: Vec<u32>| CurseForgeInstallRequest {
+        instance_id: String::new(),
+        project_id: 1,
+        file_id: 2,
+        project_type: "mod".to_string(),
+        ownership_kind: ContentOwnershipKind::UserAdded,
+        manual_operation_kind: ManualDownloadOperationKind::ContentInstall,
+        game_version: Some("1.21.1".to_string()),
+        mod_loader_type: Some(5),
+        world_name: None,
+        install_dependencies: true,
+        excluded_dependency_project_ids: excluded,
+        force_dependency_project_ids: Vec::new(),
+        dependency_plan_id: None,
+        defer_persistence: false,
+        verification_tx: None,
+        pre_resolved_relative_path: None,
+        expected_file_name: None,
+    };
+    let required = CurseForgeFileDependency::new(
+        FABRIC_API_CURSEFORGE_PROJECT_ID,
+        DependencyRelation::Required,
+    );
+    let incompatible = CurseForgeFileDependency::new(
+        FABRIC_API_CURSEFORGE_PROJECT_ID,
+        DependencyRelation::Incompatible,
+    );
+
+    let excluded = request(vec![QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID]);
+    match dependency_step(
+        &required,
+        dependency_action(&required, &excluded, &[]),
+    ) {
+        DependencyStep::Skipped(skipped) => {
+            assert_eq!(skipped.reason, "excluded_by_user");
+            assert_eq!(
+                skipped.project_id, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+                "the reported skip must name the project the exclusion was keyed by"
+            );
+        }
+        _ => panic!("an excluded dependency must be skipped"),
+    }
+
+    let kept = request(Vec::new());
+    match dependency_step(&required, dependency_action(&required, &kept, &[])) {
+        DependencyStep::Resolve { target_project_id } => {
+            assert_eq!(
+                target_project_id,
+                QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID
+            );
+        }
+        _ => panic!("a required dependency must be resolved"),
+    }
+
+    match dependency_step(
+        &incompatible,
+        dependency_action(&incompatible, &kept, &[]),
+    ) {
+        DependencyStep::Incompatible(project_id) => {
+            assert_eq!(
+                project_id, FABRIC_API_CURSEFORGE_PROJECT_ID,
+                "incompatible records name the declared project"
+            );
+        }
+        _ => panic!("an incompatible dependency must be recorded"),
+    }
+}
