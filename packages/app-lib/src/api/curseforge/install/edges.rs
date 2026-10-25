@@ -37,48 +37,48 @@ pub(crate) async fn persist_resolution_plan_dependency_edges(
             continue;
         };
         let Some(parent_entry) = crate::state::instances::adapters::sqlite::content_rows::get_content_entry_by_provider_ref(
-			&scope.content_set_id,
-			edge.parent.provider(),
-			&edge.parent.database_project_id(),
-			&parent_release,
-			&state.pool,
-		)
-		.await?
-		else {
-			continue;
-		};
+            &scope.content_set_id,
+            edge.parent.provider(),
+            &edge.parent.database_project_id(),
+            &parent_release,
+            &state.pool,
+        )
+        .await?
+        else {
+            continue;
+        };
         let Some(child_entry) = crate::state::instances::adapters::sqlite::content_rows::get_content_entry_by_provider_ref(
-			&scope.content_set_id,
-			edge.child.provider(),
-			&edge.child.database_project_id(),
-			&child_release,
-			&state.pool,
-		)
-		.await?
-		else {
-			continue;
-		};
+            &scope.content_set_id,
+            edge.child.provider(),
+            &edge.child.database_project_id(),
+            &child_release,
+            &state.pool,
+        )
+        .await?
+        else {
+            continue;
+        };
         let now = chrono::Utc::now();
         crate::state::instances::adapters::sqlite::content_rows::upsert_content_dependency_edge_in_transaction(
-			&crate::state::instances::ContentDependencyEdge {
-				id: format!("content-dependency:{}", uuid::Uuid::new_v4()),
-				content_set_id: scope.content_set_id.clone(),
-				parent_entry_id: parent_entry.id,
-				child_entry_id: child_entry.id,
-				evidence_provider: edge.evidence_provider,
-				parent_provider: edge.parent.provider(),
-				child_provider: edge.child.provider(),
-				dependency_kind: edge.relation,
-				parent_project_id: edge.parent.database_project_id(),
-				parent_release_id: parent_release,
-				child_project_id: edge.child.database_project_id(),
-				child_release_id: child_release,
-				created_at: now,
-				modified_at: now,
-			},
-			&mut tx,
-		)
-		.await?;
+            &crate::state::instances::ContentDependencyEdge {
+                id: format!("content-dependency:{}", uuid::Uuid::new_v4()),
+                content_set_id: scope.content_set_id.clone(),
+                parent_entry_id: parent_entry.id,
+                child_entry_id: child_entry.id,
+                evidence_provider: edge.evidence_provider,
+                parent_provider: edge.parent.provider(),
+                child_provider: edge.child.provider(),
+                dependency_kind: edge.relation,
+                parent_project_id: edge.parent.database_project_id(),
+                parent_release_id: parent_release,
+                child_project_id: edge.child.database_project_id(),
+                child_release_id: child_release,
+                created_at: now,
+                modified_at: now,
+            },
+            &mut tx,
+        )
+        .await?;
     }
     tx.commit().await?;
     drop(database_permit);

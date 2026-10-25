@@ -133,10 +133,10 @@ pub(crate) async fn install_fixed_modrinth_content(
         || !modrinth_version_matches_plan_target(&version, &plan.target)
     {
         return Err(ErrorKind::InputError(
-			"The planned Modrinth dependency no longer matches the instance target"
-				.to_string(),
-		)
-		.into());
+            "The planned Modrinth dependency no longer matches the instance target"
+                .to_string(),
+        )
+        .into());
     }
     let file = version
         .files
@@ -156,10 +156,10 @@ pub(crate) async fn install_fixed_modrinth_content(
             .is_some_and(|size| file.size as u64 != size)
     {
         return Err(ErrorKind::InputError(
-			"The planned Modrinth file metadata changed after dependency preview"
-				.to_string(),
-		)
-		.into());
+            "The planned Modrinth file metadata changed after dependency preview"
+                .to_string(),
+        )
+        .into());
     }
     crate::state::instances::commands::install_resolved_dependency(
         &request.instance_id,

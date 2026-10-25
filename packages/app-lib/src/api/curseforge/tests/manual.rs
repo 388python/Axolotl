@@ -190,7 +190,7 @@ fn curseforge_startup_selects_only_reconcilable_jobs() {
                 world_name: None,
                 install_dependencies: true,
                 excluded_dependency_project_ids: Vec::new(),
-					force_dependency_project_ids: Vec::new(),
+                    force_dependency_project_ids: Vec::new(),
                 dependency_plan_id: None,
                 defer_persistence: false,
                 verification_tx: None,

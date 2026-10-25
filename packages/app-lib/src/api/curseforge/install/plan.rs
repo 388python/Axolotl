@@ -60,20 +60,20 @@ pub(crate) async fn load_dependency_resolution_plan(
             != Some(&request.project_type)
     {
         return Err(ErrorKind::InputError(
-			"The dependency resolution plan does not match this install request"
-				.to_string(),
-		)
-		.into());
+            "The dependency resolution plan does not match this install request"
+                .to_string(),
+        )
+        .into());
     }
     let current_revision =
         instance_content_revision(&request.instance_id, state).await?;
     if cached.plan.instance_revision != current_revision {
         DEPENDENCY_RESOLUTION_PLANS.remove(plan_id);
         return Err(ErrorKind::InputError(
-			"The instance content changed after dependency preview; preview again"
-				.to_string(),
-		)
-		.into());
+            "The instance content changed after dependency preview; preview again"
+                .to_string(),
+        )
+        .into());
     }
     Ok(Some(cached.plan))
 }
