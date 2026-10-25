@@ -133,12 +133,13 @@ pub(crate) async fn prepare_curseforge_content_change_action(
     .await?;
 
     for (index, item) in items.into_iter().enumerate() {
-        let Some(file) = files.get(&item.file_id) else {
-            return Err(ErrorKind::OtherError(format!(
-                "CurseForge file {} was not returned by the metadata batch",
-                item.file_id
-            ))
-            .into());
+        let fetched;
+        let file = match files.get(&item.file_id) {
+            Some(file) => file,
+            None => {
+                fetched = get_file(item.project_id, item.file_id).await?;
+                &fetched
+            }
         };
         let Some(project) = projects.get(&item.project_id) else {
             return Err(ErrorKind::OtherError(format!(
