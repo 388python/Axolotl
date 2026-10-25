@@ -54,6 +54,7 @@ import { getCurseForgeFiles } from '@/helpers/curseforge'
 import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { createProjectDetailsQuery } from '@/helpers/project-links'
+import { createProjectPreviewState } from '@/helpers/project-preview'
 import type { SourceProjectMetadata } from '@/helpers/resources'
 import {
     getLastBrowseContentDisplayMode,
@@ -689,21 +690,19 @@ function setDisplayMode(mode: FavoriteDisplayMode) {
 
 function getProjectLink(project: FavoriteProject) {
     if (project.unavailable) return undefined
-    if (project.favorite.resource_id)
-        return {
-            path: `/resource/${project.favorite.resource_id}`,
-            query: createProjectDetailsQuery(route.query, route.fullPath),
-        }
+    const path = project.favorite.resource_id
+        ? `/resource/${project.favorite.resource_id}`
+        : project.provider === 'curseforge'
+          ? `/project/curseforge/${project.projectId}`
+          : project.provider === 'mcarchive'
+            ? `/project/mcarchive/${project.slug ?? project.projectId}`
+            : project.provider === 'planet_minecraft'
+              ? `/project/planet-minecraft/${project.projectId}`
+              : `/project/${project.slug ?? project.projectId}`
     return {
-        path:
-            project.provider === 'curseforge'
-                ? `/project/curseforge/${project.projectId}`
-                : project.provider === 'mcarchive'
-                  ? `/project/mcarchive/${project.slug ?? project.projectId}`
-                  : project.provider === 'planet_minecraft'
-                    ? `/project/planet-minecraft/${project.projectId}`
-                    : `/project/${project.slug ?? project.projectId}`,
+        path,
         query: createProjectDetailsQuery(route.query, route.fullPath),
+        state: createProjectPreviewState(path, project.title),
     }
 }
 

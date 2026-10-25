@@ -145,7 +145,7 @@ vi.mock('@modrinth/ui', async () => {
                     h('section', [props.heading, slots.actions?.()]),
         }),
         ProjectCard: defineComponent({
-            props: ['title'],
+            props: ['title', 'link'],
             setup: (props) => () => h('article', { 'data-favorite': '' }, props.title),
         }),
         getLatestMatchingInstallVersion: vi.fn(),
@@ -339,4 +339,24 @@ it('clears search and filters together without deleting favorites or losing the 
         query: { i: 'selected-instance', q: undefined, kind: undefined, page: undefined },
     })
     expect(fixture.push).not.toHaveBeenCalled()
+})
+
+it.each([
+    ['mcarchive', undefined, '/project/mcarchive/one'],
+    ['planet_minecraft', undefined, '/project/planet-minecraft/one'],
+    ['modrinth', 'confirmed', '/resource/confirmed'],
+] as const)('passes a navigation title for %s favorites', async (provider, resourceId, path) => {
+    fixture.load.mockResolvedValue([{ ...savedFavorite, provider, resource_id: resourceId }])
+    fixture.metadata.mockResolvedValue({
+        ...savedMetadata,
+        project: { source: provider, projectId: 'one' },
+    })
+    const wrapper = render()
+    await vi.waitFor(() => expect(wrapper.find('[data-favorite]').exists()).toBe(true))
+    const card = wrapper.findComponent('[data-favorite]')
+    expect(card.props('link')).toEqual({
+        path,
+        query: expect.objectContaining({ b: '/browse/favorites' }),
+        state: { projectPreview: { targetPath: path, title: 'Saved mod' } },
+    })
 })
