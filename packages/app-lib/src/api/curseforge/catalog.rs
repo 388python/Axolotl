@@ -13,9 +13,7 @@ use super::mapping::{
 };
 use super::transport::{MirrorPolicy, api_key, request_json};
 use super::validation::validate_file_name;
-use crate::state::{
-    CacheBehaviour, CachedEntry, ContentProvider, CurseForgeProjectId,
-};
+use crate::state::{CacheBehaviour, ContentProvider};
 use crate::util::download::constants::MODPACK_METADATA_CONCURRENCY;
 use crate::{ErrorKind, State};
 use futures::{StreamExt, stream};
@@ -152,18 +150,19 @@ pub async fn search_projects(
 
 pub async fn get_project(project_id: u32) -> crate::Result<CurseForgeProject> {
     let state = State::get().await?;
-    CachedEntry::get_curseforge_project(
-        &CurseForgeProjectId::new(project_id)?,
-        None,
-        &state.pool,
-        &state.api_semaphore,
+    crate::resources::legacy_catalog::projects_exact(
+        crate::resources::SourceId::curseforge(),
+        vec![project_id.to_string()],
+        &state,
     )
     .await?
+    .into_iter()
+    .next()
     .ok_or_else(|| {
         ErrorKind::OtherError(format!(
             "CurseForge project {project_id} was not found"
         ))
-        .as_error()
+        .into()
     })
 }
 
@@ -177,16 +176,12 @@ pub async fn get_projects_with_cache_behaviour(
     project_ids: Vec<u32>,
     cache_behaviour: Option<CacheBehaviour>,
 ) -> crate::Result<Vec<CurseForgeProject>> {
-    let project_ids = project_ids
-        .into_iter()
-        .map(CurseForgeProjectId::new)
-        .collect::<crate::Result<Vec<_>>>()?;
     let state = State::get().await?;
-    CachedEntry::get_curseforge_project_many(
-        &project_ids,
-        cache_behaviour,
-        &state.pool,
-        &state.api_semaphore,
+    crate::resources::legacy_catalog::projects_exact_with_policy(
+        crate::resources::SourceId::curseforge(),
+        project_ids.into_iter().map(|id| id.to_string()).collect(),
+        &state,
+        crate::resources::legacy_catalog::policy(cache_behaviour),
     )
     .await
 }

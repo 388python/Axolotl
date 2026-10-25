@@ -1,6 +1,7 @@
 //! Protocol projections at the boundary of the existing environment solver.
 
 use super::{providers::*, *};
+use crate::state::CacheBehaviour;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
@@ -46,6 +47,87 @@ pub(crate) async fn exact<T: DeserializeOwned>(
             "unexpected release catalog response".into(),
         )
         .into()),
+    }
+}
+
+/// Project projections for a batch of ids, in the order the ids were given.
+/// Missing projects are skipped.
+pub(crate) async fn projects_exact<T: DeserializeOwned>(
+    source: SourceId,
+    project_ids: Vec<String>,
+    state: &crate::State,
+) -> crate::Result<Vec<T>> {
+    projects_exact_with_policy(
+        source,
+        project_ids,
+        state,
+        CachePolicy::UseFresh,
+    )
+    .await
+}
+
+pub(crate) async fn projects_exact_with_policy<T: DeserializeOwned>(
+    source: SourceId,
+    project_ids: Vec<String>,
+    state: &crate::State,
+    policy: CachePolicy,
+) -> crate::Result<Vec<T>> {
+    let service = state.resources().await.map_err(error)?;
+    let queries = project_ids
+        .into_iter()
+        .map(|project_id| {
+            Ok(ProviderQuery::Project {
+                id: SourceProjectId::new(project_id).map_err(|error| {
+                    crate::ErrorKind::InputError(error.to_string())
+                })?,
+                slug: None,
+            })
+        })
+        .collect::<crate::Result<Vec<_>>>()?;
+    let values = service
+        .presentation_many_with_policy(
+            &source,
+            queries,
+            &CancellationToken::new(),
+            policy,
+        )
+        .await;
+    let mut projects = Vec::new();
+    for value in values {
+        match value.map_err(error)?.value {
+            ProviderValue::Project(document) => {
+                projects.push(serde_json::from_value(
+                    document.protocol.ok_or_else(|| {
+                        crate::ErrorKind::InputError(
+                            "project protocol projection missing".into(),
+                        )
+                    })?,
+                )?)
+            }
+            ProviderValue::NotFound => {}
+            _ => {
+                return Err(crate::ErrorKind::InputError(
+                    "unexpected project catalog response".into(),
+                )
+                .into());
+            }
+        }
+    }
+    Ok(projects)
+}
+
+/// Maps the launcher cache behaviour onto the resource service policy.
+pub(crate) fn policy(behaviour: Option<CacheBehaviour>) -> CachePolicy {
+    match behaviour.unwrap_or_default() {
+        CacheBehaviour::StaleWhileRevalidateSkipOffline => {
+            CachePolicy::UseFresh
+        }
+        CacheBehaviour::StaleWhileRevalidate => {
+            CachePolicy::StaleWhileRevalidate
+        }
+        CacheBehaviour::CacheOnly => CachePolicy::OnlyCached,
+        CacheBehaviour::MustRevalidate => CachePolicy::Revalidate,
+        CacheBehaviour::Bypass => CachePolicy::ForceRefresh,
     }
 }
 
