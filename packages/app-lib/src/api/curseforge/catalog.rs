@@ -186,19 +186,7 @@ pub async fn get_projects_with_cache_behaviour(
     .await
 }
 
-pub async fn get_description(project_id: u32) -> crate::Result<String> {
-    let response: CurseForgeResponse<String> = request_json(
-        Method::GET,
-        &format!("/v1/mods/{project_id}/description"),
-        Vec::new(),
-        None,
-        MirrorPolicy::MirrorFirst,
-    )
-    .await?;
-    Ok(response.data)
-}
-
-pub async fn get_files_page(
+async fn get_files_page(
     project_id: u32,
     request: CurseForgeFilesRequest,
 ) -> crate::Result<CurseForgeFilesResponse> {
@@ -307,21 +295,6 @@ pub async fn get_files_many(
         &state,
     )
     .await
-}
-
-pub async fn get_changelog(
-    project_id: u32,
-    file_id: u32,
-) -> crate::Result<String> {
-    let response: CurseForgeResponse<String> = request_json(
-        Method::GET,
-        &format!("/v1/mods/{project_id}/files/{file_id}/changelog"),
-        Vec::new(),
-        None,
-        MirrorPolicy::MirrorFirst,
-    )
-    .await?;
-    Ok(response.data)
 }
 
 pub async fn get_download_url(
