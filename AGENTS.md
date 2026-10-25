@@ -1,6 +1,6 @@
 # Axolotl Launcher Monorepo
 
-Axolotl contains a Vue 3 / Nuxt 3 website, a Vue 3 desktop frontend, and a Rust / Tauri shell. Turborepo (`turbo.jsonc`) and pnpm workspaces (`pnpm-workspace.yaml`) coordinate the packages. Frontend styling uses Tailwind CSS v3. Use spaces, never tabs.
+Axolotl contains a Vue 3 / Nuxt 3 website, a Vue 3 desktop frontend, and a Rust / Tauri shell. Turborepo (`turbo.jsonc`) and pnpm workspaces (`pnpm-workspace.yaml`) coordinate the packages. Frontend styling uses Tailwind CSS v3.
 
 ## Instruction Routing
 
@@ -48,6 +48,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and application da
 - Do not create unrelated scripts, SQL files or documentation. Remove files created only for temporary verification after checks complete.
 - Avoid heading comments such as `=== Helper methods ===`. Use doc comments where helpful; add inline comments only when necessary to explain non-obvious behavior.
 - Preserve exact source whitespace when editing; do not copy tool line numbers or display markers into source.
+- Indent with spaces only: four for source, two for JSON, YAML and Markdown.
 
 ## Shared Rust Build Resources
 
