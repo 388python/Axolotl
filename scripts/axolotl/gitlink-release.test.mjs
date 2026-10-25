@@ -453,7 +453,9 @@ test('GitLink mirror appends missing assets, verifies the public release, and pr
         state.requests
             .filter((request) => request.url === RELEASES_URL)
             .map((request) => request.authorization),
-        ['present', 'absent', 'present'],
+        // The extra entry is pruneReleases() re-reading the list after DELETE: the response
+        // body of a GitLink DELETE is not trustworthy, so the post-delete listing decides.
+        ['present', 'absent', 'present', 'present'],
     )
 
     const summary = JSON.parse(
