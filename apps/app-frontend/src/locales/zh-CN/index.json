@@ -17486,6 +17486,21 @@
   "app.resources.error.unsupported": {
     "message": "此内容来源不支持所请求的操作或筛选条件。"
   },
+  "app.resources.search.failure.environment": {
+    "message": "{source} 不支持按客户端或服务端筛选。移除运行环境条件后即可显示其结果。"
+  },
+  "app.resources.search.failure.sort": {
+    "message": "{source} 不支持当前排序方式。切换为“相关性”或“下载量”后即可显示其结果。"
+  },
+  "app.resources.search.failure.filters": {
+    "message": "{source} 不支持当前筛选组合，请减少筛选条件或切换内容来源。"
+  },
+  "app.resources.search.failure.reason": {
+    "message": "{source}：{reason}"
+  },
+  "app.resources.search.failure.unknown": {
+    "message": "{source} 暂时无法加载搜索结果，请稍后重试。"
+  },
   "app.resources.operation.identity-unconfirmed": {
     "message": "无法可靠识别所选资源。"
   },

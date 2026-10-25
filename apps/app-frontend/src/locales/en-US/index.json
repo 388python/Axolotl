@@ -11798,6 +11798,21 @@
   "app.resources.error.unsupported": {
     "message": "This content source does not support the requested operation or filters."
   },
+  "app.resources.search.failure.environment": {
+    "message": "{source} does not support filtering by client or server. Remove the environment filter to include its results."
+  },
+  "app.resources.search.failure.sort": {
+    "message": "{source} does not support this sort order. Choose Relevance or Downloads to include its results."
+  },
+  "app.resources.search.failure.filters": {
+    "message": "{source} does not support this combination of filters. Remove some filters or choose another source."
+  },
+  "app.resources.search.failure.reason": {
+    "message": "{source}: {reason}"
+  },
+  "app.resources.search.failure.unknown": {
+    "message": "{source} could not load search results. Try again later."
+  },
   "app.resources.history.cancel": {
     "message": "Close"
   },
