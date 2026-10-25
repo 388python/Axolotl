@@ -10568,6 +10568,15 @@
   "app.minecraft-auth.warning": {
     "message": "We couldn't sign you in to your Microsoft account. This may be due to account restrictions or regional limitations."
   },
+  "app.minecraft-auth.missing-java-profile": {
+    "message": "We couldn't find a Minecraft: Java Edition profile for this Microsoft account."
+  },
+  "app.minecraft-auth.purchase-minecraft": {
+    "message": "If you need to buy Minecraft, you can purchase it <store-link>here</store-link>."
+  },
+  "app.minecraft-auth.activate-java-profile": {
+    "message": "If you already own Minecraft, sign in on the <minecraft-link>official Minecraft website</minecraft-link>, then try signing in to the launcher again."
+  },
   "app.minecraft-auth.what-happened": {
     "message": "What we think happened"
   },

@@ -564,7 +564,7 @@ pub async fn get_loader_version_from_profile_with_cache(
             .await;
     }
 
-    resolve_loader_version_with_refresh(
+    let result = resolve_loader_version_with_refresh(
         game_version,
         loader_version,
         cache_behaviour,
@@ -576,7 +576,22 @@ pub async fn get_loader_version_from_profile_with_cache(
             )
         },
     )
-    .await
+    .await;
+    if loader == ModLoader::Forge
+        && cache_behaviour != Some(CacheBehaviour::CacheOnly)
+        && let Some(requested) = explicit_loader_version(loader_version)
+        && !matches!(&result, Ok(Some(_)))
+    {
+        match crate::api::loader_metadata::find_forge_version_in_fallback(game_version, requested).await {
+            Ok(Some(version)) => return Ok(Some(version)),
+            Ok(None) => {},
+            Err(error) => {
+                tracing::warn!(game_version, requested, %error, "Independent Forge catalog lookup failed");
+                if result.is_ok() { return Err(error); }
+            }
+        }
+    }
+    result
 }
 
 async fn resolve_loader_version_with_refresh<F, Fut>(

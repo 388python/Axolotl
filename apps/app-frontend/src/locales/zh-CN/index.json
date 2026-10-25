@@ -9383,6 +9383,15 @@
   "app.minecraft-auth.warning": {
     "message": "无法登录你的 Microsoft 账号，原因可能是账号限制或地区限制。"
   },
+  "app.minecraft-auth.missing-java-profile": {
+    "message": "我们无法从该微软账户中寻找到 Minecraft Java 正版档案："
+  },
+  "app.minecraft-auth.purchase-minecraft": {
+    "message": "若需要购买 Minecraft，请前往 <store-link>这里</store-link> 购买"
+  },
+  "app.minecraft-auth.activate-java-profile": {
+    "message": "若你确认你拥有正版 Minecraft，请前往 <minecraft-link>Minecraft 官网</minecraft-link> 并登录后再重新尝试登录"
+  },
   "app.minecraft-auth.what-happened": {
     "message": "我们推测的原因"
   },
