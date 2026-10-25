@@ -211,6 +211,13 @@ jobs:
         run: node scripts/axolotl/check-dead-utilities.mjs
       - name: Test version metadata writes
         run: cargo test --package theseus writing_version_info_creates_missing_parent_directory
+      # Runs the CurseForge content pipeline suites (recognition, dependency
+      # selection, install, verification, manual downloads, reconciliation).
+      # Linux only: the code is platform independent and this keeps the matrix
+      # cost to one extra test binary run.
+      - name: Test CurseForge content pipeline
+        if: runner.os == 'Linux'
+        run: cargo test --package theseus curseforge
       - run: cargo check --package theseus_gui --features updater
       - name: Test Windows installer UI and core
         if: runner.os == 'Windows'
