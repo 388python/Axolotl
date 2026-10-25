@@ -5,9 +5,13 @@ import Browse from './Browse.vue'
 
 const api = vi.hoisted(() => ({
     instance: vi.fn().mockResolvedValue(null),
+    installedIds: vi.fn().mockResolvedValue([]),
     handleError: vi.fn(),
     capability: vi.fn(),
     categories: vi.fn(),
+    gameVersions: vi.fn().mockResolvedValue([]),
+    archiveVersions: vi.fn().mockResolvedValue([]),
+    planetAvailable: false,
     refresh: vi.fn(),
     saveMemory: vi.fn(),
     type: 'mod',
@@ -49,8 +53,9 @@ vi.mock('@/helpers/curseforge', () => ({
     getCurseForgeImageUrl: (url: string) => url,
 }))
 vi.mock('@/helpers/planet-minecraft', () => ({
-    planetMinecraftConnectorAvailable: async () => false,
+    planetMinecraftConnectorAvailable: async () => api.planetAvailable,
 }))
+vi.mock('@/helpers/mcarchive', () => ({ getMcArchiveGameVersions: api.archiveVersions }))
 vi.mock('@/helpers/browse-filter-memory', () => ({
     getBrowseFilterMemory: (type: string) => api.memory[type],
     setBrowseFilterMemory: api.saveMemory,
@@ -95,7 +100,7 @@ vi.mock('@/composables/browse/use-app-server-browse', async () => {
 vi.mock('@/helpers/tags', () => ({
     get_categories: async () => [],
     get_loaders: async () => [],
-    get_game_versions: async () => [],
+    get_game_versions: api.gameVersions,
 }))
 vi.mock('@/helpers/events.js', () => ({ instance_listener: async () => () => {} }))
 vi.mock('@/helpers/content-search', () => ({
@@ -103,7 +108,7 @@ vi.mock('@/helpers/content-search', () => ({
     translateSearchHitTitles: async (hits: unknown[]) => hits,
 }))
 vi.mock('@/helpers/instance', () => ({
-    get_installed_project_ids: async () => [],
+    get_installed_project_ids: api.installedIds,
     get: api.instance,
     get_projects: async () => [],
     list: async () => [],
@@ -444,3 +449,139 @@ it.each(['missing', 'unavailable'])(
         }
     },
 )
+
+it.each(['mcarchive', 'planet_minecraft'] as const)(
+    'searches %s before optional version options finish',
+    async (source) => {
+        const { useRoute } = await import('vue-router')
+        const route = useRoute()
+        route.params.projectType = 'mod'
+        route.query = { source }
+        api.source = source
+        api.planetAvailable = true
+        api.refresh.mockClear()
+        api.capability.mockResolvedValue({ configured: true })
+        let finish!: (value: unknown[]) => void
+        const pending = new Promise<unknown[]>((resolve) => {
+            finish = resolve
+        })
+        if (source === 'mcarchive') api.archiveVersions.mockReturnValueOnce(pending)
+        else api.gameVersions.mockReturnValueOnce(pending)
+        const wrapper = mount(Browse, {
+            global: { stubs: { Teleport: true }, directives: { tooltip: {} } },
+        })
+        try {
+            await flushPromises()
+            expect(api.refresh).toHaveBeenCalledTimes(1)
+            expect((api.context as { filtersReady: { value: boolean } }).filtersReady.value).toBe(
+                false,
+            )
+            finish([])
+            await flushPromises()
+            expect((api.context as { filtersReady: { value: boolean } }).filtersReady.value).toBe(
+                true,
+            )
+            expect(api.refresh).toHaveBeenCalledTimes(1)
+        } finally {
+            wrapper.unmount()
+            api.source = 'all'
+            api.planetAvailable = false
+            route.query = {}
+        }
+    },
+)
+
+it('waits for metadata when a version filter is supplied in the URL', async () => {
+    const { useRoute } = await import('vue-router')
+    const route = useRoute()
+    route.params.projectType = 'mod'
+    route.query = { source: 'modrinth', v: '1.21.1' }
+    api.refresh.mockClear()
+    api.capability.mockResolvedValue({ configured: true })
+    let finish!: (value: unknown[]) => void
+    api.gameVersions.mockReturnValueOnce(
+        new Promise((resolve) => {
+            finish = resolve
+        }),
+    )
+    const wrapper = mount(Browse, {
+        global: { stubs: { Teleport: true }, directives: { tooltip: {} } },
+    })
+    try {
+        await flushPromises()
+        expect(api.refresh).not.toHaveBeenCalled()
+        finish([{ version: '1.21.1', version_type: 'release' }])
+        await flushPromises()
+        expect(api.refresh).toHaveBeenCalledTimes(1)
+    } finally {
+        wrapper.unmount()
+        route.query = {}
+    }
+})
+
+it('retries optional filter metadata without restarting the search', async () => {
+    const { useRoute } = await import('vue-router')
+    const route = useRoute()
+    route.params.projectType = 'mod'
+    route.query = { source: 'planet_minecraft' }
+    api.planetAvailable = true
+    api.refresh.mockClear()
+    api.capability.mockResolvedValue({ configured: true })
+    api.gameVersions.mockRejectedValueOnce(new Error('offline')).mockResolvedValue([])
+    const wrapper = mount(Browse, {
+        global: { stubs: { Teleport: true }, directives: { tooltip: {} } },
+    })
+    try {
+        await flushPromises()
+        expect(api.refresh).toHaveBeenCalledTimes(1)
+        expect(
+            (wrapper.vm as unknown as { filterMetadataFailed: boolean }).filterMetadataFailed,
+        ).toBe(true)
+        ;(wrapper.vm as unknown as { retryFilterMetadata: () => void }).retryFilterMetadata()
+        await flushPromises()
+        expect((api.context as { filtersReady: { value: boolean } }).filtersReady.value).toBe(true)
+        expect(api.refresh).toHaveBeenCalledTimes(1)
+    } finally {
+        wrapper.unmount()
+        api.planetAvailable = false
+        route.query = {}
+    }
+})
+
+it('keeps filters disabled until the implicit installed-content filter is initialized', async () => {
+    const { useRoute } = await import('vue-router')
+    const route = useRoute()
+    route.params.projectType = 'mod'
+    route.query = { source: 'modrinth', i: 'target', ai: 'true' }
+    api.instance.mockResolvedValue({
+        id: 'target',
+        name: 'Target',
+        install_stage: 'installed',
+        game_version: '1.21.1',
+        loader: 'fabric',
+    })
+    api.capability.mockResolvedValue({ configured: true })
+    api.refresh.mockClear()
+    let finish!: (ids: string[]) => void
+    api.installedIds.mockReturnValueOnce(
+        new Promise((resolve) => {
+            finish = resolve
+        }),
+    )
+    const wrapper = mount(Browse, {
+        global: { stubs: { Teleport: true }, directives: { tooltip: {} } },
+    })
+    try {
+        await flushPromises()
+        expect(api.refresh).not.toHaveBeenCalled()
+        expect((api.context as { filtersReady: { value: boolean } }).filtersReady.value).toBe(false)
+        finish([])
+        await flushPromises()
+        expect(api.refresh).toHaveBeenCalledTimes(1)
+        expect((api.context as { filtersReady: { value: boolean } }).filtersReady.value).toBe(true)
+    } finally {
+        wrapper.unmount()
+        route.query = {}
+        api.instance.mockResolvedValue(null)
+    }
+})

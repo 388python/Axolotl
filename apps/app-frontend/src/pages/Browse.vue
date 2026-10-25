@@ -100,7 +100,6 @@ import { getDisplayInstanceIcon } from '@/helpers/instance-icons'
 import { instanceServerProjectId, isServerProjectLink } from '@/helpers/instance-project'
 import { getMcArchiveGameVersions, type McArchiveGameVersion } from '@/helpers/mcarchive'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
-import { runAfterPageTransitionSettle } from '@/helpers/page-transition'
 import { planetMinecraftConnectorAvailable } from '@/helpers/planet-minecraft'
 import { createProjectDetailsQuery } from '@/helpers/project-links'
 import { createProjectPreviewState } from '@/helpers/project-preview'
@@ -188,8 +187,13 @@ const curseForgeClassIds: Partial<Record<ProjectType, number>> = {
 }
 
 const searchEnabled = ref(false)
-const filtersReady = ref(false)
 const browseInitialized = ref(false)
+const filterMetadataStatus = ref<'loading' | 'ready' | 'error'>('loading')
+const filtersReady = computed(
+    () => browseInitialized.value && filterMetadataStatus.value === 'ready',
+)
+const filterMetadataFailed = computed(() => filterMetadataStatus.value === 'error')
+let filterMetadataVersion = 0
 const curseForgeCapability = ref<Awaited<ReturnType<typeof getCurseForgeCapability>>>({
     status: 'missing_key',
     configured: false,
@@ -312,13 +316,48 @@ const loaders = ref<Labrinth.Tags.v2.Loader[]>([])
 const availableGameVersions = ref<Labrinth.Tags.v2.GameVersion[]>([])
 const mcArchiveGameVersions = ref<McArchiveGameVersion[]>([])
 
-async function loadFilterMetadata() {
-    if (isWorldMapBrowse.value) return
-    const result = await Promise.all([get_categories(), get_loaders(), get_game_versions()])
-    if (isUnmounted) return
-    categories.value = result[0]
-    loaders.value = result[1]
-    availableGameVersions.value = result[2]
+async function loadFilterMetadata(type: ProjectType, source: BrowseContentSource) {
+    if (type === WORLD_BROWSE_PROJECT_TYPE) return
+    const requests: Promise<unknown>[] = [
+        get_game_versions().then((versions) => {
+            if (!isUnmounted) availableGameVersions.value = versions
+        }),
+    ]
+    if (source !== 'mcarchive' && source !== 'planet_minecraft') {
+        requests.push(
+            get_categories().then((result) => {
+                if (!isUnmounted) categories.value = result
+            }),
+            get_loaders().then((result) => {
+                if (!isUnmounted) loaders.value = result
+            }),
+        )
+    }
+    if (source === 'curseforge' || source === 'all') requests.push(ensureCurseForgeCategories(type))
+    if (source === 'mcarchive') requests.push(refreshMcArchiveGameVersions())
+    await Promise.all(requests)
+}
+
+async function prepareFilterMetadata(type = projectType.value, source = contentSource.value) {
+    const version = ++filterMetadataVersion
+    filterMetadataStatus.value = 'loading'
+    const isCurrent = () =>
+        !isUnmounted &&
+        version === filterMetadataVersion &&
+        type === projectType.value &&
+        source === contentSource.value
+    try {
+        await loadFilterMetadata(type, source)
+        if (isCurrent()) filterMetadataStatus.value = 'ready'
+    } catch (error) {
+        if (isCurrent()) filterMetadataStatus.value = 'error'
+        throw error
+    }
+}
+
+function retryFilterMetadata() {
+    if (!searchEnabled.value) void refreshBrowse()
+    else void prepareFilterMetadata().catch(() => {})
 }
 
 async function refreshMcArchiveGameVersions() {
@@ -779,6 +818,10 @@ const messages = defineMessages({
         id: 'app.browse.source-failed',
         defaultMessage:
             '{source} could not return results for this search. Check the filters or try again later.',
+    },
+    filterMetadataFailed: {
+        id: 'app.browse.filter-metadata-failed',
+        defaultMessage: 'Filter options could not be loaded.',
     },
     categoriesFailed: {
         id: 'app.browse.categories-failed',
@@ -2191,6 +2234,7 @@ watch(
     [
         projectType,
         filtersReady,
+        browseInitialized,
         searchState.currentFilters,
         searchState.toggledGroups,
         searchState.overriddenProvidedFilterTypes,
@@ -2198,7 +2242,7 @@ watch(
         searchState.serverToggledGroups,
     ],
     () => {
-        if (!filtersReady.value) return
+        if (!filtersReady.value || !browseInitialized.value) return
         const isServer = projectType.value === 'server'
         setBrowseFilterMemory(projectType.value, {
             filters: isServer
@@ -2263,7 +2307,7 @@ let normalizingSource = false
 async function prepareBrowseContext(previousType = projectType.value) {
     const type = projectType.value
     const version = ++sourceRequestVersion
-    filtersReady.value = false
+    filterMetadataStatus.value = 'loading'
     searchEnabled.value = false
     searchState.loading.value = true
     searchState.searchError.value = null
@@ -2286,9 +2330,7 @@ async function prepareBrowseContext(previousType = projectType.value) {
         } finally {
             normalizingSource = false
         }
-        if (contentSource.value === 'curseforge' || contentSource.value === 'all')
-            await ensureCurseForgeCategories(type)
-        if (contentSource.value === 'mcarchive') await refreshMcArchiveGameVersions()
+        await prepareFilterMetadata(type, contentSource.value)
         if (version !== sourceRequestVersion || isUnmounted) return
         if (type !== initializedFilterType) applyRememberedFilters(type, true)
         else if (contentSource.value !== initializedFilterSource) {
@@ -2301,7 +2343,6 @@ async function prepareBrowseContext(previousType = projectType.value) {
         if (version !== sourceRequestVersion || isUnmounted) return
         initializedFilterType = type
         initializedFilterSource = contentSource.value
-        filtersReady.value = true
         searchEnabled.value = true
         await searchState.refreshSearch()
     } catch (error) {
@@ -2421,7 +2462,6 @@ async function initializeBrowse() {
             const [capability, planetAvailable] = await Promise.all([
                 getCurseForgeCapability(),
                 planetMinecraftConnectorAvailable().catch(() => false),
-                loadFilterMetadata(),
                 initInstanceContext(),
             ])
             if (isUnmounted) return
@@ -2435,18 +2475,15 @@ async function initializeBrowse() {
             if (isWorldMapBrowse.value)
                 sourceBeforeWorldMapBrowse.value = getLastBrowseContentSource() ?? 'all'
             const memory = getBrowseFilterMemory(projectType.value)
-            if (
-                (hasExplicitFilterQuery() || memory?.filters.length) &&
-                (contentSource.value === 'curseforge' || contentSource.value === 'all')
-            ) {
-                await ensureCurseForgeCategories(projectType.value)
-            } else if (contentSource.value === 'curseforge' || contentSource.value === 'all') {
-                runAfterPageTransitionSettle(() => {
-                    if (!isUnmounted)
-                        void ensureCurseForgeCategories(projectType.value).catch(handleError)
-                })
-            }
-            if (contentSource.value === 'mcarchive') await refreshMcArchiveGameVersions()
+            const metadataRequest = prepareFilterMetadata()
+            const requiresFilterMetadata =
+                hasExplicitFilterQuery() ||
+                !!memory?.filters.length ||
+                !!activeInstance.value ||
+                isServerContext.value ||
+                projectType.value === 'server'
+            if (requiresFilterMetadata) await metadataRequest
+            else void metadataRequest.catch(() => {})
             await initialInstanceFilterPromise
             if (instanceHideInstalled.value) {
                 await initialInstalledProjectsPromise
@@ -2466,7 +2503,6 @@ async function initializeBrowse() {
             initializedFilterType = projectType.value
             initializedFilterSource = contentSource.value
             browseInitialized.value = true
-            filtersReady.value = true
             searchEnabled.value = true
             await searchState.refreshSearch()
             if (pendingRouteInstanceSwitch.value) {
@@ -2726,6 +2762,16 @@ provideBrowseManager({
                 </ContextMenu>
             </template>
             <template #above-results>
+                <div
+                    v-if="filterMetadataFailed && searchEnabled"
+                    role="alert"
+                    class="mb-3 flex items-center gap-3 rounded-lg border border-solid border-surface-4 bg-surface-2 p-3 text-sm"
+                >
+                    <span>{{ formatMessage(messages.filterMetadataFailed) }}</span>
+                    <Button @click="retryFilterMetadata">{{
+                        formatMessage(commonMessages.retryButton)
+                    }}</Button>
+                </div>
                 <div
                     v-if="resourceSearchNotice"
                     role="status"
