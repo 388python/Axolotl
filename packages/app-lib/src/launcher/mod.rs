@@ -1344,10 +1344,27 @@ async fn install_minecraft_with_local_source(
     )
     .await?;
 
-    let client_path = state
+    let mut client_path = state
         .directories
         .version_dir(&version_jar)
         .join(format!("{version_jar}.jar"));
+
+    if let Some(profile) = &mmc_profile {
+        client_path = profile
+            .prepare_runtime(
+                &state,
+                &client_path,
+                java_version
+                    .as_ref()
+                    .map(|java| java.architecture.as_str())
+                    .unwrap_or(std::env::consts::ARCH),
+                minecraft_updated,
+                false,
+            )
+            .await?
+            .assemble(&client_path, &instance_path)
+            .await?;
+    }
 
     let Some(java_version) = java_version else {
         if content_set.loader == ModLoader::OptiFine
@@ -2004,6 +2021,7 @@ pub async fn launch_minecraft(
 
     let cache_behaviour = offline_mode.then_some(CacheBehaviour::CacheOnly);
     let mut linked_libraries = None;
+    let mut mmc_profile = None;
 
     // PCL/PCL-CE expose per-instance launch preferences (Java, memory, custom
     // arguments) in their own config files; load them once for this launch.
@@ -2125,7 +2143,7 @@ pub async fn launch_minecraft(
                 .position(|x| x.id == "22w16a")
                 .unwrap_or(0);
 
-        let mmc_profile = multimc::MultiMcProfile::load(
+        mmc_profile = multimc::MultiMcProfile::load(
             &instance_path,
             &content_set.game_version,
             content_set.loader,
@@ -2465,10 +2483,23 @@ pub async fn launch_minecraft(
         // The game jar lives inside the linked installation.
         direct.client_jar(&version_jar)
     } else {
-        let vanilla_client_path = state
+        let mut vanilla_client_path = state
             .directories
             .version_dir(&version_jar)
             .join(format!("{version_jar}.jar"));
+        if let Some(profile) = &mmc_profile {
+            vanilla_client_path = profile
+                .prepare_runtime(
+                    &state,
+                    &vanilla_client_path,
+                    &java_version.architecture,
+                    minecraft_updated,
+                    offline_mode,
+                )
+                .await?
+                .assemble(&vanilla_client_path, &instance_path)
+                .await?;
+        }
         match crate::api::instance::assemble_for_launch(
             &instance_path,
             &content_set.game_version,
