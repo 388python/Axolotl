@@ -1,15 +1,15 @@
 //! Install preview derived from a dependency plan.
 
 use super::catalog::{get_file, get_project};
-use super::constants::{CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH};
+use super::constants::MAX_DEPENDENCY_DEPTH;
 use super::dto::{
     CurseForgeInstallRequest, CurseForgeProject, CurseForgeSkippedDependency,
     default_true,
 };
 use super::install::{
     CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
-    should_resolve_dependency,
 };
+use super::install::{DependencyAction, dependency_action};
 use super::mapping::{mod_loader_to_slug, recognized_project_type};
 use super::selection::{
     CurseForgeDependencySelectionReason, append_modrinth_fallback_plan,
@@ -19,7 +19,6 @@ use super::selection::{
     store_dependency_resolution_plan,
 };
 use crate::State;
-use crate::state::instances::DependencyRelation;
 use crate::state::{
     ContentProvider, DependencyResolutionEdge, DependencyResolutionIssue,
     DependencyResolutionNode, DependencyResolutionPlan,
@@ -135,173 +134,146 @@ pub async fn preview_install_file(
             && pending_file.depth < MAX_DEPENDENCY_DEPTH
         {
             for dependency_ref in &file.dependencies {
-                let relation = dependency_ref.relation();
-                let dependency_project_id = dependency_ref.target_project_id(
-                    request.mod_loader_type == Some(CURSEFORGE_LOADER_QUILT),
-                );
-                match relation {
-                    DependencyRelation::Incompatible => {
-                        incompatible.push(dependency_ref.mod_id)
-                    }
-                    DependencyRelation::Embedded | DependencyRelation::Tool => {
+                let dependency_project_id = match dependency_action(
+                    dependency_ref,
+                    &request,
+                    &installed_project_ids,
+                ) {
+                    DependencyAction::Skip {
+                        reason,
+                        target_project_id,
+                    } => {
                         skipped.push(CurseForgeSkippedDependency {
-                            project_id: dependency_ref.mod_id,
-                            file_id: None,
-                            reason: if relation == DependencyRelation::Embedded
+                            project_id: if reason == "embedded"
+                                || reason == "tool"
                             {
-                                "embedded".to_string()
+                                dependency_ref.mod_id
                             } else {
-                                "tool".to_string()
+                                target_project_id
                             },
-                        })
+                            file_id: None,
+                            reason: reason.to_string(),
+                        });
+                        continue;
                     }
-                    DependencyRelation::Optional
-                    | DependencyRelation::Include
-                    | DependencyRelation::Required => {
-                        if !should_resolve_dependency(
-                            relation,
-                            request.manual_operation_kind,
-                        ) {
-                            continue;
+                    DependencyAction::Incompatible => {
+                        incompatible.push(dependency_ref.mod_id);
+                        continue;
+                    }
+                    DependencyAction::Filtered => continue,
+                    DependencyAction::Resolve { target_project_id } => {
+                        target_project_id
+                    }
+                };
+                {
+                    let dependency_project = match projects
+                        .get(&dependency_project_id)
+                    {
+                        Some(project) => project.clone(),
+                        None => {
+                            let project =
+                                get_project(dependency_project_id).await?;
+                            projects
+                                .insert(dependency_project_id, project.clone());
+                            project
                         }
-                        if request
-                            .excluded_dependency_project_ids
-                            .contains(&dependency_project_id)
-                        {
-                            skipped.push(CurseForgeSkippedDependency {
-                                project_id: dependency_project_id,
-                                file_id: None,
-                                reason: "excluded_by_user".to_string(),
-                            });
-                            continue;
-                        }
-                        if installed_project_ids.contains(&format!(
-                            "curseforge:{dependency_project_id}"
-                        )) && !request
-                            .force_dependency_project_ids
-                            .contains(&dependency_project_id)
-                        {
-                            skipped.push(CurseForgeSkippedDependency {
-                                project_id: dependency_project_id,
-                                file_id: None,
-                                reason: "already_installed".to_string(),
-                            });
-                            continue;
-                        }
-                        let dependency_project = match projects
-                            .get(&dependency_project_id)
-                        {
-                            Some(project) => project.clone(),
-                            None => {
-                                let project =
-                                    get_project(dependency_project_id).await?;
-                                projects.insert(
-                                    dependency_project_id,
-                                    project.clone(),
-                                );
-                                project
-                            }
-                        };
-                        let Some(dependency_type) = recognized_project_type(
-                            dependency_project.class_id,
-                        ) else {
-                            skipped.push(CurseForgeSkippedDependency {
-                                project_id: dependency_project_id,
-                                file_id: None,
-                                reason: "unsupported_project_type".to_string(),
-                            });
-                            continue;
-                        };
-                        let Some(selected) = select_dependency_file(
-                            dependency_project_id,
-                            request.game_version.clone(),
-                            request.mod_loader_type,
-                        )
-                        .await?
-                        else {
-                            if fallback_parents.insert((project_id, file_id)) {
-                                match resolve_modrinth_fallback_plan(
-                                    &file, item_type, &request, &state,
-                                )
-                                .await
+                    };
+                    let Some(dependency_type) =
+                        recognized_project_type(dependency_project.class_id)
+                    else {
+                        skipped.push(CurseForgeSkippedDependency {
+                            project_id: dependency_project_id,
+                            file_id: None,
+                            reason: "unsupported_project_type".to_string(),
+                        });
+                        continue;
+                    };
+                    let Some(selected) = select_dependency_file(
+                        dependency_project_id,
+                        request.game_version.clone(),
+                        request.mod_loader_type,
+                    )
+                    .await?
+                    else {
+                        if fallback_parents.insert((project_id, file_id)) {
+                            match resolve_modrinth_fallback_plan(
+                                &file, item_type, &request, &state,
+                            )
+                            .await
+                            {
+                                Ok(Some(fallback_plan))
+                                    if !fallback_plan
+                                        .dependencies
+                                        .is_empty() =>
                                 {
-                                    Ok(Some(fallback_plan))
-                                        if !fallback_plan
-                                            .dependencies
-                                            .is_empty() =>
-                                    {
-                                        append_modrinth_fallback_plan(
-                                            &mut plan,
+                                    append_modrinth_fallback_plan(
+                                        &mut plan,
+                                        &fallback_plan,
+                                        &curseforge_content_ref(
+                                            project_id, file_id,
+                                        )?,
+                                        &state,
+                                    )
+                                    .await?;
+                                    modrinth_fallbacks.extend(
+                                        preview_modrinth_fallbacks(
                                             &fallback_plan,
-                                            &curseforge_content_ref(
-                                                project_id, file_id,
-                                            )?,
+                                            project_id,
                                             &state,
                                         )
-                                        .await?;
-                                        modrinth_fallbacks.extend(
-                                            preview_modrinth_fallbacks(
-                                                &fallback_plan,
-                                                project_id,
-                                                &state,
-                                            )
-                                            .await?,
-                                        );
-                                        continue;
-                                    }
-                                    Ok(Some(_) | None) => {}
-                                    Err(error) => {
-                                        tracing::warn!(
-                                            project_id = dependency_project_id,
-                                            parent_project_id = project_id,
-                                            parent_file_id = file_id,
-                                            "Modrinth SHA-1 dependency fallback failed: {error}"
-                                        );
-                                        skipped.push(
-                                            CurseForgeSkippedDependency {
-                                                project_id:
-                                                    dependency_project_id,
-                                                file_id: None,
-                                                reason:
-                                                    "modrinth_lookup_failed"
-                                                        .to_string(),
-                                            },
-                                        );
-                                        continue;
-                                    }
+                                        .await?,
+                                    );
+                                    continue;
+                                }
+                                Ok(Some(_) | None) => {}
+                                Err(error) => {
+                                    tracing::warn!(
+                                        project_id = dependency_project_id,
+                                        parent_project_id = project_id,
+                                        parent_file_id = file_id,
+                                        "Modrinth SHA-1 dependency fallback failed: {error}"
+                                    );
+                                    skipped.push(CurseForgeSkippedDependency {
+                                        project_id: dependency_project_id,
+                                        file_id: None,
+                                        reason: "modrinth_lookup_failed"
+                                            .to_string(),
+                                    });
+                                    continue;
                                 }
                             }
-                            skipped.push(CurseForgeSkippedDependency {
-                                project_id: dependency_project_id,
-                                file_id: None,
-                                reason: "no_compatible_version".to_string(),
-                            });
-                            continue;
-                        };
-                        let dependency_file = selected.file;
-                        let child_ref = curseforge_content_ref(
-                            dependency_project_id,
-                            dependency_file.id,
-                        )?;
-                        if pending_file.ancestors.contains(&(
-                            dependency_project_id,
-                            dependency_file.id,
-                        )) || (dependency_project_id, dependency_file.id)
-                            == (project_id, file_id)
-                        {
-                            skipped.push(CurseForgeSkippedDependency {
-                                project_id: dependency_project_id,
-                                file_id: Some(dependency_file.id),
-                                reason: "dependency_cycle".to_string(),
-                            });
-                            continue;
                         }
-                        let parent_ref =
-                            curseforge_content_ref(project_id, file_id)?;
-                        plan.edges.push(DependencyResolutionEdge {
+                        skipped.push(CurseForgeSkippedDependency {
+                            project_id: dependency_project_id,
+                            file_id: None,
+                            reason: "no_compatible_version".to_string(),
+                        });
+                        continue;
+                    };
+                    let dependency_file = selected.file;
+                    let child_ref = curseforge_content_ref(
+                        dependency_project_id,
+                        dependency_file.id,
+                    )?;
+                    if pending_file
+                        .ancestors
+                        .contains(&(dependency_project_id, dependency_file.id))
+                        || (dependency_project_id, dependency_file.id)
+                            == (project_id, file_id)
+                    {
+                        skipped.push(CurseForgeSkippedDependency {
+                            project_id: dependency_project_id,
+                            file_id: Some(dependency_file.id),
+                            reason: "dependency_cycle".to_string(),
+                        });
+                        continue;
+                    }
+                    let parent_ref =
+                        curseforge_content_ref(project_id, file_id)?;
+                    plan.edges.push(DependencyResolutionEdge {
                             parent: parent_ref.clone(),
                             child: child_ref.clone(),
-                            relation: if relation.is_required()
+                            relation: if dependency_ref.relation().is_required()
                             {
                                 crate::state::instances::ContentDependencyKind::Required
                             } else {
@@ -309,15 +281,12 @@ pub async fn preview_install_file(
                             },
                             evidence_provider: ContentProvider::CurseForge,
                         });
-                        if !plan
-                            .nodes
-                            .iter()
-                            .any(|node| node.content == child_ref)
-                        {
-                            plan.nodes.push(DependencyResolutionNode {
+                    if !plan.nodes.iter().any(|node| node.content == child_ref)
+                    {
+                        plan.nodes.push(DependencyResolutionNode {
                                 content: child_ref,
                                 parent: Some(parent_ref),
-                            relation: if relation.is_required()
+                            relation: if dependency_ref.relation().is_required()
                             {
                                 crate::state::instances::ContentDependencyKind::Required
                             } else {
@@ -328,51 +297,46 @@ pub async fn preview_install_file(
                                 expected_sha1: curseforge_file_sha1(&dependency_file),
                                 expected_size: Some(dependency_file.file_length),
                             });
-                        }
-                        let existing = dependencies.iter_mut().find(|item| {
-                            item.project_id == dependency_project_id
-                        });
-                        if let Some(existing) = existing {
-                            existing.required |= relation.is_required();
-                            if !existing
-                                .required_by_project_ids
-                                .contains(&project_id)
-                            {
-                                existing
-                                    .required_by_project_ids
-                                    .push(project_id);
-                            }
-                            continue;
-                        }
-                        dependencies.push(CurseForgePreviewItem {
-                            project_id: dependency_project_id,
-                            file_id: dependency_file.id,
-                            title: dependency_project.name.clone(),
-                            version_number: dependency_file
-                                .display_name
-                                .clone(),
-                            file_name: dependency_file.file_name.clone(),
-                            size: dependency_file.file_length,
-                            required_by_project_ids: vec![project_id],
-                            icon_url: dependency_project
-                                .logo
-                                .as_ref()
-                                .map(|logo| logo.thumbnail_url.clone()),
-                            version_mismatch: false,
-                            selection_reason: Some(selected.reason),
-                            required: relation.is_required(),
-                        });
-                        let mut ancestors = pending_file.ancestors.clone();
-                        ancestors.insert((project_id, file_id));
-                        pending.push(PreviewPendingCurseForgeFile {
-                            project_id: dependency_project_id,
-                            file_id: dependency_file.id,
-                            item_type: dependency_type,
-                            depth: pending_file.depth + 1,
-                            ancestors,
-                        });
                     }
-                    _ => {}
+                    let existing = dependencies
+                        .iter_mut()
+                        .find(|item| item.project_id == dependency_project_id);
+                    if let Some(existing) = existing {
+                        existing.required |=
+                            dependency_ref.relation().is_required();
+                        if !existing
+                            .required_by_project_ids
+                            .contains(&project_id)
+                        {
+                            existing.required_by_project_ids.push(project_id);
+                        }
+                        continue;
+                    }
+                    dependencies.push(CurseForgePreviewItem {
+                        project_id: dependency_project_id,
+                        file_id: dependency_file.id,
+                        title: dependency_project.name.clone(),
+                        version_number: dependency_file.display_name.clone(),
+                        file_name: dependency_file.file_name.clone(),
+                        size: dependency_file.file_length,
+                        required_by_project_ids: vec![project_id],
+                        icon_url: dependency_project
+                            .logo
+                            .as_ref()
+                            .map(|logo| logo.thumbnail_url.clone()),
+                        version_mismatch: false,
+                        selection_reason: Some(selected.reason),
+                        required: dependency_ref.relation().is_required(),
+                    });
+                    let mut ancestors = pending_file.ancestors.clone();
+                    ancestors.insert((project_id, file_id));
+                    pending.push(PreviewPendingCurseForgeFile {
+                        project_id: dependency_project_id,
+                        file_id: dependency_file.id,
+                        item_type: dependency_type,
+                        depth: pending_file.depth + 1,
+                        ancestors,
+                    });
                 }
             }
         } else if request.install_dependencies {
