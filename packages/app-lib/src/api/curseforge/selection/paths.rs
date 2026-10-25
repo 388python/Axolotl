@@ -169,54 +169,54 @@ async fn persist_manual_modpack_archive(
     let state = State::get().await?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
     let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-		instance_id,
-		&state.pool,
-	)
-	.await?
-	.ok_or_else(|| {
-		ErrorKind::InputError(
-			"Instance has no applied content set".to_string(),
-		)
-	})?;
+        instance_id,
+        &state.pool,
+    )
+    .await?
+    .ok_or_else(|| {
+        ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?;
     let now = chrono::Utc::now();
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     crate::state::instances::adapters::sqlite::content_rows::upsert_pending_manual_download_in_transaction(
-		&crate::state::instances::PendingManualDownload {
-			id: format!("manual-download:{}", uuid::Uuid::new_v4()),
-			instance_id: instance_id.to_string(),
-			pack_member_id: None,
-			content_entry_id: None,
-			operation_kind: download.operation_kind,
-			operation_target_id: Some(download.file_id.to_string()),
-			project_type: ProjectType::Mod,
-			provider: ContentProvider::CurseForge,
-			provider_project_id: download.project_id.to_string(),
-			provider_release_id: download.file_id.to_string(),
-			file_name: download.file_name.clone(),
-			website_url: download.website_url.clone(),
-			target_relative_path: download.file_name.clone(),
-			expected_sha1: download
-				.hashes
-				.iter()
-				.find(|hash| hash.algo == 1)
-				.map(|hash| hash.value.clone()),
-			expected_size: (download.file_length > 0)
-				.then_some(download.file_length),
-			expected_fingerprint: (download.file_fingerprint > 0)
-				.then_some(download.file_fingerprint),
-			state: crate::state::instances::ManualDownloadState::Waiting,
-			context: serde_json::to_value(download)?,
-			created_at: now,
-			modified_at: now,
-		},
-		&mut tx,
-	)
-	.await?;
+        &crate::state::instances::PendingManualDownload {
+            id: format!("manual-download:{}", uuid::Uuid::new_v4()),
+            instance_id: instance_id.to_string(),
+            pack_member_id: None,
+            content_entry_id: None,
+            operation_kind: download.operation_kind,
+            operation_target_id: Some(download.file_id.to_string()),
+            project_type: ProjectType::Mod,
+            provider: ContentProvider::CurseForge,
+            provider_project_id: download.project_id.to_string(),
+            provider_release_id: download.file_id.to_string(),
+            file_name: download.file_name.clone(),
+            website_url: download.website_url.clone(),
+            target_relative_path: download.file_name.clone(),
+            expected_sha1: download
+                .hashes
+                .iter()
+                .find(|hash| hash.algo == 1)
+                .map(|hash| hash.value.clone()),
+            expected_size: (download.file_length > 0)
+                .then_some(download.file_length),
+            expected_fingerprint: (download.file_fingerprint > 0)
+                .then_some(download.file_fingerprint),
+            state: crate::state::instances::ManualDownloadState::Waiting,
+            context: serde_json::to_value(download)?,
+            created_at: now,
+            modified_at: now,
+        },
+        &mut tx,
+    )
+    .await?;
     crate::state::instances::adapters::sqlite::content_rows::bump_content_set_revision_in_transaction(
-		&content_set.id,
-		&mut tx,
-	)
-	.await?;
+        &content_set.id,
+        &mut tx,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -231,37 +231,37 @@ async fn persist_manual_world_archive(
     let now = chrono::Utc::now();
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     crate::state::instances::adapters::sqlite::content_rows::upsert_pending_manual_download_in_transaction(
-		&crate::state::instances::PendingManualDownload {
-			id: format!("manual-download:{}", uuid::Uuid::new_v4()),
-			instance_id: instance_id.to_string(),
-			pack_member_id: None,
-			content_entry_id: None,
-			operation_kind: download.operation_kind,
-			operation_target_id: None,
-			project_type: ProjectType::WorldSave,
-			provider: ContentProvider::CurseForge,
-			provider_project_id: download.project_id.to_string(),
-			provider_release_id: download.file_id.to_string(),
-			file_name: download.file_name.clone(),
-			website_url: download.website_url.clone(),
-			target_relative_path: format!("saves/{}", download.file_name),
-			expected_sha1: download
-				.hashes
-				.iter()
-				.find(|hash| hash.algo == 1)
-				.map(|hash| hash.value.clone()),
-			expected_size: (download.file_length > 0)
-				.then_some(download.file_length),
-			expected_fingerprint: (download.file_fingerprint > 0)
-				.then_some(download.file_fingerprint),
-			state: crate::state::instances::ManualDownloadState::Waiting,
-			context: serde_json::to_value(download)?,
-			created_at: now,
-			modified_at: now,
-		},
-		&mut tx,
-	)
-	.await?;
+        &crate::state::instances::PendingManualDownload {
+            id: format!("manual-download:{}", uuid::Uuid::new_v4()),
+            instance_id: instance_id.to_string(),
+            pack_member_id: None,
+            content_entry_id: None,
+            operation_kind: download.operation_kind,
+            operation_target_id: None,
+            project_type: ProjectType::WorldSave,
+            provider: ContentProvider::CurseForge,
+            provider_project_id: download.project_id.to_string(),
+            provider_release_id: download.file_id.to_string(),
+            file_name: download.file_name.clone(),
+            website_url: download.website_url.clone(),
+            target_relative_path: format!("saves/{}", download.file_name),
+            expected_sha1: download
+                .hashes
+                .iter()
+                .find(|hash| hash.algo == 1)
+                .map(|hash| hash.value.clone()),
+            expected_size: (download.file_length > 0)
+                .then_some(download.file_length),
+            expected_fingerprint: (download.file_fingerprint > 0)
+                .then_some(download.file_fingerprint),
+            state: crate::state::instances::ManualDownloadState::Waiting,
+            context: serde_json::to_value(download)?,
+            created_at: now,
+            modified_at: now,
+        },
+        &mut tx,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -274,13 +274,13 @@ pub(crate) async fn complete_manual_world_download(
     let _instance_lock = state.lock_instance_content(instance_id).await;
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     crate::state::instances::adapters::sqlite::content_rows::complete_pending_manual_download(
-		instance_id,
-		&download.project_id.to_string(),
-		&download.file_id.to_string(),
-		None,
-		&mut tx,
-	)
-	.await?;
+        instance_id,
+        &download.project_id.to_string(),
+        &download.file_id.to_string(),
+        None,
+        &mut tx,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -340,7 +340,7 @@ pub(crate) async fn persist_manual_download(
                 format!("pack-member:{}", uuid::Uuid::new_v4())
             });
             crate::state::instances::adapters::sqlite::content_rows::upsert_pack_member_in_transaction(
-			&crate::state::instances::PackMember {
+            &crate::state::instances::PackMember {
                 id: member_id.clone(),
                 content_set_id: content_set.id.clone(),
                 content_entry_id: None,
@@ -366,9 +366,9 @@ pub(crate) async fn persist_manual_download(
                 created_at: now,
                 modified_at: now,
             },
-			&mut tx,
-		)
-		.await?;
+            &mut tx,
+        )
+        .await?;
             Some(member_id)
         }
     } else {

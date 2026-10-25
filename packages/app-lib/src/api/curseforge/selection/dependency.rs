@@ -161,13 +161,13 @@ pub(crate) async fn instance_content_revision(
         return Ok(None);
     }
     Ok(
-		crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-			instance_id,
-			&state.pool,
-		)
-		.await?
-		.map(|content_set| content_set.revision),
-	)
+        crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
+            instance_id,
+            &state.pool,
+        )
+        .await?
+        .map(|content_set| content_set.revision),
+    )
 }
 
 pub(crate) fn store_dependency_resolution_plan(plan: DependencyResolutionPlan) {
@@ -185,13 +185,13 @@ pub(crate) fn store_dependency_resolution_plan(plan: DependencyResolutionPlan) {
 impl From<CurseForgeDependencySelectionReason> for DependencySelectionReason {
     fn from(reason: CurseForgeDependencySelectionReason) -> Self {
         match reason {
-			CurseForgeDependencySelectionReason::NativeStrictMatch => {
-				Self::NativeStrictMatch
-			}
-			CurseForgeDependencySelectionReason::Sha1VerifiedModrinthFallback => {
-				Self::Sha1VerifiedModrinthFallback
-			}
-		}
+            CurseForgeDependencySelectionReason::NativeStrictMatch => {
+                Self::NativeStrictMatch
+            }
+            CurseForgeDependencySelectionReason::Sha1VerifiedModrinthFallback => {
+                Self::Sha1VerifiedModrinthFallback
+            }
+        }
     }
 }
 

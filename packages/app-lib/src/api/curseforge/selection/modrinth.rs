@@ -169,14 +169,14 @@ pub(crate) async fn append_modrinth_fallback_plan(
                     .find(|candidate| candidate.version_id == version_id)
                 else {
                     resolution_plan.issues.push(DependencyResolutionIssue {
-						provider: ContentProvider::Modrinth,
-						project_id: dependency.project_id.clone(),
-						parent: Some(curseforge_parent.clone()),
-						relation: Some(
-							crate::state::instances::ContentDependencyKind::Required,
-						),
-						reason: "dependency_parent_unresolved".to_string(),
-					});
+                        provider: ContentProvider::Modrinth,
+                        project_id: dependency.project_id.clone(),
+                        parent: Some(curseforge_parent.clone()),
+                        relation: Some(
+                            crate::state::instances::ContentDependencyKind::Required,
+                        ),
+                        reason: "dependency_parent_unresolved".to_string(),
+                    });
                     continue;
                 };
                 ContentProviderRef::Modrinth {

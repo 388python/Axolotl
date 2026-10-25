@@ -297,22 +297,22 @@ pub async fn install_modpack_with_reporter(
     .await?;
     let Some(download_url) = download_url else {
         let manual_download = CurseForgeManualDownload {
-			project_id: request.project_id,
-			file_id: request.file_id,
-			file_name: pack_file.file_name.clone(),
-			ownership_kind: crate::state::instances::ContentOwnershipKind::PackManaged,
-			operation_kind: crate::state::instances::ManualDownloadOperationKind::PackInstall,
-			website_url: curseforge_file_page_url(
-				project.links.website_url.as_deref(),
-				request.file_id,
-			),
-			project_type: "modpack".to_string(),
-			project_slug: project.slug.clone(),
-			target_folder: String::new(),
-			hashes: pack_file.hashes.clone(),
-			file_length: pack_file.file_length,
-			file_fingerprint: pack_file.file_fingerprint,
-		};
+            project_id: request.project_id,
+            file_id: request.file_id,
+            file_name: pack_file.file_name.clone(),
+            ownership_kind: crate::state::instances::ContentOwnershipKind::PackManaged,
+            operation_kind: crate::state::instances::ManualDownloadOperationKind::PackInstall,
+            website_url: curseforge_file_page_url(
+                project.links.website_url.as_deref(),
+                request.file_id,
+            ),
+            project_type: "modpack".to_string(),
+            project_slug: project.slug.clone(),
+            target_folder: String::new(),
+            hashes: pack_file.hashes.clone(),
+            file_length: pack_file.file_length,
+            file_fingerprint: pack_file.file_fingerprint,
+        };
         persist_manual_download(&request.instance_id, &manual_download).await?;
         return Ok(CurseForgeModpackInstallResult {
             content: CurseForgeInstallResult {
@@ -388,30 +388,30 @@ pub async fn install_modpack_with_reporter(
         && !request.allow_target_change
     {
         return Err(ErrorKind::InputError(format!(
-				"This modpack targets Minecraft {} with {}, while the selected instance uses {} with {}",
-				manifest.minecraft.version,
-				loader.as_deref().unwrap_or("vanilla"),
-				instance_game_version,
-				instance_loader
-			))
-			.into());
+                "This modpack targets Minecraft {} with {}, while the selected instance uses {} with {}",
+                manifest.minecraft.version,
+                loader.as_deref().unwrap_or("vanilla"),
+                instance_game_version,
+                instance_loader
+            ))
+            .into());
     }
 
     let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-			&request.instance_id,
-			&state.pool,
-		)
-		.await?
-		.ok_or_else(|| {
-			ErrorKind::InputError(
-				"Instance has no applied content set".to_string(),
-			)
-		})?;
+            &request.instance_id,
+            &state.pool,
+        )
+        .await?
+        .ok_or_else(|| {
+            ErrorKind::InputError(
+                "Instance has no applied content set".to_string(),
+            )
+        })?;
     let pack_members = crate::state::instances::adapters::sqlite::content_rows::get_pack_members(
-			&content_set.id,
-			&state.pool,
-		)
-		.await?;
+            &content_set.id,
+            &state.pool,
+        )
+        .await?;
     let (selected_files, disabled_pack_projects) =
         select_modpack_manifest_files(
             &manifest,
@@ -842,7 +842,7 @@ pub async fn install_modpack_with_reporter(
         .unwrap_or_default();
     let materialized_overrides = if should_commit {
         Some(
-			crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
+            crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
                 request.instance_id.clone(),
                 override_cancellation.clone(),
                 move |cancellation| {
@@ -862,11 +862,11 @@ pub async fn install_modpack_with_reporter(
         .as_ref()
         .map_or(0, |(files_written, _)| *files_written);
     let post_override_result: crate::Result<()> = async {
-		if let Some(reporter) = reporter.as_ref() {
-			reporter
-				.update(InstallPhaseId::Finalizing, None, pack_details)
-				.await?;
-		}
+        if let Some(reporter) = reporter.as_ref() {
+            reporter
+                .update(InstallPhaseId::Finalizing, None, pack_details)
+                .await?;
+        }
         if should_commit && !request.allow_target_change {
             crate::api::instance::edit(
             &request.instance_id,
@@ -894,15 +894,15 @@ pub async fn install_modpack_with_reporter(
             )
             .await?;
             let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-			&request.instance_id,
-			&state.pool,
-		)
-		.await?
-		.ok_or_else(|| {
-			ErrorKind::InputError(
-				"Instance has no applied content set".to_string(),
-			)
-			})?;
+            &request.instance_id,
+            &state.pool,
+        )
+        .await?
+        .ok_or_else(|| {
+            ErrorKind::InputError(
+                "Instance has no applied content set".to_string(),
+            )
+            })?;
             crate::state::sync_content_files(&request.instance_id, &state)
                 .await?;
             match get_modpack_expected_members(
@@ -913,12 +913,12 @@ pub async fn install_modpack_with_reporter(
             {
                 Ok(expected) => {
                     crate::state::instances::commands::reconcile_curseforge_members(
-					&request.instance_id,
-					&content_set.id,
-					&expected,
-					&state,
-				)
-					.await?;
+                    &request.instance_id,
+                    &content_set.id,
+                    &expected,
+                    &state,
+                )
+                    .await?;
                 }
                 Err(error) => tracing::warn!(
                     "Unable to persist the complete CurseForge pack manifest: {error}"
@@ -1376,7 +1376,7 @@ pub async fn install_modpack_from_local_archive_with_reporter(
     let overrides_archive_path = archive_path.clone();
     let override_cancellation = reporter.cancellation_token();
     let (overrides_written, override_replacements) =
-		crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
+        crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
             instance_id.clone(),
             override_cancellation.clone(),
             move |cancellation| {
@@ -1457,29 +1457,29 @@ pub(crate) async fn install_local_manifest_files(
     let reporter = &reporter.clone().with_pipeline_cancellation();
     let state = State::get().await?;
     let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-		instance_id,
-		&state.pool,
-	)
-	.await?
-	.ok_or_else(|| {
-		ErrorKind::InputError(
-			"Instance has no applied content set".to_string(),
-		)
-	})?;
+        instance_id,
+        &state.pool,
+    )
+    .await?
+    .ok_or_else(|| {
+        ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?;
     let installed_releases = crate::state::instances::adapters::sqlite::content_rows::get_pack_members(
-		&content_set.id,
-		&state.pool,
-	)
-	.await?
-	.into_iter()
-	.filter(|member| {
-		member.materialization_state
-			== crate::state::instances::PackMemberMaterializationState::Present
-	})
-	.filter_map(|member| {
-		Some((member.provider_project_id?, member.provider_release_id?))
-	})
-	.collect::<HashSet<_>>();
+        &content_set.id,
+        &state.pool,
+    )
+    .await?
+    .into_iter()
+    .filter(|member| {
+        member.materialization_state
+            == crate::state::instances::PackMemberMaterializationState::Present
+    })
+    .filter_map(|member| {
+        Some((member.provider_project_id?, member.provider_release_id?))
+    })
+    .collect::<HashSet<_>>();
     let selected_files = manifest_files
         .into_iter()
         .filter(|file| file.required || install_optional)
@@ -1872,11 +1872,11 @@ pub(crate) async fn get_modpack_expected_members_with_reporter(
     )
     .await?
     .ok_or_else(|| {
-		ErrorKind::InputError(
-			"The linked CurseForge pack archive requires a manual download, so membership cannot be calibrated automatically"
-				.to_string(),
-		)
-	})?;
+        ErrorKind::InputError(
+            "The linked CurseForge pack archive requires a manual download, so membership cannot be calibrated automatically"
+                .to_string(),
+        )
+    })?;
     let pack_details = InstallPhaseDetails::Modpack {
         project_id: Some(project_id.to_string()),
         version_id: Some(file_id.to_string()),
