@@ -4,7 +4,7 @@ use super::catalog::{get_file, get_project};
 use super::constants::{CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH};
 use super::dto::{
     CurseForgeInstallRequest, CurseForgeProject, CurseForgeSkippedDependency,
-    DependencyRelation, default_true,
+    default_true,
 };
 use super::install::{
     CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
@@ -19,6 +19,7 @@ use super::selection::{
     store_dependency_resolution_plan,
 };
 use crate::State;
+use crate::state::instances::DependencyRelation;
 use crate::state::{
     ContentProvider, DependencyResolutionEdge, DependencyResolutionIssue,
     DependencyResolutionNode, DependencyResolutionPlan,

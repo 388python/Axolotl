@@ -38,10 +38,10 @@ use super::verify::{
 use crate::api::content_search::{
     chinese_file_title_for_curseforge_slug, localized_content_file_name,
 };
-use crate::event::LoadingBarType;
 use crate::event::emit::{
     emit_loading, init_loading, loading_try_for_each_concurrent,
 };
+use crate::event::{LoadingBarId, LoadingBarType};
 use crate::install::{
     InstallJobEventKind, InstallPhaseDetails, InstallPhaseId, InstallProgress,
     InstallProgressReporter, InstallProgressSecondary,
@@ -508,302 +508,37 @@ pub async fn install_modpack_with_reporter(
             .await?;
     }
 
-    tracing::info!(
-        selected_manifest_files = selected_files.len(),
-        "Resolved CurseForge modpack manifest files"
-    );
-    let content = Arc::new(Mutex::new(CurseForgeInstallResult::default()));
-    let files_done = Arc::new(AtomicU64::new(0));
-    let bytes_done = Arc::new(AtomicU64::new(0));
-    let active_downloads = Arc::new(AtomicU64::new(0));
-    let cancellation = reporter
-        .as_ref()
-        .map(InstallProgressReporter::cancellation_token)
-        .unwrap_or_default();
-    // Keep pipeline memory and staged-file growth bounded independently of
-    // the manifest size. The buffer absorbs normal verifier/SQLite jitter;
-    // sustained downstream pressure intentionally reaches the producers.
-    let (verification_tx, verification_rx) =
-        mpsc::channel::<CurseForgeVerificationTask>(
-            MODPACK_VERIFICATION_QUEUE_CAPACITY,
-        );
-    let verification_context = CurseForgeVerificationContext {
-        reporter: reporter.clone(),
-        loading_bar: loading_bar.clone(),
-        details: pack_details.clone(),
-        files_done: files_done.clone(),
-        bytes_done: bytes_done.clone(),
-        active_downloads: active_downloads.clone(),
-        total_files: total_files as u64,
-        total_bytes: content_total_bytes,
-        cancellation: cancellation.clone(),
-    };
-    let (database_tx, database_rx) = mpsc::channel::<CurseForgeDatabaseTask>(
-        MODPACK_DATABASE_QUEUE_CAPACITY,
-    );
-    let database_worker = spawn_curseforge_database_worker(
-        database_rx,
-        verification_context.clone(),
-    );
-    let verification_worker = spawn_curseforge_verification_worker(
-        verification_rx,
-        verification_context,
-        database_tx.clone(),
-    );
-    let download_metrics = reporter.as_ref().map(|reporter| {
-        Arc::new(CurseForgeDownloadMetrics::with_reporter(reporter.clone()))
-    });
-    let projects = Arc::new(projects);
-    let file_meta = Arc::new(file_meta);
-    let minecraft_version = manifest.minecraft.version.clone();
-    let download_result = loading_try_for_each_concurrent(
-        stream::iter(selected_files.into_iter().map(Ok::<_, crate::Error>)),
-        Some(state.download_concurrency()),
-        // Progress is updated manually with file+byte counts below.
-        None,
-        1.0,
-        total_files,
-        None,
-        |manifest_file| {
-            let content = content.clone();
-            let projects = projects.clone();
-            let file_meta = file_meta.clone();
-            let files_done = files_done.clone();
-            let bytes_done = bytes_done.clone();
-            let active_downloads = active_downloads.clone();
-            let loading_bar = loading_bar.clone();
-            let reporter = reporter.clone();
-            let download_metrics = download_metrics.clone();
-            let pack_details = pack_details.clone();
-            let minecraft_version = minecraft_version.clone();
-            let request = request.clone();
-            let verification_tx = verification_tx.clone();
-            let cancellation = cancellation.clone();
-            let existing_relative_paths = existing_relative_paths.clone();
-            async move {
-                if cancellation.is_cancelled() {
-                    return Err(ErrorKind::OtherError("download canceled".to_string()).into());
-                }
-                let project = projects
-                    .get(&manifest_file.project_id)
-                    .ok_or_else(|| {
-                        ErrorKind::OtherError(format!(
-                            "CurseForge project metadata is missing for {}",
-                            manifest_file.project_id
-                        ))
-                    })?;
-                let project_type = project_type_for_class(project.class_id);
-                let folder = modpack_target_folder(project_type)?;
-                let meta = file_meta.get(&manifest_file.file_id).ok_or_else(|| {
-                    ErrorKind::OtherError(format!(
-                        "CurseForge file metadata is missing for {}",
-                        manifest_file.file_id
-                    ))
-                })?;
-                let file_name = crate::util::io::sanitize_download_file_name(&meta.file_name)?;
-                let original_relative_path = format!("{folder}/{file_name}");
-                let localized_candidate = (project_type != "mod" && project_type != "world")
-                    .then(|| {
-                        chinese_file_title_for_curseforge_slug(&project.slug)
-                            .and_then(|title| {
-                                localized_content_file_name(&file_name, &title)
-                            })
-                            .map(|file_name| format!("{folder}/{file_name}"))
-                    })
-                    .flatten();
-                let pre_resolved_relative_path = if existing_relative_paths
-                    .contains(&original_relative_path)
-                {
-                    original_relative_path
-                } else if let Some(localized) = localized_candidate {
-                    if existing_relative_paths.contains(&localized) || prefer_localized_names {
-                        localized
-                    } else {
-                        original_relative_path
-                    }
-                } else {
-                    original_relative_path
-                };
-
-                let mut active_download =
-                    ActiveCurseForgeDownload::start(active_downloads.clone());
-                let (installed_result, failed_result, failure_reason) =
-                    retry_modpack_file_install(
-                        &request.instance_id,
-                        &manifest_file,
-                        project_type,
-                        &minecraft_version,
-                        loader_type_value,
-                        if request.allow_target_change {
-                            crate::state::instances::ManualDownloadOperationKind::PackUpdate
-                        } else {
-                            crate::state::instances::ManualDownloadOperationKind::PackInstall
-                        },
-                        download_metrics.as_deref(),
-                        file_meta
-                            .get(&manifest_file.file_id)
-                            .map(|file| file.file_name.as_str())
-                        .unwrap_or("<unknown>"),
-                        cancellation.clone(),
-                        Some(verification_tx.clone()),
-                        Some(pre_resolved_relative_path),
-                        Some((project.clone(), meta.clone())),
-                    )
-                    .await;
-                active_download.finish();
-
-                if cancellation.is_cancelled() {
-                    return Err(ErrorKind::OtherError("download canceled".to_string()).into());
-                }
-
-                let Some(item_result) = installed_result else {
-                    let mut failed_result = failed_result.unwrap_or_default();
-                    let file_name = file_meta
-                        .get(&manifest_file.file_id)
-                        .map(|file| file.file_name.clone())
-                        .unwrap_or_else(|| {
-                            format!(
-                                "project-{}-file-{}",
-                                manifest_file.project_id,
-                                manifest_file.file_id
-                            )
-                        });
-                    let manual_download =
-                        failed_result.manual_downloads.first().cloned();
-                    let event = if let Some(manual_download) =
-                        manual_download.as_ref()
-                    {
-                        InstallJobEventKind::ContentFileSkipped {
-                            path: manual_download.file_name.clone(),
-                            reason: "CurseForge requires manual download"
-                                .to_string(),
-                            project_id: Some(
-                                manifest_file.project_id.to_string(),
-                            ),
-                            version_id: Some(manifest_file.file_id.to_string()),
-                            manual_url: manual_download.website_url.clone(),
-                        }
-                    } else {
-                        let reason = format!(
-                            "Failed after {MODPACK_FILE_INSTALL_ATTEMPTS} attempts: {failure_reason}"
-                        );
-                        failed_result.failed_downloads.push(
-                            CurseForgeFailedDownload {
-                                project_id: manifest_file.project_id,
-                                file_id: manifest_file.file_id,
-                                file_name: file_name.clone(),
-                                reason: reason.clone(),
-                            },
-                        );
-                        InstallJobEventKind::ContentFileFailed {
-                            path: file_name,
-                            reason,
-                            project_id: Some(
-                                manifest_file.project_id.to_string(),
-                            ),
-                            version_id: Some(manifest_file.file_id.to_string()),
-                        }
-                    };
-                    {
-                        let mut content =
-                            content.lock().expect("content mutex");
-                        merge_install_result(&mut content, failed_result);
-                    }
-                    report_modpack_progress(
-                        loading_bar.as_deref(),
-                        reporter.as_ref(),
-                        pack_details,
-                        &files_done,
-                        &bytes_done,
-                        &active_downloads,
-                        total_files as u64,
-                        content_total_bytes,
-                        0,
-                        event,
-                    )
-                    .await?;
-                    return Ok(());
-                };
-                if project_type == "world" {
-                    report_modpack_progress(loading_bar.as_deref(), reporter.as_ref(), pack_details.clone(), &files_done, &bytes_done, &active_downloads, total_files as u64, content_total_bytes, meta.file_length, InstallJobEventKind::ContentFileCompleted {
-                        path: item_result.installed[0].relative_path.clone(), bytes: meta.file_length,
-                    }).await?;
-                }
-                {
-                    let mut content = content.lock().expect("content mutex");
-                    merge_install_result(&mut content, item_result);
-                }
-                Ok(())
-            }
+    let content = install_pack_files(
+        PackFileInstall {
+            source: "remote",
+            instance_id: &request.instance_id,
+            minecraft_version: &manifest.minecraft.version,
+            loader_type_value,
+            operation_kind: if request.allow_target_change {
+                crate::state::instances::ManualDownloadOperationKind::PackUpdate
+            } else {
+                crate::state::instances::ManualDownloadOperationKind::PackInstall
+            },
+            pack_details: pack_details.clone(),
+            reporter: reporter.clone(),
+            loading_bar: loading_bar.clone(),
+            download_metrics: reporter.as_ref().map(|reporter| {
+                Arc::new(CurseForgeDownloadMetrics::with_reporter(
+                    reporter.clone(),
+                ))
+            }),
+            selected_files,
+            projects: HashMap::clone(&projects),
+            file_meta: HashMap::clone(&file_meta),
+            existing_relative_paths,
+            prefer_localized_names,
+            total_files,
+            content_total_bytes,
         },
+        &state,
     )
-    .await;
+    .await?;
 
-    if let Err(error) = &download_result {
-        if let Some(reporter) = &reporter {
-            reporter.fail_pipeline(error);
-        }
-        cancellation.cancel();
-    }
-
-    drop(verification_tx);
-    let verification_result = verification_worker.await.map_err(|e| {
-        ErrorKind::OtherError(format!("verification worker failed: {e}"))
-    })?;
-    drop(database_tx);
-    let database_result = database_worker.await.map_err(|e| {
-        ErrorKind::OtherError(format!("database worker failed: {e}"))
-    })?;
-    if let Some(error) = reporter
-        .as_ref()
-        .and_then(InstallProgressReporter::pipeline_failure)
-    {
-        return Err(error);
-    }
-    verification_result?;
-    database_result?;
-    download_result?;
-
-    // Every selected file has now passed verification and database
-    // registration. Publish an authoritative item-count completion snapshot
-    // so a final byte-progress sample cannot leave CurseForge installs at
-    // 99% in the frontend.
-    if let Some(reporter) = reporter.as_ref() {
-        reporter
-            .update(
-                InstallPhaseId::DownloadingContent,
-                Some(InstallProgress {
-                    current: total_files as u64,
-                    total: total_files as u64,
-                    secondary: Some(InstallProgressSecondary {
-                        current: content_total_bytes,
-                        total: content_total_bytes,
-                    }),
-                }),
-                pack_details.clone(),
-            )
-            .await?;
-    }
-
-    if let (Some(reporter), Some(download_metrics)) =
-        (reporter.as_ref(), download_metrics.as_ref())
-    {
-        download_metrics.finish(reporter).await?;
-    }
-
-    let content = Arc::try_unwrap(content)
-        .map_err(|_| {
-            ErrorKind::OtherError(
-                "CurseForge install state was still shared after completion"
-                    .to_string(),
-            )
-        })?
-        .into_inner()
-        .map_err(|_| {
-            ErrorKind::OtherError(
-                "CurseForge install state mutex was poisoned".to_string(),
-            )
-        })?;
     if request.allow_target_change {
         for installed in &content.installed {
             if disabled_pack_projects
@@ -966,6 +701,344 @@ pub async fn install_modpack_with_reporter(
         minecraft_version: manifest.minecraft.version,
         loader,
     })
+}
+
+/// One pass of the modpack member installation pipeline, shared by the remote
+/// and local manifest entry points.
+struct PackFileInstall<'a> {
+    source: &'static str,
+    instance_id: &'a str,
+    minecraft_version: &'a str,
+    loader_type_value: Option<u32>,
+    operation_kind: crate::state::instances::ManualDownloadOperationKind,
+    pack_details: InstallPhaseDetails,
+    reporter: Option<InstallProgressReporter>,
+    loading_bar: Option<Arc<LoadingBarId>>,
+    download_metrics: Option<Arc<CurseForgeDownloadMetrics>>,
+    selected_files: Vec<CurseForgeManifestFile>,
+    projects: HashMap<u32, CurseForgeProject>,
+    file_meta: HashMap<u32, CurseForgeFile>,
+    existing_relative_paths: Arc<HashSet<String>>,
+    prefer_localized_names: bool,
+    total_files: usize,
+    content_total_bytes: u64,
+}
+
+async fn install_pack_files(
+    ctx: PackFileInstall<'_>,
+    state: &State,
+) -> crate::Result<CurseForgeInstallResult> {
+    let instance_id = ctx.instance_id.to_string();
+    let minecraft_version = ctx.minecraft_version.to_string();
+    let loader_type_value = ctx.loader_type_value;
+    let operation_kind = ctx.operation_kind;
+    let pack_details = ctx.pack_details.clone();
+    let reporter = ctx.reporter.clone();
+    let loading_bar = ctx.loading_bar.clone();
+    let download_metrics = ctx.download_metrics.clone();
+    let selected_files = ctx.selected_files.clone();
+    let projects = ctx.projects.clone();
+    let file_meta = ctx.file_meta.clone();
+    let existing_relative_paths = ctx.existing_relative_paths.clone();
+    let prefer_localized_names = ctx.prefer_localized_names;
+    let total_files = ctx.total_files;
+    let content_total_bytes = ctx.content_total_bytes;
+    tracing::info!(
+        selected_manifest_files = selected_files.len(),
+        ctx.source,
+        "Resolved CurseForge modpack manifest files"
+    );
+
+    let content = Arc::new(Mutex::new(CurseForgeInstallResult::default()));
+    let projects = Arc::new(projects);
+    let file_meta = Arc::new(file_meta);
+    let files_done = Arc::new(AtomicU64::new(0));
+    let bytes_done = Arc::new(AtomicU64::new(0));
+    let active_downloads = Arc::new(AtomicU64::new(0));
+    let cancellation = reporter
+        .as_ref()
+        .map(InstallProgressReporter::cancellation_token)
+        .unwrap_or_default();
+    let (verification_tx, verification_rx) =
+        mpsc::channel::<CurseForgeVerificationTask>(
+            MODPACK_VERIFICATION_QUEUE_CAPACITY,
+        );
+    let verification_context = CurseForgeVerificationContext {
+        reporter: reporter.clone(),
+        loading_bar: loading_bar.clone(),
+        details: pack_details.clone(),
+        files_done: files_done.clone(),
+        bytes_done: bytes_done.clone(),
+        active_downloads: active_downloads.clone(),
+        total_files: total_files as u64,
+        total_bytes: content_total_bytes,
+        cancellation: cancellation.clone(),
+    };
+    let (database_tx, database_rx) = mpsc::channel::<CurseForgeDatabaseTask>(
+        MODPACK_DATABASE_QUEUE_CAPACITY,
+    );
+    let database_worker = spawn_curseforge_database_worker(
+        database_rx,
+        verification_context.clone(),
+    );
+    let verification_worker = spawn_curseforge_verification_worker(
+        verification_rx,
+        verification_context,
+        database_tx.clone(),
+    );
+
+    let download_result = loading_try_for_each_concurrent(
+        stream::iter(selected_files.into_iter().map(Ok::<_, crate::Error>)),
+        Some(state.download_concurrency()),
+        None,
+        1.0,
+        total_files,
+        None,
+        |manifest_file| {
+            let content = content.clone();
+            let projects = projects.clone();
+            let file_meta = file_meta.clone();
+            let files_done = files_done.clone();
+            let bytes_done = bytes_done.clone();
+            let active_downloads = active_downloads.clone();
+            let loading_bar = loading_bar.clone();
+            let reporter = reporter.clone();
+            let download_metrics = download_metrics.clone();
+            let pack_details = pack_details.clone();
+            let instance_id = instance_id.to_string();
+            let minecraft_version = minecraft_version.to_string();
+            let verification_tx = verification_tx.clone();
+            let existing_relative_paths = existing_relative_paths.clone();
+            let cancellation = cancellation.clone();
+            async move {
+                if cancellation.is_cancelled() {
+                    return Err(
+                        ErrorKind::OtherError("download canceled".to_string())
+                            .into(),
+                    );
+                }
+                let expected_file_name = file_meta
+                    .get(&manifest_file.file_id)
+                    .map(|file| file.file_name.as_str())
+                    .unwrap_or("<unknown>");
+                let project = projects
+                    .get(&manifest_file.project_id)
+                    .ok_or_else(|| {
+                        ErrorKind::OtherError(format!(
+                            "CurseForge project metadata is missing for {}",
+                            manifest_file.project_id
+                        ))
+                    })?;
+                let project_type = project_type_for_class(project.class_id);
+                let folder = modpack_target_folder(project_type)?;
+                let meta = file_meta.get(&manifest_file.file_id).ok_or_else(|| {
+                    ErrorKind::OtherError(format!(
+                        "CurseForge file metadata is missing for {}",
+                        manifest_file.file_id
+                    ))
+                })?;
+                let file_name = crate::util::io::sanitize_download_file_name(&meta.file_name)?;
+                let original_relative_path = format!("{folder}/{file_name}");
+                let localized_candidate = (project_type != "mod" && project_type != "world")
+                    .then(|| {
+                        chinese_file_title_for_curseforge_slug(&project.slug)
+                            .and_then(|title| {
+                                localized_content_file_name(&file_name, &title)
+                            })
+                            .map(|file_name| format!("{folder}/{file_name}"))
+                    })
+                    .flatten();
+                let pre_resolved_relative_path = if existing_relative_paths
+                    .contains(&original_relative_path)
+                {
+                    original_relative_path
+                } else if let Some(localized) = localized_candidate {
+                    if existing_relative_paths.contains(&localized) || prefer_localized_names {
+                        localized
+                    } else {
+                        original_relative_path
+                    }
+                } else {
+                    original_relative_path
+                };
+
+                let mut active_download =
+                    ActiveCurseForgeDownload::start(active_downloads.clone());
+                let (installed_result, failed_result, failure_reason) =
+                    retry_modpack_file_install(
+                        &instance_id,
+                        &manifest_file,
+                        project_type,
+                        &minecraft_version,
+                        loader_type_value,
+                        operation_kind,
+                        download_metrics.as_deref(),
+                        expected_file_name,
+                        cancellation.clone(),
+                        Some(verification_tx.clone()),
+                        Some(pre_resolved_relative_path),
+                        Some((project.clone(), meta.clone())),
+                    )
+                    .await;
+                active_download.finish();
+
+                if cancellation.is_cancelled() {
+                    return Err(
+                        ErrorKind::OtherError("download canceled".to_string())
+                            .into(),
+                    );
+                }
+
+                let Some(item_result) = installed_result else {
+                    let mut failed_result = failed_result.unwrap_or_default();
+                    let file_name = file_meta
+                        .get(&manifest_file.file_id)
+                        .map(|file| file.file_name.clone())
+                        .unwrap_or_else(|| {
+                            format!(
+                                "project-{}-file-{}",
+                                manifest_file.project_id,
+                                manifest_file.file_id
+                            )
+                        });
+                    let manual_download =
+                        failed_result.manual_downloads.first().cloned();
+                    let event = if let Some(manual_download) =
+                        manual_download.as_ref()
+                    {
+                        InstallJobEventKind::ContentFileSkipped {
+                            path: manual_download.file_name.clone(),
+                            reason: "CurseForge requires manual download"
+                                .to_string(),
+                            project_id: Some(
+                                manifest_file.project_id.to_string(),
+                            ),
+                            version_id: Some(manifest_file.file_id.to_string()),
+                            manual_url: manual_download.website_url.clone(),
+                        }
+                    } else {
+                        let reason = format!(
+                            "Failed after {MODPACK_FILE_INSTALL_ATTEMPTS} attempts: {failure_reason}"
+                        );
+                        failed_result.failed_downloads.push(
+                            CurseForgeFailedDownload {
+                                project_id: manifest_file.project_id,
+                                file_id: manifest_file.file_id,
+                                file_name: file_name.clone(),
+                                reason: reason.clone(),
+                            },
+                        );
+                        InstallJobEventKind::ContentFileFailed {
+                            path: file_name,
+                            reason,
+                            project_id: Some(
+                                manifest_file.project_id.to_string(),
+                            ),
+                            version_id: Some(manifest_file.file_id.to_string()),
+                        }
+                    };
+                    {
+                        let mut content =
+                            content.lock().expect("content mutex");
+                        merge_install_result(&mut content, failed_result);
+                    }
+                    report_modpack_progress(
+                        loading_bar.as_deref(),
+                        reporter.as_ref(),
+                        pack_details,
+                        &files_done,
+                        &bytes_done,
+                        &active_downloads,
+                        total_files as u64,
+                        content_total_bytes,
+                        0,
+                        event,
+                    )
+                    .await?;
+                    return Ok(());
+                };
+                if project_type == "world" {
+                    report_modpack_progress(loading_bar.as_deref(), reporter.as_ref(), pack_details.clone(), &files_done, &bytes_done, &active_downloads, total_files as u64, content_total_bytes, meta.file_length, InstallJobEventKind::ContentFileCompleted {
+                        path: item_result.installed[0].relative_path.clone(), bytes: meta.file_length,
+                    }).await?;
+                }
+                {
+                    let mut content = content.lock().expect("content mutex");
+                    merge_install_result(&mut content, item_result);
+                }
+                Ok(())
+            }
+        },
+    )
+    .await;
+
+    if let Err(error) = &download_result {
+        if let Some(reporter) = reporter.as_ref() {
+            reporter.fail_pipeline(error);
+        }
+        cancellation.cancel();
+    }
+
+    drop(verification_tx);
+    let verification_result = verification_worker.await.map_err(|error| {
+        ErrorKind::OtherError(format!(
+            "CurseForge verification worker failed: {error}"
+        ))
+    })?;
+    drop(database_tx);
+    let database_result = database_worker.await.map_err(|error| {
+        ErrorKind::OtherError(format!(
+            "CurseForge database worker failed: {error}"
+        ))
+    })?;
+    if let Some(error) = ctx
+        .reporter
+        .as_ref()
+        .and_then(InstallProgressReporter::pipeline_failure)
+    {
+        return Err(error);
+    }
+    verification_result?;
+    database_result?;
+    download_result?;
+
+    if let Some(reporter) = reporter.as_ref() {
+        reporter
+            .update(
+                InstallPhaseId::DownloadingContent,
+                Some(InstallProgress {
+                    current: total_files as u64,
+                    total: total_files as u64,
+                    secondary: Some(InstallProgressSecondary {
+                        current: content_total_bytes,
+                        total: content_total_bytes,
+                    }),
+                }),
+                pack_details.clone(),
+            )
+            .await?;
+    }
+
+    if let (Some(reporter), Some(download_metrics)) =
+        (reporter.as_ref(), download_metrics.as_ref())
+    {
+        download_metrics.finish(reporter).await?;
+    }
+
+    Arc::try_unwrap(content)
+        .map_err(|_| {
+            ErrorKind::OtherError(
+                "CurseForge install state was still shared after completion"
+                    .to_string(),
+            )
+        })?
+        .into_inner()
+        .map_err(|_| {
+            ErrorKind::OtherError(
+                "CurseForge install state mutex was poisoned".to_string(),
+            )
+        })
+        .map_err(Into::into)
 }
 
 fn select_modpack_manifest_files(
@@ -1543,286 +1616,31 @@ pub(crate) async fn install_local_manifest_files(
         )
         .await?;
 
-    tracing::info!(
-        selected_manifest_files = selected_files.len(),
-        "Resolved local CurseForge modpack manifest files"
-    );
-    let content = Arc::new(Mutex::new(CurseForgeInstallResult::default()));
-    let download_metrics =
-        Arc::new(CurseForgeDownloadMetrics::with_reporter(reporter.clone()));
-    let projects = Arc::new(projects);
-    let file_meta = Arc::new(file_meta);
-    let files_done = Arc::new(AtomicU64::new(0));
-    let bytes_done = Arc::new(AtomicU64::new(0));
-    let active_downloads = Arc::new(AtomicU64::new(0));
-    let cancellation = reporter.cancellation_token();
-    let (verification_tx, verification_rx) =
-        mpsc::channel::<CurseForgeVerificationTask>(
-            MODPACK_VERIFICATION_QUEUE_CAPACITY,
-        );
-    let verification_context = CurseForgeVerificationContext {
-        reporter: Some(reporter.clone()),
-        loading_bar: None,
-        details: pack_details.clone(),
-        files_done: files_done.clone(),
-        bytes_done: bytes_done.clone(),
-        active_downloads: active_downloads.clone(),
-        total_files: total_files as u64,
-        total_bytes: content_total_bytes,
-        cancellation: cancellation.clone(),
-    };
-    let (database_tx, database_rx) = mpsc::channel::<CurseForgeDatabaseTask>(
-        MODPACK_DATABASE_QUEUE_CAPACITY,
-    );
-    let database_worker = spawn_curseforge_database_worker(
-        database_rx,
-        verification_context.clone(),
-    );
-    let verification_worker = spawn_curseforge_verification_worker(
-        verification_rx,
-        verification_context,
-        database_tx.clone(),
-    );
-
-    let download_result = loading_try_for_each_concurrent(
-        stream::iter(selected_files.into_iter().map(Ok::<_, crate::Error>)),
-        Some(state.download_concurrency()),
-        None,
-        1.0,
-        total_files,
-        None,
-        |manifest_file| {
-            let content = content.clone();
-            let projects = projects.clone();
-            let file_meta = file_meta.clone();
-            let files_done = files_done.clone();
-            let bytes_done = bytes_done.clone();
-            let active_downloads = active_downloads.clone();
-            let reporter = reporter.clone();
-            let download_metrics = download_metrics.clone();
-            let pack_details = pack_details.clone();
-            let instance_id = instance_id.to_string();
-            let minecraft_version = minecraft_version.to_string();
-            let verification_tx = verification_tx.clone();
-            let existing_relative_paths = existing_relative_paths.clone();
-            let cancellation = cancellation.clone();
-            async move {
-                if cancellation.is_cancelled() {
-                    return Err(
-                        ErrorKind::OtherError("download canceled".to_string())
-                            .into(),
-                    );
-                }
-                let expected_file_name = file_meta
-                    .get(&manifest_file.file_id)
-                    .map(|file| file.file_name.as_str())
-                    .unwrap_or("<unknown>");
-                let project = projects
-                    .get(&manifest_file.project_id)
-                    .ok_or_else(|| {
-                        ErrorKind::OtherError(format!(
-                            "CurseForge project metadata is missing for {}",
-                            manifest_file.project_id
-                        ))
-                    })?;
-                let project_type = project_type_for_class(project.class_id);
-                let folder = modpack_target_folder(project_type)?;
-                let meta = file_meta.get(&manifest_file.file_id).ok_or_else(|| {
-                    ErrorKind::OtherError(format!(
-                        "CurseForge file metadata is missing for {}",
-                        manifest_file.file_id
-                    ))
-                })?;
-                let file_name = crate::util::io::sanitize_download_file_name(&meta.file_name)?;
-                let original_relative_path = format!("{folder}/{file_name}");
-                let localized_candidate = (project_type != "mod" && project_type != "world")
-                    .then(|| {
-                        chinese_file_title_for_curseforge_slug(&project.slug)
-                            .and_then(|title| {
-                                localized_content_file_name(&file_name, &title)
-                            })
-                            .map(|file_name| format!("{folder}/{file_name}"))
-                    })
-                    .flatten();
-                let pre_resolved_relative_path = if existing_relative_paths
-                    .contains(&original_relative_path)
-                {
-                    original_relative_path
-                } else if let Some(localized) = localized_candidate {
-                    if existing_relative_paths.contains(&localized) || prefer_localized_names {
-                        localized
-                    } else {
-                        original_relative_path
-                    }
-                } else {
-                    original_relative_path
-                };
-
-                let mut active_download =
-                    ActiveCurseForgeDownload::start(active_downloads.clone());
-                let (installed_result, failed_result, failure_reason) =
-                    retry_modpack_file_install(
-                        &instance_id,
-                        &manifest_file,
-                        project_type,
-                        &minecraft_version,
-                        loader_type_value,
-                        crate::state::instances::ManualDownloadOperationKind::PackUpdate,
-                        Some(&download_metrics),
-                        expected_file_name,
-                        cancellation.clone(),
-                        Some(verification_tx.clone()),
-                        Some(pre_resolved_relative_path),
-                        Some((project.clone(), meta.clone())),
-                    )
-                    .await;
-                active_download.finish();
-
-                if cancellation.is_cancelled() {
-                    return Err(
-                        ErrorKind::OtherError("download canceled".to_string())
-                            .into(),
-                    );
-                }
-
-                let Some(item_result) = installed_result else {
-                    let mut failed_result = failed_result.unwrap_or_default();
-                    let file_name = file_meta
-                        .get(&manifest_file.file_id)
-                        .map(|file| file.file_name.clone())
-                        .unwrap_or_else(|| {
-                            format!(
-                                "project-{}-file-{}",
-                                manifest_file.project_id,
-                                manifest_file.file_id
-                            )
-                        });
-                    let manual_download =
-                        failed_result.manual_downloads.first().cloned();
-                    let event = if let Some(manual_download) =
-                        manual_download.as_ref()
-                    {
-                        InstallJobEventKind::ContentFileSkipped {
-                            path: manual_download.file_name.clone(),
-                            reason: "CurseForge requires manual download"
-                                .to_string(),
-                            project_id: Some(
-                                manifest_file.project_id.to_string(),
-                            ),
-                            version_id: Some(manifest_file.file_id.to_string()),
-                            manual_url: manual_download.website_url.clone(),
-                        }
-                    } else {
-                        let reason = format!(
-                            "Failed after {MODPACK_FILE_INSTALL_ATTEMPTS} attempts: {failure_reason}"
-                        );
-                        failed_result.failed_downloads.push(
-                            CurseForgeFailedDownload {
-                                project_id: manifest_file.project_id,
-                                file_id: manifest_file.file_id,
-                                file_name: file_name.clone(),
-                                reason: reason.clone(),
-                            },
-                        );
-                        InstallJobEventKind::ContentFileFailed {
-                            path: file_name,
-                            reason,
-                            project_id: Some(
-                                manifest_file.project_id.to_string(),
-                            ),
-                            version_id: Some(manifest_file.file_id.to_string()),
-                        }
-                    };
-                    {
-                        let mut content =
-                            content.lock().expect("content mutex");
-                        merge_install_result(&mut content, failed_result);
-                    }
-                    report_modpack_progress(
-                        None,
-                        Some(&reporter),
-                        pack_details,
-                        &files_done,
-                        &bytes_done,
-                        &active_downloads,
-                        total_files as u64,
-                        content_total_bytes,
-                        0,
-                        event,
-                    )
-                    .await?;
-                    return Ok(());
-                };
-                if project_type == "world" {
-                    report_modpack_progress(None, Some(&reporter), pack_details.clone(), &files_done, &bytes_done, &active_downloads, total_files as u64, content_total_bytes, meta.file_length, InstallJobEventKind::ContentFileCompleted {
-                        path: item_result.installed[0].relative_path.clone(), bytes: meta.file_length,
-                    }).await?;
-                }
-                {
-                    let mut content = content.lock().expect("content mutex");
-                    merge_install_result(&mut content, item_result);
-                }
-                Ok(())
-            }
+    install_pack_files(
+        PackFileInstall {
+            source: "local",
+            instance_id,
+            minecraft_version,
+            loader_type_value,
+            operation_kind:
+                crate::state::instances::ManualDownloadOperationKind::PackUpdate,
+            pack_details,
+            reporter: Some(reporter.clone()),
+            loading_bar: None,
+            download_metrics: Some(Arc::new(
+                CurseForgeDownloadMetrics::with_reporter(reporter.clone()),
+            )),
+            selected_files,
+            projects,
+            file_meta,
+            existing_relative_paths,
+            prefer_localized_names,
+            total_files,
+            content_total_bytes,
         },
+        &state,
     )
-    .await;
-
-    if let Err(error) = &download_result {
-        reporter.fail_pipeline(error);
-        cancellation.cancel();
-    }
-
-    drop(verification_tx);
-    let verification_result = verification_worker.await.map_err(|error| {
-        ErrorKind::OtherError(format!(
-            "local CurseForge verification worker failed: {error}"
-        ))
-    })?;
-    drop(database_tx);
-    let database_result = database_worker.await.map_err(|error| {
-        ErrorKind::OtherError(format!(
-            "local CurseForge database worker failed: {error}"
-        ))
-    })?;
-    if let Some(error) = reporter.pipeline_failure() {
-        return Err(error);
-    }
-    verification_result?;
-    database_result?;
-    download_result?;
-
-    reporter
-        .update(
-            InstallPhaseId::DownloadingContent,
-            Some(InstallProgress {
-                current: total_files as u64,
-                total: total_files as u64,
-                secondary: Some(InstallProgressSecondary {
-                    current: content_total_bytes,
-                    total: content_total_bytes,
-                }),
-            }),
-            pack_details.clone(),
-        )
-        .await?;
-
-    download_metrics.finish(reporter).await?;
-
-    Arc::try_unwrap(content)
-        .map_err(|_| {
-            ErrorKind::OtherError(
-                "CurseForge install state was still shared after completion"
-                    .to_string(),
-            )
-        })?
-        .into_inner()
-        .map_err(|_| {
-            ErrorKind::OtherError(
-                "CurseForge install state mutex was poisoned".to_string(),
-            )
-        })
-        .map_err(Into::into)
+    .await
 }
 
 #[derive(Clone, Debug)]

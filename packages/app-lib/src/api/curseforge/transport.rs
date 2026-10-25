@@ -1,6 +1,5 @@
 //! Credential resolution, mirror routing, and request plumbing.
 
-#[cfg(debug_assertions)]
 use super::auth::{api_key_generation, record_key_response};
 use super::constants::API_BASE_URL;
 use super::dto::CurseForgeApiKeySource;

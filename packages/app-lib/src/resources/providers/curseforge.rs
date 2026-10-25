@@ -1,4 +1,4 @@
-use crate::api::curseforge::DependencyRelation;
+use crate::state::instances::DependencyRelation;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;

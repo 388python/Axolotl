@@ -4,7 +4,7 @@ use super::fixtures::stage8_curseforge_file;
 use crate::api::curseforge::dto::{
     CurseForgeManifestLoader, CurseForgeManifestMinecraft,
     CurseForgeModpackManifest, CurseForgeModpackTarget,
-    CurseForgeSortableGameVersion, DependencyRelation,
+    CurseForgeSortableGameVersion,
 };
 use crate::api::curseforge::install::{
     dependency_policy, should_resolve_dependency,
@@ -19,6 +19,7 @@ use crate::api::curseforge::selection::{
 use crate::api::curseforge::update::{
     loader_family, loader_type, looks_like_game_version, modpack_target,
 };
+use crate::state::instances::DependencyRelation;
 use crate::state::{ModLoader, ProjectType};
 use content_management::DependencyPolicy;
 
