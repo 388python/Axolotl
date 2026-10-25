@@ -676,8 +676,9 @@ mod address_tests {
             proxy: ProxyPolicy::System,
         };
         super::super::proxy_context::with_snapshot(clients, async {
+            let limit = super::super::constants::MAX_CONNECTIONS_PER_AUTHORITY;
             // One of these normal permits is the caller's first socket.
-            let mut permits: Vec<_> = (0..31)
+            let mut permits: Vec<_> = (0..limit - 1)
                 .map(|_| {
                     super::super::native_budget::try_acquire(&route).unwrap()
                 })
@@ -704,7 +705,7 @@ mod address_tests {
             assert_eq!(super::super::native_budget::available(&route), 2);
             assert!(address_race_budget(&route, true, 1).is_none());
             drop(permits);
-            assert_eq!(super::super::native_budget::available(&route), 32);
+            assert_eq!(super::super::native_budget::available(&route), limit);
         })
         .await;
     }
@@ -842,13 +843,13 @@ async fn establish(
         connect_tcp(host, port, route, reserve_native_budget).await
     };
     let tcp = tcp_result.map_err(|error| {
-		H2ConnectError::new(
-			H2ConnectFailureKind::Tcp,
-			format!(
-				"failed to establish shared HTTP/2 connection to {authority}: {error}"
-			),
-		)
-	})?;
+        H2ConnectError::new(
+            H2ConnectFailureKind::Tcp,
+            format!(
+                "failed to establish shared HTTP/2 connection to {authority}: {error}"
+            ),
+        )
+    })?;
 
     let remote_addr = tcp.peer_addr().ok();
     let server_name =

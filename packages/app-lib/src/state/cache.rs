@@ -551,6 +551,7 @@ pub struct Project {
     pub id: String,
     pub slug: Option<String>,
     pub project_type: String,
+    #[serde(default, deserialize_with = "deserialize_optional_string")]
     pub team: String,
     pub organization: Option<String>,
     pub title: String,

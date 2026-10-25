@@ -55,12 +55,12 @@ GitHub Actions owns the build and publication order. Pages does not run a hosted
   that owns `axlmc.org`. Set its production branch to `main`. This is a Pages
   project, separate from the existing `axolotl` Worker. Direct Upload projects
   cannot later switch to Pages Git integration without creating a new project.
-- Add the repository Actions secret `CLOUDFLARE_PAGES_API_TOKEN`, with
-  **Account > Cloudflare Pages > Edit** permission limited to that account.
-  Preserve the existing `CLOUDFLARE_API_TOKEN` used by other services.
-- Add repository Actions variables `CLOUDFLARE_PAGES_ACCOUNT_ID` (the owning
-  Cloudflare account ID) and `CLOUDFLARE_PAGES_PROJECT_NAME` (`axolotl-website`).
-  The workflow maps the Pages-specific token and account variable to Wrangler's
+- Reuse the repository Actions secret `CLOUDFLARE_API_TOKEN`, shared with the
+  Telemetry Worker. Include **Account > Cloudflare Pages > Edit** permission
+  for the owning account alongside its existing service permissions.
+- Add the repository Actions secret `CLOUDFLARE_ACCOUNT_ID` (the owning
+  Cloudflare account ID) and the variable `CLOUDFLARE_PAGES_PROJECT_NAME` (`axolotl-website`).
+  The workflow maps the shared token and account secrets to Wrangler's
   `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` environment variables.
 - After the first successful upload, associate `axlmc.org` and `www.axlmc.org`
   under **Pages > Custom domains**, then confirm the DNS changes. Keep the

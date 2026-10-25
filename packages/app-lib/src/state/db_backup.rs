@@ -612,12 +612,12 @@ async fn prune_app_db_backups(backup_dir: &Path) -> crate::Result<()> {
 async fn has_user_tables(conn: &mut SqliteConnection) -> crate::Result<bool> {
     let count = sqlx::query_scalar!(
         "
-		SELECT COUNT(*)
-		FROM sqlite_master
-		WHERE type = 'table'
-			AND name NOT LIKE 'sqlite_%'
-			AND name NOT IN ('_sqlx_migrations', 'app_metadata')
-		",
+        SELECT COUNT(*)
+        FROM sqlite_master
+        WHERE type = 'table'
+            AND name NOT LIKE 'sqlite_%'
+            AND name NOT IN ('_sqlx_migrations', 'app_metadata')
+        ",
     )
     .fetch_one(&mut *conn)
     .await?;
@@ -645,10 +645,10 @@ async fn has_table(
 ) -> crate::Result<bool> {
     let count = sqlx::query_scalar!(
         "
-		SELECT COUNT(*)
-		FROM sqlite_master
-		WHERE type = 'table' AND name = ?
-		",
+        SELECT COUNT(*)
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        ",
         table_name,
     )
     .fetch_one(&mut *conn)

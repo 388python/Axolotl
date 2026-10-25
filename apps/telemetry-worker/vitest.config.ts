@@ -9,7 +9,7 @@ export default defineConfig({
             main: './src/index.ts',
             miniflare: {
                 compatibilityDate: '2025-08-13',
-                d1Databases: ['DB'],
+                d1Databases: ['DB', 'UPGRADE_DB'],
                 bindings: {
                     INSTALLATION_HMAC_SECRET:
                         'test-only-secret-that-is-longer-than-thirty-two-bytes',

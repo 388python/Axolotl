@@ -16,15 +16,15 @@ jobs:
       group: website-production
       cancel-in-progress: false
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_PAGES_ACCOUNT_ID }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_PAGES_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_PROJECT_NAME }}
     steps:
       - name: Check Cloudflare Pages deployment configuration
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_PAGES_PROJECT_NAME" ]]; then
-            echo '::error::Configure the CLOUDFLARE_PAGES_API_TOKEN secret and CLOUDFLARE_PAGES_ACCOUNT_ID / CLOUDFLARE_PAGES_PROJECT_NAME variables. See apps/website/README.md.'
+            echo '::error::Configure the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets and the CLOUDFLARE_PAGES_PROJECT_NAME variable. See apps/website/README.md.'
             exit 1
           fi
       - name: Check out current production source
@@ -63,7 +63,7 @@ jobs:
           if-no-files-found: error
       - name: Deploy prebuilt website to Cloudflare Pages
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           pnpm --package=wrangler@4.152.0 dlx wrangler pages deploy \
             apps/website/.output/public \

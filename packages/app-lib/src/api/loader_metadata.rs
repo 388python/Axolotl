@@ -914,20 +914,20 @@ fn liteloader_manifest(
             .and_then(|value| value.as_str())
             .is_none_or(|stream| !stream.eq_ignore_ascii_case("snapshot"));
         game_versions.push(Version {
-			id: game_version.clone(),
-			stable: true,
-			version_group: None,
-			loaders: vec![LoaderVersion {
-				id: version.to_string(),
-				url: LITELOADER_META_URL.to_string(),
-				stable,
-				profile_source: LoaderProfileSource::LiteLoader,
-				fallback_url: Some(
-					"https://bmclapi2.bangbang93.com/maven/com/mumfrey/liteloader/versions.json"
-						.to_string(),
-				),
-			}],
-		});
+            id: game_version.clone(),
+            stable: true,
+            version_group: None,
+            loaders: vec![LoaderVersion {
+                id: version.to_string(),
+                url: LITELOADER_META_URL.to_string(),
+                stable,
+                profile_source: LoaderProfileSource::LiteLoader,
+                fallback_url: Some(
+                    "https://bmclapi2.bangbang93.com/maven/com/mumfrey/liteloader/versions.json"
+                        .to_string(),
+                ),
+            }],
+        });
     }
     game_versions.sort_by(|left, right| compare_versions(&right.id, &left.id));
     Ok(Manifest {
@@ -1975,9 +1975,9 @@ fn build_liteloader_profile(
         })?;
     if actual_version != loader_version {
         return Err(crate::ErrorKind::InputError(format!(
-			"LiteLoader version {loader_version} is not available for Minecraft {game_version}"
-		))
-		.into());
+            "LiteLoader version {loader_version} is not available for Minecraft {game_version}"
+        ))
+        .into());
     }
     let tweak_class = entry
         .get("tweakClass")
@@ -2136,10 +2136,10 @@ fn parse_installer(
         serde_json::to_vec(version_info)?
     } else {
         return Err(crate::ErrorKind::OtherError(
-			"Loader installer contains no version.json, profile json, or versionInfo"
-				.to_string(),
-		)
-		.as_error());
+            "Loader installer contains no version.json, profile json, or versionInfo"
+                .to_string(),
+        )
+        .as_error());
     };
     let mut installer: InstallerProfile =
         serde_json::from_value(profile_value)?;
@@ -2148,10 +2148,10 @@ fn parse_installer(
     if version_value.get("inheritsFrom").is_none() {
         let minecraft = installer.minecraft.clone().ok_or_else(|| {
             crate::ErrorKind::OtherError(
-				"Loader installer version has no inheritsFrom or minecraft version"
-					.to_string(),
-			)
-			.as_error()
+                "Loader installer version has no inheritsFrom or minecraft version"
+                    .to_string(),
+            )
+            .as_error()
         })?;
         version_value
             .as_object_mut()
@@ -3538,18 +3538,18 @@ mod tests {
         let options = SimpleFileOptions::default();
         archive.start_file("install_profile.json", options).unwrap();
         archive
-			.write_all(
-				serde_json::json!({
-					"versionInfo": minimal_installer_version("1.7.10-Forge"),
-					"install": {
-						"path": "net.minecraftforge:forge:1.7.10-10.13.4.1614-1.7.10",
-						"filePath": "/forge-universal.jar"
-					}
-				})
-				.to_string()
-				.as_bytes(),
-			)
-			.unwrap();
+            .write_all(
+                serde_json::json!({
+                    "versionInfo": minimal_installer_version("1.7.10-Forge"),
+                    "install": {
+                        "path": "net.minecraftforge:forge:1.7.10-10.13.4.1614-1.7.10",
+                        "filePath": "/forge-universal.jar"
+                    }
+                })
+                .to_string()
+                .as_bytes(),
+            )
+            .unwrap();
         archive.start_file("forge-universal.jar", options).unwrap();
         archive.write_all(b"legacy universal artifact").unwrap();
         let parsed = parse_installer(
@@ -3597,20 +3597,20 @@ mod tests {
         let options = SimpleFileOptions::default();
         archive.start_file("version.json", options).unwrap();
         archive
-			.write_all(
-				serde_json::json!({
-					"id": "1.12.2-Cleanroom-test",
-					"releaseTime": "2026-08-15T20:37:45+00:00",
-					"time": "2026-08-15T20:37:45+00:00",
-					"mainClass": "top.outlands.foundation.boot.Foundation",
-					"javaVersion": {"component": "java-runtime-epsilon", "majorVersion": 25},
-					"libraries": [],
-					"type": "release"
-				})
-				.to_string()
-				.as_bytes(),
-			)
-			.unwrap();
+            .write_all(
+                serde_json::json!({
+                    "id": "1.12.2-Cleanroom-test",
+                    "releaseTime": "2026-08-15T20:37:45+00:00",
+                    "time": "2026-08-15T20:37:45+00:00",
+                    "mainClass": "top.outlands.foundation.boot.Foundation",
+                    "javaVersion": {"component": "java-runtime-epsilon", "majorVersion": 25},
+                    "libraries": [],
+                    "type": "release"
+                })
+                .to_string()
+                .as_bytes(),
+            )
+            .unwrap();
         archive.start_file("install_profile.json", options).unwrap();
         archive
             .write_all(br#"{"minecraft":"1.12.2","json":"/version.json"}"#)

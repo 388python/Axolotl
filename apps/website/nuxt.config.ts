@@ -14,9 +14,8 @@ export default defineNuxtConfig({
     },
     app: {
         head: {
-            // 只放与主题无关的静态类。主题类由下方 theme-init 脚本单独写入：
-            // 若这里再写死 dark-mode，客户端 head 管理器会在水合时把整串 class
-            // 覆盖回去，与脚本设的 light-mode 并存，深色令牌反而胜出（浅色底白字）。
+            // Theme classes are applied by the pre-hydration script below. Keeping
+            // them out of htmlAttrs prevents Nuxt from re-adding a stale class.
             htmlAttrs: {
                 class: 'accent-pink',
                 lang: 'zh-CN',
