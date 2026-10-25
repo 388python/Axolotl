@@ -184,3 +184,14 @@ fn mojang_monitor_commands_are_registered_and_allowed_for_the_main_window() {
         );
     }
 }
+
+#[test]
+fn curseforge_runtime_handlers_match_the_build_manifest() {
+    let runtime = runtime_commands(include_str!("../src/api/curseforge.rs"));
+    let manifest = manifest_commands(include_str!("../build.rs"), "curseforge");
+    assert_eq!(
+        runtime, manifest,
+        "curseforge commands must be identical in the runtime handler and the \
+         build-time manifest"
+    );
+}
