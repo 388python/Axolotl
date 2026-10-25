@@ -236,10 +236,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to compile NSIS uninstall fixture" }
           & apps/installer-ui/tests/uninstall-smoke.ps1
   website:
-    name: Build website
+    name: Build website (${{ matrix.nitro-preset }})
     needs: [changes, guardrails]
     if: needs.changes.outputs.website == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nitro-preset: [static, cloudflare-module]
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -252,7 +256,11 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Test website
+        run: pnpm --filter @axolotl/website test
       - name: Build website
+        env:
+          NITRO_PRESET: ${{ matrix.nitro-preset }}
         run: pnpm --filter @axolotl/website build
 
   desktop-ci-result:

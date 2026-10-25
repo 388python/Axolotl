@@ -111,10 +111,10 @@ const latestVersion = computed(() => {
     return typeof tagName === 'string' ? tagName.replace(/^v/, '') : null
 })
 
+const requestHeaders = useRequestHeaders(['user-agent'])
 const platform = computed<string>(() => {
     if (import.meta.server) {
-        const headers = useRequestHeaders()
-        return headers['user-agent'] || ''
+        return requestHeaders['user-agent'] || ''
     } else {
         return navigator.userAgent || ''
     }
