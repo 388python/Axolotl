@@ -4,6 +4,7 @@ import {
     Button,
     Combobox,
     type ComboboxOption,
+    commonMessages,
     defineMessages,
     StyledInput,
     Toggle,
@@ -445,10 +446,20 @@ const coordinateAxes = computed<readonly string[]>(() =>
     coordinateDimensions.value === 2 ? COORDINATE_AXES_2D : COORDINATE_AXES_3D,
 )
 
+function isCoordinateString(value: string): boolean {
+    return /^[-+~^0-9.\s]*$/.test(value)
+}
+
+function isCoordinateTuple(value: string): boolean {
+    const parts = value.trim().split(/\s+/)
+    return (
+        parts.length === coordinateDimensions.value &&
+        parts.every((part) => /^(?:~[-+]?\d*\.?\d*|\^[-+]?\d*\.?\d*|[-+]?\d*\.?\d+)$/.test(part))
+    )
+}
+
 const mixedAsEntity = ref(
-    isMixedCoordinates.value && props.modelValue
-        ? !/^[~^0-9. -]+$/.test(String(props.modelValue))
-        : false,
+    isMixedCoordinates.value && !isCoordinateString(String(props.modelValue ?? '')),
 )
 
 function parseCoordinates(raw: string, dims: number): CoordinatePart[] {
@@ -492,6 +503,7 @@ const coordinateParts = ref<CoordinatePart[]>(
 
 if (
     isCoordinates.value &&
+    props.arg.required &&
     !mixedAsEntity.value &&
     (props.modelValue === undefined || props.modelValue === '')
 ) {
@@ -499,12 +511,17 @@ if (
 }
 
 watch(
-    () => props.modelValue,
-    (val) => {
-        if (!isCoordinates.value || mixedAsEntity.value) return
-        const current = serializeCoordinates(coordinateParts.value)
+    [() => props.modelValue, isCoordinates, isMixedCoordinates, coordinateDimensions],
+    ([val]) => {
+        if (!isCoordinates.value) return
         const next = String(val ?? '')
-        if (next === current) return
+        if (isMixedCoordinates.value) {
+            if (isCoordinateTuple(next)) mixedAsEntity.value = false
+            else if (!isCoordinateString(next)) mixedAsEntity.value = true
+        }
+        if (mixedAsEntity.value) return
+        const current = serializeCoordinates(coordinateParts.value)
+        if (next === current && coordinateParts.value.length === coordinateDimensions.value) return
         coordinateParts.value = parseCoordinates(next, coordinateDimensions.value)
     },
 )
@@ -519,8 +536,8 @@ function cycleCoordinateMode(index: number) {
     if (!part) return
 
     let nextMode: CoordinateMode
-    if (part.mode === 'relative') nextMode = 'local'
-    else if (part.mode === 'local') nextMode = 'absolute'
+    if (part.mode === 'relative') nextMode = 'absolute'
+    else if (part.mode === 'absolute' && coordinateDimensions.value === 3) nextMode = 'local'
     else nextMode = 'relative'
 
     if (nextMode === 'local') {
@@ -549,10 +566,15 @@ function setCoordinateValue(index: number, value: string) {
     emitCoordinates()
 }
 
+function clearCoordinates() {
+    coordinateParts.value = parseCoordinates('', coordinateDimensions.value)
+    emit('update:modelValue', '')
+}
+
 function switchMixedMode(toEntity: boolean) {
     mixedAsEntity.value = toEntity
     const val = String(props.modelValue ?? '')
-    const isCoordString = /^[-~^0-9. ]*$/.test(val)
+    const isCoordString = isCoordinateString(val)
 
     if (toEntity) {
         if (!val || isCoordString) emit('update:modelValue', '@p')
@@ -723,6 +745,14 @@ function coordinateModeLabel(mode: CoordinateMode): string {
                         @update:model-value="setCoordinateValue(index, String($event ?? ''))"
                     />
                 </div>
+                <Button
+                    v-if="!arg.required && modelValue !== undefined && modelValue !== ''"
+                    type="quiet"
+                    size="sm"
+                    @click="clearCoordinates"
+                >
+                    {{ formatMessage(commonMessages.clearButton) }}
+                </Button>
             </div>
         </div>
         <StyledInput
