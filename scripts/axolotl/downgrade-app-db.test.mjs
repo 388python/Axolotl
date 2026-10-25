@@ -59,16 +59,16 @@ function sampleDatabase(
     }
     database.exec('INSERT INTO settings (id, max_memory) VALUES (1, 4096)')
     database.exec(`CREATE TABLE _sqlx_migrations (
-		version BIGINT PRIMARY KEY,
-		description TEXT NOT NULL,
-		installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		success BOOLEAN NOT NULL,
-		checksum BLOB NOT NULL,
-		execution_time BIGINT NOT NULL
-	)`)
+        version BIGINT PRIMARY KEY,
+        description TEXT NOT NULL,
+        installed_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        success BOOLEAN NOT NULL,
+        checksum BLOB NOT NULL,
+        execution_time BIGINT NOT NULL
+    )`)
     const insert = database.prepare(
         `INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
-		 VALUES (?, ?, TRUE, X'00', 0)`,
+         VALUES (?, ?, TRUE, X'00', 0)`,
     )
     for (const version of applied) insert.run(version, `migration-${version}`)
     database.close()

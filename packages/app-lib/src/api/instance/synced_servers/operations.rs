@@ -831,11 +831,11 @@ async fn participating(
     }
     let global_enabled = sqlx::query_scalar!(
         r#"
-		SELECT EXISTS(
-			SELECT 1 FROM sync_feature_settings
-			WHERE feature = 'multiplayer_servers' AND globally_enabled = 1
-		) AS "enabled!: bool"
-		"#,
+        SELECT EXISTS(
+            SELECT 1 FROM sync_feature_settings
+            WHERE feature = 'multiplayer_servers' AND globally_enabled = 1
+        ) AS "enabled!: bool"
+        "#,
     )
     .fetch_one(&state.pool)
     .await?;

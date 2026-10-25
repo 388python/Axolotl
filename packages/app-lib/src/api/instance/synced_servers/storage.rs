@@ -21,10 +21,10 @@ pub(in crate::api::instance) async fn canonical_exists(
 async fn canonical_initialized(state: &State) -> crate::Result<bool> {
     Ok(sqlx::query_scalar!(
         r#"
-		SELECT EXISTS(
-			SELECT 1 FROM synced_server_state WHERE singleton = 1
-		) AS "initialized!: bool"
-		"#,
+        SELECT EXISTS(
+            SELECT 1 FROM synced_server_state WHERE singleton = 1
+        ) AS "initialized!: bool"
+        "#,
     )
     .fetch_one(&state.pool)
     .await?)
@@ -42,10 +42,10 @@ async fn read_canonical_with(
     validate_stored_list(executor, "synced_servers", None).await?;
     let rows = sqlx::query!(
         "
-		SELECT id, nbt
-		FROM synced_servers
-		ORDER BY position
-		",
+        SELECT id, nbt
+        FROM synced_servers
+        ORDER BY position
+        ",
     )
     .fetch_all(executor)
     .await?;
@@ -121,20 +121,20 @@ async fn write_server_state(
         canonical_changed = write_canonical_rows(tx, canonical).await?;
         sqlx::query!(
             "
-			INSERT INTO synced_server_state (singleton, revision)
-			VALUES (1, 0)
-			ON CONFLICT(singleton) DO NOTHING
-			",
+            INSERT INTO synced_server_state (singleton, revision)
+            VALUES (1, 0)
+            ON CONFLICT(singleton) DO NOTHING
+            ",
         )
         .execute(&mut **tx)
         .await?;
         if canonical_changed {
             sqlx::query!(
                 "
-				UPDATE synced_server_state
-				SET revision = revision + 1
-				WHERE singleton = 1
-				",
+                UPDATE synced_server_state
+                SET revision = revision + 1
+                WHERE singleton = 1
+                ",
             )
             .execute(&mut **tx)
             .await?;
@@ -179,10 +179,10 @@ async fn write_canonical_rows(
     validate_stored_list(&mut **tx, "synced_servers", None).await?;
     let current = sqlx::query!(
         "
-		SELECT id, position, nbt
-		FROM synced_servers
-		ORDER BY position
-		",
+        SELECT id, position, nbt
+        FROM synced_servers
+        ORDER BY position
+        ",
     )
     .fetch_all(&mut **tx)
     .await?;
@@ -241,12 +241,12 @@ async fn write_canonical_rows(
     for (id, position, nbt) in desired {
         sqlx::query!(
             "
-			INSERT INTO synced_servers (id, position, nbt)
-			VALUES (?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				position = excluded.position,
-				nbt = excluded.nbt
-			",
+            INSERT INTO synced_servers (id, position, nbt)
+            VALUES (?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                position = excluded.position,
+                nbt = excluded.nbt
+            ",
             id,
             position,
             nbt,
@@ -260,10 +260,10 @@ async fn write_canonical_rows(
 pub(super) async fn server_revision(state: &State) -> crate::Result<i64> {
     Ok(sqlx::query_scalar!(
         r#"
-		SELECT revision AS "revision!: i64"
-		FROM synced_server_state
-		WHERE singleton = 1
-		"#,
+        SELECT revision AS "revision!: i64"
+        FROM synced_server_state
+        WHERE singleton = 1
+        "#,
     )
     .fetch_optional(&state.pool)
     .await?
@@ -285,11 +285,11 @@ async fn load_local_with(
         .await?;
     let rows = sqlx::query!(
         "
-		SELECT id, source, excluded_synced_server_id, nbt, position
-		FROM instance_servers
-		WHERE instance_id = ?
-		ORDER BY position
-		",
+        SELECT id, source, excluded_synced_server_id, nbt, position
+        FROM instance_servers
+        WHERE instance_id = ?
+        ORDER BY position
+        ",
         instance_id,
     )
     .fetch_all(executor)
@@ -343,12 +343,12 @@ pub(super) async fn write_local_rows(
         validate_size(servers.len(), bytes)?;
         sqlx::query!(
             "
-			INSERT INTO instance_servers
-				(instance_id, id, source, excluded_synced_server_id,
-				 nbt, position)
-			VALUES (?, ?, ?,
-				(SELECT id FROM synced_servers WHERE id = ?), ?, ?)
-			",
+            INSERT INTO instance_servers
+                (instance_id, id, source, excluded_synced_server_id,
+                 nbt, position)
+            VALUES (?, ?, ?,
+                (SELECT id FROM synced_servers WHERE id = ?), ?, ?)
+            ",
             instance_id,
             server.id,
             source,
@@ -375,11 +375,11 @@ pub(super) async fn load_projection_entries(
     .await?;
     let rows = sqlx::query!(
         "
-		SELECT server_id, owner, nbt, position
-		FROM instance_server_projection_entries
-		WHERE instance_id = ?
-		ORDER BY position
-		",
+        SELECT server_id, owner, nbt, position
+        FROM instance_server_projection_entries
+        WHERE instance_id = ?
+        ORDER BY position
+        ",
         instance_id,
     )
     .fetch_all(&mut *connection)
@@ -432,10 +432,10 @@ pub(super) async fn begin_server_checkpoint(
         let position = position as i64;
         sqlx::query!(
             "
-			INSERT INTO instance_server_projection_entries
-				(instance_id, owner, server_id, nbt, position)
-			VALUES (?, ?, ?, ?, ?)
-			",
+            INSERT INTO instance_server_projection_entries
+                (instance_id, owner, server_id, nbt, position)
+            VALUES (?, ?, ?, ?, ?)
+            ",
             instance_id,
             owner,
             server.id,
@@ -447,18 +447,18 @@ pub(super) async fn begin_server_checkpoint(
     }
     sqlx::query!(
         "
-		INSERT INTO instance_sync_checkpoints
-			(instance_id, feature, variant, expected_sha1, merge_base,
-			 source_revision, status, link_mode)
-		VALUES (?, 'multiplayer_servers', 'default', ?, NULL, ?,
-			'pending', NULL)
-		ON CONFLICT(instance_id, feature, variant) DO UPDATE SET
-			expected_sha1 = excluded.expected_sha1,
-			merge_base = NULL,
-			source_revision = excluded.source_revision,
-			status = 'pending',
-			link_mode = NULL
-		",
+        INSERT INTO instance_sync_checkpoints
+            (instance_id, feature, variant, expected_sha1, merge_base,
+             source_revision, status, link_mode)
+        VALUES (?, 'multiplayer_servers', 'default', ?, NULL, ?,
+            'pending', NULL)
+        ON CONFLICT(instance_id, feature, variant) DO UPDATE SET
+            expected_sha1 = excluded.expected_sha1,
+            merge_base = NULL,
+            source_revision = excluded.source_revision,
+            status = 'pending',
+            link_mode = NULL
+        ",
         instance_id,
         expected_sha1,
         source_revision,

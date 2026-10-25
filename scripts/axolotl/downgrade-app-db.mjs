@@ -413,8 +413,8 @@ function elsewhereHint(args) {
     if (others.length === 0) return ''
 
     return `\n\nOther builds keep their own directories, and these databases exist:\n  ${others.join(
-		'\n  ',
-	)}\nSelect one with --db, or --suffix for a suffixed build. Only the database named here is ever written to.`
+        '\n  ',
+    )}\nSelect one with --db, or --suffix for a suffixed build. Only the database named here is ever written to.`
 }
 
 function resolveDatabase(args) {

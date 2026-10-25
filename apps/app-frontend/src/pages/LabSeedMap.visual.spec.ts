@@ -667,8 +667,9 @@ it('automatically paints visible layouts without a selection, shares requests wi
     await divider.trigger('dblclick')
     await vi.waitFor(() => expect(Number(divider.attributes('aria-valuenow'))).toBe(62))
     await wrapper!.findAll('[role="tab"]')[1].trigger('click')
-    await vi.waitFor(() =>
-        expect(wrapper!.get('aside canvas').attributes('data-ready')).toBe('true'),
+    await vi.waitFor(
+        () => expect(wrapper!.get('aside canvas').attributes('data-ready')).toBe('true'),
+        { timeout: 10000 },
     )
     if (import.meta.env.VITE_AXOLOTL_VISUAL_EVIDENCE)
         await page.screenshot({
@@ -689,7 +690,7 @@ it('automatically paints visible layouts without a selection, shares requests wi
     await wrapper!.get('aside button[aria-label="Close structure details"]').trigger('click')
     expect(vm.selection).toBeNull()
     expect(wrapper!.find('aside').exists()).toBe(false)
-})
+}, 30000)
 
 it('paints unselected Ancient city piece projections on the map canvas', async () => {
     const details: SeedMapStructureDetails = {

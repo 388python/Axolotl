@@ -191,12 +191,12 @@ async fn insert_outbox_event(
     let now = Utc::now().timestamp();
     sqlx::query(
         r#"
-		INSERT INTO telemetry_outbox (
-			event_id, event_type, payload, created_at, next_attempt_at,
-			size_bytes, dedupe_key
-		) VALUES (?, 'heartbeat', jsonb(?), ?, ?, ?, ?)
-		ON CONFLICT(dedupe_key) DO NOTHING
-		"#,
+        INSERT INTO telemetry_outbox (
+            event_id, event_type, payload, created_at, next_attempt_at,
+            size_bytes, dedupe_key
+        ) VALUES (?, 'heartbeat', jsonb(?), ?, ?, ?, ?)
+        ON CONFLICT(dedupe_key) DO NOTHING
+        "#,
     )
     .bind(event_id)
     .bind(&payload)
@@ -223,16 +223,16 @@ async fn cleanup_outbox(state: &State) -> crate::Result<()> {
     .await?;
     sqlx::query(
         r#"
-		DELETE FROM telemetry_outbox
-		WHERE event_id IN (
-			SELECT event_id FROM (
-				SELECT event_id,
-					SUM(size_bytes) OVER (ORDER BY created_at DESC, event_id DESC) AS running_bytes
-				FROM telemetry_outbox
-			)
-			WHERE running_bytes > ?
-		)
-		"#,
+        DELETE FROM telemetry_outbox
+        WHERE event_id IN (
+            SELECT event_id FROM (
+                SELECT event_id,
+                    SUM(size_bytes) OVER (ORDER BY created_at DESC, event_id DESC) AS running_bytes
+                FROM telemetry_outbox
+            )
+            WHERE running_bytes > ?
+        )
+        "#,
     )
     .bind(MAX_OUTBOX_BYTES)
     .execute(&state.pool)
