@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppleIcon from '@modrinth/assets/external/apple.svg?component'
+import GithubIcon from '@modrinth/assets/external/github.svg?component'
 import LinuxIcon from '@modrinth/assets/external/linux.svg?component'
 import WindowsIcon from '@modrinth/assets/external/windows.svg?component'
 import ArrowDownIcon from '@modrinth/assets/icons/arrow-down.svg?component'
@@ -321,9 +322,16 @@ const messages = defineMessages({
         defaultMessage:
             'Axolotl Launcher Lab showing the skin editor, gradient text generator, seed map, and schematic workshop.',
     },
-    openSourceBadge: {
-        id: 'axolotl-marketing.hero.open-source',
-        defaultMessage: 'Tauri v2 - Rust - Vue 3',
+    // The hero used to lead with the tech stack, which tells a visitor nothing
+    // about whether the launcher is safe to install. The licence, the price and
+    // the absence of ads are the facts that answer that question.
+    heroTrustLine: {
+        id: 'axolotl-marketing.hero.trust-line',
+        defaultMessage: 'Open source · GPL-3.0 · Free · No ads · Windows / macOS / Linux',
+    },
+    heroTrustLink: {
+        id: 'axolotl-marketing.hero.trust-link',
+        defaultMessage: 'View the source on GitHub',
     },
     oneLauncher: {
         id: 'axolotl-marketing.demo.one-launcher',
@@ -993,10 +1001,17 @@ useHead(() => ({
         <div ref="hero" class="landing-hero">
             <div class="hero-grid" aria-hidden="true" />
             <div class="hero-content">
-                <div class="flex items-center gap-3">
-                    <div class="hero-kicker">
-                        {{ formatMessage(messages.openSourceBadge) }}
-                    </div>
+                <div class="hero-kicker">
+                    <span>{{ formatMessage(messages.heroTrustLine) }}</span>
+                    <a
+                        class="hero-kicker-link"
+                        href="https://github.com/Mystic-Stars/Axolotl"
+                        target="_blank"
+                        rel="noopener"
+                        :aria-label="formatMessage(messages.heroTrustLink)"
+                    >
+                        <GithubIcon aria-hidden="true" />
+                    </a>
                 </div>
                 <h1 class="main-header mb-8 mt-4 max-w-[52rem] text-[var(--color-contrast)]">
                     {{ formatMessage(messages.downloadAxolotl) }}
@@ -1700,21 +1715,43 @@ useHead(() => ({
     text-align: center;
 }
 
+// A trust line, not a badge: the pill treatment made a factual claim read as
+// decoration, and its blur and glow were the heaviest ornament above the fold.
 .hero-kicker {
     display: inline-flex;
     align-items: center;
+    gap: 0.5rem;
     width: fit-content;
-    height: fit-content;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    background: color-mix(in srgb, var(--color-brand) 12%, transparent);
     color: var(--color-brand);
-    font-size: 0.875rem;
-    font-weight: 700;
-    line-height: 1;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 0.75rem 2.5rem color-mix(in srgb, var(--color-brand) 12%, transparent);
+    font-size: 0.78125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
+    text-align: center;
+
+    .hero-kicker-link {
+        display: inline-flex;
+        align-items: center;
+        color: inherit;
+        transition: opacity 0.2s ease;
+
+        &:hover {
+            opacity: 0.7;
+        }
+
+        svg {
+            width: 1rem;
+            height: 1rem;
+        }
+    }
+}
+
+// The brand pink is tuned for surfaces, not for small text: pink-600 on the light
+// background measures 3.86:1, below the 4.5:1 floor for text this size. The
+// darker step of the same hue clears it at 5.07:1 while staying recognisably the
+// brand colour. The dark and OLED backgrounds already pass with the brand pink.
+.light-mode .hero-kicker {
+    color: var(--color-pink-700);
 }
 
 .landing-hero .main-subheader {

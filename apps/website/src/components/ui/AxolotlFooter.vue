@@ -20,6 +20,12 @@ const messages = defineMessages({
         id: 'axolotl-site.footer.open-source-link',
         defaultMessage: 'open source',
     },
+    // The hero used to carry the tech stack; it lives here now, where a visitor
+    // looking for implementation details will scroll to.
+    techStack: {
+        id: 'axolotl-site.footer.tech-stack',
+        defaultMessage: 'Built with Tauri v2, Rust, and Vue 3',
+    },
     disclaimer: {
         id: 'axolotl-site.footer.minecraft-disclaimer',
         defaultMessage:
@@ -49,6 +55,7 @@ const messages = defineMessages({
                         >.
                     </span>
                 </p>
+                <p>{{ formatMessage(messages.techStack) }}</p>
             </div>
 
             <nav
