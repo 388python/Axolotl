@@ -55,7 +55,7 @@ const requiredInvariants = [
 	],
 	[
 		'User-Agent format',
-		frontendConfig.includes('garbage-human-studio/axolotl/${version} (${os})'),
+		frontendConfig.includes('Axolotl-Launcher/${version} (${os})'),
 	],
 	[
 		'private Modrinth services disabled',
