@@ -510,7 +510,7 @@ async fn fingerprint_and_hashes_use_current_bytes_and_cancel_before_network() {
             .unwrap();
     assert_eq!(
         fingerprint,
-        crate::api::curseforge::compute_fingerprint(bytes)
+        crate::util::fingerprint::compute_fingerprint(bytes)
     );
     let cancel = CancellationToken::new();
     cancel.cancel();
@@ -1495,7 +1495,7 @@ async fn frozen_file_hashing_reports_progress_before_the_file_finishes() {
     assert_eq!(snapshot.integrity.size, Some(bytes.len() as u64));
     assert_eq!(
         fingerprint,
-        crate::api::curseforge::compute_fingerprint(&bytes)
+        crate::util::fingerprint::compute_fingerprint(&bytes)
     );
     let total = bytes.len() as u64 * 2;
     assert_eq!(progress.first(), Some(&(0, total)));

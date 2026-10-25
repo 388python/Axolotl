@@ -1769,9 +1769,9 @@ async fn curseforge_automatic_roots_and_optional_candidates_resolve_under_channe
     let (_directory, cache) = cache().await;
     let service = ResourceService::new(
         cache.clone(),
-        vec![Arc::new(Available(Arc::new(CurseForgeProvider::new(
-            transport.clone(),
-        ))))],
+        vec![Arc::new(Available(Arc::new(
+            CurseForgeProvider::for_tests(transport.clone()),
+        )))],
     )
     .unwrap();
     let root = ResourceSelection {
