@@ -121,4 +121,7 @@ apps/app/resources/blockbench-skin/
 #local development script
 start-dev.ps1
 
+# WorkBuddy local workspace data
+.workbuddy-ai/
+
 apps/app/resources/seed-map/
