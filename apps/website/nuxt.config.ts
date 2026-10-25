@@ -14,8 +14,10 @@ export default defineNuxtConfig({
     },
     app: {
         head: {
+            // Theme classes are applied by the pre-hydration script below. Keeping
+            // them out of htmlAttrs prevents Nuxt from re-adding a stale class.
             htmlAttrs: {
-                class: 'accent-pink dark-mode',
+                class: 'accent-pink',
                 lang: 'zh-CN',
             },
             title: 'Axolotl Launcher - 免费开源的 Minecraft 启动器',
