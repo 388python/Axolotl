@@ -58,6 +58,3 @@ pub(crate) use self::update::{
     apply_staged_curseforge_upgrade_file_with_state,
     stage_curseforge_upgrade_file, update_managed_modpack_with_reporter,
 };
-pub(crate) use self::verify::{
-    CurseForgeFingerprintHasher, compute_fingerprint,
-};
