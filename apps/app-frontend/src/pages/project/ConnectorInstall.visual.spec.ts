@@ -225,35 +225,58 @@ for (const [name, component, loader, field, data] of [
     })
 }
 
-it('MCArchive keeps the navigation title through loading, failure and retry', async () => {
-    let fail!: (error: Error) => void
-    vi.mocked(getMcArchiveModBySlug).mockImplementationOnce(
-        () =>
-            new Promise((_, reject) => {
-                fail = reject
-            }),
-    )
-    window.history.replaceState(
-        { projectPreview: { targetPath: route.path, title: 'Known archive' } },
-        '',
-    )
-    const wrapper = mount(McArchive)
-    try {
-        expect(wrapper.get('h1').text()).toBe('Known archive')
-        fail(new Error('offline'))
-        await flushPromises()
-        expect(wrapper.get('h1').text()).toBe('Known archive')
-        expect(wrapper.find('[role="alert"]').exists()).toBe(true)
-        expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false)
-        await wrapper
-            .findAll('button')
-            .find((button) => button.text() === 'Retry')!
-            .trigger('click')
-        await flushPromises()
-        expect(wrapper.get('h1').text()).toBe('old')
-        expect(getMcArchiveModBySlug).toHaveBeenCalledTimes(2)
-    } finally {
-        wrapper.unmount()
+it.each([
+    ['MCArchive', McArchive, getMcArchiveModBySlug],
+    ['Planet Minecraft', PlanetMinecraft, getPlanetMinecraftProject],
+] as const)(
+    '%s keeps the navigation title through loading, failure and retry',
+    async (_name, component, loader) => {
+        let fail!: (error: Error) => void
+        vi.mocked(loader).mockImplementationOnce(
+            () =>
+                new Promise((_, reject) => {
+                    fail = reject
+                }),
+        )
+        window.history.replaceState(
+            { projectPreview: { targetPath: route.path, title: 'Known archive' } },
+            '',
+        )
+        const wrapper = mount(component)
+        try {
+            expect(wrapper.get('h1').text()).toBe('Known archive')
+            fail(new Error('offline'))
+            await flushPromises()
+            expect(wrapper.get('h1').text()).toBe('Known archive')
+            expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+            expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false)
+            await wrapper
+                .findAll('button')
+                .find((button) => button.text() === 'Retry')!
+                .trigger('click')
+            await flushPromises()
+            expect(wrapper.get('h1').text()).toBe('old')
+            expect(loader).toHaveBeenCalledTimes(2)
+        } finally {
+            wrapper.unmount()
+            window.history.replaceState({}, '')
+        }
+    },
+)
+
+it.each([McArchive, PlanetMinecraft])(
+    'shows a title placeholder on a cold direct visit',
+    (component) => {
+        vi.mocked(getMcArchiveModBySlug).mockReturnValue(new Promise(() => {}))
+        vi.mocked(getPlanetMinecraftProject).mockReturnValue(new Promise(() => {}))
         window.history.replaceState({}, '')
-    }
-})
+        const wrapper = mount(component)
+        try {
+            expect(wrapper.find('h1').exists()).toBe(false)
+            expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true)
+            expect(wrapper.find('[data-skeleton]').exists()).toBe(true)
+        } finally {
+            wrapper.unmount()
+        }
+    },
+)
