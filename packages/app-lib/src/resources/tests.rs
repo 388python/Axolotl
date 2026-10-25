@@ -3147,3 +3147,34 @@ async fn curated_project_confirmation_rejects_different_mcmod_subvariants() {
     assert!(!evidence.contains("leftArtifact"));
     pool.close().await;
 }
+
+#[test]
+fn launcher_cache_behaviour_maps_onto_the_service_policies() {
+    use crate::resources::legacy_catalog::policy;
+    use crate::state::CacheBehaviour;
+
+    // Expired entries are served immediately and refreshed in the background,
+    // which is what the resource service does for StaleWhileRevalidate.
+    assert_eq!(policy(None), CachePolicy::StaleWhileRevalidate);
+    assert_eq!(
+        policy(Some(CacheBehaviour::StaleWhileRevalidateSkipOffline)),
+        CachePolicy::StaleWhileRevalidate
+    );
+    assert_eq!(
+        policy(Some(CacheBehaviour::StaleWhileRevalidate)),
+        CachePolicy::StaleWhileRevalidate
+    );
+    assert_eq!(
+        policy(Some(CacheBehaviour::CacheOnly)),
+        CachePolicy::OnlyCached
+    );
+    // Valid entries come from the cache, expired ones are refetched.
+    assert_eq!(
+        policy(Some(CacheBehaviour::MustRevalidate)),
+        CachePolicy::UseFresh
+    );
+    assert_eq!(
+        policy(Some(CacheBehaviour::Bypass)),
+        CachePolicy::ForceRefresh
+    );
+}

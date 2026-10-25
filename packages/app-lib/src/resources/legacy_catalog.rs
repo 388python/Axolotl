@@ -94,7 +94,18 @@ pub(crate) async fn projects_exact_with_policy<T: DeserializeOwned>(
         .await;
     let mut projects = Vec::new();
     for value in values {
-        match value.map_err(error)?.value {
+        let value = match value {
+            Ok(value) => value.value,
+            // A cached-only batch reports every miss as Unavailable; keep the
+            // cached subset instead of failing the whole batch.
+            Err(ResourceError::Unavailable)
+                if policy == CachePolicy::OnlyCached =>
+            {
+                continue;
+            }
+            Err(failure) => return Err(error(failure)),
+        };
+        match value {
             ProviderValue::Project(document) => {
                 projects.push(serde_json::from_value(
                     document.protocol.ok_or_else(|| {
@@ -117,16 +128,27 @@ pub(crate) async fn projects_exact_with_policy<T: DeserializeOwned>(
 }
 
 /// Maps the launcher cache behaviour onto the resource service policy.
+///
+/// `StaleWhileRevalidateSkipOffline` serves expired entries immediately and
+/// refreshes them in the background, exactly like the legacy cache did; the
+/// remaining difference is that a key with no cached entry now surfaces the
+/// source error instead of being silently absent.
+///
+/// `MustRevalidate` has no exact counterpart: the service only refuses to fall
+/// back to an expired entry under `ForceRefresh`, which also ignores valid
+/// entries. `UseFresh` therefore keeps the "valid entry is served without a
+/// request, expired entry is refetched" halves, and still falls back to the
+/// expired entry when the refresh fails.
 pub(crate) fn policy(behaviour: Option<CacheBehaviour>) -> CachePolicy {
     match behaviour.unwrap_or_default() {
         CacheBehaviour::StaleWhileRevalidateSkipOffline => {
-            CachePolicy::UseFresh
+            CachePolicy::StaleWhileRevalidate
         }
         CacheBehaviour::StaleWhileRevalidate => {
             CachePolicy::StaleWhileRevalidate
         }
         CacheBehaviour::CacheOnly => CachePolicy::OnlyCached,
-        CacheBehaviour::MustRevalidate => CachePolicy::Revalidate,
+        CacheBehaviour::MustRevalidate => CachePolicy::UseFresh,
         CacheBehaviour::Bypass => CachePolicy::ForceRefresh,
     }
 }
