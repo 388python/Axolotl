@@ -9,7 +9,11 @@ import { getPlanetMinecraftProject } from '@/helpers/planet-minecraft'
 import McArchive from './McArchive.vue'
 import PlanetMinecraft from './PlanetMinecraft.vue'
 
-const route = reactive({ params: { slug: 'old', id: 'old' }, query: {} })
+const route = reactive({
+    path: '/project/mcarchive/old',
+    params: { slug: 'old', id: 'old' },
+    query: {},
+})
 const target = ref({ id: 'instance', name: 'Target' })
 const showInstall = vi.fn()
 const cancelInstall = vi.fn<() => Promise<void>>()
@@ -51,6 +55,8 @@ vi.mock('@/components/browse/BrowseInstanceSelector.vue', () => ({
     default: defineComponent({ setup: () => () => h('span') }),
 }))
 vi.mock('@modrinth/ui', () => ({
+    ProjectPageSkeleton: defineComponent({ setup: () => () => h('div', { 'data-skeleton': '' }) }),
+    commonMessages: { retryButton: { defaultMessage: 'Retry' } },
     Button: defineComponent({
         setup:
             (_, { attrs, slots }) =>
@@ -218,3 +224,36 @@ for (const [name, component, loader, field, data] of [
         }
     })
 }
+
+it('MCArchive keeps the navigation title through loading, failure and retry', async () => {
+    let fail!: (error: Error) => void
+    vi.mocked(getMcArchiveModBySlug).mockImplementationOnce(
+        () =>
+            new Promise((_, reject) => {
+                fail = reject
+            }),
+    )
+    window.history.replaceState(
+        { projectPreview: { targetPath: route.path, title: 'Known archive' } },
+        '',
+    )
+    const wrapper = mount(McArchive)
+    try {
+        expect(wrapper.get('h1').text()).toBe('Known archive')
+        fail(new Error('offline'))
+        await flushPromises()
+        expect(wrapper.get('h1').text()).toBe('Known archive')
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+        expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false)
+        await wrapper
+            .findAll('button')
+            .find((button) => button.text() === 'Retry')!
+            .trigger('click')
+        await flushPromises()
+        expect(wrapper.get('h1').text()).toBe('old')
+        expect(getMcArchiveModBySlug).toHaveBeenCalledTimes(2)
+    } finally {
+        wrapper.unmount()
+        window.history.replaceState({}, '')
+    }
+})
