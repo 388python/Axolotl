@@ -1,5 +1,6 @@
 //! CurseForge integration: submodule wiring and the crate-internal re-exports.
 
+mod archive;
 mod auth;
 mod catalog;
 mod constants;
@@ -22,16 +23,20 @@ mod verify;
 #[cfg(test)]
 mod tests;
 
+pub use self::archive::get_local_modpack_target;
 pub use self::auth::*;
 pub use self::catalog::*;
 pub use self::dto::*;
+pub use self::install::CurseForgeModrinthFallbackPreview;
 pub use self::install::*;
 pub use self::manual::*;
+pub use self::modpack::get_modpack_target;
 pub use self::modpack::*;
 pub use self::preview::*;
 pub use self::selection::*;
 pub use self::update::*;
 
+pub(crate) use self::archive::loader_family;
 pub(crate) use self::catalog::{
     derived_curseforge_download_url, resource_request,
 };
@@ -48,7 +53,6 @@ pub(crate) use self::modpack::{
     install_local_manifest_files,
 };
 pub(crate) use self::transport::api_key;
-pub(crate) use self::update::loader_family;
 pub(crate) use self::update::{
     StagedCurseForgeUpgrade, apply_staged_curseforge_upgrade_file,
     apply_staged_curseforge_upgrade_file_with_state,
