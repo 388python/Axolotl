@@ -698,7 +698,7 @@ pub(crate) async fn get_linked_modpack_info(
             avatar_url: org.icon_url,
             owner_type: OwnerType::Organization,
         })
-    } else {
+    } else if !project.team.is_empty() {
         let team = CachedEntry::get_team(
             &project.team,
             cache_behaviour,
@@ -716,6 +716,8 @@ pub(crate) async fn get_linked_modpack_info(
                     owner_type: OwnerType::User,
                 })
         })
+    } else {
+        None
     };
     let (_, update_version_id, update_version) = check_modpack_update(
         version_id,
@@ -842,7 +844,7 @@ async fn get_curseforge_linked_modpack_info(
                     avatar_url: org.icon_url,
                     owner_type: OwnerType::Organization,
                 })
-            } else {
+            } else if !mr_project.team.is_empty() {
                 CachedEntry::get_team(
                     &mr_project.team,
                     cache_behaviour,
@@ -860,6 +862,8 @@ async fn get_curseforge_linked_modpack_info(
                         },
                     )
                 })
+            } else {
+                None
             };
 
             let files = crate::api::curseforge::get_files(
@@ -2335,6 +2339,7 @@ async fn resolve_metadata(
     let team_ids = projects
         .iter()
         .map(|project| project.team.clone())
+        .filter(|team| !team.is_empty())
         .collect::<HashSet<_>>();
     let org_ids = projects
         .iter()

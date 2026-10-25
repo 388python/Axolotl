@@ -12,9 +12,8 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-async fn endpoint_trial_for_range_recovery() -> super::super::tuning::TrialLease
-{
-    use super::super::tuning::{TRIALS, TrialKind};
+async fn endpoint_trial_for_range_recovery() -> super::tuning::TrialLease {
+    use super::tuning::{TRIALS, TrialKind};
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             if let Some(trial) = TRIALS.acquire(
