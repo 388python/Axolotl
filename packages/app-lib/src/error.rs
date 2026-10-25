@@ -88,6 +88,9 @@ pub enum ErrorKind {
     #[error("download {context} stream receive timed out")]
     DownloadStreamStalled { context: String },
 
+    #[error("{0}")]
+    DownloadResourceWaitTimeout(String),
+
     #[error("HTTP/2 transport error: {0}")]
     DownloadH2Error(#[from] h2::Error),
 

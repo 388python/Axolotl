@@ -1326,6 +1326,7 @@ fn install_error_code(
         | ErrorKind::NetworkError(_)
         | ErrorKind::HttpError { .. }
         | ErrorKind::ApiIsDownError(_) => "network_error",
+        ErrorKind::DownloadResourceWaitTimeout(_) => "resource_wait_error",
         ErrorKind::Any(_)
             if matches!(
                 phase,
