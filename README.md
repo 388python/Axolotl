@@ -39,10 +39,6 @@
   </tr>
 </table>
 
-<a href="https://www.netlify.com">
-  <img src="https://www.netlify.com/assets/badges/netlify-badge-color-accent.svg" alt="Deploys by Netlify" />
-</a>
-
 - [在爱发电支持 Axolotl Launcher](https://ifdian.net/a/Mystic-Stars) — 你的支持将帮助项目持续维护与改进
 
 </details>

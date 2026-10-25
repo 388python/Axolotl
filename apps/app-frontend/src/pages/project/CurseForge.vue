@@ -796,7 +796,8 @@ async function loadProject(projectId: number) {
     translationLoading.value = false
     translations.value = {}
     loading.value = true
-    versionsLoading.value = false
+    versionsLoading.value = true
+    descriptionLoading.value = true
     filesComplete.value = false
     project.value = null
     mcmodUrl.value = null
@@ -922,6 +923,11 @@ watch(
     },
     { immediate: true },
 )
+onScopeDispose(() => {
+    projectRequestVersion++
+    filesRequestVersion++
+    translationRequestVersion++
+})
 
 watch([activeTab, () => project.value?.id, filesReady], ([tab, projectId, ready]) => {
     if (tab === 'versions' && projectId && ready && !filesComplete.value) {

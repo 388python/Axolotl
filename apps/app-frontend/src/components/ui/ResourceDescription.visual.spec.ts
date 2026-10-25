@@ -1,3 +1,4 @@
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
 import { flushPromises, mount } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
@@ -5,6 +6,10 @@ import { defineComponent, h } from 'vue'
 import { resourceDescription, resourceGet } from '@/helpers/resources'
 
 import ResourceDescription from './ResourceDescription.vue'
+
+function queryPlugin() {
+    return { plugins: [[VueQueryPlugin, { queryClient: new QueryClient() }]] }
+}
 
 vi.mock('@/helpers/resources', () => ({
     sourceResource: (source: string, projectId: string) => ({
@@ -52,6 +57,7 @@ function ready() {
 it('reads the preferred description while keeping the original installation reference', async () => {
     ready()
     const wrapper = mount(ResourceDescription, {
+        global: queryPlugin(),
         props: { source: 'modrinth', projectId: 'abcdefgh' },
         slots: { default: '<p>Original translated description</p>' },
     })
@@ -79,6 +85,7 @@ it('reads the preferred description while keeping the original installation refe
 it('retries the failed source while preserving the last successful description', async () => {
     ready()
     const wrapper = mount(ResourceDescription, {
+        global: queryPlugin(),
         props: { source: 'modrinth', projectId: 'abcdefgh' },
     })
     try {
@@ -110,6 +117,7 @@ it('retries the failed source while preserving the last successful description',
 it('keeps a completed description on failure and aborts old subscriptions on source change', async () => {
     ready()
     const wrapper = mount(ResourceDescription, {
+        global: queryPlugin(),
         props: { source: 'modrinth', projectId: 'abcdefgh' },
     })
     try {
@@ -147,22 +155,25 @@ it('keeps a completed description on failure and aborts old subscriptions on sou
 
 it('shows a local skeleton only when no description is available', async () => {
     ready()
-    let resolve!: (value: Awaited<ReturnType<typeof resourceGet>>) => void
-    vi.mocked(resourceGet).mockImplementationOnce(
+    vi.mocked(resourceGet).mockReturnValueOnce(new Promise(() => {}))
+    let resolve!: (value: Awaited<ReturnType<typeof resourceDescription>>) => void
+    vi.mocked(resourceDescription).mockImplementationOnce(
         () =>
             new Promise((done) => {
                 resolve = done
             }),
     )
     const wrapper = mount(ResourceDescription, {
+        global: queryPlugin(),
         props: { source: 'planet_minecraft', projectId: 'one' },
     })
     try {
         expect(wrapper.find('[data-skeleton]').exists()).toBe(true)
         resolve({
-            defaultProject: { source: 'planet_minecraft', projectId: 'one' },
-            projects: [project('planet_minecraft', 'one')],
-        } as Awaited<ReturnType<typeof resourceGet>>)
+            source: 'planet_minecraft',
+            format: 'plain',
+            body: 'planet_minecraft description',
+        })
         await flushPromises()
         expect(wrapper.text()).toContain('planet_minecraft description')
         expect(wrapper.find('[data-skeleton]').exists()).toBe(false)
@@ -172,6 +183,7 @@ it('shows a local skeleton only when no description is available', async () => {
 
     vi.mocked(resourceGet).mockReturnValueOnce(new Promise(() => {}))
     const original = mount(ResourceDescription, {
+        global: queryPlugin(),
         props: { source: 'mcarchive', projectId: 'two' },
         slots: { default: '<p>Existing description</p>' },
     })
@@ -180,5 +192,21 @@ it('shows a local skeleton only when no description is available', async () => {
         expect(original.find('[data-skeleton]').exists()).toBe(false)
     } finally {
         original.unmount()
+    }
+})
+
+it('renders the original source before aggregate discovery completes', async () => {
+    ready()
+    vi.mocked(resourceGet).mockImplementationOnce(() => new Promise(() => {}))
+    const wrapper = mount(ResourceDescription, {
+        global: queryPlugin(),
+        props: { source: 'modrinth', projectId: 'abcdefgh' },
+    })
+    try {
+        await flushPromises()
+        expect(wrapper.text()).toContain('modrinth description')
+        expect(wrapper.attributes('aria-busy')).toBe('false')
+    } finally {
+        wrapper.unmount()
     }
 })

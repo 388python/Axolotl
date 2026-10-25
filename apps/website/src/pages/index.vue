@@ -11,13 +11,17 @@ import GitGraphIcon from '@modrinth/assets/icons/git-graph.svg?component'
 import IssuesIcon from '@modrinth/assets/icons/issues.svg?component'
 import SearchIcon from '@modrinth/assets/icons/search.svg?component'
 import TrashIcon from '@modrinth/assets/icons/trash.svg?component'
-import Accordion from '@modrinth/ui/src/components/base/Accordion.vue'
-import Avatar from '@modrinth/ui/src/components/base/Avatar.vue'
-import Button from '@modrinth/ui/src/components/base/buttons/Button.vue'
-import Checkbox from '@modrinth/ui/src/components/base/Checkbox.vue'
-import Combobox, { type ComboboxOption } from '@modrinth/ui/src/components/base/Combobox.vue'
-import IntlFormatted from '@modrinth/ui/src/components/base/IntlFormatted.vue'
-import { defineMessages, useVIntl } from '@modrinth/ui/src/composables/i18n.ts'
+import {
+    Accordion,
+    Avatar,
+    Button,
+    Checkbox,
+    Combobox,
+    type ComboboxOption,
+    defineMessages,
+    IntlFormatted,
+    useVIntl,
+} from '@modrinth/ui'
 
 import AppleLogo from '~/components/landing/AppleLogo.vue'
 import CommunitySection from '~/components/landing/CommunitySection.vue'
@@ -27,18 +31,13 @@ import MultiplayerIcon from '~/components/landing/MultiplayerIcon.vue'
 import OfflineModeIcon from '~/components/landing/OfflineModeIcon.vue'
 import ProjectsShowcase from '~/components/landing/ProjectsShowcase.vue'
 import WindowsLogo from '~/components/landing/WindowsLogo.vue'
+import type { ReleaseChannel } from '~/utils/download-sources'
 import { trackHeroGlow } from '~/utils/hero-glow'
 import {
     getDownloadAvailability,
     getReleasePage,
-    type ReleaseChannel,
-    resolveLauncherDownloads,
+    hasLauncherDownloads,
 } from '~/utils/launcher-downloads'
-
-interface UpdateServerDownloadMetadata {
-    version: string
-    downloads: Array<{ filename: string; url: string }>
-}
 
 type OSType = 'Mac' | 'Windows' | 'Linux' | null
 
@@ -53,30 +52,13 @@ onMounted(() => {
 })
 onBeforeUnmount(() => stopHeroGlow?.())
 
-const { resolvedSource } = useDownloadSource()
-const UPDATE_SERVER_BASE_URL = 'https://update.axlmc.org'
 const releaseChannel = ref<ReleaseChannel>('release')
-const releaseApi = computed(
-    () => `${UPDATE_SERVER_BASE_URL}/api/downloads/latest?channel=${releaseChannel.value}`,
-)
-
-// 使用 Update Server 的下载目录作为默认发布数据源；GitHub 保留为手动备用源。
 const {
-    data: launcherRelease,
+    release: launcherRelease,
     status: launcherReleaseStatus,
     refresh: refreshLauncherRelease,
-} = await useFetch<UpdateServerDownloadMetadata>(releaseApi, {
-    // Download metadata is intentionally fetched in the browser. This keeps
-    // static generation independent from the update service's availability and
-    // lets every deployed page resolve the current release after loading.
-    server: false,
-    transform(data: UpdateServerDownloadMetadata) {
-        return {
-            tag_name: `v${data.version}`,
-            assets: data.downloads.map((download) => download.filename),
-        }
-    },
-})
+    links: downloadLinks,
+} = useLauncherDownloads(releaseChannel)
 
 // 下载链接的三种状态：获取中 / 就绪 / 失败。失败时主 CTA 降级为跳转下载区，
 // 下载区显示错误提示与 GitHub Releases 手动下载入口，避免点击死链接。
@@ -86,12 +68,6 @@ const downloadState = computed<'loading' | 'ready' | 'error'>(() => {
     return 'loading'
 })
 
-const downloadLinks = computed(() =>
-    resolveLauncherDownloads(
-        launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
-        resolvedSource.value,
-    ),
-)
 const windowsLink = computed(() => downloadLinks.value.windows)
 const macLinks = computed(() => ({ universal: downloadLinks.value.mac }))
 const linuxLinks = computed(() => ({
@@ -104,6 +80,10 @@ const releasePage = computed(() =>
         releaseChannel.value,
         launcherReleaseStatus.value === 'success' ? launcherRelease.value : null,
     ),
+)
+// A valid catalog may have no packages for this channel or platform.
+const releaseUnavailable = computed(
+    () => downloadState.value === 'ready' && !hasLauncherDownloads(launcherRelease.value),
 )
 const linkUnavailableLabel = computed(() =>
     formatMessage(
@@ -131,10 +111,10 @@ const latestVersion = computed(() => {
     return typeof tagName === 'string' ? tagName.replace(/^v/, '') : null
 })
 
+const requestHeaders = useRequestHeaders(['user-agent'])
 const platform = computed<string>(() => {
     if (import.meta.server) {
-        const headers = useRequestHeaders()
-        return headers['user-agent'] || ''
+        return requestHeaders['user-agent'] || ''
     } else {
         return navigator.userAgent || ''
     }
@@ -1419,7 +1399,7 @@ useHead(() => ({
                             })
                         }}
                     </span>
-                    <span v-else-if="launcherReleaseStatus === 'error'">
+                    <span v-else-if="launcherReleaseStatus === 'error' || releaseUnavailable">
                         {{ formatMessage(messages.downloadChannelVersionUnavailable) }}
                     </span>
                     <span v-else>{{ formatMessage(messages.downloadChannelFetchingVersion) }}</span>

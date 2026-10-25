@@ -106,6 +106,7 @@ import { createProjectPreviewState } from '@/helpers/project-preview'
 import {
     isResourceOperationError,
     resourceOperationError,
+    resourceSearchFailure,
     resourceSourceName,
 } from '@/helpers/resource-operation-logic'
 import {
@@ -813,11 +814,6 @@ const messages = defineMessages({
     serverSourceUnavailable: {
         id: 'app.browse.server-source-unavailable',
         defaultMessage: 'The server content source is unavailable. Try again later.',
-    },
-    sourceFailed: {
-        id: 'app.browse.source-failed',
-        defaultMessage:
-            '{source} could not return results for this search. Check the filters or try again later.',
     },
     filterMetadataFailed: {
         id: 'app.browse.filter-metadata-failed',
@@ -1991,11 +1987,7 @@ async function search(requestParams: string, signal: AbortSignal) {
     if (page.entries.length === 0 && page.sourceFailures.length > 0)
         throw new Error(
             page.sourceFailures
-                .map((failure) =>
-                    formatMessage(messages.sourceFailed, {
-                        source: resourceSourceName(failure.source),
-                    }),
-                )
+                .map((failure) => resourceSearchFailure(failure, query, formatMessage))
                 .join('; '),
         )
     const hits = page.entries
@@ -2068,9 +2060,7 @@ async function search(requestParams: string, signal: AbortSignal) {
         page: resourceSearchPages.indexOf(page) + 1,
         resourceNotice: [
             ...page.sourceFailures.map((failure) =>
-                formatMessage(messages.sourceFailed, {
-                    source: resourceSourceName(failure.source),
-                }),
+                resourceSearchFailure(failure, query, formatMessage),
             ),
             ...page.exhaustedSources.map((source) =>
                 formatMessage(messages.sourceWindowExhausted, {
