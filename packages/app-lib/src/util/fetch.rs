@@ -2625,10 +2625,10 @@ async fn fetch_advanced_inner(
 
                             while let Some(item) = stream.next().await {
                                 let chunk = item.wrap_err_with(|| {
-									eyre!(
-										"failed to read response body from {log_request_url}"
-									)
-								})?;
+                                    eyre!(
+                                        "failed to read response body from {log_request_url}"
+                                    )
+                                })?;
 
                                 downloaded += chunk.len() as u64;
                                 if let Some(feedback) = &endpoint_feedback { feedback.record(chunk.len(), super::download::local_resources::network_pressure()); }
@@ -2684,7 +2684,7 @@ async fn fetch_advanced_inner(
                             eyre!(
                                 "failed to read response body from {log_request_url}"
                             )
-						})
+                        })
                     };
                     if loading_bar.is_none()
                         && progress.is_none()
@@ -9542,21 +9542,21 @@ mod tests {
     #[test]
     fn malformed_official_cdn_redirects_reuse_the_original_encoded_path() {
         let original = Url::parse(
-			"https://cdn-alt.modrinth.com/data/project/versions/version/%E9%87%91%E5%90%88%E6%AC%A2_1.21%2B.zip",
-		)
-		.unwrap();
+            "https://cdn-alt.modrinth.com/data/project/versions/version/%E9%87%91%E5%90%88%E6%AC%A2_1.21%2B.zip",
+        )
+        .unwrap();
         for host in ["cdn-alt.modrinth.com", "cdn.modrinth.com"] {
             let redirect = Url::parse(&format!(
-				"https://{host}/data/project/versions/version/\u{91c8}\u{91c8}.zip",
-			))
-			.unwrap();
+                "https://{host}/data/project/versions/version/\u{91c8}\u{91c8}.zip",
+            ))
+            .unwrap();
 
             let repaired = repair_official_cdn_redirect(
-				&original,
-				&redirect,
-				&format!("https://{host}/data/project/versions/version/\u{91c8}\u{91c8}.zip"),
-			)
-			.unwrap();
+                &original,
+                &redirect,
+                &format!("https://{host}/data/project/versions/version/\u{91c8}\u{91c8}.zip"),
+            )
+            .unwrap();
 
             assert_eq!(
                 repaired.as_str(),
@@ -10833,13 +10833,13 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), b"axolotl download").unwrap();
         let integrity = Integrity {
-			size: Some(16),
-			sha1: Some("90e438ead880c77ea2d7e726b5aa74e6d21a805f".to_string()),
-			sha512: Some("2dcd3e0a9f198e9ef892a28ed6534dd154be2bd13531c961c0852aa6f1e24f633d2cd8288d3cf13c6a482a87c822b74a4901a2aa64292f4a371c5ebfea392c1b".to_string()),
-			sha256: Some("120561bc60d59ebe2a08fc229ff2b1eb06b20c4211d21a17c15dd80790f48672".to_string()),
-			md5: Some("30018bb52add8c6dbc5d4149c1325df0".to_string()),
-			content: ContentValidation::None,
-		};
+            size: Some(16),
+            sha1: Some("90e438ead880c77ea2d7e726b5aa74e6d21a805f".to_string()),
+            sha512: Some("2dcd3e0a9f198e9ef892a28ed6534dd154be2bd13531c961c0852aa6f1e24f633d2cd8288d3cf13c6a482a87c822b74a4901a2aa64292f4a371c5ebfea392c1b".to_string()),
+            sha256: Some("120561bc60d59ebe2a08fc229ff2b1eb06b20c4211d21a17c15dd80790f48672".to_string()),
+            md5: Some("30018bb52add8c6dbc5d4149c1325df0".to_string()),
+            content: ContentValidation::None,
+        };
         assert_eq!(verify_file(file.path(), &integrity).await.unwrap(), 16);
     }
 

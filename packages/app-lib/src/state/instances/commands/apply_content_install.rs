@@ -3124,7 +3124,7 @@ async fn record_resolved_plan_edges(
     let mut ids = Vec::with_capacity(paths.len());
     for path in paths {
         ids.push(sqlx::query_scalar::<_, String>("SELECT entry.id FROM instance_content_entries entry JOIN instance_files file ON file.id = entry.file_id WHERE entry.content_set_id = ? AND file.relative_path = ? ORDER BY entry.modified_at DESC LIMIT 1")
-			.bind(content_set_id).bind(path).fetch_one(&mut **tx).await?);
+            .bind(content_set_id).bind(path).fetch_one(&mut **tx).await?);
     }
     for id in ids.iter().skip(1) {
         content_rows::set_content_entry_auto_dependency_in_transaction(
@@ -3167,9 +3167,9 @@ async fn record_resolved_plan_edges(
             continue;
         };
         if let Some(child) = sqlx::query_scalar::<_, String>("SELECT entry.id FROM instance_content_entries entry JOIN instance_content_provider_refs ref ON ref.content_entry_id = entry.id WHERE entry.content_set_id = ? AND ref.provider = 'modrinth' AND ref.provider_project_id = ? AND ref.provider_release_id = ? ORDER BY entry.modified_at DESC LIMIT 1")
-			.bind(content_set_id).bind(&skipped.project_id).bind(version).fetch_optional(&mut **tx).await? {
-			edges.push((parent, child, skipped.project_id.clone(), version.to_string()));
-		}
+            .bind(content_set_id).bind(&skipped.project_id).bind(version).fetch_optional(&mut **tx).await? {
+            edges.push((parent, child, skipped.project_id.clone(), version.to_string()));
+        }
     }
     for (parent, child, project, version) in edges {
         let now = chrono::Utc::now();

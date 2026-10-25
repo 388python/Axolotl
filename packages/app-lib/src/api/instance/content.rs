@@ -197,10 +197,10 @@ async fn plan_content_updates_with_refresh(
             })?;
             if !pack.reconciled {
                 return Err(crate::ErrorKind::InputError(
-					"Pack membership is not calibrated yet; refresh while online before updating the pack"
-						.to_string(),
-				)
-				.into());
+                    "Pack membership is not calibrated yet; refresh while online before updating the pack"
+                        .to_string(),
+                )
+                .into());
             }
             if let Some(target_release_id) = target {
                 let provider = pack.provider.ok_or_else(|| {
@@ -262,16 +262,16 @@ pub async fn apply_content_update_plan(
         })?;
     let state = State::get().await?;
     let current_revision = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-		&plan.instance_id,
-		&state.pool,
-	)
-	.await?
-	.ok_or_else(|| {
-		crate::ErrorKind::InputError(
-			"Instance has no applied content set".to_string(),
-		)
-	})?
-	.revision;
+        &plan.instance_id,
+        &state.pool,
+    )
+    .await?
+    .ok_or_else(|| {
+        crate::ErrorKind::InputError(
+            "Instance has no applied content set".to_string(),
+        )
+    })?
+    .revision;
     if let Err(error) =
         ensure_update_plan_revision(plan.revision, current_revision)
     {

@@ -213,11 +213,11 @@ mod tests {
             .await
             .expect("in-memory database");
         sqlx::raw_sql(
-			"CREATE TABLE existing_content (id INTEGER PRIMARY KEY, marker TEXT NOT NULL); INSERT INTO existing_content (marker) VALUES ('keep');",
-		)
-		.execute(&pool)
-		.await
-		.expect("legacy database data");
+            "CREATE TABLE existing_content (id INTEGER PRIMARY KEY, marker TEXT NOT NULL); INSERT INTO existing_content (marker) VALUES ('keep');",
+        )
+        .execute(&pool)
+        .await
+        .expect("legacy database data");
 
         sqlx::raw_sql(include_str!(
             "../../migrations/20260820200000_content-favorites.sql"
@@ -233,11 +233,11 @@ mod tests {
         .await
         .expect("legacy row after migration");
         let table_exists: i64 = sqlx::query_scalar(
-			"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'content_favorites'",
-		)
-		.fetch_one(&pool)
-		.await
-		.expect("content favorites table query");
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'content_favorites'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("content favorites table query");
 
         assert_eq!(marker, "keep");
         assert_eq!(table_exists, 1);
@@ -304,30 +304,30 @@ mod tests {
      {
         let pool = pool().await;
         sqlx::query(
-			"INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('modrinth', 'older', 'mod', 1)",
-		)
-		.execute(&pool)
-		.await
-		.expect("insert valid favorite");
+            "INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('modrinth', 'older', 'mod', 1)",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert valid favorite");
         sqlx::query(
-			"INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('curseforge', 'newer', 'shader', 2)",
-		)
-		.execute(&pool)
-		.await
-		.expect("insert valid favorite");
+            "INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('curseforge', 'newer', 'shader', 2)",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert valid favorite");
 
         assert!(sqlx::query(
-			"INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('unknown', 'bad-provider', 'mod', 3)",
-		)
-		.execute(&pool)
-		.await
-		.is_err());
+            "INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('unknown', 'bad-provider', 'mod', 3)",
+        )
+        .execute(&pool)
+        .await
+        .is_err());
         assert!(sqlx::query(
-			"INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('modrinth', 'bad-type', 'modpack', 3)",
-		)
-		.execute(&pool)
-		.await
-		.is_err());
+            "INSERT INTO content_favorites (provider, project_id, content_type, saved_at) VALUES ('modrinth', 'bad-type', 'modpack', 3)",
+        )
+        .execute(&pool)
+        .await
+        .is_err());
 
         let favorites = list(&pool).await.expect("list favorites");
         assert_eq!(

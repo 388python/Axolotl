@@ -2350,8 +2350,8 @@ pub async fn download_libraries(
 
     let num_files = tasks.len();
     loading_try_for_each_concurrent(
-		stream::iter(tasks).map(Ok::<LibraryDownloadTask<'_>, crate::Error>),
-		crate::util::download::task_concurrency_limit(st),
+        stream::iter(tasks).map(Ok::<LibraryDownloadTask<'_>, crate::Error>),
+        crate::util::download::task_concurrency_limit(st),
         loading_bar,
         loading_amount,
         num_files,
@@ -2956,10 +2956,10 @@ mod tests {
         sqlx::migrate!().run(&pool).await.unwrap();
         let state = crate::state::test_state(directories, pool).await.unwrap();
         let version: GameVersion = serde_json::from_value(serde_json::json!({
-			"id": "1.12.2", "type": "release", "url": "invalid://no-network",
-			"releaseTime": "2017-09-18T08:39:46Z", "time": "2021-12-15T15:04:05Z",
-			"sha1": "", "complianceLevel": 0
-		})).unwrap();
+            "id": "1.12.2", "type": "release", "url": "invalid://no-network",
+            "releaseTime": "2017-09-18T08:39:46Z", "time": "2021-12-15T15:04:05Z",
+            "sha1": "", "complianceLevel": 0
+        })).unwrap();
         let loader: LoaderVersion = serde_json::from_value(serde_json::json!({
             "id": "test-loader", "stable": true, "url": "invalid://no-network"
         }))

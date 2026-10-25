@@ -244,22 +244,22 @@
                             {{ installButtonLabel }}
                         </Button>
                         <!-- 开服功能暂有问题，隐藏该按钮
-						<Transition name="start-server">
-							<Button
-								v-if="serverCapableModpack"
-								key="modpack-start-server"
-								size="xl"
-								type="outlined"
+                        <Transition name="start-server">
+                            <Button
+                                v-if="serverCapableModpack"
+                                key="modpack-start-server"
+                                size="xl"
+                                type="outlined"
 
-									v-tooltip="formatMessage(messages.startServer)"
-									native-type="button"
-									@click="openModpackServerFlow"
-								>
-									<ServerIcon />
-									{{ formatMessage(messages.startServer) }}
-								</Button>
-						</Transition>
-						-->
+                                    v-tooltip="formatMessage(messages.startServer)"
+                                    native-type="button"
+                                    @click="openModpackServerFlow"
+                                >
+                                    <ServerIcon />
+                                    {{ formatMessage(messages.startServer) }}
+                                </Button>
+                        </Transition>
+                        -->
                         <OverflowMenu
                             :tooltip="formatMessage(commonMessages.moreOptionsButton)"
                             :options="[

@@ -1330,7 +1330,7 @@ pub(crate) async fn get_content_provider_refs(
             &provider,
             &project_id,
             release_id.as_deref(),
-			file_id.as_deref(),
+            file_id.as_deref(),
         )
         .map_err(|error| {
             crate::ErrorKind::InputError(format!(
@@ -2182,32 +2182,32 @@ pub(crate) async fn get_content_mutation_target(
     .await?;
 
     row.map(|row| {
-		let relative_path = row.try_get::<Option<String>, _>("relative_path")?;
-		let project_type = row
-			.try_get::<Option<String>, _>("project_type")?
-			.as_deref()
-			.map(project_type_from_str)
-			.transpose()?
-			.or_else(|| {
-				relative_path.as_deref().and_then(
-					crate::state::instances::adapters::filesystem::project_type_from_relative_path,
-				)
-			})
-			.ok_or_else(|| {
-				crate::ErrorKind::InputError(
-					"Unable to determine the selected content project type"
-						.to_string(),
-				)
-			})?;
+        let relative_path = row.try_get::<Option<String>, _>("relative_path")?;
+        let project_type = row
+            .try_get::<Option<String>, _>("project_type")?
+            .as_deref()
+            .map(project_type_from_str)
+            .transpose()?
+            .or_else(|| {
+                relative_path.as_deref().and_then(
+                    crate::state::instances::adapters::filesystem::project_type_from_relative_path,
+                )
+            })
+            .ok_or_else(|| {
+                crate::ErrorKind::InputError(
+                    "Unable to determine the selected content project type"
+                        .to_string(),
+                )
+            })?;
 
-		Ok(ContentMutationTarget {
-			entry_id: row.try_get("entry_id")?,
-			member_id: row.try_get("member_id")?,
-			relative_path,
-			ownership_kind: ContentOwnershipKind::from_str(
-				&row.try_get::<String, _>("ownership_kind")?,
-			)?,
-			project_type,
+        Ok(ContentMutationTarget {
+            entry_id: row.try_get("entry_id")?,
+            member_id: row.try_get("member_id")?,
+            relative_path,
+            ownership_kind: ContentOwnershipKind::from_str(
+                &row.try_get::<String, _>("ownership_kind")?,
+            )?,
+            project_type,
             provider: row
                 .try_get::<Option<String>, _>("provider")?
                 .as_deref()
@@ -2821,11 +2821,11 @@ mod tests {
             .await
             .expect("insert content set");
         sqlx::query(
-			"INSERT INTO instances (id, applied_content_set_id) VALUES ('instance', 'set')",
-		)
-		.execute(&pool)
-		.await
-		.expect("insert instance");
+            "INSERT INTO instances (id, applied_content_set_id) VALUES ('instance', 'set')",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert instance");
         sqlx::query(
             "INSERT INTO instance_files (id, instance_id, relative_path)
 			 VALUES ('file', 'instance', 'mods/example.jar')",

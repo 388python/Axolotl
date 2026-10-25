@@ -225,9 +225,9 @@ pub struct State {
     configured_http_client_update: AsyncMutex<()>,
 
     pub(crate) file_watcher: FileWatcher,
-	pub(crate) screenshot_locks: DashMap<String, Arc<AsyncMutex<()>>>,
-	pub(crate) synced_options_lock: Arc<AsyncMutex<()>>,
-	pub(crate) game_locale_indexer: crate::api::instance::synced_options::game_options::locales::GameLocaleIndexer,
+    pub(crate) screenshot_locks: DashMap<String, Arc<AsyncMutex<()>>>,
+    pub(crate) synced_options_lock: Arc<AsyncMutex<()>>,
+    pub(crate) game_locale_indexer: crate::api::instance::synced_options::game_options::locales::GameLocaleIndexer,
 }
 
 impl State {
