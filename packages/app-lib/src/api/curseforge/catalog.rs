@@ -1,5 +1,6 @@
 //! Read-only CurseForge API queries.
 
+use super::constants::{MAX_PAGE_SIZE, MINECRAFT_GAME_ID};
 use super::download::normalized_download_url;
 use super::dto::{
     CurseForgeCategory, CurseForgeFile, CurseForgeFilesRequest,
@@ -7,16 +8,82 @@ use super::dto::{
     CurseForgeProject, CurseForgeResponse, CurseForgeSearchRequest,
     UnifiedSearchHit, UnifiedSearchResponse,
 };
-use super::mapping::{filter_categories, push_query};
+use super::mapping::{
+    filter_categories, mod_loader_to_slug, project_type_for_class, push_query,
+};
 use super::transport::{MirrorPolicy, api_key, request_json};
 use super::validation::validate_file_name;
-use super::{CATEGORY_CACHE, MAX_PAGE_SIZE, MINECRAFT_GAME_ID};
 use crate::state::{
     CacheBehaviour, CachedEntry, ContentProvider, CurseForgeProjectId,
 };
+use crate::util::download::constants::MODPACK_METADATA_CONCURRENCY;
 use crate::{ErrorKind, State};
+use futures::{StreamExt, stream};
 use reqwest::Method;
 use serde_json::{Value, json};
+use std::collections::{HashMap, HashSet};
+use std::sync::{LazyLock, RwLock};
+
+static CATEGORY_CACHE: LazyLock<RwLock<Option<Vec<CurseForgeCategory>>>> =
+    LazyLock::new(|| RwLock::new(None));
+
+pub(super) fn unique_metadata_chunks(mut ids: Vec<u32>) -> Vec<Vec<u32>> {
+    ids.sort_unstable();
+    ids.dedup();
+    ids.chunks(MAX_PAGE_SIZE as usize)
+        .map(<[u32]>::to_vec)
+        .collect()
+}
+
+pub(super) async fn get_modpack_projects(
+    project_ids: Vec<u32>,
+) -> crate::Result<HashMap<u32, CurseForgeProject>> {
+    let chunks = unique_metadata_chunks(project_ids);
+    let project_ids = chunks.iter().flatten().copied().collect::<Vec<_>>();
+    let batches = stream::iter(chunks)
+        .map(|chunk| async move { get_projects(chunk).await })
+        .buffer_unordered(MODPACK_METADATA_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+    let mut projects = HashMap::new();
+    for batch in batches {
+        for project in batch? {
+            projects.insert(project.id, project);
+        }
+    }
+    let missing = project_ids
+        .into_iter()
+        .filter(|project_id| !projects.contains_key(project_id))
+        .collect::<Vec<_>>();
+    let fallbacks = stream::iter(missing)
+        .map(|project_id| async move { get_project(project_id).await })
+        .buffer_unordered(MODPACK_METADATA_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+    for project in fallbacks {
+        let project = project?;
+        projects.insert(project.id, project);
+    }
+    Ok(projects)
+}
+
+pub(super) async fn get_modpack_files(
+    file_ids: Vec<u32>,
+) -> crate::Result<HashMap<u32, CurseForgeFile>> {
+    let chunks = unique_metadata_chunks(file_ids);
+    let batches = stream::iter(chunks)
+        .map(|chunk| async move { get_files_many(chunk).await })
+        .buffer_unordered(MODPACK_METADATA_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+    let mut files = HashMap::new();
+    for batch in batches {
+        for file in batch? {
+            files.insert(file.id, file);
+        }
+    }
+    Ok(files)
+}
 
 pub async fn search_projects(
     request: CurseForgeSearchRequest,
@@ -398,4 +465,65 @@ pub(crate) async fn resource_request(
     body: Option<Value>,
 ) -> crate::Result<Value> {
     request_json(method, path, query, body, MirrorPolicy::MirrorFirst).await
+}
+
+impl From<CurseForgeProject> for UnifiedSearchHit {
+    fn from(project: CurseForgeProject) -> Self {
+        let mut versions = Vec::new();
+        let mut seen_versions = HashSet::new();
+        let mut loaders = HashSet::new();
+        for index in &project.latest_files_indexes {
+            if seen_versions.insert(index.game_version.clone()) {
+                versions.push(index.game_version.clone());
+            }
+            if let Some(mod_loader) = index.mod_loader {
+                let loader_slug = mod_loader_to_slug(mod_loader);
+                loaders.insert(loader_slug);
+            }
+        }
+
+        let project_type = project_type_for_class(project.class_id);
+        let mut categories: Vec<String> = project
+            .categories
+            .iter()
+            .map(|category| category.slug.clone())
+            .collect();
+        categories.extend(loaders.iter().map(|s| s.to_string()));
+
+        Self {
+            provider: ContentProvider::CurseForge,
+            project_id: project.id.to_string(),
+            slug: Some(project.slug),
+            author: project
+                .authors
+                .first()
+                .map(|author| author.name.clone())
+                .unwrap_or_default(),
+            author_url: project
+                .authors
+                .first()
+                .map(|author| author.url.clone()),
+            title: project.name,
+            description: project.summary,
+            project_type: project_type.to_string(),
+            categories,
+            versions,
+            downloads: project.download_count,
+            icon_url: project.logo.map(|logo| logo.url),
+            date_created: project.date_created,
+            date_modified: project.date_modified,
+            latest_version: project
+                .latest_files
+                .first()
+                .map(|file| file.id.to_string()),
+            gallery: project
+                .screenshots
+                .into_iter()
+                .map(|screenshot| screenshot.url)
+                .collect(),
+            website_url: project.links.website_url,
+            source_url: project.links.source_url,
+            allow_mod_distribution: project.allow_mod_distribution,
+        }
+    }
 }

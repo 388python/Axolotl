@@ -4,7 +4,7 @@ use super::fixtures::stage8_curseforge_file;
 use crate::api::curseforge::dto::{
     CurseForgeManifestLoader, CurseForgeManifestMinecraft,
     CurseForgeModpackManifest, CurseForgeModpackTarget,
-    CurseForgeSortableGameVersion,
+    CurseForgeSortableGameVersion, DependencyRelation,
 };
 use crate::api::curseforge::install::{
     dependency_policy, should_resolve_dependency,
@@ -19,11 +19,6 @@ use crate::api::curseforge::selection::{
 use crate::api::curseforge::update::{
     loader_family, loader_type, looks_like_game_version, modpack_target,
 };
-use crate::api::curseforge::{
-    DEPENDENCY_RELATION_EMBEDDED, DEPENDENCY_RELATION_INCLUDE,
-    DEPENDENCY_RELATION_INCOMPATIBLE, DEPENDENCY_RELATION_OPTIONAL,
-    DEPENDENCY_RELATION_REQUIRED, DEPENDENCY_RELATION_TOOL,
-};
 use crate::state::{ModLoader, ProjectType};
 use content_management::DependencyPolicy;
 
@@ -33,15 +28,15 @@ fn content_updates_only_resolve_required_dependencies() {
 
     let operation = ManualDownloadOperationKind::ContentUpdate;
     assert!(should_resolve_dependency(
-        DEPENDENCY_RELATION_REQUIRED,
+        DependencyRelation::Required,
         operation
     ));
     for relation in [
-        DEPENDENCY_RELATION_OPTIONAL,
-        DEPENDENCY_RELATION_INCLUDE,
-        DEPENDENCY_RELATION_EMBEDDED,
-        DEPENDENCY_RELATION_TOOL,
-        DEPENDENCY_RELATION_INCOMPATIBLE,
+        DependencyRelation::Optional,
+        DependencyRelation::Include,
+        DependencyRelation::Embedded,
+        DependencyRelation::Tool,
+        DependencyRelation::Incompatible,
     ] {
         assert!(!should_resolve_dependency(relation, operation));
     }
@@ -58,9 +53,9 @@ fn content_installs_still_resolve_optional_dependencies_for_selection() {
         ManualDownloadOperationKind::PackUpdate,
     ] {
         for relation in [
-            DEPENDENCY_RELATION_REQUIRED,
-            DEPENDENCY_RELATION_OPTIONAL,
-            DEPENDENCY_RELATION_INCLUDE,
+            DependencyRelation::Required,
+            DependencyRelation::Optional,
+            DependencyRelation::Include,
         ] {
             assert!(should_resolve_dependency(relation, operation));
         }

@@ -1,9 +1,10 @@
 //! Install preview derived from a dependency plan.
 
 use super::catalog::{get_file, get_project};
+use super::constants::{CURSEFORGE_LOADER_QUILT, MAX_DEPENDENCY_DEPTH};
 use super::dto::{
     CurseForgeInstallRequest, CurseForgeProject, CurseForgeSkippedDependency,
-    default_true,
+    DependencyRelation, default_true,
 };
 use super::install::{
     CurseForgeModrinthFallbackPreview, PreviewPendingCurseForgeFile,
@@ -16,13 +17,6 @@ use super::selection::{
     managed_project_type, preview_modrinth_fallbacks,
     resolve_modrinth_fallback_plan, select_dependency_file,
     store_dependency_resolution_plan,
-};
-use super::{
-    CURSEFORGE_LOADER_QUILT, DEPENDENCY_RELATION_EMBEDDED,
-    DEPENDENCY_RELATION_INCLUDE, DEPENDENCY_RELATION_INCOMPATIBLE,
-    DEPENDENCY_RELATION_OPTIONAL, DEPENDENCY_RELATION_REQUIRED,
-    DEPENDENCY_RELATION_TOOL, FABRIC_API_CURSEFORGE_PROJECT_ID,
-    MAX_DEPENDENCY_DEPTH, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
 };
 use crate::State;
 use crate::state::{
@@ -140,24 +134,19 @@ pub async fn preview_install_file(
             && pending_file.depth < MAX_DEPENDENCY_DEPTH
         {
             for dependency_ref in &file.dependencies {
-                let dependency_project_id = if request.mod_loader_type
-                    == Some(CURSEFORGE_LOADER_QUILT)
-                    && dependency_ref.mod_id == FABRIC_API_CURSEFORGE_PROJECT_ID
-                {
-                    QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID
-                } else {
-                    dependency_ref.mod_id
-                };
-                match dependency_ref.relation_type {
-                    DEPENDENCY_RELATION_INCOMPATIBLE => {
+                let relation = dependency_ref.relation();
+                let dependency_project_id = dependency_ref.target_project_id(
+                    request.mod_loader_type == Some(CURSEFORGE_LOADER_QUILT),
+                );
+                match relation {
+                    DependencyRelation::Incompatible => {
                         incompatible.push(dependency_ref.mod_id)
                     }
-                    DEPENDENCY_RELATION_EMBEDDED | DEPENDENCY_RELATION_TOOL => {
+                    DependencyRelation::Embedded | DependencyRelation::Tool => {
                         skipped.push(CurseForgeSkippedDependency {
                             project_id: dependency_ref.mod_id,
                             file_id: None,
-                            reason: if dependency_ref.relation_type
-                                == DEPENDENCY_RELATION_EMBEDDED
+                            reason: if relation == DependencyRelation::Embedded
                             {
                                 "embedded".to_string()
                             } else {
@@ -165,11 +154,11 @@ pub async fn preview_install_file(
                             },
                         })
                     }
-                    DEPENDENCY_RELATION_OPTIONAL
-                    | DEPENDENCY_RELATION_INCLUDE
-                    | DEPENDENCY_RELATION_REQUIRED => {
+                    DependencyRelation::Optional
+                    | DependencyRelation::Include
+                    | DependencyRelation::Required => {
                         if !should_resolve_dependency(
-                            dependency_ref.relation_type,
+                            relation,
                             request.manual_operation_kind,
                         ) {
                             continue;
@@ -311,8 +300,7 @@ pub async fn preview_install_file(
                         plan.edges.push(DependencyResolutionEdge {
 							parent: parent_ref.clone(),
 							child: child_ref.clone(),
-							relation: if dependency_ref.relation_type
-								== DEPENDENCY_RELATION_REQUIRED
+							relation: if relation.is_required()
 							{
 								crate::state::instances::ContentDependencyKind::Required
 							} else {
@@ -328,8 +316,7 @@ pub async fn preview_install_file(
                             plan.nodes.push(DependencyResolutionNode {
 								content: child_ref,
 								parent: Some(parent_ref),
-							relation: if dependency_ref.relation_type
-								== DEPENDENCY_RELATION_REQUIRED
+							relation: if relation.is_required()
 							{
 								crate::state::instances::ContentDependencyKind::Required
 							} else {
@@ -345,8 +332,7 @@ pub async fn preview_install_file(
                             item.project_id == dependency_project_id
                         });
                         if let Some(existing) = existing {
-                            existing.required |= dependency_ref.relation_type
-                                == DEPENDENCY_RELATION_REQUIRED;
+                            existing.required |= relation.is_required();
                             if !existing
                                 .required_by_project_ids
                                 .contains(&project_id)
@@ -373,8 +359,7 @@ pub async fn preview_install_file(
                                 .map(|logo| logo.thumbnail_url.clone()),
                             version_mismatch: false,
                             selection_reason: Some(selected.reason),
-                            required: dependency_ref.relation_type
-                                == DEPENDENCY_RELATION_REQUIRED,
+                            required: relation.is_required(),
                         });
                         let mut ancestors = pending_file.ancestors.clone();
                         ancestors.insert((project_id, file_id));

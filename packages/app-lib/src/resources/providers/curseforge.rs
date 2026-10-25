@@ -1,3 +1,4 @@
+use crate::api::curseforge::DependencyRelation;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -816,17 +817,28 @@ impl RemoteFile {
         }
         let mut dependencies = vec![];
         for dependency in self.dependencies.unwrap_or_default() {
-            let kind = match dependency.relation_type {
-                1 => ResourceDependencyKind::Embedded,
-                2 | 4 | 6 => ResourceDependencyKind::Optional,
-                3 => ResourceDependencyKind::Required,
-                5 => ResourceDependencyKind::Incompatible,
-                _ => {
-                    return Err(ResourceError::InvalidResponse(
-                        "unknown dependency relation".into(),
-                    ));
-                }
-            };
+            let kind =
+                match DependencyRelation::from_raw(dependency.relation_type) {
+                    DependencyRelation::Embedded => {
+                        ResourceDependencyKind::Embedded
+                    }
+                    DependencyRelation::Optional
+                    | DependencyRelation::Tool
+                    | DependencyRelation::Include => {
+                        ResourceDependencyKind::Optional
+                    }
+                    DependencyRelation::Required => {
+                        ResourceDependencyKind::Required
+                    }
+                    DependencyRelation::Incompatible => {
+                        ResourceDependencyKind::Incompatible
+                    }
+                    DependencyRelation::Unknown(_) => {
+                        return Err(ResourceError::InvalidResponse(
+                            "unknown dependency relation".into(),
+                        ));
+                    }
+                };
             positive_id(&dependency.mod_id.to_string())?;
             dependencies.push(ArtifactDependency {
                 target: DependencyTarget::Resource {

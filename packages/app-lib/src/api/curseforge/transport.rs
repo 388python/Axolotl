@@ -1,10 +1,9 @@
 //! Credential resolution, mirror routing, and request plumbing.
 
 #[cfg(debug_assertions)]
-use super::LOCAL_CLIENT;
 use super::auth::{api_key_generation, record_key_response};
+use super::constants::API_BASE_URL;
 use super::dto::CurseForgeApiKeySource;
-use super::{API_BASE_URL, CLIENT};
 use crate::state::{
     DownloadSourceMode, curseforge_api_key_override_if_ready,
     curseforge_settings,
@@ -17,7 +16,31 @@ use crate::{ErrorKind, State};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
+
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .read_timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(crate::launcher_user_agent())
+        .no_proxy()
+        .build()
+        .expect("CurseForge client configuration should be valid")
+});
+
+#[cfg(debug_assertions)]
+static LOCAL_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(15))
+        .read_timeout(Duration::from_secs(30))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(crate::launcher_user_agent())
+        .no_proxy()
+        .build()
+        .expect("Local CurseForge client configuration should be valid")
+});
 
 pub(crate) fn api_key() -> Option<String> {
     api_key_with_source().0
