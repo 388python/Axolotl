@@ -49,6 +49,53 @@ pub(crate) async fn exact<T: DeserializeOwned>(
     }
 }
 
+/// Release projections for a batch of ids, in the order the ids were given.
+/// Missing releases are skipped.
+pub(crate) async fn releases_exact<T: DeserializeOwned>(
+    source: SourceId,
+    release_ids: Vec<String>,
+    state: &crate::State,
+) -> crate::Result<Vec<T>> {
+    let service = state.resources().await.map_err(error)?;
+    let queries = release_ids
+        .into_iter()
+        .map(|release_id| {
+            Ok(ProviderQuery::Release {
+                project_id: None,
+                release_id: SourceReleaseId::new(release_id).map_err(
+                    |error| crate::ErrorKind::InputError(error.to_string()),
+                )?,
+                slug: None,
+            })
+        })
+        .collect::<crate::Result<Vec<_>>>()?;
+    let values = service
+        .presentation_many(&source, queries, &CancellationToken::new())
+        .await;
+    let mut releases = Vec::new();
+    for value in values {
+        match value.map_err(error)?.value {
+            ProviderValue::Release(document) => {
+                releases.push(serde_json::from_value(
+                    document.protocol.ok_or_else(|| {
+                        crate::ErrorKind::InputError(
+                            "release protocol projection missing".into(),
+                        )
+                    })?,
+                )?)
+            }
+            ProviderValue::NotFound => {}
+            _ => {
+                return Err(crate::ErrorKind::InputError(
+                    "unexpected release catalog response".into(),
+                )
+                .into());
+            }
+        }
+    }
+    Ok(releases)
+}
+
 pub(crate) async fn page<T: DeserializeOwned>(
     source: SourceId,
     project_id: String,

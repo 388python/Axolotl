@@ -305,55 +305,13 @@ pub async fn get_file(
 pub async fn get_files_many(
     file_ids: Vec<u32>,
 ) -> crate::Result<Vec<CurseForgeFile>> {
-    use crate::resources::{
-        SourceId, SourceReleaseId,
-        providers::{ProviderQuery, ProviderValue},
-    };
     let state = State::get().await?;
-    let service = state
-        .resources()
-        .await
-        .map_err(crate::resources::protocol::error)?;
-    let queries = file_ids
-        .into_iter()
-        .map(|id| {
-            Ok(ProviderQuery::Release {
-                project_id: None,
-                release_id: SourceReleaseId::new(id.to_string())
-                    .map_err(crate::resources::protocol::error)?,
-                slug: None,
-            })
-        })
-        .collect::<crate::Result<Vec<_>>>()?;
-    let values = service
-        .presentation_many(
-            &SourceId::curseforge(),
-            queries,
-            &tokio_util::sync::CancellationToken::new(),
-        )
-        .await;
-    let mut files = Vec::new();
-    for value in values {
-        match value.map_err(crate::resources::protocol::error)?.value {
-            ProviderValue::Release(document) => {
-                files.push(serde_json::from_value(
-                    document.protocol.ok_or_else(|| {
-                        ErrorKind::InputError(
-                            "CurseForge file projection missing".into(),
-                        )
-                    })?,
-                )?)
-            }
-            ProviderValue::NotFound => {}
-            _ => {
-                return Err(ErrorKind::InputError(
-                    "unexpected CurseForge file response".into(),
-                )
-                .into());
-            }
-        }
-    }
-    Ok(files)
+    crate::resources::legacy_catalog::releases_exact(
+        crate::resources::SourceId::curseforge(),
+        file_ids.into_iter().map(|id| id.to_string()).collect(),
+        &state,
+    )
+    .await
 }
 
 pub async fn get_changelog(
