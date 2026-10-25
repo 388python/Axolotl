@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn multimc_component_errors_are_pack_errors_during_import() {
+    let error = crate::ErrorKind::InputError(
+        "Invalid MultiMC jarMods list".to_string(),
+    )
+    .into();
+    assert_eq!(
+        install_error_code(InstallPhaseId::ExtractingOverrides, &error),
+        "pack_error"
+    );
+    let error = crate::ErrorKind::InputError(
+        "Inner path escapes the source root".to_string(),
+    )
+    .into();
+    assert_eq!(
+        install_error_code(InstallPhaseId::ExtractingOverrides, &error),
+        "path_error"
+    );
+}
+
+#[test]
 fn historical_content_recovery_requires_its_saved_release() {
     assert_eq!(
         request::require_historical_release(Some("original".into())).unwrap(),

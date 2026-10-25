@@ -1283,6 +1283,12 @@ fn install_error_code(
         {
             "unrecognized_format"
         }
+        ErrorKind::InputError(msg)
+            if matches!(phase, ExtractingOverrides)
+                && msg.contains("MultiMC") =>
+        {
+            "pack_error"
+        }
         ErrorKind::InputError(_) => match phase {
             Exporting => "export_error",
             PreparingInstance | CreatingBackup | Finalizing | Completed => {

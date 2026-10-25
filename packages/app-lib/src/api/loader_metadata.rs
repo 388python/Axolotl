@@ -1,6 +1,8 @@
 use crate::State;
 use crate::state::CachedLoaderManifest;
-use crate::util::fetch::{FetchSemaphore, fetch, fetch_json, fetch_metadata};
+use crate::util::fetch::{
+    FetchSemaphore, fetch, fetch_json, fetch_metadata, fetch_official,
+};
 use crate::util::io;
 use daedalus::minecraft::{
     Argument, ArgumentType, JavaVersion, Library, VersionType,
@@ -459,7 +461,7 @@ async fn fetch_loader_manifest_uncached(
                     .map(|manifest| scope_manifest(manifest, game_version))
             }
             ("forge", Some(game_version)) => {
-                fetch_forge_manifest(fetch_semaphore, pool)
+                fetch_forge_manifest(fetch_semaphore, pool, force_refresh)
                     .await
                     .map(|manifest| scope_manifest(manifest, game_version))
             }
@@ -476,7 +478,7 @@ async fn fetch_loader_manifest_uncached(
                 fetch_fabric_manifest(fetch_semaphore, pool).await
             }
             ("forge", None) => {
-                fetch_forge_manifest(fetch_semaphore, pool).await
+                fetch_forge_manifest(fetch_semaphore, pool, force_refresh).await
             }
             ("neo", None) => {
                 fetch_neoforge_manifest(
@@ -1128,14 +1130,75 @@ fn meta_api_manifest(
 async fn fetch_forge_manifest(
     fetch_semaphore: &FetchSemaphore,
     pool: &SqlitePool,
+    official_only: bool,
 ) -> crate::Result<Manifest> {
     let metadata_url = format!("{FORGE_MAVEN_URL}maven-metadata.xml");
     let (metadata, promotions) = fetch_forge_indexes(
-        fetch_maven_metadata(&metadata_url, fetch_semaphore, pool),
+        async {
+            if official_only {
+                let bytes = fetch_official(
+                    &metadata_url,
+                    None,
+                    None,
+                    None,
+                    fetch_semaphore,
+                    pool,
+                )
+                .await?;
+                parse_maven_metadata(&metadata_url, &bytes)
+            } else {
+                fetch_maven_metadata(&metadata_url, fetch_semaphore, pool).await
+            }
+        },
         fetch_loader_json(FORGE_PROMOTIONS_URL, fetch_semaphore, pool),
     )
     .await?;
     Ok(forge_manifest(metadata, promotions))
+}
+
+/// An exact-version miss is not a transport error, so it needs an independent
+/// catalog lookup even when the primary catalog passed its format validation.
+pub(crate) async fn find_forge_version_in_fallback(
+    game_version: &str,
+    requested: &str,
+) -> crate::Result<Option<LoaderVersion>> {
+    let state = crate::State::get().await?;
+    let url = format!(
+        "{}forge/v0/manifest.json",
+        env!("MODRINTH_LAUNCHER_META_URL")
+    );
+    let bytes = tokio::time::timeout(
+        LOADER_METADATA_TIMEOUT,
+        fetch_official(
+            &url,
+            None,
+            None,
+            None,
+            &state.api_semaphore,
+            &state.pool,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        crate::ErrorKind::OtherError(
+            "Forge fallback catalog request timed out".into(),
+        )
+        .as_error()
+    })??;
+    let manifest = validate_manifest(serde_json::from_slice(&bytes)?)?;
+    Ok(find_exact_forge_version(manifest, game_version, requested))
+}
+
+fn find_exact_forge_version(
+    manifest: Manifest,
+    game_version: &str,
+    requested: &str,
+) -> Option<LoaderVersion> {
+    scope_manifest(manifest, game_version)
+        .game_versions
+        .into_iter()
+        .flat_map(|version| version.loaders)
+        .find(|version| version.id == requested)
 }
 
 async fn fetch_forge_indexes(
@@ -2372,6 +2435,30 @@ mod tests {
     use super::*;
     use std::io::Write;
     use zip::write::SimpleFileOptions;
+
+    #[test]
+    fn forge_fallback_requires_exact_game_and_loader_version() {
+        let manifest = forge_manifest(
+            maven_metadata(
+                "",
+                &["1.20.1-47.4.28", "1.20.1-47.4.22", "1.21.1-52.1.0"],
+            ),
+            ForgePromotions::default(),
+        );
+        assert_eq!(
+            find_exact_forge_version(manifest.clone(), "1.20.1", "47.4.28")
+                .unwrap()
+                .id,
+            "47.4.28"
+        );
+        assert!(
+            find_exact_forge_version(manifest.clone(), "1.21.1", "47.4.28")
+                .is_none()
+        );
+        assert!(
+            find_exact_forge_version(manifest, "1.20.1", "47.4.29").is_none()
+        );
+    }
 
     fn maven_metadata(release: &str, versions: &[&str]) -> MavenMetadata {
         MavenMetadata {

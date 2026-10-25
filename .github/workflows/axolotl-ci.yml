@@ -281,7 +281,8 @@ jobs:
 
   desktop-ci-result:
     name: Desktop CI result
-    if: always()
+    # Report failed checks, but skip the gate when a newer run cancels this workflow.
+    if: ${{ !cancelled() }}
     needs: [changes, guardrails, frontend, resources, desktop, website]
     runs-on: ubuntu-latest
     steps:
