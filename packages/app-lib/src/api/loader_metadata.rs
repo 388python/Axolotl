@@ -1,6 +1,8 @@
 use crate::State;
 use crate::state::CachedLoaderManifest;
-use crate::util::fetch::{FetchSemaphore, fetch, fetch_json, fetch_metadata, fetch_official};
+use crate::util::fetch::{
+    FetchSemaphore, fetch, fetch_json, fetch_metadata, fetch_official,
+};
 use crate::util::io;
 use daedalus::minecraft::{
     Argument, ArgumentType, JavaVersion, Library, VersionType,
@@ -1134,7 +1136,15 @@ async fn fetch_forge_manifest(
     let (metadata, promotions) = fetch_forge_indexes(
         async {
             if official_only {
-                let bytes = fetch_official(&metadata_url, None, None, None, fetch_semaphore, pool).await?;
+                let bytes = fetch_official(
+                    &metadata_url,
+                    None,
+                    None,
+                    None,
+                    fetch_semaphore,
+                    pool,
+                )
+                .await?;
                 parse_maven_metadata(&metadata_url, &bytes)
             } else {
                 fetch_maven_metadata(&metadata_url, fetch_semaphore, pool).await
@@ -1153,16 +1163,40 @@ pub(crate) async fn find_forge_version_in_fallback(
     requested: &str,
 ) -> crate::Result<Option<LoaderVersion>> {
     let state = crate::State::get().await?;
-    let url = format!("{}forge/v0/manifest.json", env!("MODRINTH_LAUNCHER_META_URL"));
-    let bytes = tokio::time::timeout(LOADER_METADATA_TIMEOUT, fetch_official(
-        &url, None, None, None, &state.api_semaphore, &state.pool,
-    )).await.map_err(|_| crate::ErrorKind::OtherError("Forge fallback catalog request timed out".into()).as_error())??;
+    let url = format!(
+        "{}forge/v0/manifest.json",
+        env!("MODRINTH_LAUNCHER_META_URL")
+    );
+    let bytes = tokio::time::timeout(
+        LOADER_METADATA_TIMEOUT,
+        fetch_official(
+            &url,
+            None,
+            None,
+            None,
+            &state.api_semaphore,
+            &state.pool,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        crate::ErrorKind::OtherError(
+            "Forge fallback catalog request timed out".into(),
+        )
+        .as_error()
+    })??;
     let manifest = validate_manifest(serde_json::from_slice(&bytes)?)?;
     Ok(find_exact_forge_version(manifest, game_version, requested))
 }
 
-fn find_exact_forge_version(manifest: Manifest, game_version: &str, requested: &str) -> Option<LoaderVersion> {
-    scope_manifest(manifest, game_version).game_versions.into_iter()
+fn find_exact_forge_version(
+    manifest: Manifest,
+    game_version: &str,
+    requested: &str,
+) -> Option<LoaderVersion> {
+    scope_manifest(manifest, game_version)
+        .game_versions
+        .into_iter()
         .flat_map(|version| version.loaders)
         .find(|version| version.id == requested)
 }
@@ -2401,6 +2435,30 @@ mod tests {
     use super::*;
     use std::io::Write;
     use zip::write::SimpleFileOptions;
+
+    #[test]
+    fn forge_fallback_requires_exact_game_and_loader_version() {
+        let manifest = forge_manifest(
+            maven_metadata(
+                "",
+                &["1.20.1-47.4.28", "1.20.1-47.4.22", "1.21.1-52.1.0"],
+            ),
+            ForgePromotions::default(),
+        );
+        assert_eq!(
+            find_exact_forge_version(manifest.clone(), "1.20.1", "47.4.28")
+                .unwrap()
+                .id,
+            "47.4.28"
+        );
+        assert!(
+            find_exact_forge_version(manifest.clone(), "1.21.1", "47.4.28")
+                .is_none()
+        );
+        assert!(
+            find_exact_forge_version(manifest, "1.20.1", "47.4.29").is_none()
+        );
+    }
 
     fn maven_metadata(release: &str, versions: &[&str]) -> MavenMetadata {
         MavenMetadata {
