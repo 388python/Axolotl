@@ -18,6 +18,33 @@ The schema-version-1 heartbeat envelope and success response stay compatible wit
 
 ## Upgrading an existing deployment
 
+### Deploy from GitHub Actions
+
+The **Deploy Telemetry Worker** workflow in `.github/workflows/deploy-telemetry-worker.yml` runs only when manually dispatched. Push the workflow and Worker changes to `main`, then open **Actions → Deploy Telemetry Worker → Run workflow** and select `main`.
+
+Configure these repository Actions settings:
+
+| Setting                 | Kind                                            | Purpose                                                                    |
+| ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | Secret                                          | Reuses the existing token for Worker deployment and D1 migrations.         |
+| `CLOUDFLARE_ACCOUNT_ID` | Variable, or existing Secret with the same name | Identifies the account containing `axolotl-telemetry` and its D1 database. |
+| `CLOUDFLARE_ZONE_ID`    | Variable, optional                              | Required only when selecting `configure_rate_limit`.                       |
+
+The token must be scoped to the correct account/zone and allow Workers script deployment, D1 edits/migrations, and management of the Worker's custom domain/routes. Configuring the optional edge rule additionally requires zone rate-limiting/WAF rule write access. An existing Pages-only token may need additional permissions even though its secret name stays the same.
+
+`INSTALLATION_HMAC_SECRET` must already exist as a **Cloudflare Worker secret**, at least 32 characters long. The workflow checks for its presence and preserves it; do not replace it with a new value during routine deployment, because that changes installation identities. For initial provisioning, run `pnpm exec wrangler secret put INSTALLATION_HMAC_SECRET` from this package directory using the intended existing value.
+
+Inputs:
+
+- `dry_run`: runs tests, lint and a paused-deployment bundle check without remote API changes or production probes. It can run on a non-main branch and does not require deployment credentials.
+- `configure_rate_limit`: also creates/updates the telemetry WAF rule before pausing ingestion. It defaults to false; enable it when first configuring or updating that rule.
+
+For a production run, the workflow validates the selected revision, checks configuration, deploys it with `INGEST_ENABLED=false`, verifies that the custom domain rejects legacy error packets, applies all pending D1 migrations, and deploys again with `INGEST_ENABLED=true`. It then repeats the health/error-rejection check. Both probes are deliberately missing mandatory fields, so they cannot become valid telemetry data on either the old or new Worker. They check routing and protocol behavior, not an actual production database write.
+
+Production runs are serialized and a new dispatch does not cancel a running migration. If migration or deployment fails after ingestion was paused, the workflow does not automatically re-enable ingestion. Fix the reported cause and rerun it; already-applied migrations are skipped. If the final verification fails after the enable step succeeded, inspect the custom domain and active deployment because ingestion may already be enabled. Avoid manually cancelling a deployment in progress.
+
+### Deploy from a terminal
+
 Pause ingestion during the migration/deployment window, then apply all pending forward migrations before deploying this Worker:
 
 ```sh
