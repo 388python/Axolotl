@@ -189,10 +189,7 @@ it('updates effect fields and output when switching from give to clear', async (
     wrappers.push(wrapper)
     await flushPromises()
     await wrapper.findAll('select')[3].setValue('effect')
-    const card = (name: string) =>
-        wrapper
-            .findAll('.argument-card')
-            .find((item) => item.text().includes(`arg.effect.${name}.display`))!
+    const card = (name: string) => wrapper.findAll(`[data-testid="arg-card-${name}"]`)[0]!
     await card('target').get('input').setValue('@s')
     await card('effect').get('input').setValue('minecraft:speed')
     expect(card('duration')).toBeDefined()

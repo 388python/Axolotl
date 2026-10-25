@@ -578,7 +578,11 @@ function coordinateModeLabel(mode: CoordinateMode): string {
 </script>
 
 <template>
-    <div class="argument-card flex min-w-0 flex-col gap-2" :class="{ 'md:col-span-2': isNbt }">
+    <div
+        class="argument-card flex min-w-0 flex-col gap-2"
+        :class="{ 'md:col-span-2': isNbt }"
+        :data-testid="`arg-card-${arg.name}`"
+    >
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
                 <label
