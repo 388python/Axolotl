@@ -320,6 +320,8 @@ pub(crate) const FASTLY_SEED_PREFIXES: [[u8; 3]; 3] =
 /// Installation download pipelines and content finalization.
 pub(crate) const AGGREGATE_FAILURE_PATH_CHAR_LIMIT: usize = 160;
 pub(crate) const AGGREGATE_FAILURE_PATH_LIMIT: usize = 3;
+pub(crate) const AUTO_RETRY_BACKOFF_DELAYS: [Duration; 2] =
+    [Duration::from_secs(1), Duration::from_secs(2)];
 pub(crate) const AUTO_RETRY_PASSES: usize = 2;
 pub(crate) const CONTENT_CHECKPOINT_FILE_COUNT: usize = 25;
 pub(crate) const CONTENT_CHECKPOINT_INTERVAL: Duration = Duration::from_secs(2);
@@ -428,6 +430,7 @@ pub(crate) const DIAGNOSTICS_PROXY_INELIGIBLE: &str = "proxy_ineligible";
 pub(crate) const DIAGNOSTICS_RANGE: &str = "range";
 pub(crate) const DIAGNOSTICS_RANGE_UNSUPPORTED: &str = "range_unsupported";
 pub(crate) const DIAGNOSTICS_RESOLVE: &str = "resolve";
+pub(crate) const DIAGNOSTICS_RESOURCE_WAIT: &str = "resource_wait";
 pub(crate) const DIAGNOSTICS_ROLLBACK: &str = "rollback";
 pub(crate) const DIAGNOSTICS_RULE_INELIGIBLE: &str = "rule_ineligible";
 pub(crate) const DIAGNOSTICS_SELECTED: &str = "selected";

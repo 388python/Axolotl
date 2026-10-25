@@ -2362,7 +2362,7 @@ async fn fetch_advanced_inner(
                     )
                     .await
                     .map_err(|_| {
-                        ErrorKind::NetworkError(
+                        ErrorKind::DownloadResourceWaitTimeout(
                             FETCH_TIMED_OUT_WAITING_FOR_CDN_CONNECTION_RESOURCES
                                 .into(),
                         )
@@ -7192,7 +7192,7 @@ async fn run_native_route_attempts(
             permit_wait.await
         }
         .map_err(|_| {
-            ErrorKind::NetworkError(
+            ErrorKind::DownloadResourceWaitTimeout(
                 FETCH_TIMED_OUT_WAITING_FOR_NATIVE_DOWNLOAD_RESOURCES
                     .to_string(),
             )
