@@ -70,16 +70,16 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         }
     };
     let members = crate::state::instances::adapters::sqlite::content_rows::get_pack_members(
-		&metadata.applied_content_set.id,
-		&state.pool,
-	)
-	.await?;
+        &metadata.applied_content_set.id,
+        &state.pool,
+    )
+    .await?;
     if members.iter().any(|member| !member.reconciled) {
         return Err(ErrorKind::InputError(
-			"CurseForge pack membership is not calibrated yet; refresh the content page while online before updating"
-				.to_string(),
-		)
-		.into());
+            "CurseForge pack membership is not calibrated yet; refresh the content page while online before updating"
+                .to_string(),
+        )
+        .into());
     }
     let expected = get_modpack_expected_members_with_reporter(
         project_id,
@@ -107,7 +107,7 @@ pub(crate) async fn update_managed_modpack_with_reporter(
         .iter()
         .filter(|member| {
             member.materialization_state
-				== crate::state::instances::PackMemberMaterializationState::Present
+                == crate::state::instances::PackMemberMaterializationState::Present
         })
         .filter_map(|member| {
             Some((
@@ -157,21 +157,21 @@ pub(crate) async fn update_managed_modpack_with_reporter(
     }
 
     let entries = crate::state::instances::adapters::sqlite::content_rows::get_content_entries(
-		&metadata.applied_content_set.id,
-		&state.pool,
-	)
-	.await?
-	.into_iter()
-	.filter_map(|entry| entry.file_id.map(|file_id| (entry.id, file_id)))
-	.collect::<HashMap<_, _>>();
+        &metadata.applied_content_set.id,
+        &state.pool,
+    )
+    .await?
+    .into_iter()
+    .filter_map(|entry| entry.file_id.map(|file_id| (entry.id, file_id)))
+    .collect::<HashMap<_, _>>();
     let files = crate::state::instances::adapters::sqlite::content_rows::get_instance_files(
-		instance_id,
-		&state.pool,
-	)
-	.await?
-	.into_iter()
-	.map(|file| (file.id.clone(), file.relative_path))
-	.collect::<HashMap<_, _>>();
+        instance_id,
+        &state.pool,
+    )
+    .await?
+    .into_iter()
+    .map(|file| (file.id.clone(), file.relative_path))
+    .collect::<HashMap<_, _>>();
     let backup = create_curseforge_update_backup(
         &metadata, &members, &entries, &files, &state,
     )
@@ -422,10 +422,10 @@ async fn rollback_curseforge_update(
     }
 
     let current_members = crate::state::instances::adapters::sqlite::content_rows::get_pack_members(
-		&metadata.applied_content_set.id,
-		&state.pool,
-	)
-	.await?;
+        &metadata.applied_content_set.id,
+        &state.pool,
+    )
+    .await?;
     let _instance_lock = state.lock_instance_content(instance_id).await;
     let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
     let old_keys = old_members
@@ -443,7 +443,7 @@ async fn rollback_curseforge_update(
     for old_member in old_members {
         let current_entry_id = sqlx::query_scalar::<_, Option<String>>(
             "SELECT content_entry_id FROM instance_pack_members
-			 WHERE content_set_id = ? AND member_key = ?",
+             WHERE content_set_id = ? AND member_key = ?",
         )
         .bind(&metadata.applied_content_set.id)
         .bind(&old_member.member_key)
@@ -455,16 +455,16 @@ async fn rollback_curseforge_update(
             restored_member.content_entry_id = current_entry_id;
         }
         crate::state::instances::adapters::sqlite::content_rows::upsert_pack_member_in_transaction(
-			&restored_member,
-			&mut tx,
-		)
-		.await?;
+            &restored_member,
+            &mut tx,
+        )
+        .await?;
     }
     crate::state::instances::adapters::sqlite::content_rows::bump_content_set_revision_in_transaction(
-		&metadata.applied_content_set.id,
-		&mut tx,
-	)
-	.await?;
+        &metadata.applied_content_set.id,
+        &mut tx,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -544,9 +544,9 @@ pub(super) fn collect_modpack_override_tasks<R: Read + Seek>(
     let limit = crate::api::pack::archive_util::EXTRACTION_SIZE_LIMIT;
     if total_size > limit {
         return Err(ErrorKind::InputError(format!(
-			"CurseForge modpack overrides exceed the extraction limit: {total_size} unpacked bytes required, limit is {limit} bytes"
-		))
-		.into());
+            "CurseForge modpack overrides exceed the extraction limit: {total_size} unpacked bytes required, limit is {limit} bytes"
+        ))
+        .into());
     }
     Ok(tasks_by_target.into_values().collect())
 }
@@ -912,9 +912,9 @@ pub async fn switch_installed_file_version(
 
     let state = State::get().await?;
     let row = sqlx::query(
-		"SELECT ref.provider_project_id, ref.provider_release_id, entry.project_type,
-				entry.ownership_kind,
-				content_set.game_version, content_set.loader
+        "SELECT ref.provider_project_id, ref.provider_release_id, entry.project_type,
+                entry.ownership_kind,
+                content_set.game_version, content_set.loader
          FROM instance_files file
          INNER JOIN instance_content_entries entry ON entry.file_id = file.id
          INNER JOIN instance_content_provider_refs ref

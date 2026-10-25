@@ -26,16 +26,16 @@ pub(crate) async fn prepare_curseforge_content_change_action(
     })?;
     let row = sqlx::query(
         "SELECT entry.project_type, entry.ownership_kind,
-				content_set.game_version, content_set.loader
-		 FROM instance_files file
-		 INNER JOIN instance_content_entries entry ON entry.file_id = file.id
-		 INNER JOIN instances instance ON instance.id = entry.instance_id
-		 INNER JOIN instance_content_sets content_set
-			ON content_set.id = entry.content_set_id
-		 WHERE file.instance_id = ? AND file.relative_path = ?
-			AND entry.content_set_id = instance.applied_content_set_id
-		 ORDER BY entry.modified_at DESC
-		 LIMIT 1",
+                content_set.game_version, content_set.loader
+         FROM instance_files file
+         INNER JOIN instance_content_entries entry ON entry.file_id = file.id
+         INNER JOIN instances instance ON instance.id = entry.instance_id
+         INNER JOIN instance_content_sets content_set
+            ON content_set.id = entry.content_set_id
+         WHERE file.instance_id = ? AND file.relative_path = ?
+            AND entry.content_set_id = instance.applied_content_set_id
+         ORDER BY entry.modified_at DESC
+         LIMIT 1",
     )
     .bind(instance_id)
     .bind(relative_path)
@@ -146,36 +146,36 @@ pub(crate) async fn prepare_curseforge_content_change_action(
             )?);
         let id = format!("curseforge:{}:{}", item.project_id, item.file_id);
         action.files.push(crate::install::ContentChangeFile {
-			id: id.clone(),
-			role: if index == 0 {
-				crate::install::ContentChangeFileRole::Primary
-			} else {
-				crate::install::ContentChangeFileRole::Dependency
-			},
-			provider: ContentProvider::CurseForge,
-			project_id: item.project_id.to_string(),
-			release_id: item.file_id.to_string(),
-			file_name: item.file_name.clone(),
-			target_relative_path: cache_path.display().to_string(),
-			urls: url.clone().into_iter().collect(),
-			manual_download_url: url.is_none().then(|| {
-				format!(
-					"https://www.curseforge.com/minecraft/mc-mods/{}/download/{}/file",
-					project.slug, item.file_id
-				)
-			}),
-			integrity: crate::install::ContentChangeFileIntegrity {
-				size: Some(item.size),
-				sha1: curseforge_file_sha1(&file),
-				sha512: None,
-				sha256: None,
-				md5: file
-					.hashes
-					.iter()
-					.find(|hash| hash.algo == 2)
-					.map(|hash| hash.value.clone()),
-			},
-		});
+            id: id.clone(),
+            role: if index == 0 {
+                crate::install::ContentChangeFileRole::Primary
+            } else {
+                crate::install::ContentChangeFileRole::Dependency
+            },
+            provider: ContentProvider::CurseForge,
+            project_id: item.project_id.to_string(),
+            release_id: item.file_id.to_string(),
+            file_name: item.file_name.clone(),
+            target_relative_path: cache_path.display().to_string(),
+            urls: url.clone().into_iter().collect(),
+            manual_download_url: url.is_none().then(|| {
+                format!(
+                    "https://www.curseforge.com/minecraft/mc-mods/{}/download/{}/file",
+                    project.slug, item.file_id
+                )
+            }),
+            integrity: crate::install::ContentChangeFileIntegrity {
+                size: Some(item.size),
+                sha1: curseforge_file_sha1(&file),
+                sha512: None,
+                sha256: None,
+                md5: file
+                    .hashes
+                    .iter()
+                    .find(|hash| hash.algo == 2)
+                    .map(|hash| hash.value.clone()),
+            },
+        });
         for parent in &item.required_by_project_ids {
             action
                 .dependencies
