@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, defineMessages, useVIntl } from '@modrinth/ui'
+import { Button, defineMessages, ProjectPageSkeleton, useVIntl } from '@modrinth/ui'
 import { computed, onScopeDispose, ref, useSlots, watch } from 'vue'
 
 import TranslatedProjectDescription from '@/components/ui/TranslatedProjectDescription.vue'
@@ -114,6 +114,7 @@ onScopeDispose(() => controller?.abort())
             <Button @click="load(attemptedSource)">{{ formatMessage(messages.retry) }}</Button>
         </div>
         <slot v-if="selected === source && $slots.default" />
+        <ProjectPageSkeleton v-else-if="busy && !text" variant="description" />
         <template v-else-if="!text" />
         <p v-else-if="text.format === 'plain'" class="m-0 whitespace-pre-wrap">{{ text.body }}</p>
         <TranslatedProjectDescription

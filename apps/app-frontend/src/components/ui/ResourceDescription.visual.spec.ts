@@ -21,6 +21,7 @@ vi.mock('@/components/ui/TranslatedProjectDescription.vue', () => ({
     }),
 }))
 vi.mock('@modrinth/ui', () => ({
+    ProjectPageSkeleton: defineComponent({ setup: () => () => h('div', { 'data-skeleton': '' }) }),
     Button: defineComponent({
         setup:
             (_, { attrs, slots }) =>
@@ -141,5 +142,43 @@ it('keeps a completed description on failure and aborts old subscriptions on sou
         expect(wrapper.text()).not.toContain('late response')
     } finally {
         wrapper.unmount()
+    }
+})
+
+it('shows a local skeleton only when no description is available', async () => {
+    ready()
+    let resolve!: (value: Awaited<ReturnType<typeof resourceGet>>) => void
+    vi.mocked(resourceGet).mockImplementationOnce(
+        () =>
+            new Promise((done) => {
+                resolve = done
+            }),
+    )
+    const wrapper = mount(ResourceDescription, {
+        props: { source: 'planet_minecraft', projectId: 'one' },
+    })
+    try {
+        expect(wrapper.find('[data-skeleton]').exists()).toBe(true)
+        resolve({
+            defaultProject: { source: 'planet_minecraft', projectId: 'one' },
+            projects: [project('planet_minecraft', 'one')],
+        } as Awaited<ReturnType<typeof resourceGet>>)
+        await flushPromises()
+        expect(wrapper.text()).toContain('planet_minecraft description')
+        expect(wrapper.find('[data-skeleton]').exists()).toBe(false)
+    } finally {
+        wrapper.unmount()
+    }
+
+    vi.mocked(resourceGet).mockReturnValueOnce(new Promise(() => {}))
+    const original = mount(ResourceDescription, {
+        props: { source: 'mcarchive', projectId: 'two' },
+        slots: { default: '<p>Existing description</p>' },
+    })
+    try {
+        expect(original.text()).toContain('Existing description')
+        expect(original.find('[data-skeleton]').exists()).toBe(false)
+    } finally {
+        original.unmount()
     }
 })
