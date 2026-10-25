@@ -276,30 +276,30 @@ pub(super) async fn install_manual_download(
         .await?;
         let state = State::get().await?;
         let content_set = crate::state::instances::adapters::sqlite::content_rows::get_applied_content_set(
-			instance_id,
-			&state.pool,
-		)
-		.await?
-		.ok_or_else(|| {
-			ErrorKind::InputError(
-				"Instance has no applied content set".to_string(),
-			)
-		})?;
+            instance_id,
+            &state.pool,
+        )
+        .await?
+        .ok_or_else(|| {
+            ErrorKind::InputError(
+                "Instance has no applied content set".to_string(),
+            )
+        })?;
         let _instance_lock = state.lock_instance_content(instance_id).await;
         let mut tx = state.pool.begin_with("BEGIN IMMEDIATE").await?;
         crate::state::instances::adapters::sqlite::content_rows::complete_pending_manual_download(
-			instance_id,
-			&download.project_id.to_string(),
-			&download.file_id.to_string(),
-			None,
-			&mut tx,
-		)
-		.await?;
-        crate::state::instances::adapters::sqlite::content_rows::bump_content_set_revision_in_transaction(
-			&content_set.id,
-			&mut tx,
+            instance_id,
+            &download.project_id.to_string(),
+            &download.file_id.to_string(),
+            None,
+            &mut tx,
         )
-		.await?;
+        .await?;
+        crate::state::instances::adapters::sqlite::content_rows::bump_content_set_revision_in_transaction(
+            &content_set.id,
+            &mut tx,
+        )
+        .await?;
         tx.commit().await?;
         let relative_path = source_path.to_string_lossy().to_string();
         tracing::info!(

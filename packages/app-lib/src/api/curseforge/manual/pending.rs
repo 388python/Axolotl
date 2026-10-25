@@ -97,13 +97,13 @@ pub async fn list_pending_manual_downloads(
 ) -> crate::Result<Vec<CurseForgeManualDownload>> {
     let state = State::get().await?;
     Ok(crate::state::instances::adapters::sqlite::content_rows::get_pending_manual_downloads(
-		instance_id,
-		&state.pool,
-	)
-	.await?
-	.into_iter()
-	.filter_map(pending_manual_download)
-	.collect())
+        instance_id,
+        &state.pool,
+    )
+    .await?
+    .into_iter()
+    .filter_map(pending_manual_download)
+    .collect())
 }
 
 pub(super) fn pending_manual_download(

@@ -98,16 +98,16 @@ where
     Fut: std::future::Future<Output = crate::Result<()>>,
 {
     let pending = crate::state::instances::adapters::sqlite::content_rows::get_pending_manual_downloads(
-		instance_id,
-		&state.pool,
-	)
-	.await?
-	.into_iter()
-	.filter(|download| download.provider == ContentProvider::CurseForge)
-	.map(|download| {
-		(download.provider_project_id, download.provider_release_id)
-	})
-	.collect::<HashSet<_>>();
+        instance_id,
+        &state.pool,
+    )
+    .await?
+    .into_iter()
+    .filter(|download| download.provider == ContentProvider::CurseForge)
+    .map(|download| {
+        (download.provider_project_id, download.provider_release_id)
+    })
+    .collect::<HashSet<_>>();
     let materialized = crate::state::instances::adapters::sqlite::content_rows::get_materialized_curseforge_downloads(
         instance_id,
         &state.pool,
