@@ -315,3 +315,60 @@ fn recognized_project_types_map_curseforge_classes() {
     assert_eq!(recognized_project_type(Some(4471)), None);
     assert_eq!(recognized_project_type(None), None);
 }
+
+#[test]
+fn quilted_fabric_api_dependency_uses_the_resolved_project() {
+    use crate::api::curseforge::constants::{
+        FABRIC_API_CURSEFORGE_PROJECT_ID,
+        QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+    };
+    use crate::api::curseforge::dto::{
+        CurseForgeFileDependency, CurseForgeInstallRequest,
+    };
+    use crate::api::curseforge::install::{
+        DependencyAction, dependency_action,
+    };
+    use crate::state::instances::{
+        ContentOwnershipKind, ManualDownloadOperationKind,
+    };
+
+    let request = CurseForgeInstallRequest {
+        instance_id: String::new(),
+        project_id: 1,
+        file_id: 2,
+        project_type: "mod".to_string(),
+        ownership_kind: ContentOwnershipKind::UserAdded,
+        manual_operation_kind: ManualDownloadOperationKind::ContentInstall,
+        game_version: Some("1.21.1".to_string()),
+        mod_loader_type: Some(5),
+        world_name: None,
+        install_dependencies: true,
+        excluded_dependency_project_ids: vec![
+            QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+        ],
+        force_dependency_project_ids: Vec::new(),
+        dependency_plan_id: None,
+        defer_persistence: false,
+        verification_tx: None,
+        pre_resolved_relative_path: None,
+        expected_file_name: None,
+    };
+    let dependency = CurseForgeFileDependency::new(
+        FABRIC_API_CURSEFORGE_PROJECT_ID,
+        DependencyRelation::Required,
+    );
+
+    match dependency_action(&dependency, &request, &[]) {
+        DependencyAction::Skip {
+            reason,
+            target_project_id,
+        } => {
+            assert_eq!(reason, "excluded_by_user");
+            assert_eq!(
+                target_project_id, QUILTED_FABRIC_API_CURSEFORGE_PROJECT_ID,
+                "the skip must name the project the exclusion was keyed by"
+            );
+        }
+        _ => panic!("an excluded dependency must be skipped"),
+    }
+}

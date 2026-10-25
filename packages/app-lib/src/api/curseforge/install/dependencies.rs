@@ -48,7 +48,9 @@ pub(crate) fn should_resolve_dependency(
 
 /// The outcome of evaluating one declared dependency against a request.
 pub(crate) enum DependencyAction {
-    /// Do not resolve it; `reason` is what the results report.
+    /// Do not resolve it; `reason` is what the results report, and
+    /// `target_project_id` is the project they name: the resolved target,
+    /// because exclusions and installed checks are keyed by it.
     Skip {
         reason: &'static str,
         target_project_id: u32,

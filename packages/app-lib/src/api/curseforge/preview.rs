@@ -144,13 +144,7 @@ pub async fn preview_install_file(
                         target_project_id,
                     } => {
                         skipped.push(CurseForgeSkippedDependency {
-                            project_id: if reason == "embedded"
-                                || reason == "tool"
-                            {
-                                dependency_ref.mod_id
-                            } else {
-                                target_project_id
-                            },
+                            project_id: target_project_id,
                             file_id: None,
                             reason: reason.to_string(),
                         });
