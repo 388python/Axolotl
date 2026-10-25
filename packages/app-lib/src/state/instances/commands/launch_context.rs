@@ -616,17 +616,17 @@ mod tests {
             .await
             .expect("in-memory SQLite pool");
         sqlx::query(
-			"CREATE TABLE instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, pinned_at INTEGER NULL, modified INTEGER NOT NULL)",
-		)
-		.execute(&pool)
-		.await
-		.expect("instances table");
+            "CREATE TABLE instances (id TEXT PRIMARY KEY, name TEXT NOT NULL, pinned_at INTEGER NULL, modified INTEGER NOT NULL)",
+        )
+        .execute(&pool)
+        .await
+        .expect("instances table");
         sqlx::query(
-			"CREATE TABLE instance_daily_playtime (played_on TEXT NOT NULL, instance_id TEXT NOT NULL, instance_name TEXT NOT NULL, played_seconds INTEGER NOT NULL DEFAULT 0, session_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (played_on, instance_id))",
-		)
-		.execute(&pool)
-		.await
-		.expect("daily playtime table");
+            "CREATE TABLE instance_daily_playtime (played_on TEXT NOT NULL, instance_id TEXT NOT NULL, instance_name TEXT NOT NULL, played_seconds INTEGER NOT NULL DEFAULT 0, session_count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (played_on, instance_id))",
+        )
+        .execute(&pool)
+        .await
+        .expect("daily playtime table");
         pool
     }
 
@@ -683,9 +683,9 @@ mod tests {
     async fn persists_pinned_state_without_erasing_playtime_history() {
         let pool = test_pool().await;
         sqlx::query("INSERT INTO instances (id, name, pinned_at, modified) VALUES ('instance', 'Instance', NULL, 0)")
-			.execute(&pool)
-			.await
-			.unwrap();
+            .execute(&pool)
+            .await
+            .unwrap();
         upsert_daily_playtime(
             "instance",
             "Instance",
@@ -712,9 +712,9 @@ mod tests {
             .unwrap();
 
         let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM instance_daily_playtime WHERE instance_id = 'instance'")
-			.fetch_one(&pool)
-			.await
-			.unwrap();
+            .fetch_one(&pool)
+            .await
+            .unwrap();
         assert_eq!(rows, 1);
     }
 }

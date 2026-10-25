@@ -2060,7 +2060,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
         }
     };
     let materialization_result =
-		crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
+        crate::api::pack::archive_util::run_cancellable_blocking_instance_write(
         instance_id.clone(),
         reporter.cancellation_token(),
         {
@@ -2073,7 +2073,7 @@ pub(crate) async fn install_zipped_mrpack_files_with_reporter(
             }
         },
     )
-	.await;
+    .await;
     let override_replacements = match materialization_result {
         Ok(replacements) => replacements,
         Err(error) => {

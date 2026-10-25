@@ -300,11 +300,11 @@ pub(crate) async fn switch_content_entry_version(
             emit_content_changed(instance_id).await?;
             Ok(updated_path)
         }
-		Some(ContentProvider::McArchive) => Err(crate::ErrorKind::InputError(
-			"MCArchive content version changes require selecting a file manually"
-				.to_string(),
-		)
-		.into()),
+        Some(ContentProvider::McArchive) => Err(crate::ErrorKind::InputError(
+            "MCArchive content version changes require selecting a file manually"
+                .to_string(),
+        )
+        .into()),
         _ => {
             let state = State::get().await?;
             crate::state::instances::commands::switch_project_version_with_dependencies_preserving_name(
@@ -424,30 +424,30 @@ pub async fn restore_pack_member_default(
                     verification_tx: None,
                     pre_resolved_relative_path: None,
                     expected_file_name: None,
-					instance_id: instance_id.to_string(),
-					project_id: project_id.parse().map_err(|_| {
-						crate::ErrorKind::InputError(
-							"Stored CurseForge project ID is invalid".to_string(),
-						)
-					})?,
-					file_id: release_id.parse().map_err(|_| {
-						crate::ErrorKind::InputError(
-							"Stored CurseForge file ID is invalid".to_string(),
-						)
-					})?,
-					project_type: member.project_type.get_name().to_string(),
-					ownership_kind: ContentOwnershipKind::PackManaged,
-					manual_operation_kind: crate::state::instances::ManualDownloadOperationKind::ContentUpdate,
-					game_version: Some(content_set.game_version),
-					mod_loader_type: curseforge_loader_type(content_set.loader),
-					world_name: None,
-					install_dependencies: false,
-					excluded_dependency_project_ids: Vec::new(),
-					force_dependency_project_ids: Vec::new(),
-					dependency_plan_id: None,
-				},
-			)
-			.await?;
+                    instance_id: instance_id.to_string(),
+                    project_id: project_id.parse().map_err(|_| {
+                        crate::ErrorKind::InputError(
+                            "Stored CurseForge project ID is invalid".to_string(),
+                        )
+                    })?,
+                    file_id: release_id.parse().map_err(|_| {
+                        crate::ErrorKind::InputError(
+                            "Stored CurseForge file ID is invalid".to_string(),
+                        )
+                    })?,
+                    project_type: member.project_type.get_name().to_string(),
+                    ownership_kind: ContentOwnershipKind::PackManaged,
+                    manual_operation_kind: crate::state::instances::ManualDownloadOperationKind::ContentUpdate,
+                    game_version: Some(content_set.game_version),
+                    mod_loader_type: curseforge_loader_type(content_set.loader),
+                    world_name: None,
+                    install_dependencies: false,
+                    excluded_dependency_project_ids: Vec::new(),
+                    force_dependency_project_ids: Vec::new(),
+                    dependency_plan_id: None,
+                },
+            )
+            .await?;
             let pending_manual = !result.manual_downloads.is_empty();
             let failure_reason = result
                 .failed_downloads

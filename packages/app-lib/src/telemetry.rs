@@ -105,10 +105,10 @@ async fn run_cycle(
 
 async fn is_enabled(state: &State) -> crate::Result<bool> {
     let row = sqlx::query(
-		"SELECT telemetry, telemetry_consent_version FROM settings WHERE id = 0",
-	)
-	.fetch_one(&state.pool)
-	.await?;
+        "SELECT telemetry, telemetry_consent_version FROM settings WHERE id = 0",
+    )
+    .fetch_one(&state.pool)
+    .await?;
     Ok(row.get::<i64, _>("telemetry") == 1
         && row.get::<i64, _>("telemetry_consent_version") > 0)
 }
@@ -125,11 +125,11 @@ async fn ensure_identity(pool: &sqlx::SqlitePool) -> crate::Result<String> {
 
     let installation_id = Uuid::new_v4().to_string();
     sqlx::query(
-		"INSERT OR IGNORE INTO telemetry_identity (id, installation_id) VALUES (0, ?)",
-	)
-	.bind(&installation_id)
-	.execute(pool)
-	.await?;
+        "INSERT OR IGNORE INTO telemetry_identity (id, installation_id) VALUES (0, ?)",
+    )
+    .bind(&installation_id)
+    .execute(pool)
+    .await?;
     let row = sqlx::query(
         "SELECT installation_id FROM telemetry_identity WHERE id = 0",
     )
@@ -216,13 +216,13 @@ async fn cleanup_outbox(state: &State) -> crate::Result<()> {
         .execute(&state.pool)
         .await?;
     sqlx::query(
-		"DELETE FROM telemetry_outbox WHERE event_id IN (SELECT event_id FROM telemetry_outbox ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
-	)
-	.bind(MAX_OUTBOX_EVENTS)
-	.execute(&state.pool)
-	.await?;
+        "DELETE FROM telemetry_outbox WHERE event_id IN (SELECT event_id FROM telemetry_outbox ORDER BY created_at DESC LIMIT -1 OFFSET ?)",
+    )
+    .bind(MAX_OUTBOX_EVENTS)
+    .execute(&state.pool)
+    .await?;
     sqlx::query(
-		r#"
+        r#"
 		DELETE FROM telemetry_outbox
 		WHERE event_id IN (
 			SELECT event_id FROM (
@@ -233,10 +233,10 @@ async fn cleanup_outbox(state: &State) -> crate::Result<()> {
 			WHERE running_bytes > ?
 		)
 		"#,
-	)
-	.bind(MAX_OUTBOX_BYTES)
-	.execute(&state.pool)
-	.await?;
+    )
+    .bind(MAX_OUTBOX_BYTES)
+    .execute(&state.pool)
+    .await?;
     Ok(())
 }
 
@@ -246,12 +246,12 @@ async fn upload_next_batch(
 ) -> crate::Result<()> {
     let now = Utc::now().timestamp();
     let rows = sqlx::query(
-		"SELECT event_id, json(payload) AS payload FROM telemetry_outbox WHERE event_type = 'heartbeat' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?",
-	)
-	.bind(now)
-	.bind(MAX_BATCH_EVENTS)
-	.fetch_all(&state.pool)
-	.await?;
+        "SELECT event_id, json(payload) AS payload FROM telemetry_outbox WHERE event_type = 'heartbeat' AND next_attempt_at <= ? ORDER BY created_at LIMIT ?",
+    )
+    .bind(now)
+    .bind(MAX_BATCH_EVENTS)
+    .fetch_all(&state.pool)
+    .await?;
     if rows.is_empty() {
         return Ok(());
     }
@@ -342,13 +342,13 @@ async fn schedule_retry(
             _ => 6 * 60 * 60,
         };
         sqlx::query(
-			"UPDATE telemetry_outbox SET attempts = ?, next_attempt_at = ? WHERE event_id = ?",
-		)
-		.bind(attempts)
-		.bind(Utc::now().timestamp() + delay)
-		.bind(event_id)
-		.execute(&state.pool)
-		.await?;
+            "UPDATE telemetry_outbox SET attempts = ?, next_attempt_at = ? WHERE event_id = ?",
+        )
+        .bind(attempts)
+        .bind(Utc::now().timestamp() + delay)
+        .bind(event_id)
+        .execute(&state.pool)
+        .await?;
     }
     Ok(())
 }

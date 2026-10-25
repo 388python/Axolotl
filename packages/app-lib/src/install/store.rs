@@ -167,8 +167,8 @@ pub async fn list(
         .await?
     } else {
         sqlx::query_as!(
-			InstallJobRow,
-			"
+            InstallJobRow,
+            "
 			SELECT
 				id AS \"id!: String\",
 				instance_id,
@@ -183,9 +183,9 @@ pub async fn list(
 			WHERE dismissed = 0 AND status IN ('queued', 'running', 'failed', 'interrupted')
 			ORDER BY created ASC
 			",
-		)
-		.fetch_all(&app_state.pool)
-		.await?
+        )
+        .fetch_all(&app_state.pool)
+        .await?
     };
 
     let mut rows = rows;
@@ -1080,14 +1080,14 @@ mod tests {
         let (state, instance_id) =
             create_completion_test_instance("waiting lifecycle").await;
         let mut waiting_state = InstallJobState::new(
-			super::super::model::InstallRequest::InstallPackToExistingInstance {
-				instance_id: instance_id.clone(),
-				location: crate::api::pack::install_from::CreatePackLocation::FromFile {
-					path: std::path::PathBuf::from("unused.mrpack"),
-				},
-				post_install_edit: None,
-			},
-		);
+            super::super::model::InstallRequest::InstallPackToExistingInstance {
+                instance_id: instance_id.clone(),
+                location: crate::api::pack::install_from::CreatePackLocation::FromFile {
+                    path: std::path::PathBuf::from("unused.mrpack"),
+                },
+                post_install_edit: None,
+            },
+        );
         waiting_state.pause_reason = Some(
             super::super::model::InstallPauseReason::MissingRequiredContent {
                 failed_files: 1,

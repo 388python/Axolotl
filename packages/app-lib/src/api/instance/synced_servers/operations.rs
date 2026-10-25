@@ -83,10 +83,10 @@ pub(in crate::api::instance) async fn seed_servers(
         && !pack_state_exists(&metadata.instance.id, state).await?
     {
         return Err(ErrorKind::InputError(
-			"This linked modpack cannot be used as the multiplayer base until its supplied server list has been reconstructed. Choose an unmanaged instance instead."
-				.to_string(),
-		)
-		.into());
+            "This linked modpack cannot be used as the multiplayer base until its supplied server list has been reconstructed. Choose an unmanaged instance instead."
+                .to_string(),
+        )
+        .into());
     }
     let servers = sync_candidates(metadata, state).await?;
     let canonical = servers
@@ -529,10 +529,10 @@ async fn remove_server_locked(
 ) -> crate::Result<()> {
     if !participating(metadata, state).await? {
         return Err(ErrorKind::InputError(
-			"Stable server removal requires multiplayer syncing for this instance."
-				.to_string(),
-		)
-		.into());
+            "Stable server removal requires multiplayer syncing for this instance."
+                .to_string(),
+        )
+        .into());
     }
     let records = compose_records(metadata, state).await?;
     let record = records

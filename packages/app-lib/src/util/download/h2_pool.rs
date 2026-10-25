@@ -843,13 +843,13 @@ async fn establish(
         connect_tcp(host, port, route, reserve_native_budget).await
     };
     let tcp = tcp_result.map_err(|error| {
-		H2ConnectError::new(
-			H2ConnectFailureKind::Tcp,
-			format!(
-				"failed to establish shared HTTP/2 connection to {authority}: {error}"
-			),
-		)
-	})?;
+        H2ConnectError::new(
+            H2ConnectFailureKind::Tcp,
+            format!(
+                "failed to establish shared HTTP/2 connection to {authority}: {error}"
+            ),
+        )
+    })?;
 
     let remote_addr = tcp.peer_addr().ok();
     let server_name =

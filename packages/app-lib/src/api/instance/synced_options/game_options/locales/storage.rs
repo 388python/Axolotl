@@ -28,24 +28,24 @@ pub(super) async fn load(
     .fetch_all(pool)
     .await?;
     rows.into_iter().filter(|row| {
-		row.option_id.strip_prefix("external:").and_then(super::mod_translation_key).is_some()
-	}).map(|row| {
-		let observation = row.observation_json.as_deref().map(serde_json::from_str).transpose()
-			.inspect_err(|error| tracing::warn!(%error, scope = row.scope, option_id = row.option_id,
-				"Game setting locales: stored observation could not be decoded"))?;
-		let origin = row.origin_json.as_deref().map(serde_json::from_str).transpose()
-			.inspect_err(|error| tracing::warn!(%error, scope = row.scope, option_id = row.option_id,
-				"Game setting locales: stored origin could not be decoded"))?;
-		Ok(OriginRow {
-			scope: row.scope,
-			option_id: row.option_id,
-			source_instance_id: row.source_instance_id,
-			source_game_version: row.source_game_version,
-			backfilled: row.backfilled,
-			observation,
-			origin,
-		})
-	}).collect()
+        row.option_id.strip_prefix("external:").and_then(super::mod_translation_key).is_some()
+    }).map(|row| {
+        let observation = row.observation_json.as_deref().map(serde_json::from_str).transpose()
+            .inspect_err(|error| tracing::warn!(%error, scope = row.scope, option_id = row.option_id,
+                "Game setting locales: stored observation could not be decoded"))?;
+        let origin = row.origin_json.as_deref().map(serde_json::from_str).transpose()
+            .inspect_err(|error| tracing::warn!(%error, scope = row.scope, option_id = row.option_id,
+                "Game setting locales: stored origin could not be decoded"))?;
+        Ok(OriginRow {
+            scope: row.scope,
+            option_id: row.option_id,
+            source_instance_id: row.source_instance_id,
+            source_game_version: row.source_game_version,
+            backfilled: row.backfilled,
+            observation,
+            origin,
+        })
+    }).collect()
 }
 
 #[tracing::instrument(
@@ -63,7 +63,7 @@ pub(super) async fn observe(
 ) -> crate::Result<()> {
     let json = serde_json::to_string(observation)?;
     sqlx::query!(
-		"INSERT INTO game_option_locale_origins
+        "INSERT INTO game_option_locale_origins
 		(scope, option_id, source_instance_id, source_game_version, observation_json)
 		SELECT ?, ?, ?, ?, ?
 		WHERE ? <> '' OR EXISTS (SELECT 1 FROM synced_game_option_values WHERE option_id = ?)
@@ -73,8 +73,8 @@ pub(super) async fn observe(
 		AND game_option_locale_origins.backfilled = 0
 		AND game_option_locale_origins.source_instance_id = excluded.source_instance_id
 		AND game_option_locale_origins.source_game_version = excluded.source_game_version",
-		scope, option_id, instance_id, game_version, json, scope, option_id,
-	).execute(&mut **tx).await?;
+        scope, option_id, instance_id, game_version, json, scope, option_id,
+    ).execute(&mut **tx).await?;
     Ok(())
 }
 

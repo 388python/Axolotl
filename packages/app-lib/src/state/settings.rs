@@ -783,11 +783,11 @@ impl Settings {
         .await?;
 
         sqlx::query(
-			"UPDATE settings SET enter_lightweight_mode_on_game_launch = ? WHERE id = 0",
-		)
-		.bind(self.enter_lightweight_mode_on_game_launch)
-		.execute(&mut *connection)
-		.await?;
+            "UPDATE settings SET enter_lightweight_mode_on_game_launch = ? WHERE id = 0",
+        )
+        .bind(self.enter_lightweight_mode_on_game_launch)
+        .execute(&mut *connection)
+        .await?;
 
         sqlx::query("UPDATE settings SET close_behavior = ? WHERE id = 0")
             .bind(&self.close_behavior)

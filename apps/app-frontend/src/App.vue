@@ -2873,11 +2873,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 <template>
     <SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
     <!--
-		A failed initialization never renders the app shell, so this framed window
-		ends up with no title bar and no controls at all. This strip keeps the
-		window draggable and offers a way to quit that does not depend on the
-		parts which failed to load.
-	-->
+        A failed initialization never renders the app shell, so this framed window
+        ends up with no title bar and no controls at all. This strip keeps the
+        window draggable and offers a way to quit that does not depend on the
+        parts which failed to load.
+    -->
     <div
         v-if="stateFailed && !stateInitialized"
         data-tauri-drag-region
@@ -3170,10 +3170,10 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
             <div class="page-transition-grid grid min-h-full">
                 <RouterView v-slot="{ Component, route: pageRoute }">
                     <!--
-						Enter animation is keyed only on the route (see getPageTransitionKey).
-						The layer mounts as soon as the URL changes — not when the async page
-						Suspense resolves — so nav switches stay smooth while data loads.
-					-->
+                        Enter animation is keyed only on the route (see getPageTransitionKey).
+                        The layer mounts as soon as the URL changes — not when the async page
+                        Suspense resolves — so nav switches stay smooth while data loads.
+                    -->
                     <Transition
                         name="page-slide"
                         :css="themeStore.getFeatureFlag('page_transitions') && !onSettingsPage"

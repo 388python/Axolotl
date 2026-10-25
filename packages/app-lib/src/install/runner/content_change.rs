@@ -294,49 +294,49 @@ async fn download_prepared_files(
                     );
                 }
                 let result = match file.provider {
-				ContentProvider::Modrinth => {
-					crate::state::instances::commands::download_project_version_with_reporter(
-						&instance_id,
-						&file.release_id,
-						if file.role == crate::install::ContentChangeFileRole::Primary {
-							DownloadReason::Update
-						} else {
-							DownloadReason::Dependency
-						},
-						None,
-						reporter,
-						&state,
-					)
-					.await
-					.map(DownloadedContent::Modrinth)
-				}
-				ContentProvider::CurseForge => {
-					match (
-						file.project_id.parse::<u32>(),
-						file.release_id.parse::<u32>(),
-					) {
-						(Ok(project_id), Ok(file_id)) => {
-							crate::api::curseforge::stage_curseforge_upgrade_file(
-								project_id,
-								file_id,
-								None,
-								Some(&reporter),
-							)
-							.await
-								.map(DownloadedContent::CurseForge)
-						}
-						_ => Err(crate::ErrorKind::InputError(
-							"Invalid CurseForge project or file ID".to_string(),
-						)
-						.into()),
-					}
-				}
-				provider => Err(crate::ErrorKind::InputError(format!(
-					"Provider {} cannot be downloaded automatically",
-					provider.as_str()
-				))
-				.into()),
-			};
+                ContentProvider::Modrinth => {
+                    crate::state::instances::commands::download_project_version_with_reporter(
+                        &instance_id,
+                        &file.release_id,
+                        if file.role == crate::install::ContentChangeFileRole::Primary {
+                            DownloadReason::Update
+                        } else {
+                            DownloadReason::Dependency
+                        },
+                        None,
+                        reporter,
+                        &state,
+                    )
+                    .await
+                    .map(DownloadedContent::Modrinth)
+                }
+                ContentProvider::CurseForge => {
+                    match (
+                        file.project_id.parse::<u32>(),
+                        file.release_id.parse::<u32>(),
+                    ) {
+                        (Ok(project_id), Ok(file_id)) => {
+                            crate::api::curseforge::stage_curseforge_upgrade_file(
+                                project_id,
+                                file_id,
+                                None,
+                                Some(&reporter),
+                            )
+                            .await
+                                .map(DownloadedContent::CurseForge)
+                        }
+                        _ => Err(crate::ErrorKind::InputError(
+                            "Invalid CurseForge project or file ID".to_string(),
+                        )
+                        .into()),
+                    }
+                }
+                provider => Err(crate::ErrorKind::InputError(format!(
+                    "Provider {} cannot be downloaded automatically",
+                    provider.as_str()
+                ))
+                .into()),
+            };
                 (file, result)
             }
         }),

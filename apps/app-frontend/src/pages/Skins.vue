@@ -1195,12 +1195,12 @@ watch(offline, () => {
                 {{ formatMessage(messages.skinSelectorTitle) }}
             </h1>
             <!--
-				The preview's height, strictly: the area the app gives the page
-				(100vh less the top bar) minus the title, the action row below it and
-				the page's own padding. It keeps that height whether or not actions are
-				showing -- when one appears the column grows downwards instead, so the
-				model never moves and the actions never sit on the canvas.
-			-->
+                The preview's height, strictly: the area the app gives the page
+                (100vh less the top bar) minus the title, the action row below it and
+                the page's own padding. It keeps that height whether or not actions are
+                showing -- when one appears the column grows downwards instead, so the
+                model never moves and the actions never sit on the canvas.
+            -->
             <div
                 ref="skinPreviewArea"
                 class="ml-5 mt-4 flex h-[calc(100vh_-_var(--top-bar-height)_-_11rem)] min-h-[14rem] items-center justify-center"
@@ -1228,10 +1228,10 @@ watch(offline, () => {
             </div>
 
             <!--
-				The preview's actions belong to the column, not to the canvas: in the
-				flow they always get their own height, they never sit on the model, and
-				the preview above them does not move when one of them appears.
-			-->
+                The preview's actions belong to the column, not to the canvas: in the
+                flow they always get their own height, they never sit on the model, and
+                the preview above them does not move when one of them appears.
+            -->
             <div class="ml-5 mt-3 flex flex-wrap items-center justify-center gap-2">
                 <template v-if="hasPendingSkinChange">
                     <button
