@@ -140,6 +140,10 @@
         "AWS_SECRET_ACCESS_KEY"
       ]
     },
+    "test:e2e": {
+      "cache": false,
+      "env": ["CI", "PLAYWRIGHT_BASE_URL", "FORCE_COLOR"]
+    },
     "fix": {},
     "fix:ancillary": {
       "cache": false

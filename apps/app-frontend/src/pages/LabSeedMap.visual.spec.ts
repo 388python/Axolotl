@@ -50,7 +50,7 @@ vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     useRoute: () => ({ query: {} }),
 }))
-vi.mock('@/lab/recipe-generator/item-images', () => ({
+vi.mock('@/lab/shared/minecraft/item-images', () => ({
     loadMinecraftItemImage: () => Promise.resolve({ src: '' }),
 }))
 vi.mock('@/components/lab/seed-map/SeedMapBiomePicker.vue', () => ({
