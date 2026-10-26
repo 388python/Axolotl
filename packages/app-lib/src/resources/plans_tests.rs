@@ -2377,6 +2377,7 @@ async fn whole_instance_update_checks_run_concurrently_with_source_limits() {
     struct GatedProvider {
         inner: PlanProvider,
         gate: Arc<Semaphore>,
+        slow_first: Arc<Semaphore>,
         active: AtomicUsize,
         maximum: AtomicUsize,
     }
@@ -2398,6 +2399,9 @@ async fn whole_instance_update_checks_run_concurrently_with_source_limits() {
             let active = self.active.fetch_add(1, Ordering::SeqCst) + 1;
             self.maximum.fetch_max(active, Ordering::SeqCst);
             self.gate.acquire().await.unwrap().forget();
+            if queries.iter().any(|query| matches!(query, ProviderQuery::Release { release_id, .. } if release_id.as_str() == "p0000000-1")) {
+                self.slow_first.acquire().await.unwrap().forget();
+            }
             let result = self.inner.fetch_many(queries).await;
             self.active.fetch_sub(1, Ordering::SeqCst);
             result
@@ -2419,6 +2423,7 @@ async fn whole_instance_update_checks_run_concurrently_with_source_limits() {
             requests: Mutex::new(vec![]),
         },
         gate: Arc::new(Semaphore::new(0)),
+        slow_first: Arc::new(Semaphore::new(0)),
         active: AtomicUsize::new(0),
         maximum: AtomicUsize::new(0),
     });
@@ -2446,6 +2451,11 @@ async fn whole_instance_update_checks_run_concurrently_with_source_limits() {
     });
     wait_until(|| provider.active.load(Ordering::SeqCst) == 3).await;
     provider.gate.add_permits(1000);
+    wait_until(|| provider.inner.requests.lock().unwrap().iter().any(|query| {
+        matches!(query, ProviderQuery::Releases { project_id, .. } if project_id.as_str() == "p0000069")
+    })).await;
+    assert!(!task.is_finished());
+    provider.slow_first.add_permits(1);
     let result = task.await.unwrap();
     assert_eq!(result.entries.len(), 70, "{:?}", result.failures);
     assert_eq!(result.releases.len(), 70);

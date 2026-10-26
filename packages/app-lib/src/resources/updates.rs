@@ -143,7 +143,7 @@ pub(crate) async fn check_entries(
             .await;
             (entry, outcome)
         })
-        .buffered(8);
+        .buffer_unordered(8);
     while let Some((entry, outcome)) = checks.next().await {
         if cancel.is_cancelled() {
             return Err(ResourceError::Canceled);
