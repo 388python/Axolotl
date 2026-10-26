@@ -1,4 +1,139 @@
 {
+  "app.settings.tabs.mcp": {
+    "message": "MCP"
+  },
+  "app.mcp.introduction": {
+    "message": "通过 Model Context Protocol，让 AI 客户端管理你的启动器。"
+  },
+  "app.mcp.preview-notice": {
+    "message": "MCP 连接暂不可用。你可以先了解访问权限和客户端接入方式。"
+  },
+  "app.mcp.access-title": {
+    "message": "访问权限"
+  },
+  "app.mcp.full-access": {
+    "message": "完全访问模式"
+  },
+  "app.mcp.full-access-description": {
+    "message": "允许免确认连接、调用删除类工具，以及直接操作启动器界面。"
+  },
+  "app.mcp.standard-mode": {
+    "message": "普通访问"
+  },
+  "app.mcp.full-mode": {
+    "message": "完全访问"
+  },
+  "app.mcp.manual-approval": {
+    "message": "每次连接都需要你手动确认，Agent 才能开始操作。"
+  },
+  "app.mcp.no-deletion": {
+    "message": "不能调用任何删除类工具。"
+  },
+  "app.mcp.tools-only": {
+    "message": "只能使用启动器提供的封装工具，不能直接操作界面。"
+  },
+  "app.mcp.full-mode-notice": {
+    "message": "Agent 可以免确认连接、删除数据并直接操作界面。请只连接你信任的客户端。"
+  },
+  "app.mcp.disconnect-hint": {
+    "message": "连接期间，随时点击标题栏中的“AI 已连接”即可断开。"
+  },
+  "app.mcp.warning-title": {
+    "message": "启用完全访问模式？"
+  },
+  "app.mcp.warning-description": {
+    "message": "连接的 Agent 将无需确认即可访问启动器、调用删除类工具并直接操作界面。错误操作或恶意指令可能导致世界和实例被删除、文件被修改，或隐私数据泄露。"
+  },
+  "app.mcp.warning-session": {
+    "message": "切换访问模式会断开当前连接，下次连接将使用新的权限。"
+  },
+  "app.mcp.acknowledge": {
+    "message": "我已了解风险，并信任将要连接的 AI 客户端。"
+  },
+  "app.mcp.enable-full-access": {
+    "message": "启用完全访问"
+  },
+  "app.mcp.cancel": {
+    "message": "取消"
+  },
+  "app.mcp.setup-title": {
+    "message": "接入 AI 客户端"
+  },
+  "app.mcp.setup-description": {
+    "message": "选择客户端，查看对应的配置步骤。"
+  },
+  "app.mcp.endpoint-notice": {
+    "message": "示例中的 MCP_URL 是占位符。MCP 可用后，请将它替换为启动器提供的服务地址，并保持启动器运行。"
+  },
+  "app.mcp.codex-step": {
+    "message": "在终端执行以下命令，然后使用 codex mcp list 检查服务器配置。"
+  },
+  "app.mcp.claude-step": {
+    "message": "在终端执行以下命令，然后在 Claude Code 中打开 /mcp 检查连接。"
+  },
+  "app.mcp.cursor-step": {
+    "message": "将以下条目添加到 ~/.cursor/mcp.json，对所有项目生效；或添加到项目的 .cursor/mcp.json。已有 mcpServers 时，请合并条目。"
+  },
+  "app.mcp.vscode-step": {
+    "message": "打开命令面板，运行“MCP: Add Server”。选择 HTTP，输入启动器的服务地址，命名为 axolotl，然后选择配置保存位置。"
+  },
+  "app.mcp.after-setup": {
+    "message": "开始工作前，让 Agent 先请求连接启动器。普通访问模式下，需要在启动器中确认连接。"
+  },
+  "app.mcp.official-guide": {
+    "message": "官方接入文档"
+  },
+  "app.mcp.client-label": {
+    "message": "AI 客户端"
+  },
+  "app.mcp.connection-title": {
+    "message": "允许 AI 连接？"
+  },
+  "app.mcp.connection-description": {
+    "message": "{client} 正在请求访问你的启动器。"
+  },
+  "app.mcp.allow-connection": {
+    "message": "允许连接"
+  },
+  "app.mcp.deny-connection": {
+    "message": "拒绝"
+  },
+  "app.mcp.connected": {
+    "message": "AI 已连接"
+  },
+  "app.mcp.disconnect": {
+    "message": "断开 {client} 的连接"
+  },
+  "app.mcp.debug-title": {
+    "message": "MCP 连接预览"
+  },
+  "app.mcp.debug-description": {
+    "message": "模拟连接请求、任务完成或连接中断，不会连接外部客户端。"
+  },
+  "app.mcp.debug-client": {
+    "message": "预览 Agent"
+  },
+  "app.mcp.debug-connect": {
+    "message": "模拟连接"
+  },
+  "app.mcp.debug-finish": {
+    "message": "模拟任务完成"
+  },
+  "app.mcp.debug-interrupt": {
+    "message": "模拟连接中断"
+  },
+  "app.mcp.debug-idle": {
+    "message": "未连接"
+  },
+  "app.mcp.debug-pending": {
+    "message": "等待确认"
+  },
+  "app.mcp.debug-active": {
+    "message": "已连接 · 预览"
+  },
+  "app.mcp.client-search": {
+    "message": "MCP 模型上下文协议 Codex Claude Code Cursor VS Code 安装 连接 智能体 Agent"
+  },
   "app.project.additional-details-failed": {
     "message": "部分项目详情加载失败。"
   },

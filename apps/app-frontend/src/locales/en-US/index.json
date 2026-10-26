@@ -1,4 +1,139 @@
 {
+  "app.settings.tabs.mcp": {
+    "message": "MCP"
+  },
+  "app.mcp.introduction": {
+    "message": "Connect an AI client to manage your launcher through Model Context Protocol."
+  },
+  "app.mcp.preview-notice": {
+    "message": "MCP connections are not available yet. Explore access settings and client setup below."
+  },
+  "app.mcp.access-title": {
+    "message": "Access permissions"
+  },
+  "app.mcp.full-access": {
+    "message": "Full access mode"
+  },
+  "app.mcp.full-access-description": {
+    "message": "Allow connections without approval, deletion tools, and direct control of the launcher interface."
+  },
+  "app.mcp.standard-mode": {
+    "message": "Standard access"
+  },
+  "app.mcp.full-mode": {
+    "message": "Full access"
+  },
+  "app.mcp.manual-approval": {
+    "message": "Approve each connection before an agent can act."
+  },
+  "app.mcp.no-deletion": {
+    "message": "Deletion tools are unavailable."
+  },
+  "app.mcp.tools-only": {
+    "message": "Agents use launcher tools and cannot directly control the interface."
+  },
+  "app.mcp.full-mode-notice": {
+    "message": "Agents can connect without approval, delete data, and directly control the interface. Only connect clients you trust."
+  },
+  "app.mcp.disconnect-hint": {
+    "message": "While connected, you can click “AI connected” in the title bar to disconnect at any time."
+  },
+  "app.mcp.warning-title": {
+    "message": "Enable full access mode?"
+  },
+  "app.mcp.warning-description": {
+    "message": "Connected agents will be able to act without connection approval, use deletion tools, and control the launcher interface. Mistakes or malicious instructions could delete worlds and instances, change files, or expose private data."
+  },
+  "app.mcp.warning-session": {
+    "message": "Changing access mode disconnects the current session. The next connection uses the new permissions."
+  },
+  "app.mcp.acknowledge": {
+    "message": "I understand the risks and trust the AI clients I connect."
+  },
+  "app.mcp.enable-full-access": {
+    "message": "Enable full access"
+  },
+  "app.mcp.cancel": {
+    "message": "Cancel"
+  },
+  "app.mcp.setup-title": {
+    "message": "Connect your AI client"
+  },
+  "app.mcp.setup-description": {
+    "message": "Choose a client to view its setup instructions."
+  },
+  "app.mcp.endpoint-notice": {
+    "message": "The examples use MCP_URL as a placeholder. Replace it with the launcher’s service URL when MCP becomes available, then keep the launcher running."
+  },
+  "app.mcp.codex-step": {
+    "message": "Run this command in a terminal. Use codex mcp list to verify the server configuration."
+  },
+  "app.mcp.claude-step": {
+    "message": "Run this command in a terminal. Open /mcp in Claude Code to check the connection."
+  },
+  "app.mcp.cursor-step": {
+    "message": "Add this entry to ~/.cursor/mcp.json for all projects, or .cursor/mcp.json for the current project. Merge it with any existing mcpServers entries."
+  },
+  "app.mcp.vscode-step": {
+    "message": "Open the Command Palette and run “MCP: Add Server”. Choose HTTP, enter the launcher’s service URL, name it axolotl, and select a configuration location."
+  },
+  "app.mcp.after-setup": {
+    "message": "Ask the agent to connect to the launcher before starting work. In standard access mode, approve the connection in the launcher."
+  },
+  "app.mcp.official-guide": {
+    "message": "Official setup guide"
+  },
+  "app.mcp.client-label": {
+    "message": "AI client"
+  },
+  "app.mcp.connection-title": {
+    "message": "Allow AI to connect?"
+  },
+  "app.mcp.connection-description": {
+    "message": "{client} is requesting access to your launcher."
+  },
+  "app.mcp.allow-connection": {
+    "message": "Allow connection"
+  },
+  "app.mcp.deny-connection": {
+    "message": "Decline"
+  },
+  "app.mcp.connected": {
+    "message": "AI connected"
+  },
+  "app.mcp.disconnect": {
+    "message": "Disconnect {client}"
+  },
+  "app.mcp.debug-title": {
+    "message": "MCP connection preview"
+  },
+  "app.mcp.debug-description": {
+    "message": "Simulate a connection request, task completion, or an interrupted connection. No external client is connected."
+  },
+  "app.mcp.debug-client": {
+    "message": "Preview agent"
+  },
+  "app.mcp.debug-connect": {
+    "message": "Simulate connection"
+  },
+  "app.mcp.debug-finish": {
+    "message": "Simulate task completion"
+  },
+  "app.mcp.debug-interrupt": {
+    "message": "Simulate connection loss"
+  },
+  "app.mcp.debug-idle": {
+    "message": "Disconnected"
+  },
+  "app.mcp.debug-pending": {
+    "message": "Waiting for approval"
+  },
+  "app.mcp.debug-active": {
+    "message": "Connected · preview"
+  },
+  "app.mcp.client-search": {
+    "message": "MCP Model Context Protocol Codex Claude Code Cursor VS Code installation connection agent"
+  },
   "app.project.additional-details-failed": {
     "message": "Some project details could not be loaded."
   },

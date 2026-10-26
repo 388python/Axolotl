@@ -108,6 +108,7 @@ import { minecraftLaunchErrorKey } from '@/composables/useMinecraftLaunchError'
 import { setupMojangAuthMonitor, useMojangAuthStatus } from '@/composables/useMojangAuth'
 import { useNetworkStatus } from '@/composables/useNetworkStatus'
 import { AxolotlBrandConfig, config, getOfficialLabrinthBaseUrl } from '@/config'
+import McpConnectionOverlay from '@/features/mcp/McpConnectionOverlay.vue'
 import { trackEvent } from '@/helpers/analytics'
 import { get_user, get_version } from '@/helpers/cache.js'
 import { configureCurseForgeManualDownloadWatcher } from '@/helpers/curseforge'
@@ -2916,6 +2917,15 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
             'has-css-window-border': cssWindowBorder,
         }"
     >
+        <McpConnectionOverlay
+            :rounded="
+                !isMaximized &&
+                !!(
+                    (themeStore.customBackgroundPath && !themeStore.transparentBackground) ||
+                    (themeStore.transparentBackground && !nativeDecorations)
+                )
+            "
+        />
         <Transition name="fade">
             <div
                 v-if="restarting"
