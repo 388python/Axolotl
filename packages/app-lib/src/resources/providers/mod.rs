@@ -121,7 +121,7 @@ impl ProviderQuery {
             || matches!(value, ProviderValue::Matches(matches) if matches.is_empty())
             || matches!(value, ProviderValue::Identified(matches) if matches.is_empty())
         {
-            return 6 * 60 * 60;
+            return 60 * 60;
         }
         match self {
             Self::Search { .. } | Self::SearchProtocol { .. } => 60,
@@ -134,7 +134,7 @@ impl ProviderQuery {
             | Self::ReleaseProtocol { .. }
             | Self::Changelog { .. }
             | Self::Identify { .. }
-            | Self::IdentifyExport { .. } => 24 * 60 * 60,
+            | Self::IdentifyExport { .. } => 60 * 60,
         }
     }
 

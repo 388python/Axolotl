@@ -22,7 +22,8 @@ use crate::launcher::quick_play_version::{
     QuickPlayServerVersion, QuickPlayVersion,
 };
 use crate::server_address::{ServerAddress, parse_server_address};
-use crate::state::server_join_log::JoinLogEntry;
+use crate::state::store::Collection as _;
+use crate::state::store::join_log::{JoinLog, JoinLogEntry, JoinLogKey};
 use crate::state::{
     CacheBehaviour, Credentials, Instance, InstanceInstallStage,
     InstanceLaunchContext, InstanceLink, JavaVersion, MemorySettings,
@@ -2765,13 +2766,17 @@ pub async fn launch_minecraft(
             } => Some((original_host.clone(), *original_port)),
         };
         if let Some((host, port)) = original
-            && let Err(e) = (JoinLogEntry {
-                instance_id: instance.id.clone(),
-                host,
-                port,
-                join_time: Utc::now(),
-            })
-            .upsert(&state.pool)
+            && let Err(e) = JoinLog::set(
+                &state.data,
+                &JoinLogKey {
+                    instance_id: instance.id.clone(),
+                    host,
+                    port,
+                },
+                Some(&JoinLogEntry {
+                    join_time: Utc::now(),
+                }),
+            )
             .await
         {
             tracing::warn!("Failed to write server join log entry: {e}");

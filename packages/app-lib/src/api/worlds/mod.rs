@@ -5,9 +5,9 @@ use crate::launcher::get_loader_version_from_profile;
 use crate::launcher::instance_runtime::InstanceRuntimeAdapter;
 use crate::server_address::{parse_server_address, resolve_server_address};
 use crate::state::attached_world_data::AttachedWorldData;
-use crate::state::{
-    InstanceInstallStage, attached_world_data, server_join_log,
-};
+use crate::state::store::Collection as _;
+use crate::state::store::join_log::JoinLog;
+use crate::state::{InstanceInstallStage, attached_world_data};
 use crate::util::protocol_version::OLD_PROTOCOL_VERSIONS;
 pub use crate::util::protocol_version::ProtocolVersion;
 
@@ -33,6 +33,7 @@ use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -552,9 +553,13 @@ async fn get_server_worlds_in_instance(
     }
 
     let state = State::get().await?;
-    let join_log = server_join_log::get_joins(instance_id, &state.pool)
-        .await
-        .ok();
+    let join_log = JoinLog::get_all(&state.data).await.ok().map(|records| {
+        records
+            .into_iter()
+            .filter(|(key, _)| key.instance_id == instance_id)
+            .map(|(key, entry)| ((key.host, key.port), entry.join_time))
+            .collect::<HashMap<_, _>>()
+    });
 
     for (index, server) in servers.into_iter().enumerate() {
         if server.hidden {
@@ -844,19 +849,19 @@ async fn get_world_session_lock(world: &Path) -> Result<tokio::fs::File> {
         .truncate(false)
         .open(&lock_path)
         .await?;
-    file.write_all("☃".as_bytes()).await?;
-    file.sync_all().await?;
-    let locked = file.try_lock_exclusive()?;
-    locked.then_some(file).ok_or_else(|| {
-        io::IOError::IOPathError {
+    if !file.try_lock_exclusive()? {
+        return Err(io::IOError::IOPathError {
             source: std::io::Error::new(
                 std::io::ErrorKind::ResourceBusy,
                 "already locked by Minecraft",
             ),
             path: lock_path.to_string_lossy().into_owned(),
         }
-        .into()
-    })
+        .into());
+    }
+    file.write_all("☃".as_bytes()).await?;
+    file.sync_all().await?;
+    Ok(file)
 }
 
 async fn try_get_world_session_lock(

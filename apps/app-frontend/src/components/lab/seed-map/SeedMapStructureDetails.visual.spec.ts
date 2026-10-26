@@ -22,7 +22,7 @@ vi.mock('@/lab/seed-map/advanced', () => ({
     getSeedMapStructureDetails: calls.details,
     getSeedMapContainerLoot: calls.loot,
 }))
-vi.mock('@/lab/recipe-generator/item-images', () => ({ loadMinecraftItemImage: vi.fn() }))
+vi.mock('@/lab/shared/minecraft/item-images', () => ({ loadMinecraftItemImage: vi.fn() }))
 vi.mock('@modrinth/ui', async () => {
     const { ref } = await import('vue')
     const { IntlMessageFormat } = await import('intl-messageformat')

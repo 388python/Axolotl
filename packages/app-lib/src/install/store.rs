@@ -75,6 +75,16 @@ pub async fn insert(
     status: InstallJobStatus,
     app_state: &State,
 ) -> crate::Result<InstallJobRecord> {
+    insert_with_content_plan(id, state, status, None, app_state).await
+}
+
+pub(crate) async fn insert_with_content_plan(
+    id: Uuid,
+    state: &InstallJobState,
+    status: InstallJobStatus,
+    plan_id: Option<&str>,
+    app_state: &State,
+) -> crate::Result<InstallJobRecord> {
     let now = Utc::now();
     let kind = state.request.kind();
     let json = serde_json::to_string(state)?;
@@ -85,6 +95,7 @@ pub async fn insert(
     let created = now.timestamp();
     let modified = created;
 
+    let mut tx = app_state.pool.begin().await?;
     sqlx::query!(
         "
         INSERT INTO install_jobs (
@@ -100,8 +111,18 @@ pub async fn insert(
         created,
         modified,
     )
-    .execute(&app_state.pool)
+    .execute(&mut *tx)
     .await?;
+    if let Some(plan_id) = plan_id {
+        sqlx::query(
+            "INSERT INTO content_update_jobs(plan_id, job_id) VALUES (?, ?)",
+        )
+        .bind(plan_id)
+        .bind(&id_value)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
 
     get(id, app_state).await?.ok_or_else(|| {
         crate::ErrorKind::OtherError(format!(

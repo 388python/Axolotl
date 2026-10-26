@@ -1,6 +1,6 @@
 import atlasLayoutData from './assets/texture-atlas.json'
 import atlasUrl from './assets/texture-atlas.png?url'
-import type { CustomItem, CustomTag, JavaVersionId, RecipeSlotContext } from './types.ts'
+import type { JavaVersionId } from './types.ts'
 
 export type TextureAtlas = {
     url: string
@@ -89,23 +89,6 @@ export async function loadVanillaTags(version: JavaVersionId): Promise<Record<st
     const promise = loader ? loader().then(({ default: tags }) => tags) : Promise.resolve({})
     tagCache.set(version, promise)
     return promise
-}
-
-export function buildSlotContext(
-    customItems: CustomItem[],
-    customTags: CustomTag[],
-    resources: LoadedVersionResources,
-): RecipeSlotContext {
-    const customItemsByUid: Record<string, CustomItem> = {}
-    for (const item of customItems) customItemsByUid[item.uid] = item
-    const customTagsByUid: Record<string, CustomTag> = {}
-    for (const tag of customTags) customTagsByUid[tag.uid] = tag
-    return {
-        itemsById: resources.itemsById,
-        customItemsByUid,
-        customTagsByUid,
-        vanillaTags: resources.vanillaTags,
-    }
 }
 
 export function clearResourceCaches(): void {

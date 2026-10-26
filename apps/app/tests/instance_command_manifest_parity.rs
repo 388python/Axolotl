@@ -92,6 +92,7 @@ fn instance_runtime_handlers_are_registered_in_build_manifest() {
         missing.join(", ")
     );
     for command in [
+        "instance_apply_content_update_plan",
         "instance_discard_upgrade_plan",
         "instance_get_post_upgrade_notice",
         "instance_dismiss_post_upgrade_notice",

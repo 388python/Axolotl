@@ -13,7 +13,7 @@ function loadImage(source: string): Promise<HTMLImageElement> {
     })
 }
 
-/** Reuses the recipe atlas for map details and loot without packaging extra images. */
+/** Reuses the shared item atlas for map details and loot without packaging extra images. */
 export function loadMinecraftItemImage(id: string): Promise<HTMLImageElement> {
     const cached = cache.get(id)
     if (cached) return cached
