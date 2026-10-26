@@ -2301,6 +2301,7 @@ useHead(() => ({
         font-size: 0.75rem;
         font-weight: 800;
         letter-spacing: 0.1em;
+        text-transform: uppercase;
         white-space: nowrap;
     }
 
@@ -2593,11 +2594,6 @@ useHead(() => ({
     }
 
     .feature {
-        background: radial-gradient(
-            50% 50% at 50% 50%,
-            rgba(255, 255, 255, 0.35) 0%,
-            rgba(255, 255, 255, 0.27) 100%
-        ) !important;
         box-shadow: 2px 2px 12px 0px rgba(0, 0, 0, 0.16) !important;
         border: none !important;
     }
