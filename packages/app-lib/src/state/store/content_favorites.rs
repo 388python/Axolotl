@@ -1,7 +1,7 @@
 //! The content a person keeps for later.
 
 use super::{Collection, Handle};
-use crate::state::content_favorites::{
+use crate::state::content_types::{
     ContentFavoriteProvider, ContentFavoriteType,
 };
 
@@ -46,14 +46,16 @@ impl Collection for ContentFavorites {
             return Ok(());
         };
 
+        // Writing a favorite that exists refreshes what it points at and keeps
+        // the moment it was first saved, so two writes of one favorite cannot
+        // read a moment the other has already moved past.
         sqlx::query(
             "
             INSERT INTO content_favorites
                 (provider, project_id, content_type, saved_at)
             VALUES (?, ?, ?, ?)
             ON CONFLICT (provider, project_id) DO UPDATE SET
-                content_type = excluded.content_type,
-                saved_at = excluded.saved_at
+                content_type = excluded.content_type
             ",
         )
         .bind(provider)
@@ -80,9 +82,11 @@ impl Collection for ContentFavorites {
         .fetch_optional(handle.pool())
         .await?;
 
-        Ok(row.map(|(content_type, saved_at)| Self::Record {
-            content_type: to_type(content_type),
-            saved_at,
+        Ok(row.and_then(|(content_type, saved_at)| {
+            Some(Self::Record {
+                content_type: to_type(&content_type)?,
+                saved_at,
+            })
         }))
     }
 
@@ -131,42 +135,48 @@ impl Collection for ContentFavorites {
 
         Ok(rows
             .into_iter()
-            .map(|(provider, project_id, content_type, saved_at)| {
-                (
+            .filter_map(|(provider, project_id, content_type, saved_at)| {
+                Some((
                     ContentFavoriteKey {
-                        provider: to_provider(provider),
+                        provider: to_provider(&provider)?,
                         project_id,
                     },
                     ContentFavoriteRecord {
-                        content_type: to_type(content_type),
+                        content_type: to_type(&content_type)?,
                         saved_at,
                     },
-                )
+                ))
             })
             .collect())
     }
 }
 
-fn to_provider(provider: String) -> ContentFavoriteProvider {
-    ContentFavoriteProvider::parse(&provider).unwrap_or_else(|error| {
-        tracing::warn!(
-            %provider,
-            %error,
-            "Reading a favorite whose provider this build does not know"
-        );
-        ContentFavoriteProvider::Modrinth
-    })
+/// The provider a stored favorite names, or nothing when this build does not
+/// know it: a favorite is only useful while its identity can be read.
+fn to_provider(provider: &str) -> Option<ContentFavoriteProvider> {
+    ContentFavoriteProvider::parse(provider)
+        .map_err(|error| {
+            tracing::warn!(
+                %provider,
+                %error,
+                "Skipping a favorite whose provider this build does not know"
+            );
+            error
+        })
+        .ok()
 }
 
-fn to_type(content_type: String) -> ContentFavoriteType {
-    ContentFavoriteType::parse(&content_type).unwrap_or_else(|error| {
-        tracing::warn!(
-            %content_type,
-            %error,
-            "Reading a favorite whose content type this build does not know"
-        );
-        ContentFavoriteType::Mod
-    })
+fn to_type(content_type: &str) -> Option<ContentFavoriteType> {
+    ContentFavoriteType::parse(content_type)
+        .map_err(|error| {
+            tracing::warn!(
+                %content_type,
+                %error,
+                "Skipping a favorite whose content type this build does not know"
+            );
+            error
+        })
+        .ok()
 }
 
 #[cfg(test)]
@@ -216,6 +226,41 @@ mod tests {
         assert_eq!(
             ContentFavorites::get(&handle, &favorite).await.unwrap(),
             None
+        );
+    }
+
+    #[tokio::test]
+    async fn saving_a_favorite_again_keeps_the_moment_it_was_first_saved() {
+        let handle = handle().await;
+        let favorite = key(ContentFavoriteProvider::Modrinth, "sodium");
+
+        ContentFavorites::set(
+            &handle,
+            &favorite,
+            Some(&ContentFavoriteRecord {
+                content_type: ContentFavoriteType::Mod,
+                saved_at: 1,
+            }),
+        )
+        .await
+        .unwrap();
+        ContentFavorites::set(
+            &handle,
+            &favorite,
+            Some(&ContentFavoriteRecord {
+                content_type: ContentFavoriteType::Shader,
+                saved_at: 2,
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            ContentFavorites::get(&handle, &favorite).await.unwrap(),
+            Some(ContentFavoriteRecord {
+                content_type: ContentFavoriteType::Shader,
+                saved_at: 1,
+            })
         );
     }
 
@@ -273,6 +318,47 @@ mod tests {
             .execute(handle.pool())
             .await
             .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_favorite_whose_identity_cannot_be_read_is_skipped() {
+        let handle = handle().await;
+        ContentFavorites::set(
+            &handle,
+            &key(ContentFavoriteProvider::Modrinth, "sodium"),
+            Some(&ContentFavoriteRecord {
+                content_type: ContentFavoriteType::Mod,
+                saved_at: 1,
+            }),
+        )
+        .await
+        .unwrap();
+        // The table refuses these values, so they are forced in to stand for a
+        // database a later build may have left behind.
+        sqlx::raw_sql(
+            "PRAGMA ignore_check_constraints = ON;
+             INSERT INTO content_favorites
+                (provider, project_id, content_type, saved_at)
+             VALUES ('unknown', 'bad-provider', 'mod', 3),
+                ('modrinth', 'bad-type', 'modpack', 4);
+             PRAGMA ignore_check_constraints = OFF;",
+        )
+        .execute(handle.pool())
+        .await
+        .unwrap();
+
+        let stored = ContentFavorites::get_all(&handle).await.unwrap();
+
+        assert_eq!(
+            stored,
+            vec![(
+                key(ContentFavoriteProvider::Modrinth, "sodium"),
+                ContentFavoriteRecord {
+                    content_type: ContentFavoriteType::Mod,
+                    saved_at: 1,
+                },
+            )]
         );
     }
 }

@@ -97,6 +97,7 @@ mod legacy_converter;
 
 pub mod attached_world_data;
 pub(crate) mod content_store;
+pub(crate) mod content_types;
 pub mod instance_groups;
 pub(crate) mod store;
 

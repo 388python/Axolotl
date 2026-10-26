@@ -1,6 +1,9 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+pub use crate::state::content_types::{
+    ContentFavoriteProvider, ContentFavoriteType,
+};
 use crate::state::store::content_favorites::{
     ContentFavoriteKey, ContentFavoriteRecord, ContentFavorites,
 };
@@ -8,69 +11,6 @@ use crate::state::store::resource_source_projects::{
     ResourceSourceProjectKey, ResourceSourceProjects,
 };
 use crate::state::store::{Collection as _, Handle};
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ContentFavoriteProvider {
-    Modrinth,
-    Curseforge,
-    Mcarchive,
-}
-
-impl ContentFavoriteProvider {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Modrinth => "modrinth",
-            Self::Curseforge => "curseforge",
-            Self::Mcarchive => "mcarchive",
-        }
-    }
-
-    pub(crate) fn parse(value: &str) -> crate::Result<Self> {
-        match value {
-            "modrinth" => Ok(Self::Modrinth),
-            "curseforge" => Ok(Self::Curseforge),
-            "mcarchive" => Ok(Self::Mcarchive),
-            _ => Err(crate::ErrorKind::InputError(format!(
-                "Unsupported content favorite provider: {value}"
-            ))
-            .into()),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ContentFavoriteType {
-    Mod,
-    Resourcepack,
-    Datapack,
-    Shader,
-}
-
-impl ContentFavoriteType {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Mod => "mod",
-            Self::Resourcepack => "resourcepack",
-            Self::Datapack => "datapack",
-            Self::Shader => "shader",
-        }
-    }
-
-    pub(crate) fn parse(value: &str) -> crate::Result<Self> {
-        match value {
-            "mod" => Ok(Self::Mod),
-            "resourcepack" => Ok(Self::Resourcepack),
-            "datapack" => Ok(Self::Datapack),
-            "shader" => Ok(Self::Shader),
-            _ => Err(crate::ErrorKind::InputError(format!(
-                "Unsupported content favorite type: {value}"
-            ))
-            .into()),
-        }
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ContentFavorite {
@@ -126,19 +66,25 @@ pub async fn add(
         provider: favorite.provider,
         project_id: favorite.project_id.trim().to_string(),
     };
-    // Re-adding a favorite keeps the moment it was first saved, so the list
-    // only moves when a person saves something new.
-    let saved_at = match ContentFavorites::get(handle, &key).await? {
-        Some(existing) => existing.saved_at,
-        None => Utc::now().timestamp_millis(),
-    };
-    let record = ContentFavoriteRecord {
-        content_type: favorite.content_type,
-        saved_at,
-    };
-
-    ContentFavorites::set(handle, &key, Some(&record)).await?;
-    with_resource(handle, key, record).await
+    // The write keeps the moment an existing favorite was first saved, so the
+    // record the collection hands back is the one the list is ordered by.
+    ContentFavorites::set(
+        handle,
+        &key,
+        Some(&ContentFavoriteRecord {
+            content_type: favorite.content_type,
+            saved_at: Utc::now().timestamp_millis(),
+        }),
+    )
+    .await?;
+    let stored = ContentFavorites::get(handle, &key).await?;
+    match stored {
+        Some(record) => with_resource(handle, key, record).await,
+        None => Err(crate::ErrorKind::OtherError(
+            "The favorite was removed while it was being saved".to_string(),
+        )
+        .into()),
+    }
 }
 
 pub async fn remove(
