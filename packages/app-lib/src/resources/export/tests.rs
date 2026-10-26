@@ -1076,7 +1076,14 @@ async fn frozen_export_job_survives_session_close_and_preserves_instance_stage()
     pending.scan.instance_id = instance.instance.id.clone();
     let session = pending.scan.session_id.clone();
     service.register_export(pending.scan).unwrap();
-    let permit = state.install_job_semaphore.acquire().await.unwrap();
+    let permit = state
+        .install_job_semaphore
+        .acquire_many(
+            crate::util::download::constants::MAX_CONCURRENT_INSTALL_JOBS
+                as u32,
+        )
+        .await
+        .unwrap();
     let output = output_dir.path().join("pending.zip");
     let job = super::job::queue(
         &service,

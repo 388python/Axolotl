@@ -497,10 +497,6 @@ const messages = defineMessages({
         defaultMessage:
             'Updates only content added after the modpack was installed. Modpack files are not changed.',
     },
-    contentOperationTimedOut: {
-        id: 'app.instance.mods.content-operation-timeout',
-        defaultMessage: 'Timed out waiting for another content operation to finish. Try again.',
-    },
     contentRefreshWarningTitle: {
         id: 'app.instance.mods.content-refresh-warning.title',
         defaultMessage: 'Some online details are unavailable',
@@ -1320,24 +1316,6 @@ const updaterReleaseRefs = computed(
         ),
 )
 const contentUpdateSubmitting = ref(false)
-const CONTENT_OPERATION_TIMEOUT_MS = 30_000
-
-async function withContentOperationTimeout<T>(operation: Promise<T>): Promise<T> {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined
-    try {
-        return await Promise.race([
-            operation,
-            new Promise<T>((_, reject) => {
-                timeoutId = setTimeout(
-                    () => reject(new Error(formatMessage(messages.contentOperationTimedOut))),
-                    CONTENT_OPERATION_TIMEOUT_MS,
-                )
-            }),
-        ])
-    } finally {
-        if (timeoutId) clearTimeout(timeoutId)
-    }
-}
 const updatingModpack = ref(false)
 const pendingModpackUpdateVersion = ref<Labrinth.Versions.v2.Version | null>(null)
 const isModpackUpdateDowngrade = ref(false)
@@ -2367,10 +2345,9 @@ async function handleModpackUpdateConfirm() {
     contentUpdateSubmitting.value = true
     let succeeded = false
     try {
-        const plan = await withContentOperationTimeout(
-            plan_content_updates(props.instance.id, 'pack', version.id),
-        )
-        await withContentOperationTimeout(apply_content_update_plan(plan.id))
+        const plan = await plan_content_updates(props.instance.id, 'pack', version.id)
+        const result = await apply_content_update_plan(plan.id)
+        if (result.status === 'queued') downloadManager.trackJob(result.job)
         await initProjects()
         succeeded = true
     } catch (error) {
@@ -2394,6 +2371,7 @@ async function handleModalUpdate(
     selectedVersion: Labrinth.Versions.v2.Version,
     event?: MouseEvent,
 ) {
+    if (contentUpdateSubmitting.value) return
     contentUpdateSubmitting.value = true
     let succeeded = false
     if (updatingModpack.value) {
