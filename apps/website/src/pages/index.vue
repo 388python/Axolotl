@@ -1136,51 +1136,43 @@ useHead(() => ({
             <div class="modrinth-feature-grid">
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="01"
                 >
-                    <div class="promise-meta"><GitGraphIcon /><span>01</span></div>
+                    <div class="promise-meta"><GitGraphIcon /></div>
                     <h3>{{ formatMessage(messages.adFree) }}</h3>
                     <p>{{ formatMessage(messages.adFreeDescription) }}</p>
                 </article>
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="02"
                 >
-                    <div class="promise-meta"><BoxesIcon /><span>02</span></div>
+                    <div class="promise-meta"><BoxesIcon /></div>
                     <h3>{{ formatMessage(messages.localized) }}</h3>
                     <p>{{ formatMessage(messages.localizedDescription) }}</p>
                 </article>
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="03"
                 >
-                    <div class="promise-meta"><GaugeIcon /><span>03</span></div>
+                    <div class="promise-meta"><GaugeIcon /></div>
                     <h3>{{ formatMessage(messages.performant) }}</h3>
                     <p>{{ formatMessage(messages.performantDescription) }}</p>
                 </article>
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="04"
                 >
-                    <div class="promise-meta"><SearchIcon aria-hidden="true" /><span>04</span></div>
+                    <div class="promise-meta"><SearchIcon aria-hidden="true" /></div>
                     <h3>{{ formatMessage(messages.dohSupport) }}</h3>
                     <p>{{ formatMessage(messages.dohSupportDescription) }}</p>
                 </article>
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="05"
                 >
-                    <div class="promise-meta">
-                        <DownloadIcon aria-hidden="true" /><span>05</span>
-                    </div>
+                    <div class="promise-meta"><DownloadIcon aria-hidden="true" /></div>
                     <h3>{{ formatMessage(messages.mirrorSupport) }}</h3>
                     <p>{{ formatMessage(messages.mirrorSupportDescription) }}</p>
                 </article>
                 <article
                     class="feature gradient-border promise-card col-span-2 min-h-[12.5rem] p-6"
-                    data-number="06"
                 >
-                    <div class="promise-meta"><BoxesIcon aria-hidden="true" /><span>06</span></div>
+                    <div class="promise-meta"><BoxesIcon aria-hidden="true" /></div>
                     <h3>{{ formatMessage(messages.minecraftSupport) }}</h3>
                     <p>{{ formatMessage(messages.minecraftSupportDescription) }}</p>
                 </article>
@@ -1930,16 +1922,8 @@ useHead(() => ({
 .modrinth-feature-grid .feature {
     padding: var(--gap-xl);
     z-index: 1;
-    background: radial-gradient(
-        50% 50% at 50% 50%,
-        rgba(44, 48, 79, 0.35) 0%,
-        rgba(32, 35, 50, 0.27) 100%
-    );
-    box-shadow:
-        0 1.25rem 3rem rgb(0 0 0 / 12%),
-        0 0 4rem rgb(57 61 94 / 20%) inset;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--surface-2);
+    box-shadow: 0 1.25rem 3rem rgb(0 0 0 / 12%);
     overflow: hidden;
 }
 
@@ -1947,19 +1931,12 @@ useHead(() => ({
     .promise-meta {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         color: var(--color-brand);
 
         svg {
             width: 1.35rem;
             height: 1.35rem;
-        }
-
-        span {
-            color: var(--color-brand);
-            font-size: 0.75rem;
-            font-weight: 800;
-            letter-spacing: 0.09em;
         }
     }
 
@@ -1975,18 +1952,6 @@ useHead(() => ({
         color: var(--color-secondary);
         font-size: 0.9rem;
         line-height: 1.6;
-    }
-
-    &::after {
-        position: absolute;
-        right: -1.75rem;
-        bottom: -2.25rem;
-        z-index: -1;
-        color: rgb(255 255 255 / 4%);
-        content: attr(data-number);
-        font-size: 8rem;
-        font-weight: 800;
-        line-height: 1;
     }
 }
 
@@ -2110,10 +2075,6 @@ useHead(() => ({
 
 .light-mode .axolotl-highlights {
     background: #f8f7f8;
-}
-
-.light-mode .promise-card::after {
-    color: rgb(0 0 0 / 5%);
 }
 
 .light-mode .mods .row:not(.header):hover {
@@ -2336,12 +2297,10 @@ useHead(() => ({
     }
 
     .section-badge {
-        border: 1px solid color-mix(in srgb, var(--color-brand) 40%, transparent);
-        background-color: var(--color-brand-highlight);
         color: var(--color-brand);
-        border-radius: 0;
-        width: min-content;
-        padding: var(--gap-lg) var(--gap-xl);
+        font-size: 0.75rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
         white-space: nowrap;
     }
 
@@ -2639,9 +2598,7 @@ useHead(() => ({
             rgba(255, 255, 255, 0.35) 0%,
             rgba(255, 255, 255, 0.27) 100%
         ) !important;
-        box-shadow:
-            2px 2px 64px 0px rgba(255, 255, 255, 0.45) inset,
-            2px 2px 12px 0px rgba(0, 0, 0, 0.16) !important;
+        box-shadow: 2px 2px 12px 0px rgba(0, 0, 0, 0.16) !important;
         border: none !important;
     }
 
