@@ -810,13 +810,36 @@ async fn retained_local_jar_ranges_filter_updates_even_without_online_parent_ide
     .map(|(reference, version)| (reference, version.to_string()))
     .collect();
     let (_temp, mut service) =
-        service(vec![old.clone(), compatible.clone(), latest]).await;
+        service(vec![old.clone(), compatible.clone(), latest.clone()]).await;
     Arc::get_mut(&mut service).unwrap().artifact_metadata_reader =
         Arc::new(FixtureMetadataReader(versions));
     let mut local_parent = installed(&parent, "parent", "mods/local.jar");
     local_parent.artifact = None;
     local_parent.known_artifacts.clear();
     let child = installed(&old, "child", "mods/child.jar");
+    let discovery = crate::resources::updates::check_entries(
+        &service,
+        vec![local_parent.clone(), child.clone()],
+        crate::resources::updates::ResourceUpdateCheck {
+            entries: vec![],
+            releases: Default::default(),
+            unresolved: vec![],
+            failures: vec![],
+            failed_entries: vec![],
+        },
+        &target(),
+        &SourceId::modrinth(),
+        |_| {},
+        &CancellationToken::new(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        discovery.releases.get(&child.entry_id),
+        Some(&latest.reference),
+    );
+    // Candidate JAR metadata is loaded only when reviewing the actual update.
+    assert!(service.artifact_metadata.is_empty());
     let mut automatic = selection("child", &old, Some("child"));
     automatic.release = ReleaseSelection::Automatic;
     let mut request = draft(vec![automatic], ResourceOperationIntent::Update);

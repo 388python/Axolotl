@@ -44,22 +44,28 @@ pub async fn check(
 ) -> ResourceResult<ResourceUpdateCheck> {
     let state = crate::State::get().await?;
     let service = state.resources().await?;
-    let hydrated = match entry_ids {
-        Some(ids) => {
-            installed::hydrate_update_batch_with_service(
-                &state,
-                &instance_id,
-                cancel,
-                ids,
-                service,
-            )
-            .await?
-        }
+    let all_ids;
+    let ids = match entry_ids {
+        Some(ids) => ids,
         None => {
-            installed::hydrate_with_failures(&state, &instance_id, cancel)
+            all_ids = plans::installed(&state.pool, &instance_id)
                 .await?
+                .into_iter()
+                .map(|entry| entry.entry_id)
+                .collect::<Vec<_>>();
+            &all_ids
         }
     };
+    // Discover against the displayed content set. A full planning hydration
+    // would rescan files and resolve retained dependencies before any result.
+    let hydrated = installed::hydrate_update_batch_with_service(
+        &state,
+        &instance_id,
+        cancel,
+        ids,
+        service,
+    )
+    .await?;
     let instance = crate::state::get_instance(&instance_id, &state.pool)
         .await?
         .ok_or_else(|| {
@@ -89,26 +95,15 @@ pub async fn check(
     for entry_id in &result.failed_entries {
         on_progress(result.progress_for(entry_id, false));
     }
-    // Visible-entry discovery must not hydrate every retained parent. The
-    // operation planner verifies the complete dependency graph before applying
-    // an update; explicit full-instance checks also retain that validation here.
-    let requirements = if entry_ids.is_none() {
-        let local =
-            plans::requirements::local_metadata(&state.pool, &instance_id)
-                .await?;
-        service
-            .retained_requirements(&[], &hydrated.entries, &local, cancel)
-            .await?
-    } else {
-        Vec::new()
-    };
+    // Discovery reports newer compatible releases. Dependency graph and exact
+    // candidate JAR validation belong to the reviewed apply plan, where a
+    // failure can be handled without suppressing every update in the instance.
     check_entries(
         service,
         hydrated.entries,
         result,
         &target,
         &preferred,
-        &requirements,
         on_progress,
         cancel,
     )
@@ -121,7 +116,6 @@ pub(crate) async fn check_entries(
     mut result: ResourceUpdateCheck,
     target: &ipc::ResourceTarget,
     preferred: &SourceId,
-    requirements: &[plans::requirements::RetainedRequirement],
     on_progress: impl Fn(ResourceUpdateProgress) + Send + Sync,
     cancel: &CancellationToken,
 ) -> ResourceResult<ResourceUpdateCheck> {
@@ -132,15 +126,8 @@ pub(crate) async fn check_entries(
         .collect::<Vec<_>>();
     let mut checks = stream::iter(entries)
         .map(|entry| async move {
-            let outcome = check_entry(
-                service,
-                &entry,
-                target,
-                preferred,
-                requirements,
-                cancel,
-            )
-            .await;
+            let outcome =
+                check_entry(service, &entry, target, preferred, cancel).await;
             (entry, outcome)
         })
         .buffer_unordered(8);
@@ -180,7 +167,6 @@ async fn check_entry(
     entry: &InstalledResource,
     target: &ipc::ResourceTarget,
     preferred: &SourceId,
-    requirements: &[plans::requirements::RetainedRequirement],
     cancel: &CancellationToken,
 ) -> ResourceResult<Option<SourceReleaseRef>> {
     if cancel.is_cancelled() {
@@ -204,16 +190,13 @@ async fn check_entry(
         entry_id: Some(entry.entry_id.clone()),
     };
     let current = service.release(&artifact.release, None, cancel).await?;
-    let retained = service.requirements_for(&selection, requirements).await?;
     let (release, artifact, _) = service
-        .selected_release_with_requirements(
+        .selected_release_for_current(
             &selection,
             target,
             preferred,
             cancel,
             Some(&current),
-            &[],
-            &retained,
         )
         .await?;
     Ok(

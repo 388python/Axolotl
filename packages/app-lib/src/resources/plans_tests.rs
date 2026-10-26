@@ -2442,7 +2442,6 @@ async fn whole_instance_update_checks_run_concurrently_with_source_limits() {
             },
             &target(),
             &SourceId::modrinth(),
-            &[],
             |_| {},
             &CancellationToken::new(),
         )
