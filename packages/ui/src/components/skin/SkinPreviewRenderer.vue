@@ -42,6 +42,8 @@
             >
                 <slot name="nametag-badge" />
             </div>
+            <!-- The pixel font is deliberate: the nametag previews how the name
+                 renders in-game, so it must not follow the launcher UI font. -->
             <div v-if="nametag" class="px-3 py-1 rounded-md font-minecraft text-gray nametag-bg">
                 {{ nametagText }}
             </div>
