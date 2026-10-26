@@ -1034,7 +1034,13 @@ async fn cache_survives_close_and_reopen_with_a_separate_wal_database() {
     .unwrap();
     let value = project_value(SourceId::modrinth(), "project", "persistent");
     first
-        .put(&key, &value, 1800, first.generation().await, 1)
+        .put(
+            &key,
+            &value,
+            1800,
+            first.generation().await,
+            chrono::Utc::now().timestamp_micros(),
+        )
         .await;
     assert!(first.info().await.unwrap().size_bytes > 0);
     let path = first.path().to_path_buf();
@@ -1142,15 +1148,16 @@ async fn cache_clear_rejects_old_generation_and_late_older_responses() {
         &project_query("project"),
     )
     .unwrap();
+    let now = chrono::Utc::now().timestamp_micros();
     let old_generation = cache.generation().await;
     cache.clear().await.unwrap();
     cache
-        .put(&key, &ProviderValue::NotFound, 100, old_generation, 1)
+        .put(&key, &ProviderValue::NotFound, 100, old_generation, now)
         .await;
     assert!(cache.get(&key).await.is_none());
     let new = project_value(SourceId::modrinth(), "project", "new");
     cache
-        .put(&key, &new, 100, cache.generation().await, 3)
+        .put(&key, &new, 100, cache.generation().await, now + 2)
         .await;
     cache
         .put(
@@ -1158,7 +1165,7 @@ async fn cache_clear_rejects_old_generation_and_late_older_responses() {
             &ProviderValue::NotFound,
             100,
             cache.generation().await,
-            2,
+            now + 1,
         )
         .await;
     assert_eq!(cache.get(&key).await, Some(new));
@@ -3176,5 +3183,134 @@ fn launcher_cache_behaviour_maps_onto_the_service_policies() {
     assert_eq!(
         policy(Some(CacheBehaviour::Bypass)),
         CachePolicy::ForceRefresh
+    );
+}
+
+#[tokio::test]
+async fn legacy_long_lived_cache_is_revalidated_after_one_hour() {
+    let (_temp, cache) = cache().await;
+    let provider = MockProvider::new(100, None);
+    let service =
+        ResourceService::new(cache.clone(), vec![provider.clone()]).unwrap();
+    let query = project_query("project");
+    let key =
+        CacheKey::new("mock-v1".into(), SourceId::modrinth(), &query).unwrap();
+    let token = CancellationToken::new();
+    for value in [
+        ProviderValue::NotFound,
+        project_value(SourceId::modrinth(), "project", "cached"),
+    ] {
+        cache.clear().await.unwrap();
+        let started = chrono::Utc::now().timestamp_micros();
+        cache
+            .put(&key, &value, 86400, cache.generation().await, started)
+            .await;
+        assert_eq!(cache.get(&key).await, Some(value.clone()));
+        let probe = sqlx::SqlitePool::connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new().filename(cache.path()),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE resource_cache_entries SET retrieved_at = ?")
+            .bind(started - 3601 * 1_000_000)
+            .execute(&probe)
+            .await
+            .unwrap();
+        assert!(cache.get(&key).await.is_none());
+        assert_eq!(cache.get_with_freshness(&key).await, Some((value, false)));
+        provider.fail.store(true, Ordering::Release);
+        assert!(
+            service
+                .query(
+                    &SourceId::modrinth(),
+                    query.clone(),
+                    CachePolicy::UseFresh,
+                    &token
+                )
+                .await
+                .is_err()
+        );
+        provider.fail.store(false, Ordering::Release);
+        assert!(
+            !service
+                .query(
+                    &SourceId::modrinth(),
+                    query.clone(),
+                    CachePolicy::UseFresh,
+                    &token
+                )
+                .await
+                .unwrap()
+                .from_cache
+        );
+        assert!(
+            service
+                .query(
+                    &SourceId::modrinth(),
+                    query.clone(),
+                    CachePolicy::UseFresh,
+                    &token
+                )
+                .await
+                .unwrap()
+                .from_cache
+        );
+        probe.close().await;
+    }
+    cache.close().await;
+}
+
+#[test]
+fn update_query_positive_and_negative_ttls_are_at_most_one_hour() {
+    let project = SourceProjectId::new("project").unwrap();
+    let release = SourceReleaseId::new("release").unwrap();
+    let queries = [
+        ProviderQuery::Release {
+            project_id: Some(project.clone()),
+            release_id: release.clone(),
+            slug: None,
+        },
+        ProviderQuery::ReleaseProtocol {
+            release_id: release,
+            version: "v2".into(),
+        },
+        ProviderQuery::Identify {
+            integrity: ArtifactIntegrity {
+                size: None,
+                hashes: vec![],
+            },
+            fingerprint: None,
+        },
+        ProviderQuery::IdentifyExport {
+            integrity: ArtifactIntegrity {
+                size: None,
+                hashes: vec![],
+            },
+            fingerprint: None,
+        },
+        ProviderQuery::Project {
+            id: project.clone(),
+            slug: None,
+        },
+        ProviderQuery::ReleasesProtocol {
+            project_id: project,
+        },
+    ];
+    for query in queries {
+        for value in [
+            ProviderValue::NotFound,
+            ProviderValue::Matches(vec![]),
+            ProviderValue::Identified(vec![]),
+            ProviderValue::Protocol(serde_json::Value::Null),
+        ] {
+            assert!(query.ttl(&value) <= 3600);
+        }
+    }
+    assert_eq!(
+        ProviderQuery::ReleasesProtocol {
+            project_id: SourceProjectId::new("project").unwrap()
+        }
+        .ttl(&ProviderValue::Protocol(serde_json::Value::Null)),
+        300
     );
 }
