@@ -1169,16 +1169,16 @@ impl Process {
         };
 
         let state = crate::State::get().await?;
-        JoinLog::store(
+        JoinLog::set(
             &state.data,
             &JoinLogKey {
                 instance_id: instance_id.to_owned(),
                 host: host.to_string(),
                 port,
             },
-            &JoinLogEntry {
+            Some(&JoinLogEntry {
                 join_time: timestamp,
-            },
+            }),
         )
         .await?;
         {

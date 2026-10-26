@@ -5,9 +5,9 @@
 //! storage is therefore replaceable without touching a single caller, and no
 //! caller names one: everything below `Handle` stays in here.
 //!
-//! Every collection answers the same verbs, and the set grows only when a
-//! collection needs another one, so moving a caller onto this package stays
-//! mechanical and a later storage only has to answer the same questions.
+//! Four verbs: `set` and `get` reach one record by its key, `set_all` and
+//! `get_all` reach a whole collection. Writing nothing removes the record a key
+//! held, so a caller never needs a second verb for that.
 
 pub(crate) mod join_log;
 
@@ -35,22 +35,33 @@ pub(crate) trait Collection {
     /// The fields one record is identified by.
     type Key;
 
-    /// The narrower set of fields a group of records is read by.
-    type Scope;
-
     /// What one record carries beyond its key.
     type Record;
 
-    /// Writes `record` under `key`, replacing what that key held.
-    async fn store(
+    /// Writes `record` under `key`. Nothing to write removes the record the key
+    /// held.
+    async fn set(
         handle: &Handle,
         key: &Self::Key,
-        record: &Self::Record,
+        record: Option<&Self::Record>,
     ) -> crate::Result<()>;
 
-    /// Every record of one scope, keyed by what identifies it.
-    async fn list(
+    /// The record `key` holds. A key nothing was written under holds none,
+    /// which is not an error.
+    async fn get(
         handle: &Handle,
-        scope: &Self::Scope,
+        key: &Self::Key,
+    ) -> crate::Result<Option<Self::Record>>;
+
+    /// Writes the whole collection as one unit, so it is never left half
+    /// updated.
+    async fn set_all(
+        handle: &Handle,
+        records: &[(Self::Key, Self::Record)],
+    ) -> crate::Result<()>;
+
+    /// Every record the collection holds, with the key each is stored under.
+    async fn get_all(
+        handle: &Handle,
     ) -> crate::Result<Vec<(Self::Key, Self::Record)>>;
 }

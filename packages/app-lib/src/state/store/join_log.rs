@@ -15,11 +15,6 @@ pub(crate) struct JoinLogKey {
     pub port: u16,
 }
 
-/// Every server of one instance.
-pub(crate) struct InstanceJoins {
-    pub instance_id: String,
-}
-
 /// What a join left behind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct JoinLogEntry {
@@ -28,14 +23,29 @@ pub(crate) struct JoinLogEntry {
 
 impl Collection for JoinLog {
     type Key = JoinLogKey;
-    type Scope = InstanceJoins;
     type Record = JoinLogEntry;
 
-    async fn store(
+    async fn set(
         handle: &Handle,
         key: &Self::Key,
-        record: &Self::Record,
+        record: Option<&Self::Record>,
     ) -> crate::Result<()> {
+        let Some(record) = record else {
+            sqlx::query(
+                "
+                DELETE FROM join_log
+                WHERE instance_id = ? AND host = ? AND port = ?
+                ",
+            )
+            .bind(&key.instance_id)
+            .bind(&key.host)
+            .bind(i64::from(key.port))
+            .execute(handle.pool())
+            .await?;
+
+            return Ok(());
+        };
+
         sqlx::query(
             "
             INSERT INTO join_log (instance_id, host, port, join_time)
@@ -54,26 +64,72 @@ impl Collection for JoinLog {
         Ok(())
     }
 
-    async fn list(
+    async fn get(
         handle: &Handle,
-        scope: &Self::Scope,
-    ) -> crate::Result<Vec<(Self::Key, Self::Record)>> {
-        let rows: Vec<(String, i64, i64)> = sqlx::query_as(
+        key: &Self::Key,
+    ) -> crate::Result<Option<Self::Record>> {
+        let join_time: Option<i64> = sqlx::query_scalar(
             "
-            SELECT host, port, join_time
+            SELECT join_time
             FROM join_log
-            WHERE instance_id = ?
+            WHERE instance_id = ? AND host = ? AND port = ?
             ",
         )
-        .bind(&scope.instance_id)
+        .bind(&key.instance_id)
+        .bind(&key.host)
+        .bind(i64::from(key.port))
+        .fetch_optional(handle.pool())
+        .await?;
+
+        Ok(join_time.map(|join_time| Self::Record {
+            join_time: to_time(join_time),
+        }))
+    }
+
+    async fn set_all(
+        handle: &Handle,
+        records: &[(Self::Key, Self::Record)],
+    ) -> crate::Result<()> {
+        let mut transaction = handle.pool().begin().await?;
+        for (key, record) in records {
+            sqlx::query(
+                "
+                INSERT INTO join_log (instance_id, host, port, join_time)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (instance_id, host, port) DO UPDATE SET
+                    join_time = excluded.join_time
+                ",
+            )
+            .bind(&key.instance_id)
+            .bind(&key.host)
+            .bind(i64::from(key.port))
+            .bind(record.join_time.timestamp())
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
+
+        Ok(())
+    }
+
+    async fn get_all(
+        handle: &Handle,
+    ) -> crate::Result<Vec<(Self::Key, Self::Record)>> {
+        let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
+            "
+            SELECT instance_id, host, port, join_time
+            FROM join_log
+            ",
+        )
         .fetch_all(handle.pool())
         .await?;
 
         Ok(rows
             .into_iter()
-            .filter_map(|(host, port, join_time)| {
+            .filter_map(|(instance_id, host, port, join_time)| {
                 let Some(port) = u16::try_from(port).ok() else {
                     tracing::warn!(
+                        %instance_id,
                         %host,
                         port,
                         "Ignoring a join log entry whose port is out of range"
@@ -82,7 +138,7 @@ impl Collection for JoinLog {
                 };
                 Some((
                     JoinLogKey {
-                        instance_id: scope.instance_id.clone(),
+                        instance_id,
                         host,
                         port,
                     },
@@ -138,90 +194,72 @@ mod tests {
         }
     }
 
+    fn at(seconds: i64) -> JoinLogEntry {
+        JoinLogEntry {
+            join_time: Utc.timestamp_opt(seconds, 0).unwrap(),
+        }
+    }
+
     #[tokio::test]
     async fn a_join_replaces_the_time_the_address_held() {
         let handle = handle(&["instance"]).await;
         let address = key("instance", "mc.example.com", 25565);
 
-        JoinLog::store(
-            &handle,
-            &address,
-            &JoinLogEntry {
-                join_time: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-            },
-        )
-        .await
-        .unwrap();
-        JoinLog::store(
-            &handle,
-            &address,
-            &JoinLogEntry {
-                join_time: Utc.timestamp_opt(1_700_000_600, 0).unwrap(),
-            },
-        )
-        .await
-        .unwrap();
-
-        let joins = JoinLog::list(
-            &handle,
-            &InstanceJoins {
-                instance_id: "instance".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        JoinLog::set(&handle, &address, Some(&at(1_700_000_000)))
+            .await
+            .unwrap();
+        JoinLog::set(&handle, &address, Some(&at(1_700_000_600)))
+            .await
+            .unwrap();
 
         assert_eq!(
-            joins,
-            vec![(
-                address,
-                JoinLogEntry {
-                    join_time: Utc.timestamp_opt(1_700_000_600, 0).unwrap(),
-                },
-            )]
+            JoinLog::get(&handle, &address).await.unwrap(),
+            Some(at(1_700_000_600))
+        );
+        assert_eq!(
+            JoinLog::get_all(&handle).await.unwrap(),
+            vec![(address, at(1_700_000_600))]
         );
     }
 
     #[tokio::test]
-    async fn a_scope_reads_only_its_own_instance() {
-        let handle = handle(&["first", "second"]).await;
-        for (instance_id, host) in
-            [("first", "mc.example.com"), ("second", "mc.example.org")]
-        {
-            JoinLog::store(
-                &handle,
-                &key(instance_id, host, 25565),
-                &JoinLogEntry {
-                    join_time: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-                },
-            )
+    async fn writing_nothing_removes_the_record() {
+        let handle = handle(&["instance"]).await;
+        let address = key("instance", "mc.example.com", 25565);
+
+        JoinLog::set(&handle, &address, Some(&at(1_700_000_000)))
             .await
             .unwrap();
-        }
+        JoinLog::set(&handle, &address, None).await.unwrap();
 
-        let joins = JoinLog::list(
-            &handle,
-            &InstanceJoins {
-                instance_id: "second".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        assert_eq!(JoinLog::get(&handle, &address).await.unwrap(), None);
+        assert!(JoinLog::get_all(&handle).await.unwrap().is_empty());
+    }
 
-        assert_eq!(joins.len(), 1);
-        assert_eq!(joins[0].0.host, "mc.example.org");
-        assert_eq!(joins[0].0.instance_id, "second");
+    #[tokio::test]
+    async fn a_whole_collection_round_trips() {
+        let handle = handle(&["first", "second"]).await;
+        let records = vec![
+            (key("first", "mc.example.com", 25565), at(1_700_000_000)),
+            (key("second", "mc.example.org", 25566), at(1_700_000_600)),
+        ];
+
+        JoinLog::set_all(&handle, &records).await.unwrap();
+
+        let mut stored = JoinLog::get_all(&handle).await.unwrap();
+        stored.sort_by(|left, right| {
+            left.0.instance_id.cmp(&right.0.instance_id)
+        });
+        assert_eq!(stored, records);
     }
 
     #[tokio::test]
     async fn a_port_outside_the_range_is_ignored() {
         let handle = handle(&["instance"]).await;
-        JoinLog::store(
+        JoinLog::set(
             &handle,
             &key("instance", "mc.example.com", 25565),
-            &JoinLogEntry {
-                join_time: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-            },
+            Some(&at(1_700_000_000)),
         )
         .await
         .unwrap();
@@ -233,17 +271,10 @@ mod tests {
         .await
         .unwrap();
 
-        let joins = JoinLog::list(
-            &handle,
-            &InstanceJoins {
-                instance_id: "instance".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        let stored = JoinLog::get_all(&handle).await.unwrap();
 
-        assert_eq!(joins.len(), 1);
-        assert_eq!(joins[0].0.host, "mc.example.com");
-        assert_eq!(joins[0].0.port, 25565);
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].0.host, "mc.example.com");
+        assert_eq!(stored[0].0.port, 25565);
     }
 }

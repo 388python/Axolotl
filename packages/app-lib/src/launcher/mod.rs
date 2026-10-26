@@ -2766,16 +2766,16 @@ pub async fn launch_minecraft(
             } => Some((original_host.clone(), *original_port)),
         };
         if let Some((host, port)) = original
-            && let Err(e) = JoinLog::store(
+            && let Err(e) = JoinLog::set(
                 &state.data,
                 &JoinLogKey {
                     instance_id: instance.id.clone(),
                     host,
                     port,
                 },
-                &JoinLogEntry {
+                Some(&JoinLogEntry {
                     join_time: Utc::now(),
-                },
+                }),
             )
             .await
         {

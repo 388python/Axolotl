@@ -6,7 +6,7 @@ use crate::launcher::instance_runtime::InstanceRuntimeAdapter;
 use crate::server_address::{parse_server_address, resolve_server_address};
 use crate::state::attached_world_data::AttachedWorldData;
 use crate::state::store::Collection as _;
-use crate::state::store::join_log::{InstanceJoins, JoinLog};
+use crate::state::store::join_log::JoinLog;
 use crate::state::{InstanceInstallStage, attached_world_data};
 use crate::util::protocol_version::OLD_PROTOCOL_VERSIONS;
 pub use crate::util::protocol_version::ProtocolVersion;
@@ -553,17 +553,10 @@ async fn get_server_worlds_in_instance(
     }
 
     let state = State::get().await?;
-    let join_log = JoinLog::list(
-        &state.data,
-        &InstanceJoins {
-            instance_id: instance_id.to_string(),
-        },
-    )
-    .await
-    .ok()
-    .map(|joins| {
-        joins
+    let join_log = JoinLog::get_all(&state.data).await.ok().map(|records| {
+        records
             .into_iter()
+            .filter(|(key, _)| key.instance_id == instance_id)
             .map(|(key, entry)| ((key.host, key.port), entry.join_time))
             .collect::<HashMap<_, _>>()
     });
