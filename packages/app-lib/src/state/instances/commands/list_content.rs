@@ -3235,6 +3235,13 @@ mod tests {
 
     #[tokio::test]
     async fn external_file_edit_invalidates_exact_provider_refs() {
+        // The legacy cache projection uses global runtime state even when the
+        // content snapshot itself is backed by the isolated fixture below.
+        crate::event::EventState::init().await.unwrap();
+        let runtime = tempfile::tempdir().unwrap().keep();
+        State::init_for_test(runtime.to_string_lossy().into_owned())
+            .await
+            .unwrap();
         let (_temp, state, resolved) = reconciliation_fixture().await;
         let relative_path = "mods/lithium.jar";
         let file = insert_test_file(
