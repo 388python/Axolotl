@@ -5,9 +5,9 @@ use crate::launcher::get_loader_version_from_profile;
 use crate::launcher::instance_runtime::InstanceRuntimeAdapter;
 use crate::server_address::{parse_server_address, resolve_server_address};
 use crate::state::attached_world_data::AttachedWorldData;
-use crate::state::{
-    InstanceInstallStage, attached_world_data, server_join_log,
-};
+use crate::state::store::Collection as _;
+use crate::state::store::join_log::{InstanceJoins, JoinLog};
+use crate::state::{InstanceInstallStage, attached_world_data};
 use crate::util::protocol_version::OLD_PROTOCOL_VERSIONS;
 pub use crate::util::protocol_version::ProtocolVersion;
 
@@ -33,6 +33,7 @@ use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -552,9 +553,20 @@ async fn get_server_worlds_in_instance(
     }
 
     let state = State::get().await?;
-    let join_log = server_join_log::get_joins(instance_id, &state.pool)
-        .await
-        .ok();
+    let join_log = JoinLog::list(
+        &state.data,
+        &InstanceJoins {
+            instance_id: instance_id.to_string(),
+        },
+    )
+    .await
+    .ok()
+    .map(|joins| {
+        joins
+            .into_iter()
+            .map(|(key, entry)| ((key.host, key.port), entry.join_time))
+            .collect::<HashMap<_, _>>()
+    });
 
     for (index, server) in servers.into_iter().enumerate() {
         if server.hidden {
