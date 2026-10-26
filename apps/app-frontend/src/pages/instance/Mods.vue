@@ -183,6 +183,15 @@
             }}</template>
             <p class="m-0 p-4">{{ formatMessage(messages.packReconciliationWarningBody) }}</p>
         </CollapsibleAdmonition>
+        <CollapsibleAdmonition v-if="worldDatapackErrors.length" type="warning" class="mb-4">
+            <template #header>{{ formatMessage(messages.worldDatapacksFailed) }}</template>
+            <div class="p-4">
+                <p v-for="error in worldDatapackErrors" :key="error" class="m-0">{{ error }}</p>
+                <Button class="mt-3" @click="loadWorldDatapacks">{{
+                    formatMessage(commonMessages.retryButton)
+                }}</Button>
+            </div>
+        </CollapsibleAdmonition>
         <ContentPageLayout @visible-items="handleVisibleItems">
             <template #toolbar-actions>
                 <Button
@@ -409,6 +418,10 @@ import { injectDownloadManager } from '@/providers/download-manager'
 import { useTheming } from '@/store/state'
 
 const messages = defineMessages({
+    worldDatapacksFailed: {
+        id: 'app.instance.content.world-datapacks-failed',
+        defaultMessage: 'Could not read some world datapacks',
+    },
     loadingOnlineInformation: {
         id: 'app.instance.mods.loading-online-information',
         defaultMessage: 'Loading online information, please wait',
@@ -981,6 +994,7 @@ async function restoreMissingPackMember(item: InstanceContentSnapshotItem) {
 
 const {
     worldDatapackItems,
+    worldDatapackErrors,
     isWorldDatapackItem,
     loadWorldDatapacks,
     deleteWorldDatapackItem,
@@ -1141,6 +1155,21 @@ const pendingContentChanges = computed(() =>
     ),
 )
 const isBulkOperating = localBulkOperating
+const CONTENT_EVENT_DEBOUNCE_MS = 180
+let suppressSyncedUntil = 0
+const contentEventRefresh = createContentEventRefresh({
+    busy: () => isBulkOperating.value,
+    revision: () => contentSnapshot.value?.revision,
+    refresh: (filesystem) => {
+        void initProjects(filesystem ? 'bypass' : undefined).catch(handleError)
+    },
+    delay: CONTENT_EVENT_DEBOUNCE_MS,
+})
+
+watch(isBulkOperating, (operating) => {
+    if (!operating) contentEventRefresh.resume()
+})
+
 const isInstanceBusy = computed(() => props.instance?.install_stage !== 'installed')
 const isPackUnlinkDisabled = computed(
     () =>
@@ -3412,19 +3441,6 @@ async function loadInitialContent(): Promise<void> {
 }
 
 let unlistenInstances: UnlistenFn | null = null
-let suppressSyncedUntil = 0
-const contentEventRefresh = createContentEventRefresh({
-    busy: () => isBulkOperating.value,
-    revision: () => contentSnapshot.value?.revision,
-    refresh: (filesystem) => {
-        void initProjects(filesystem ? 'bypass' : undefined).catch(handleError)
-    },
-    delay: 180,
-})
-
-watch(isBulkOperating, (operating) => {
-    if (!operating) contentEventRefresh.resume()
-})
 
 function scheduleContentEventRefresh(event: { event: string; revision?: number }) {
     if (event.event === 'synced' && Date.now() < suppressSyncedUntil) return

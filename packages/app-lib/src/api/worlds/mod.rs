@@ -844,19 +844,19 @@ async fn get_world_session_lock(world: &Path) -> Result<tokio::fs::File> {
         .truncate(false)
         .open(&lock_path)
         .await?;
-    file.write_all("☃".as_bytes()).await?;
-    file.sync_all().await?;
-    let locked = file.try_lock_exclusive()?;
-    locked.then_some(file).ok_or_else(|| {
-        io::IOError::IOPathError {
+    if !file.try_lock_exclusive()? {
+        return Err(io::IOError::IOPathError {
             source: std::io::Error::new(
                 std::io::ErrorKind::ResourceBusy,
                 "already locked by Minecraft",
             ),
             path: lock_path.to_string_lossy().into_owned(),
         }
-        .into()
-    })
+        .into());
+    }
+    file.write_all("☃".as_bytes()).await?;
+    file.sync_all().await?;
+    Ok(file)
 }
 
 async fn try_get_world_session_lock(
