@@ -42,7 +42,7 @@
             >
                 <slot name="nametag-badge" />
             </div>
-            <div v-if="nametag" class="px-3 py-1 rounded-md font-minecraft text-gray nametag-bg">
+            <div v-if="nametag" class="px-3 py-1 rounded-md text-gray nametag-bg">
                 {{ nametagText }}
             </div>
         </div>
