@@ -12,7 +12,7 @@ use crate::state::{
     ModrinthVersionId, SideType,
 };
 use crate::util::download::constants::{
-    INSTALL_FILE_REPORTED_ATTEMPTS, MODPACK_RANGE_CONNECTION_FLOOR,
+    INSTALL_FILE_REPORTED_ATTEMPTS, LARGE_FILE_RANGE_CONNECTION_FLOOR,
     MODPACK_REQUESTED_H2_RANGES,
 };
 use crate::util::fetch::{
@@ -423,7 +423,7 @@ pub(crate) async fn generate_pack_from_version_id_with_reporter(
                 ..Integrity::default()
             })
             .with_h2_range_concurrency(MODPACK_REQUESTED_H2_RANGES)
-            .with_range_connection_floor(MODPACK_RANGE_CONNECTION_FLOOR)
+            .with_range_connection_floor(LARGE_FILE_RANGE_CONNECTION_FLOOR)
             .with_download_meta(download_meta)
             .with_install_tracking(
                 reporter.clone(),

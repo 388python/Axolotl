@@ -100,8 +100,8 @@ use crate::util::download::constants::{
     BULK_ADAPTIVE_RANGE_BYTES, BULK_DOWNLOAD_RESERVED_PERMITS,
     BULK_SEGMENTED_DOWNLOAD_THRESHOLD, DOWNLOAD_RANGE_CONNECTION_FLOOR,
     DOWNLOAD_RANGE_RECOVERY_INTERVAL, DOWNLOAD_RANGE_TARGET_TIME,
-    INITIAL_BULK_SEGMENT_CONCURRENCY, SEGMENT_EXPANSION_GAIN_PERCENT,
-    SEGMENT_EXPANSION_RETRY_SPEED_PERCENT,
+    INITIAL_BULK_SEGMENT_CONCURRENCY, LARGE_FILE_RANGE_CONNECTION_FLOOR,
+    SEGMENT_EXPANSION_GAIN_PERCENT, SEGMENT_EXPANSION_RETRY_SPEED_PERCENT,
 };
 use crate::util::download::constants::{
     DOWNLOAD_DNS_PREWARM_CONCURRENCY, DOWNLOAD_FAILURE_DIAGNOSTIC_ATTEMPTS,
@@ -360,6 +360,31 @@ impl DownloadRequest {
         self.range_connection_floor =
             Some(floor.clamp(1, MAX_SEGMENT_CONCURRENCY));
         self
+    }
+
+    pub(crate) fn supports_range_recovery(&self) -> bool {
+        self.allow_segmented_download
+            && (self.allow_http1_segmented_download || self.batch_download)
+            && self.resource != ResourceClass::Metadata
+            && self.integrity.has_hash()
+    }
+
+    pub(crate) fn prefers_independent_ranges(&self, size: u64) -> bool {
+        self.supports_range_recovery()
+            && self.allow_http1_segmented_download
+            && (size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD
+                || (self.range_connection_floor.is_some()
+                    && size >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64))
+    }
+
+    fn minimum_range_connections(&self, size: u64) -> usize {
+        self.range_connection_floor.unwrap_or_else(|| {
+            if self.prefers_independent_ranges(size) {
+                LARGE_FILE_RANGE_CONNECTION_FLOOR
+            } else {
+                1
+            }
+        })
     }
 
     pub(crate) fn with_h2_range_concurrency(
@@ -1111,6 +1136,14 @@ pub(crate) fn is_h2_protocol_failure(error: &reqwest::Error) -> bool {
 }
 
 fn reqwest_client_builder() -> reqwest::ClientBuilder {
+    #[cfg(test)]
+    let read_timeout = if BENCHMARK_TIMING.try_with(|_| ()).is_ok() {
+        time::Duration::from_secs(60)
+    } else {
+        FILE_TRANSFER_READ_TIMEOUT
+    };
+    #[cfg(not(test))]
+    let read_timeout = FILE_TRANSFER_READ_TIMEOUT;
     reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
             if retired_sources::is_retired(attempt.url()) {
@@ -1122,7 +1155,7 @@ fn reqwest_client_builder() -> reqwest::ClientBuilder {
             }
         }))
         .connect_timeout(FILE_TRANSFER_CONNECT_TIMEOUT)
-        .read_timeout(FILE_TRANSFER_READ_TIMEOUT)
+        .read_timeout(read_timeout)
         .tcp_keepalive(Some(FILE_TCP_KEEPALIVE))
         .tcp_nodelay(true)
         .pool_max_idle_per_host(FILE_POOL_MAX_IDLE_PER_HOST)
@@ -1618,7 +1651,7 @@ pub(crate) fn range_splitting_authority(
     effective_route_authority(route)
 }
 
-fn range_splitting_allowed(route: &DownloadRoute) -> bool {
+pub(crate) fn range_splitting_allowed(route: &DownloadRoute) -> bool {
     let host = route_host(route).unwrap_or_default();
     if [
         FETCH_GITHUB_COM,
@@ -3803,10 +3836,11 @@ fn range_growth_can_retry(previous: u64, current: u64) -> bool {
 
 fn requested_range_floor(
     request: &DownloadRequest,
+    size: u64,
     remaining: u64,
     cap: usize,
 ) -> usize {
-    request.range_connection_floor.unwrap_or(1).min(cap).min(
+    request.minimum_range_connections(size).min(cap).min(
         usize::try_from(remaining / MIN_SEGMENT_SIZE)
             .unwrap_or(usize::MAX)
             .max(1),
@@ -3918,9 +3952,20 @@ fn should_use_segmented_download(size: u64, resumable_part_bytes: u64) -> bool {
     size.saturating_sub(resumable_part_bytes) >= SEGMENTED_DOWNLOAD_THRESHOLD
 }
 
-fn can_recover_batch_ranges(request: &DownloadRequest, remaining: u64) -> bool {
-    request.batch_download
-        && request.integrity.supports_resume()
+fn range_idle_timeout(tail: bool) -> time::Duration {
+    #[cfg(test)]
+    if BENCHMARK_TIMING.try_with(|_| ()).is_ok() {
+        return time::Duration::from_secs(if tail { 5 } else { 8 });
+    }
+    if tail {
+        TAIL_HEDGE_IDLE_TIMEOUT
+    } else {
+        RANGE_IDLE_RECONNECT_TIMEOUT
+    }
+}
+
+fn can_recover_file_ranges(request: &DownloadRequest, remaining: u64) -> bool {
+    request.supports_range_recovery()
         && remaining >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64
 }
 
@@ -4569,7 +4614,7 @@ async fn download_tail_candidate(
     let path = tail_candidate_path(part_path, range.index, candidate_index);
     let mut cleanup = TailCandidateCleanupGuard::new(path.clone());
     let response = tokio::time::timeout(
-        FILE_TRANSFER_FIRST_BYTE_TIMEOUT,
+        native_first_byte_timeout(route, false),
         send_path_request_with_clients(
             route,
             custom_header,
@@ -4612,7 +4657,7 @@ async fn download_tail_candidate(
     let mut stream = response.bytes_stream();
     loop {
         let chunk =
-            tokio::time::timeout(RANGE_IDLE_RECONNECT_TIMEOUT, stream.next())
+            tokio::time::timeout(range_idle_timeout(false), stream.next())
                 .await
                 .map_err(|_| SegmentDownloadError::Transport)?;
         let Some(chunk) = chunk else {
@@ -4785,7 +4830,7 @@ async fn download_segment(
             .await
             .map_err(|error| SegmentDownloadError::Fatal(error.into()))?;
         let response = tokio::time::timeout(
-            FILE_TRANSFER_FIRST_BYTE_TIMEOUT,
+            native_first_byte_timeout(route, false),
             send_path_request_with_clients(
                 route,
                 custom_header,
@@ -4883,11 +4928,7 @@ async fn download_segment(
             let tail_threshold = TAIL_HEDGE_MIN_REMAINING.max(total_size / 10);
             let tail_eligible = range.remaining() <= tail_threshold;
             let chunk = match tokio::time::timeout(
-                if tail_eligible {
-                    TAIL_HEDGE_IDLE_TIMEOUT
-                } else {
-                    RANGE_IDLE_RECONNECT_TIMEOUT
-                },
+                range_idle_timeout(tail_eligible),
                 async {
                     stream
                         .as_mut()
@@ -5020,21 +5061,21 @@ async fn download_segment(
                     }
                     stream_end_reason = Some(format!(
                         "tail range made no progress for {:.0} seconds",
-                        TAIL_HEDGE_IDLE_TIMEOUT.as_secs_f64()
+                        range_idle_timeout(true).as_secs_f64()
                     ));
                     break;
                 }
                 Err(_) => {
                     stream_end_reason = Some(format!(
                         "no range data for {:.0} seconds",
-                        RANGE_IDLE_RECONNECT_TIMEOUT.as_secs_f64()
+                        range_idle_timeout(false).as_secs_f64()
                     ));
                     tracing::warn!(
                         url = %sanitize_url_for_log(&route.url),
                         range_start = requested_start,
                         range_end = requested_end,
                         remaining_bytes = range.remaining(),
-                        idle_seconds = RANGE_IDLE_RECONNECT_TIMEOUT.as_secs_f64(),
+                        idle_seconds = range_idle_timeout(false).as_secs_f64(),
                         "Range stream stalled; reconnecting from confirmed offset"
                     );
                     break;
@@ -5351,17 +5392,23 @@ async fn try_segmented_download(
             .unwrap_or_default();
     let disk_cap =
         super::download::local_resources::http1_range_limit(part_path).await;
-    let concurrency_cap = adaptive_range_cap(
+    let range_recovery = (request.batch_download && request.prefer_http1)
+        || request.minimum_range_connections(size) > 1;
+    let mut concurrency_cap = adaptive_range_cap(
         remaining_size,
         route_cap,
         disk_cap,
         health.consecutive_failures,
-        (request.batch_download && request.prefer_http1)
-            || request.range_connection_floor.is_some(),
+        range_recovery,
     );
     let requested_initial_count =
         initial_segment_count(remaining_size, concurrency_cap).max(
-            requested_range_floor(request, remaining_size, concurrency_cap),
+            requested_range_floor(
+                request,
+                size,
+                remaining_size,
+                concurrency_cap,
+            ),
         );
     if requested_initial_count < MIN_PARALLEL_RANGES {
         tracing::debug!(
@@ -5453,6 +5500,10 @@ async fn try_segmented_download(
         supports_range = true,
         active_ranges = downloads.len(),
         concurrency_cap,
+        configured_limit,
+        route_cap,
+        disk_cap,
+        requested_range_floor = request.minimum_range_connections(size),
         available_permits = semaphore.0.available_permits(),
         reason = "initial parallel ranges",
         "Started segmented download"
@@ -5585,6 +5636,15 @@ async fn try_segmented_download(
                     tracing::debug!(cpu_percent = pressure.cpu_percent, write_latency_ms = pressure.write_latency_ms, "Pausing range expansion under local resource pressure");
                     continue;
                 }
+                // A busy disk or CPU at admission must not fix the ceiling
+                // for the entire transfer after local pressure has cleared.
+                concurrency_cap = adaptive_range_cap(
+                    remaining_size,
+                    route_cap,
+                    super::download::local_resources::http1_range_limit(part_path).await,
+                    health.consecutive_failures,
+                    range_recovery,
+                );
                 let snapshot = speed.speed_snapshot();
                 use super::download::endpoint_selection::tuning::{TRIALS, TrialKind};
                 if expansion_trial.as_ref().is_some_and(|lease| !lease.valid(Instant::now())) {
@@ -5628,7 +5688,7 @@ async fn try_segmented_download(
                 );
                 let floor_target = range_connection_floor(size, remaining_bytes, concurrency_cap,
                     request.batch_download && request.prefer_http1)
-                    .max(requested_range_floor(request, remaining_bytes, concurrency_cap));
+                    .max(requested_range_floor(request, size, remaining_bytes, concurrency_cap));
                 let below_floor = active_ranges < floor_target;
                 if !below_floor && ((expansion_exhausted.is_some() && active_ranges >= retained_ranges)
                     || remaining_time <= super::download::constants::NATIVE_SLOW_RECONNECT_OVERHEAD
@@ -6051,13 +6111,10 @@ async fn select_h2_download_route(
     let h2_route = first_h2_route(routes)?;
     // A warm H2 socket must not bypass the large-file connection scheduler.
     // More streams on that socket cannot escape a per-connection speed limit.
-    if request.allow_http1_segmented_download
-        && request.integrity.supports_resume()
-        && request.integrity.size.is_some_and(|size| {
-            size >= BULK_SEGMENTED_DOWNLOAD_THRESHOLD
-                || (request.range_connection_floor.is_some()
-                    && size >= MIN_SEGMENT_SIZE * MIN_PARALLEL_RANGES as u64)
-        })
+    if request
+        .integrity
+        .size
+        .is_some_and(|size| request.prefers_independent_ranges(size))
         && h2_route.supports_range
         && range_splitting_allowed(&h2_route)
     {
@@ -6141,6 +6198,7 @@ enum H2AttemptResult {
     Fallback {
         failed_nonofficial: Option<String>,
         prefer_http1: bool,
+        discovered_size: Option<u64>,
     },
 }
 
@@ -6228,7 +6286,13 @@ async fn try_h2_download(
             cleanup_segment_files(part_path, MAX_SEGMENT_CONCURRENCY).await?;
             Ok(H2AttemptResult::Fallback {
                 failed_nonofficial,
-                prefer_http1: failure == crate::util::download::h2_download::H2DownloadFailure::Slow,
+                prefer_http1: matches!(failure,
+                    crate::util::download::h2_download::H2DownloadFailure::Slow
+                    | crate::util::download::h2_download::H2DownloadFailure::IndependentRanges(_)),
+                discovered_size: match failure {
+                    crate::util::download::h2_download::H2DownloadFailure::IndependentRanges(size) => Some(size),
+                    _ => None,
+                },
             })
         }
     }
@@ -6403,8 +6467,12 @@ async fn download_to_path_inner(
             H2AttemptResult::Fallback {
                 failed_nonofficial,
                 prefer_http1,
+                discovered_size,
             } => {
                 request.prefer_http1 = prefer_http1;
+                if request.integrity.size.is_none() {
+                    request.integrity.size = discovered_size;
+                }
                 failed_nonofficial
             }
         }
@@ -6503,7 +6571,7 @@ async fn try_segmented_native_attempt(
         });
     let tail_recovery = request.prefer_http1
         && request.integrity.size.is_some_and(|size| {
-            can_recover_batch_ranges(
+            can_recover_file_ranges(
                 request,
                 size.saturating_sub(resumable_part_bytes),
             )
@@ -7547,7 +7615,13 @@ async fn run_native_route_attempts(
         let mut downloaded = starting_size;
         let mut batch_tail =
             super::download::h2_receive::BatchTailWindow::new(transfer_started);
-        let mut recover_batch_ranges = false;
+        let mut recover_file_ranges = !batch_ranges_attempted
+            && !retry_with_single_thread
+            && !session.single_thread_routes.contains(&route.url)
+            && request.integrity.size.is_none()
+            && request.prefers_independent_ranges(total_size)
+            && route.supports_range
+            && range_splitting_allowed(route);
         let mut progress_gate =
             super::download::h2_receive::H2ProgressGate::with_starting_bytes(
                 total_size,
@@ -7575,7 +7649,7 @@ async fn run_native_route_attempts(
         let mut transfer_error: Option<crate::Error> = None;
         let mut switched_endpoint = false;
         let mut last_endpoint_speed = 0;
-        loop {
+        while !recover_file_ranges {
             tokio::select! {
                 item = async {
                     #[cfg(test)]
@@ -7640,12 +7714,12 @@ async fn run_native_route_attempts(
                         && !session.single_thread_routes.contains(&route.url)
                         && route.supports_range
                         && range_splitting_allowed(route)
-                        && can_recover_batch_ranges(request, total_size.saturating_sub(downloaded))
+                        && can_recover_file_ranges(request, total_size.saturating_sub(downloaded))
                         && !super::download::local_resources::pressure(part_path).blocks_expansion()
                         && semaphore.0.available_permits() >= super::download::constants::BATCH_DOWNLOAD_CONNECTION_FLOOR
                         && super::download::native_budget::available(route) >= super::download::constants::BATCH_DOWNLOAD_CONNECTION_FLOOR;
                     if batch_tail.observe(downloaded.saturating_sub(starting_size), can_recover, Instant::now()) {
-                        recover_batch_ranges = true;
+                        recover_file_ranges = true;
                         break;
                     }
                     let slow_decision = slow_policy.observe_with_pressure(
@@ -7801,15 +7875,16 @@ async fn run_native_route_attempts(
         drop(permit);
         drop(activity.take());
 
-        if recover_batch_ranges {
+        if recover_file_ranges {
             batch_ranges_attempted = true;
             let mut recovery_request = request.clone();
             recovery_request.prefer_http1 = true;
+            recovery_request.integrity.size.get_or_insert(total_size);
             tracing::debug!(
                 url = %log_url,
                 downloaded_bytes = downloaded,
                 remaining_bytes = total_size.saturating_sub(downloaded),
-                "Promoting a slow batch connection to adaptive parallel ranges"
+                "Promoting a file connection to adaptive parallel ranges"
             );
             match try_segmented_native_attempt(
                 &recovery_request,
@@ -8820,6 +8895,83 @@ mod tests {
     }
 
     #[test]
+    fn verified_file_classes_share_range_growth_and_recovery() {
+        for resource in [
+            ResourceClass::MinecraftAsset,
+            ResourceClass::MinecraftLibrary,
+            ResourceClass::Loader,
+            ResourceClass::Java,
+            ResourceClass::Modrinth,
+            ResourceClass::CurseForge,
+            ResourceClass::Modpack,
+            ResourceClass::Other,
+        ] {
+            let request =
+                DownloadRequest::new("https://example.com/file", resource)
+                    .with_integrity(
+                        Integrity::sha1("expected").with_size(16 * 1024 * 1024),
+                    );
+            assert!(
+                request.prefers_independent_ranges(16 * 1024 * 1024),
+                "{resource:?}"
+            );
+            assert_eq!(
+                requested_range_floor(
+                    &request,
+                    16 * 1024 * 1024,
+                    16 * 1024 * 1024,
+                    64
+                ),
+                32
+            );
+            assert_eq!(
+                requested_range_floor(
+                    &request,
+                    16 * 1024 * 1024,
+                    MIN_SEGMENT_SIZE * 3,
+                    64
+                ),
+                3
+            );
+            assert_eq!(
+                requested_range_floor(
+                    &request,
+                    16 * 1024 * 1024,
+                    16 * 1024 * 1024,
+                    2
+                ),
+                2
+            );
+            assert!(can_recover_file_ranges(&request, MIN_SEGMENT_SIZE * 2));
+            assert!(
+                !request
+                    .clone()
+                    .with_http1_segmented_download(false)
+                    .supports_range_recovery()
+            );
+            assert!(
+                !request
+                    .clone()
+                    .with_segmented_download(false)
+                    .supports_range_recovery()
+            );
+            assert!(
+                !request
+                    .with_integrity(Integrity::default())
+                    .supports_range_recovery()
+            );
+        }
+        let metadata = DownloadRequest::new(
+            "https://example.com/metadata",
+            ResourceClass::Metadata,
+        )
+        .with_integrity(
+            Integrity::sha1("expected").with_size(16 * 1024 * 1024),
+        );
+        assert!(!metadata.supports_range_recovery());
+    }
+
+    #[test]
     fn h2_range_concurrency_is_explicit_per_request() {
         let request = DownloadRequest::new(
             "https://example.com/pack.mrpack",
@@ -8833,6 +8985,77 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn java_h2_probe_discovers_size_before_selecting_independent_ranges()
+    {
+        let size = 16 * 1024 * 1024;
+        let request = DownloadRequest::new(
+            "https://java-size-probe.invalid/runtime.zip",
+            ResourceClass::Java,
+        )
+        .with_integrity(Integrity::sha1("verified-at-completion"));
+        let mut route = direct_test_route(
+            request.url.clone(),
+            DownloadRouteSource::Official,
+        );
+        route.supports_range = true;
+        let (client_io, server_io) = tokio::io::duplex(64 * 1024);
+        let server = tokio::spawn(async move {
+            let mut server = h2::server::handshake(server_io).await.unwrap();
+            let (request, mut respond) =
+                server.accept().await.unwrap().unwrap();
+            assert_eq!(request.headers()[header::RANGE], "bytes=0-0");
+            let response = http::Response::builder()
+                .status(StatusCode::PARTIAL_CONTENT)
+                .header(header::CONTENT_RANGE, format!("bytes 0-0/{size}"))
+                .header(header::CONTENT_LENGTH, 1)
+                .body(())
+                .unwrap();
+            respond
+                .send_response(response, false)
+                .unwrap()
+                .send_data(Bytes::from_static(&[31]), true)
+                .unwrap();
+            while server.accept().await.is_some() {}
+        });
+        let (sender, driver) = h2::client::handshake(client_io).await.unwrap();
+        let connection = super::super::download::h2_pool::SharedH2Connection::cache_for_test(&route, sender).await;
+        let driver = super::super::download::h2_pool::spawn_connection_driver(
+            &connection,
+            driver,
+            Duration::from_secs(60),
+        );
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("runtime.zip");
+        let part = suffixed_path(&destination, ".part");
+        let semaphore = FetchSemaphore(Semaphore::new(64));
+        let result = try_h2_download(
+            &request,
+            route,
+            super::super::download::native::NativeH2Policy {
+                allow_cold_connection: true,
+                abort_if_slow: true,
+                expected_speed: None,
+            },
+            &destination,
+            &part,
+            &semaphore,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(result, H2AttemptResult::Fallback {
+            prefer_http1: true,
+            discovered_size: Some(discovered),
+            failed_nonofficial: None,
+        } if discovered == size));
+        assert!(!destination.exists());
+        assert!(!connection.is_dead());
+        assert!(!connection.is_retiring());
+        assert_eq!(semaphore.0.available_permits(), 64);
+        driver.abort();
+        server.abort();
+    }
+
+    #[tokio::test]
     async fn warm_h2_archive_hint_cannot_bypass_large_file_connections() {
         let request = DownloadRequest::new(
             "https://warm-archive-policy.invalid/pack.mrpack",
@@ -8840,10 +9063,11 @@ mod tests {
         )
         .with_integrity(Integrity::sha1("expected").with_size(9_999_999))
         .with_h2_range_concurrency(16);
-        let route = direct_test_route(
+        let mut route = direct_test_route(
             request.url.clone(),
             DownloadRouteSource::Official,
         );
+        route.supports_range = true;
         let (client_io, server_io) = tokio::io::duplex(64 * 1024);
         let server = tokio::spawn(async move {
             let mut server = h2::server::handshake(server_io).await.unwrap();
@@ -10057,23 +10281,20 @@ mod tests {
     }
 
     #[test]
-    fn tail_floor_recovery_requires_verified_and_splittable_batch_data() {
+    fn tail_floor_recovery_requires_verified_and_splittable_file_data() {
         let mut request = DownloadRequest::new(
             "https://cdn.modrinth.com/tail.jar",
             ResourceClass::Modpack,
         );
         request.integrity.size = Some(6_000_000);
         request.integrity.sha1 = Some("verified-at-completion".into());
-        assert!(!can_recover_batch_ranges(&request, 6_000_000));
+        assert!(can_recover_file_ranges(&request, 6_000_000));
         let mut request = request.with_batch_download_policy();
-        assert!(can_recover_batch_ranges(&request, 6_000_000));
-        assert!(can_recover_batch_ranges(&request, MIN_SEGMENT_SIZE * 2));
-        assert!(!can_recover_batch_ranges(
-            &request,
-            MIN_SEGMENT_SIZE * 2 - 1
-        ));
+        assert!(can_recover_file_ranges(&request, 6_000_000));
+        assert!(can_recover_file_ranges(&request, MIN_SEGMENT_SIZE * 2));
+        assert!(!can_recover_file_ranges(&request, MIN_SEGMENT_SIZE * 2 - 1));
         request.integrity.sha1 = None;
-        assert!(!can_recover_batch_ranges(&request, 6_000_000));
+        assert!(!can_recover_file_ranges(&request, 6_000_000));
     }
 
     #[test]
@@ -11289,7 +11510,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hashed_pack_keeps_32_ranges_when_validators_differ() {
+    async fn verified_files_keep_32_ranges_on_unknown_disks_when_validators_differ()
+     {
         let _guard = RANGE_SPLITTING_TEST_LOCK.lock().await;
         let size = 16 * 1024 * 1024;
         let data = Arc::new(vec![31_u8; size]);
@@ -11305,31 +11527,47 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let semaphore = FetchSemaphore(Semaphore::new(64));
 
-        for valid_hash in [true, false] {
-            let destination =
-                directory.path().join(format!("pack-{valid_hash}.mrpack"));
+        for (resource, valid_hash, known_size) in [
+            (ResourceClass::Modpack, true, true),
+            (ResourceClass::MinecraftLibrary, true, true),
+            (ResourceClass::Java, true, false),
+            (ResourceClass::Modrinth, true, true),
+            (ResourceClass::CurseForge, false, true),
+        ] {
+            let destination = directory
+                .path()
+                .join(format!("file-{resource:?}-{valid_hash}"));
             let part = suffixed_path(&destination, ".part");
             let _disk =
                 super::super::download::local_resources::set_test_disk_kind(
                     &part,
-                    sysinfo::DiskKind::SSD,
+                    sysinfo::DiskKind::Unknown(0),
                 );
-            let request = DownloadRequest::new(&url, ResourceClass::Other)
-                .with_range_connection_floor(32)
-                .with_integrity(
-                    Integrity::sha1(if valid_hash {
-                        &hash
-                    } else {
-                        "0000000000000000000000000000000000000000"
-                    })
-                    .with_size(size as u64),
-                );
+            let mut integrity = Integrity::sha1(if valid_hash {
+                &hash
+            } else {
+                "0000000000000000000000000000000000000000"
+            });
+            if known_size {
+                integrity.size = Some(size as u64);
+            }
+            let request =
+                DownloadRequest::new(&url, resource).with_integrity(integrity);
             let before = requests.load(Ordering::Relaxed);
             let result =
                 download_benchmark_fixture(request, &destination, &semaphore)
                     .await;
-            assert!(requests.load(Ordering::Relaxed) - before >= 32);
-            assert_eq!(normal_requests.load(Ordering::Relaxed), 0);
+            assert!(
+                requests.load(Ordering::Relaxed) - before >= 32,
+                "{resource:?}, known_size={known_size}: fewer than 32 requests"
+            );
+            if valid_hash {
+                assert_eq!(
+                    normal_requests.load(Ordering::Relaxed),
+                    usize::from(!known_size),
+                    "{resource:?}"
+                );
+            }
             if valid_hash {
                 assert_eq!(result.unwrap().size, size as u64);
                 assert_eq!(tokio::fs::read(&destination).await.unwrap(), *data);
@@ -11341,6 +11579,7 @@ mod tests {
                 assert!(!destination.exists());
             }
             assert_eq!(semaphore.0.available_permits(), 64);
+            normal_requests.store(0, Ordering::Relaxed);
         }
         server.abort();
     }
