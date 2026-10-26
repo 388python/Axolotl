@@ -7,7 +7,6 @@ interface ShowcaseProject {
     id: string
     iconUrl: string
     title: string
-    description: string
 }
 
 // 真实 Modrinth 项目（id 与 CDN 图标来自公开 API）
@@ -128,10 +127,7 @@ const projects: ShowcaseProject[] = [
         iconUrl:
             'https://cdn.modrinth.com/data/nvQzSEkH/b04217bc2b7dc524c4d12f81ff42cc1cefb9b0fc_96.webp',
     },
-].map((project) => ({
-    ...project,
-    description: `${project.title} is available through Axolotl's content browser.`,
-}))
+]
 
 // 每行渲染两份内容保证动画无缝衔接；后半轮是视觉重复，对屏幕阅读器隐藏
 const showcaseProjects = [
@@ -176,7 +172,6 @@ const messages = defineMessages({
                     <Avatar :src="project.iconUrl" alt="" size="sm" />
                     <div class="project-info">
                         <span class="title">{{ project.title }}</span>
-                        <span class="description">{{ project.description }}</span>
                     </div>
                 </div>
             </div>
@@ -191,6 +186,10 @@ const messages = defineMessages({
     margin: calc(5rem + var(--gap-xl)) 0 var(--gap-xl);
     z-index: 3;
     text-align: left;
+
+    // 两端渐隐：滚动内容在左右边缘淡出，避免被硬生生切断
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
 
     .row {
         --gap: var(--gap-md);
@@ -217,7 +216,12 @@ const messages = defineMessages({
             animation: scroll 40s linear infinite;
 
             @media (prefers-reduced-motion: reduce) {
-                animation-play-state: paused !important;
+                // !important 是必需的：.row__content.offset 特异性更高，否则动画与位移不会被清掉
+                animation: none !important;
+                transform: none !important;
+                flex-wrap: wrap;
+                min-width: 0;
+                flex-basis: 100%;
             }
 
             @keyframes scroll {
@@ -246,13 +250,24 @@ const messages = defineMessages({
             }
         }
 
+        // 减弱动效时不再滚动：允许换行、去掉裁切，并隐藏用于无缝衔接的重复份
+        @media (prefers-reduced-motion: reduce) {
+            flex-wrap: wrap;
+            overflow: visible;
+
+            .row__content + .row__content {
+                display: none;
+            }
+        }
+
         .project {
             position: relative;
             display: flex;
 
             cursor: default;
-            padding: 1rem;
+            padding: 0.75rem 1rem;
             gap: 1rem;
+            align-items: center;
             border-radius: 1rem;
             border: 1px solid var(--landing-border-color);
             transition:
@@ -285,20 +300,6 @@ const messages = defineMessages({
                 font-size: 1.25rem;
                 line-height: 110%;
                 display: block;
-            }
-
-            .description {
-                width: 13.75rem;
-
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-
-                font-weight: 500;
-                font-size: 0.875rem;
-                line-height: 125%;
-                margin: 0.25rem 0 0;
             }
         }
     }

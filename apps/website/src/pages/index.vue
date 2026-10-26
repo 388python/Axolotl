@@ -1244,7 +1244,7 @@ useHead(() => ({
                     <div class="row select-none hover:cursor-default">
                         <div />
                         <div class="cell">{{ formatMessage(messages.name) }}</div>
-                        <div class="cell">{{ formatMessage(messages.version) }}</div>
+                        <div class="cell cell--version">{{ formatMessage(messages.version) }}</div>
                         <div class="cell">{{ formatMessage(messages.actions) }}</div>
                     </div>
                     <TransitionGroup name="mod-row" tag="div" class="table">
@@ -1262,7 +1262,7 @@ useHead(() => ({
                                     {{ formatMessage(messages.byAuthor, { author: mod.author }) }}
                                 </div>
                             </div>
-                            <div class="cell">{{ mod.version }}</div>
+                            <div class="cell cell--version">{{ mod.version }}</div>
                             <div class="cell check">
                                 <Checkbox
                                     v-model="checkedMods[index]"
@@ -2107,7 +2107,6 @@ useHead(() => ({
     .table {
         margin-bottom: 1rem;
         overflow: hidden;
-        max-height: 32rem;
     }
 
     h3,
@@ -2580,6 +2579,34 @@ useHead(() => ({
             order: 2;
             min-height: 0;
             aspect-ratio: 1280 / 743;
+        }
+    }
+
+    .mods .row {
+        // 操作列要放两个 44px 命中区（2 × 2.75rem = 5.5rem）；3.5rem 装不下，
+        // 多出的部分会被 .table 的 overflow: hidden 裁掉
+        grid-template-columns: 3rem minmax(0, 1fr) 5.5rem;
+
+        // 版本列在窄屏下让位给名称与操作列
+        .cell--version {
+            display: none;
+        }
+
+        // 勾选框与删除按钮的命中区放大到 44px
+        .cell.check {
+            min-height: 2.75rem;
+            gap: 0;
+
+            :deep(.checkbox-outer) {
+                min-width: 2.75rem;
+                min-height: 2.75rem;
+                justify-content: center;
+            }
+
+            :deep([data-button]) {
+                min-width: 2.75rem;
+                min-height: 2.75rem;
+            }
         }
     }
 }
