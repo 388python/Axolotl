@@ -350,6 +350,7 @@ import {
     hasActiveContentChange,
     pendingContentChangeAffectsItem,
 } from '@/helpers/content-change-jobs'
+import { createContentEventRefresh } from '@/helpers/content-event-refresh'
 import { mergeContentItemMetadata } from '@/helpers/content-item-metadata'
 import { applyContentItemUpdates, matchesContentItem } from '@/helpers/content-item-state'
 import { contentProjectUrl } from '@/helpers/content-project-links'
@@ -1185,6 +1186,7 @@ function isCurrentContentRequest(instanceId: string, generation: number) {
 }
 
 function invalidateContentRequests(clearState = false) {
+    contentEventRefresh.clear()
     contentUpdateScanner.cancel()
     contentEnrichmentController?.abort()
     contentRequestGeneration += 1
@@ -2077,10 +2079,6 @@ async function applyToggleDisableBatch(items: ContentItem[], enabled: boolean) {
         activeContentOperationCount = Math.max(0, activeContentOperationCount - operations.length)
         if (activeContentOperationCount === 0) {
             isBulkOperating.value = false
-            if (pendingContentRefreshAfterBulk) {
-                pendingContentRefreshAfterBulk = false
-                void initProjects()
-            }
         }
     }
 }
@@ -2830,6 +2828,7 @@ async function initProjects(cacheBehaviour?: CacheBehaviour): Promise<void> {
 }
 
 async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
+    contentEventRefresh.clear()
     void loadWorldDatapacks()
     if (!props.instance || props.instance.install_stage !== 'installed') {
         invalidateContentRequests(true)
@@ -3413,46 +3412,23 @@ async function loadInitialContent(): Promise<void> {
 }
 
 let unlistenInstances: UnlistenFn | null = null
-const CONTENT_EVENT_DEBOUNCE_MS = 180
-let contentEventTimer: ReturnType<typeof setTimeout> | null = null
-let pendingExternalContentSync = false
-let pendingContentChangedRevision: number | null = null
-let pendingContentRefreshAfterBulk = false
 let suppressSyncedUntil = 0
+const contentEventRefresh = createContentEventRefresh({
+    busy: () => isBulkOperating.value,
+    revision: () => contentSnapshot.value?.revision,
+    refresh: (filesystem) => {
+        void initProjects(filesystem ? 'bypass' : undefined).catch(handleError)
+    },
+    delay: 180,
+})
+
+watch(isBulkOperating, (operating) => {
+    if (!operating) contentEventRefresh.resume()
+})
 
 function scheduleContentEventRefresh(event: { event: string; revision?: number }) {
-    if (event.event === 'synced') {
-        if (Date.now() < suppressSyncedUntil) return
-        pendingExternalContentSync = true
-    } else if (event.event === 'content_changed') {
-        if (
-            event.revision != null &&
-            contentSnapshot.value &&
-            event.revision <= contentSnapshot.value.revision
-        ) {
-            return
-        }
-        pendingContentChangedRevision = Math.max(
-            pendingContentChangedRevision ?? 0,
-            event.revision ?? 0,
-        )
-    } else {
-        return
-    }
-
-    if (contentEventTimer) return
-    contentEventTimer = setTimeout(() => {
-        contentEventTimer = null
-        const refreshFilesystem =
-            pendingExternalContentSync && pendingContentChangedRevision == null
-        pendingExternalContentSync = false
-        pendingContentChangedRevision = null
-        if (isBulkOperating.value) {
-            pendingContentRefreshAfterBulk = true
-            return
-        }
-        void initProjects(refreshFilesystem ? 'bypass' : undefined)
-    }, CONTENT_EVENT_DEBOUNCE_MS)
+    if (event.event === 'synced' && Date.now() < suppressSyncedUntil) return
+    contentEventRefresh.enqueue(event)
 }
 
 onMounted(() => {
@@ -3523,7 +3499,7 @@ watch(
 
 onUnmounted(() => {
     isUnmounted = true
-    if (contentEventTimer) clearTimeout(contentEventTimer)
+    contentEventRefresh.clear()
     invalidateContentRequests()
     unlistenInstances?.()
 })
