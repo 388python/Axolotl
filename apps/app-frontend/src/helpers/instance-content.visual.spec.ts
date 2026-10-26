@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 
+import { createContentUpdateScanner } from './content-update-scanner'
 import { get_content_snapshot, type InstanceContentSnapshot, refresh_content } from './instance'
 import {
     type InstanceContentData,
@@ -332,7 +333,83 @@ it('discards update responses after the instance request is canceled', async () 
         failedEntries: [],
     })
     expect(await pending).toBe(data)
-    expect(resourceCheckUpdates).toHaveBeenCalledWith('instance', controller.signal, {
-        entryIds: ['entry'],
+    expect(resourceCheckUpdates).toHaveBeenCalledWith('instance', controller.signal, undefined)
+})
+
+it('checks 70 entries without viewport input and publishes once when complete', async () => {
+    vi.mocked(get_content_snapshot).mockResolvedValue(snapshot())
+    const data = (await loadInstanceContentData('instance'))!
+    data.contentItems = Array.from({ length: 70 }, (_, index) => ({
+        ...data.contentItems[0],
+        instanceEntryId: `entry-${index}`,
+        file_path: `mods/${index}.jar`,
+    }))
+    let complete!: (value: Awaited<ReturnType<typeof resourceCheckUpdates>>) => void
+    vi.mocked(resourceCheckUpdates).mockImplementation(
+        () =>
+            new Promise((resolve) => {
+                complete = resolve
+            }),
+    )
+    const commit = vi.fn()
+    const scanner = createContentUpdateScanner(commit)
+    const pending = scanner.scan(data)
+    expect(scanner.scan(data)).toBe(pending)
+    expect(resourceCheckUpdates).toHaveBeenCalledOnce()
+    expect(resourceCheckUpdates).toHaveBeenCalledWith(
+        'instance',
+        expect.any(AbortSignal),
+        undefined,
+    )
+    expect(commit).not.toHaveBeenCalled()
+    const release = { project: { source: 'modrinth', projectId: 'project' }, releaseId: 'latest' }
+    complete({
+        entries: ['entry-69'],
+        releases: { 'entry-69': release },
+        unresolved: [],
+        failures: [],
+        failedEntries: [],
     })
+    await pending
+    expect(commit).toHaveBeenCalledOnce()
+    expect(commit.mock.calls[0][0].contentItems[69].resourceUpdate).toEqual(release)
+    await scanner.scan(data)
+    expect(resourceCheckUpdates).toHaveBeenCalledOnce()
+    scanner.cancel()
+})
+
+it('rejects a late scan for an old revision and permits explicit retry after failure', async () => {
+    vi.mocked(get_content_snapshot).mockResolvedValue(snapshot())
+    const data = (await loadInstanceContentData('instance'))!
+    const known = { project: { source: 'modrinth', projectId: 'project' }, releaseId: 'known' }
+    data.contentItems[0].resourceUpdate = known
+    let complete!: (value: Awaited<ReturnType<typeof resourceCheckUpdates>>) => void
+    vi.mocked(resourceCheckUpdates)
+        .mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    complete = resolve
+                }),
+        )
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValue({
+            entries: [],
+            releases: {},
+            unresolved: [],
+            failures: [],
+            failedEntries: [],
+        })
+    const commit = vi.fn()
+    const scanner = createContentUpdateScanner(commit)
+    const old = scanner.scan(data)
+    const next = { ...data, snapshot: { ...data.snapshot, revision: data.snapshot.revision + 1 } }
+    await scanner.scan(next)
+    complete({ entries: [], releases: {}, unresolved: [], failures: [], failedEntries: [] })
+    await old
+    expect(commit).toHaveBeenCalledOnce()
+    expect(commit.mock.calls[0][0].contentItems[0].resourceUpdate).toEqual(known)
+    scanner.cancel()
+    await scanner.scan(next)
+    expect(commit.mock.calls[1][0].contentItems[0].resourceUpdate).toBeNull()
+    expect(resourceCheckUpdates).toHaveBeenCalledTimes(3)
 })

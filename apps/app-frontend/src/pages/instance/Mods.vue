@@ -184,24 +184,6 @@
             <p class="m-0 p-4">{{ formatMessage(messages.packReconciliationWarningBody) }}</p>
         </CollapsibleAdmonition>
         <ContentPageLayout @visible-items="handleVisibleItems">
-            <template #header-status>
-                <div
-                    v-if="loadingVisibleMetadata && !onlineInformationDismissed"
-                    class="flex items-center justify-between gap-2 px-3 pb-2 text-sm text-[var(--color-text-tertiary)]"
-                >
-                    <span role="status">{{
-                        formatMessage(messages.loadingOnlineInformation)
-                    }}</span>
-                    <IconButton
-                        :label="formatMessage(commonMessages.closeButton)"
-                        type="quiet"
-                        size="2xs"
-                        @click="onlineInformationDismissed = true"
-                    >
-                        <XIcon aria-hidden="true" />
-                    </IconButton>
-                </div>
-            </template>
             <template #toolbar-actions>
                 <Button
                     v-if="hasPackAssociation"
@@ -318,7 +300,6 @@ import {
     PencilIcon,
     SpinnerIcon,
     UndoIcon,
-    XIcon,
 } from '@modrinth/assets'
 import {
     Button,
@@ -334,7 +315,6 @@ import {
     type ContentOwner,
     ContentUpdaterModal,
     defineMessages,
-    IconButton,
     injectNotificationManager,
     LoadingIndicator,
     type OverflowMenuOption,
@@ -374,6 +354,7 @@ import { mergeContentItemMetadata } from '@/helpers/content-item-metadata'
 import { applyContentItemUpdates, matchesContentItem } from '@/helpers/content-item-state'
 import { contentProjectUrl } from '@/helpers/content-project-links'
 import { lookupContentWikiIds, translateContentItemTitles } from '@/helpers/content-search'
+import { createContentUpdateScanner } from '@/helpers/content-update-scanner'
 import { type CurseForgeFile, getCurseForgeImageUrl } from '@/helpers/curseforge'
 import {
     type CurseForgeManualDownloadItem,
@@ -404,7 +385,6 @@ import {
     loadInstanceContentInStages,
     localContentIconUrl,
     preserveContentUpdateState,
-    refreshInstanceContentUpdates,
 } from '@/helpers/instance-content'
 import { postUpgradeWarningForContent } from '@/helpers/post-upgrade-notice'
 import {
@@ -689,24 +669,9 @@ const contentItemsByEntryId = computed(
                 .map((item) => [item.instanceEntryId!, item]),
         ),
 )
-const onlineInformationDismissed = ref(false)
 const mcmodUrls = ref(new Map<string, string>())
 const visibleMetadataRequestedPaths = new Set<string>()
 const visibleMetadataPendingPaths = new Set<string>()
-const visibleMetadataPaths = ref(new Set<string>())
-const visibleMetadataLoadingPaths = ref(new Set<string>())
-const contentUpdateLoadingPaths = ref(new Set<string>())
-const loadingVisibleMetadata = computed(() =>
-    [...visibleMetadataPaths.value].some(
-        (path) =>
-            visibleMetadataLoadingPaths.value.has(path) ||
-            contentUpdateLoadingPaths.value.has(path),
-    ),
-)
-
-watch(loadingVisibleMetadata, (loading) => {
-    if (loading) onlineInformationDismissed.value = false
-})
 
 let visibleMetadataRefreshRunning = false
 let mcmodLookupVersion = 0
@@ -1185,6 +1150,30 @@ const isPackUnlinkDisabled = computed(
 let contentEnrichmentController: AbortController | undefined
 let contentRequestGeneration = 0
 let activeBypassRefresh: Promise<void> | null = null
+const contentUpdateScanner = createContentUpdateScanner((updated) => {
+    if (
+        isUnmounted ||
+        props.instance.id !== updated.path ||
+        props.instance.install_stage !== 'installed' ||
+        contentSnapshot.value?.revision !== updated.snapshot.revision
+    )
+        return
+    const failed = new Set(updated.updateCheckFailedEntries)
+    for (const item of [...updated.contentItems, ...updated.linkedContentItems]) {
+        if (item.instanceEntryId && !failed.has(item.instanceEntryId)) mergeContentUpdate(item)
+    }
+    contentSnapshot.value = {
+        ...contentSnapshot.value,
+        warnings: [
+            ...contentSnapshot.value.warnings.filter(
+                (warning) => warning.code !== 'resource_update_unavailable',
+            ),
+            ...updated.snapshot.warnings.filter(
+                (warning) => warning.code === 'resource_update_unavailable',
+            ),
+        ],
+    }
+})
 
 function isCurrentContentRequest(instanceId: string, generation: number) {
     return (
@@ -1196,14 +1185,11 @@ function isCurrentContentRequest(instanceId: string, generation: number) {
 }
 
 function invalidateContentRequests(clearState = false) {
+    contentUpdateScanner.cancel()
     contentEnrichmentController?.abort()
     contentRequestGeneration += 1
-    visibleMetadataPaths.value.clear()
-    visibleMetadataLoadingPaths.value.clear()
-    contentUpdateLoadingPaths.value.clear()
     if (!clearState) return
 
-    onlineInformationDismissed.value = false
     contentSnapshot.value = null
     projects.value = []
     linkedModpackContentItems.value = []
@@ -1356,7 +1342,7 @@ function mergeVisibleMetadataItems(
     dependencyGraphModal.value?.setItems(allDependencyGraphItems())
 }
 
-function mergeVisibleUpdate(item: ContentItem) {
+function mergeContentUpdate(item: ContentItem) {
     if (!item.instanceEntryId) return
     const current = contentItemsByEntryId.value.get(item.instanceEntryId)
     if (!current || current.file_path !== item.file_path || hasContentOperation(current)) return
@@ -1372,116 +1358,29 @@ function mergeVisibleUpdate(item: ContentItem) {
 async function flushVisibleMetadataRefresh() {
     if (visibleMetadataRefreshRunning) return
     visibleMetadataRefreshRunning = true
-
     try {
         while (visibleMetadataPendingPaths.size > 0) {
             const instanceId = props.instance.id
             const generation = contentRequestGeneration
-            const paths = [...visibleMetadataPendingPaths].filter((path) => {
-                if (visibleMetadataPaths.value.has(path)) return true
-                visibleMetadataRequestedPaths.delete(path)
-                visibleMetadataLoadingPaths.value.delete(path)
-                contentUpdateLoadingPaths.value.delete(path)
-                return false
-            })
+            const paths = [...visibleMetadataPendingPaths]
             visibleMetadataPendingPaths.clear()
-            const snapshot = contentSnapshot.value
-            if (!paths.length) continue
-            if (!snapshot) {
-                for (const path of paths) {
-                    visibleMetadataRequestedPaths.delete(path)
-                    visibleMetadataLoadingPaths.value.delete(path)
-                    contentUpdateLoadingPaths.value.delete(path)
-                }
-                continue
-            }
-            const pathSet = new Set(paths)
             const originals = new Map(
                 [...projects.value, ...linkedModpackContentItems.value]
-                    .filter((item) => item.file_path && pathSet.has(item.file_path))
+                    .filter((item) => item.file_path && paths.includes(item.file_path))
                     .map((item) => [item.file_path!, item]),
             )
-            const originalsByEntry = new Map(
-                [...originals.values()].map((item) => [item.instanceEntryId, item]),
-            )
-            const controller = (contentEnrichmentController ??= new AbortController())
-            const isCurrent = () =>
-                !controller.signal.aborted && isCurrentContentRequest(instanceId, generation)
-
             try {
-                const results = await Promise.allSettled([
-                    (async () => {
-                        let refreshedItems = await get_content_items_by_paths(instanceId, paths)
-                        if (!isCurrent()) return
-                        refreshedItems = await translateContentItemTitles(
-                            refreshedItems,
-                            i18n.global.locale.value,
-                        ).catch(() => refreshedItems)
-                        if (isCurrent()) mergeVisibleMetadataItems(refreshedItems, originals)
-                        if (isCurrent()) {
-                            for (const path of paths) visibleMetadataLoadingPaths.value.delete(path)
-                        }
-                    })(),
-                    (async () => {
-                        const updated = await refreshInstanceContentUpdates(
-                            {
-                                path: instanceId,
-                                snapshot,
-                                contentItems: [...originals.values()],
-                                linkedContentItems: [],
-                                modpack: null,
-                            },
-                            controller.signal,
-                            {
-                                onProgress: (progress) => {
-                                    if (!isCurrent()) return
-                                    const original = originalsByEntry.get(progress.entryId)
-                                    if (original?.file_path)
-                                        contentUpdateLoadingPaths.value.delete(original.file_path)
-                                    if (progress.failed || progress.unresolved) return
-                                    if (original)
-                                        mergeVisibleUpdate({
-                                            ...original,
-                                            resourceUpdate: progress.release,
-                                        })
-                                },
-                            },
-                        )
-                        if (!isCurrent()) return
-                        const failedEntries = new Set(updated.updateCheckFailedEntries ?? [])
-                        for (const item of [
-                            ...updated.contentItems,
-                            ...updated.linkedContentItems,
-                        ]) {
-                            if (item.instanceEntryId && !failedEntries.has(item.instanceEntryId))
-                                mergeVisibleUpdate(item)
-                        }
-                        for (const path of paths) contentUpdateLoadingPaths.value.delete(path)
-                        if (contentSnapshot.value) {
-                            contentSnapshot.value = {
-                                ...contentSnapshot.value,
-                                warnings: updated.snapshot.warnings,
-                            }
-                        }
-                    })(),
-                ])
-                if (!isCurrent()) continue
-                for (const result of results) {
-                    if (result.status !== 'rejected') continue
-                    for (const path of paths) visibleMetadataRequestedPaths.delete(path)
-                    debugState('visible metadata refresh failed', {
-                        instanceId,
-                        paths,
-                        error: result.reason,
-                    })
-                }
-            } finally {
-                if (isCurrentContentRequest(instanceId, generation)) {
-                    for (const path of paths) {
-                        visibleMetadataLoadingPaths.value.delete(path)
-                        contentUpdateLoadingPaths.value.delete(path)
-                    }
-                }
+                let items = await get_content_items_by_paths(instanceId, paths)
+                if (!isCurrentContentRequest(instanceId, generation)) continue
+                items = await translateContentItemTitles(items, i18n.global.locale.value).catch(
+                    () => items,
+                )
+                if (isCurrentContentRequest(instanceId, generation))
+                    mergeVisibleMetadataItems(items, originals)
+            } catch (error) {
+                if (!isCurrentContentRequest(instanceId, generation)) continue
+                for (const path of paths) visibleMetadataRequestedPaths.delete(path)
+                debugState('visible metadata refresh failed', { instanceId, paths, error })
             }
         }
     } finally {
@@ -1490,39 +1389,17 @@ async function flushVisibleMetadataRefresh() {
 }
 
 function handleVisibleItems(items: ContentItem[]) {
-    if (isUnmounted || props.instance.install_stage !== 'installed') {
-        return
-    }
-
+    if (isUnmounted || props.instance.install_stage !== 'installed') return
     const knownPaths = new Set(
-        [...projects.value, ...linkedModpackContentItems.value]
-            .map((item) => item.file_path)
-            .filter((path): path is string => !!path),
+        [...projects.value, ...linkedModpackContentItems.value].map((item) => item.file_path),
     )
-    visibleMetadataPaths.value = new Set(
-        items.map((item) => item.file_path).filter((path): path is string => !!path),
-    )
-
-    let queued = false
-
     for (const item of items) {
         const path = item.file_path
-
-        if (!path || !knownPaths.has(path) || visibleMetadataRequestedPaths.has(path)) {
-            continue
-        }
-
+        if (!path || !knownPaths.has(path) || visibleMetadataRequestedPaths.has(path)) continue
         visibleMetadataRequestedPaths.add(path)
         visibleMetadataPendingPaths.add(path)
-        visibleMetadataLoadingPaths.value.add(path)
-        if (item.instanceEntryId && item.instanceMaterializationState === 'present')
-            contentUpdateLoadingPaths.value.add(path)
-        queued = true
     }
-
-    if (queued) {
-        void flushVisibleMetadataRefresh()
-    }
+    if (visibleMetadataPendingPaths.size) void flushVisibleMetadataRefresh()
 }
 
 function getStableContentId(item: ContentItem) {
@@ -2960,11 +2837,11 @@ async function initProjectsInternal(cacheBehaviour?: CacheBehaviour) {
     }
 
     const instanceId = props.instance.id
+    if (cacheBehaviour === 'bypass' || cacheBehaviour === 'must_revalidate')
+        contentUpdateScanner.cancel()
     contentEnrichmentController?.abort()
     contentEnrichmentController = new AbortController()
     const generation = ++contentRequestGeneration
-    visibleMetadataLoadingPaths.value.clear()
-    contentUpdateLoadingPaths.value.clear()
     visibleMetadataRequestedPaths.clear()
     visibleMetadataPendingPaths.clear()
     debugState('initProjects start', { instanceId, cacheBehaviour, generation })
@@ -3074,14 +2951,6 @@ function applyContentData(contentData: InstanceContentData) {
         count: contentData.contentItems.length,
         paths: contentData.contentItems.map((c) => c.file_name).slice(0, 20),
     })
-    // A visible batch can finish between the local and cached snapshots.
-    const visibleUpdates = [...contentItemsByEntryId.value.values()].filter(
-        (item) =>
-            item.resourceUpdate &&
-            item.file_path &&
-            visibleMetadataRequestedPaths.has(item.file_path) &&
-            !contentUpdateLoadingPaths.value.has(item.file_path),
-    )
     contentSnapshot.value = contentData.snapshot
     const previousItems = new Map(
         [...projects.value, ...linkedModpackContentItems.value]
@@ -3110,7 +2979,6 @@ function applyContentData(contentData: InstanceContentData) {
     }
     projects.value = contentItems
     linkedModpackContentItems.value = linkedContentItems
-    for (const item of visibleUpdates) mergeVisibleUpdate(item)
     if (updatingProject.value) {
         const entryId = updatingProject.value.instanceEntryId
         const refreshed = [...contentItems, ...linkedContentItems].find((item) =>
@@ -3142,6 +3010,13 @@ function applyContentData(contentData: InstanceContentData) {
         linkedModpackUpdateVersionId.value = null
     }
 
+    void contentUpdateScanner
+        .scan({
+            ...contentData,
+            contentItems: projects.value,
+            linkedContentItems: linkedModpackContentItems.value,
+        })
+        .catch(handleError)
     loading.value = false
 
     const hasContent = contentItems.length > 0 || linkedContentItems.length > 0
