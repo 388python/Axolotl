@@ -284,14 +284,19 @@ const handleDownload = () => {
     }
 }
 
+// 页头是 absolute（滚动后会离开视口），但点击那一刻它仍盖在目标上方。
+// window.scrollTo 既不认 scroll-padding-top 也不认 scroll-margin-top，
+// 所以这里自己让出页头高度，并先取整，避免落点比页头高出不到 1px。
 const scrollToSection = () => {
     nextTick(() => {
-        if (downloadSection.value) {
-            window.scrollTo({
-                top: downloadSection.value.offsetTop,
-                behavior: 'smooth',
-            })
-        }
+        const section = downloadSection.value
+        if (!section) return
+        const headerHeight = document.querySelector('header')?.getBoundingClientRect().height ?? 0
+        // scrollTo 会把位置取整到整数像素，先按取整后的文档位置让出页头高度。
+        const target = Math.floor(
+            section.getBoundingClientRect().top + window.scrollY - headerHeight,
+        )
+        window.scrollTo({ top: target, behavior: 'smooth' })
     })
 }
 
@@ -1412,30 +1417,10 @@ useHead(() => ({
                 </article>
             </div>
         </section>
-        <section id="faq" class="faq-section" aria-labelledby="faq-title">
-            <div class="faq-intro">
-                <span class="text-xs font-extrabold uppercase tracking-[0.1em] text-brand">{{
-                    formatMessage(messages.faqEyebrow)
-                }}</span>
-                <h2 id="faq-title">{{ formatMessage(messages.faqTitle) }}</h2>
-                <p>{{ formatMessage(messages.faqDescription) }}</p>
-            </div>
-            <div class="faq-list flex flex-col gap-3">
-                <details
-                    v-for="item in faqItems"
-                    :key="item.question"
-                    class="faq-item rounded-2xl border border-divider bg-surface-2"
-                >
-                    <summary>{{ item.question }}</summary>
-                    <p>{{ item.answer }}</p>
-                </details>
-            </div>
-        </section>
-        <CommunitySection />
         <div
             id="download"
             ref="downloadSection"
-            class="footer relative flex flex-col items-center justify-center gap-6 overflow-hidden bg-[var(--color-accent-contrast)] px-6 py-[clamp(4rem,8vw,7rem)] text-center text-[var(--color-contrast)]"
+            class="footer relative flex flex-col items-center justify-center gap-6 overflow-hidden bg-[var(--surface-1)] px-6 py-[clamp(4rem,8vw,7rem)] text-center text-[var(--color-contrast)]"
         >
             <div class="section-badge">{{ formatMessage(messages.downloadOptions) }}</div>
             <div class="section-subheader">
@@ -1644,6 +1629,26 @@ useHead(() => ({
                 </IntlFormatted>
             </p>
         </div>
+        <section id="faq" class="faq-section" aria-labelledby="faq-title">
+            <div class="faq-intro">
+                <span class="text-xs font-extrabold uppercase tracking-[0.1em] text-brand">{{
+                    formatMessage(messages.faqEyebrow)
+                }}</span>
+                <h2 id="faq-title">{{ formatMessage(messages.faqTitle) }}</h2>
+                <p>{{ formatMessage(messages.faqDescription) }}</p>
+            </div>
+            <div class="faq-list flex flex-col gap-3">
+                <details
+                    v-for="item in faqItems"
+                    :key="item.question"
+                    class="faq-item rounded-2xl border border-divider bg-surface-2"
+                >
+                    <summary>{{ item.question }}</summary>
+                    <p>{{ item.answer }}</p>
+                </details>
+            </div>
+        </section>
+        <CommunitySection />
     </div>
 </template>
 
@@ -1655,6 +1660,11 @@ useHead(() => ({
     width: min(76rem, calc(100% - 3rem));
     margin: 0 auto;
     padding: 7rem 0;
+
+    // 直接跟在下载区之后时，下载区自己的上下留白已经够用，不再叠加一层。
+    .footer + & {
+        padding-top: 0;
+    }
 }
 
 .faq-intro {
@@ -1697,6 +1707,10 @@ useHead(() => ({
         gap: 2rem;
         width: calc(100% - 2rem);
         padding: 5rem 0;
+
+        .footer + & {
+            padding-top: 0;
+        }
     }
 }
 
@@ -2613,7 +2627,7 @@ useHead(() => ({
 
 .light-mode {
     .footer {
-        background: #f8f7f8;
+        background: var(--surface-1);
     }
 
     .bottom-transition {
