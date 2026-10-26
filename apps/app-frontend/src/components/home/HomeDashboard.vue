@@ -805,11 +805,11 @@ defineExpose({ openWidgetPicker, setLayout })
     right: 0.5rem;
     z-index: 12;
     display: flex;
-    // The bar is sized by its content and anchored to the right edge, so
-    // revealing the size label and options menu widens it leftwards past the
-    // card border. Reserving the full width up front keeps the hit area stable:
-    // otherwise the growing bar moves out from under the pointer, the hover
-    // ends, the bar collapses, and the widget flickers.
+    /* The bar is sized by its content and anchored to the right edge, so
+       revealing the size label and options menu widens it leftwards past the
+       card border. Reserving the full width up front keeps the hit area stable:
+       otherwise the growing bar moves out from under the pointer, the hover
+       ends, the bar collapses, and the widget flickers. */
     width: calc(2rem + 2.25rem + 0.25rem + 2rem + 0.25rem);
     max-width: calc(100% - 1rem);
     height: 2.25rem;
