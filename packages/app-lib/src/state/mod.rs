@@ -655,6 +655,11 @@ impl State {
             .get_or_try_init(move || Self::initialize_state(app_identifier))
             .await?;
 
+        if let Err(error) =
+            instances::commands::recover_content_file_operations(state).await
+        {
+            tracing::error!(%error, "Error recovering content file operations");
+        }
         if let Err(e) =
             crate::install::recovery::recover_interrupted_jobs(state).await
         {
