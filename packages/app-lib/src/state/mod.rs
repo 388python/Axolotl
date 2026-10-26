@@ -98,7 +98,7 @@ mod legacy_converter;
 pub mod attached_world_data;
 pub(crate) mod content_store;
 pub mod instance_groups;
-pub mod server_join_log;
+pub(crate) mod store;
 
 // Global state
 // RwLock on state only has concurrent reads, except for config dir change which takes control of the State
@@ -214,6 +214,10 @@ pub struct State {
     pub(crate) instance_locks: Arc<InstanceLockManager>,
 
     pub(crate) pool: SqlitePool,
+
+    /// What the collections of [`store`] are read and written through.
+    pub(crate) data: store::Handle,
+
     resource_service: OnceCell<Arc<crate::resources::ResourceService>>,
 
     /// CurseForge API key set in the launcher. Takes precedence over the key
@@ -1288,6 +1292,7 @@ impl State {
             friends_socket,
             restart_after_pending_update: AtomicBool::new(false),
             instance_locks: Arc::new(InstanceLockManager::default()),
+            data: store::Handle::new(pool.clone()),
             pool,
             resource_service: OnceCell::new(),
             curseforge_api_key: RwLock::new(curseforge_api_key),
@@ -1411,6 +1416,7 @@ pub(crate) async fn test_state(
         friends_socket: FriendsSocket::new(),
         restart_after_pending_update: AtomicBool::new(false),
         instance_locks: Arc::new(InstanceLockManager::default()),
+        data: store::Handle::new(pool.clone()),
         pool,
         resource_service: OnceCell::new(),
         curseforge_api_key: RwLock::new(curseforge_api_key),
