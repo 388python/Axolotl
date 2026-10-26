@@ -9,7 +9,9 @@
 //! `get_all` reach a whole collection. Writing nothing removes the record a key
 //! held, so a caller never needs a second verb for that.
 
+pub(crate) mod content_favorites;
 pub(crate) mod join_log;
+pub(crate) mod resource_source_projects;
 
 use sqlx::SqlitePool;
 
