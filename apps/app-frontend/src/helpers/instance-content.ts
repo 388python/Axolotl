@@ -214,7 +214,7 @@ export async function loadInstanceContentData(
     }
 }
 
-/** Discover updates only for the supplied batch, after displaying local content. */
+/** Discover updates for the supplied batch, after displaying local content. */
 export async function refreshInstanceContentUpdates(
     data: InstanceContentData,
     signal?: AbortSignal,
@@ -243,7 +243,7 @@ export async function refreshInstanceContentUpdates(
     const selected = new Set(entryIds)
     if (entryIds.length) {
         try {
-            const updates = await resourceCheckUpdates(data.path, signal, { ...options, entryIds })
+            const updates = await resourceCheckUpdates(data.path, signal, options)
             if (signal?.aborted) return data
             for (const item of items) {
                 if (!item.instanceEntryId || !selected.has(item.instanceEntryId)) continue

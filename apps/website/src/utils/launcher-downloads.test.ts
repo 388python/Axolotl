@@ -7,6 +7,7 @@ import {
     getReleasePage,
     hasLauncherDownloads,
     resolveLauncherDownloads,
+    shouldDegradeDownload,
 } from './launcher-downloads.ts'
 
 function release(tag: string, names: string[]) {
@@ -99,4 +100,28 @@ test('availability and generated platform links agree, including installer namin
     }
     for (const names of [[], ['Axolotl_x64-setup.exe.sig'], ['latest.json']])
         assert.equal(hasLauncherDownloads(release('v1.10.0', names)), false)
+})
+
+test('a hanging version request degrades the hero call to action', () => {
+    // Still waiting: the button keeps saying it is fetching.
+    assert.equal(shouldDegradeDownload('loading', 0), false)
+    assert.equal(shouldDegradeDownload('loading', 2499), false)
+
+    // The limit itself already counts as waited out, so the button never sits one
+    // tick short of usable.
+    assert.equal(shouldDegradeDownload('loading', 2500), true)
+    assert.equal(shouldDegradeDownload('loading', 60_000), true)
+})
+
+test('a settled request never degrades, however long it took', () => {
+    // A slow success is still a success: the button should offer the download,
+    // not fall back to the options list.
+    assert.equal(shouldDegradeDownload('ready', 0), false)
+    assert.equal(shouldDegradeDownload('ready', 60_000), false)
+    assert.equal(shouldDegradeDownload('error', 60_000), false)
+})
+
+test('the degrade limit is configurable for the caller', () => {
+    assert.equal(shouldDegradeDownload('loading', 999, 1000), false)
+    assert.equal(shouldDegradeDownload('loading', 1000, 1000), true)
 })

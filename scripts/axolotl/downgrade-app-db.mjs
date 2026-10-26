@@ -52,6 +52,8 @@ const CHANNELS = ['release', 'beta']
 // Only recent migrations are listed. Dropping to a threshold before them is
 // refused rather than guessed at; --allow-unmapped accepts the risk explicitly.
 const REVERTIBLE_SCHEMA = {
+    20261026123000: { tables: ['content_update_jobs'] },
+    20261026120000: { tables: ['content_file_operations'] },
     20261022120000: { columns: [{ table: 'settings', column: 'curseforge_api_key' }] },
     // CodeFlow endpoint domain move; data only
     20261021120000: {},
@@ -678,6 +680,13 @@ function unmappedVersions(plan) {
     return plan.filter(({ mapped }) => !mapped).map(({ version }) => version)
 }
 
+function checkPendingContentRecovery(database, plan) {
+    if (plan.some(({ tables }) => tables.some(({ table, present }) => table === 'content_file_operations' && present)) &&
+        database.prepare('SELECT COUNT(*) AS count FROM content_file_operations').get().count > 0) {
+        throw new Error('content file recovery is pending; start the current launcher to finish recovery before downgrading')
+    }
+}
+
 function main() {
     const args = parseArgs(process.argv.slice(2))
     if (!args.list && args.to === undefined) {
@@ -704,6 +713,14 @@ function main() {
 
     reportPlan(state)
     checkMappings(state.plan)
+    const recoveryCheck = openReadOnly(db)
+    try {
+        checkPendingContentRecovery(recoveryCheck, state.plan)
+    } catch (error) {
+        fail(error.message)
+    } finally {
+        recoveryCheck.close()
+    }
 
     const unmapped = unmappedVersions(state.plan)
     if (unmapped.length > 0) {
@@ -739,6 +756,7 @@ function main() {
         writable.exec('PRAGMA foreign_keys = OFF')
         writable.exec('BEGIN')
         try {
+            checkPendingContentRecovery(writable, state.plan)
             for (const { columns, tables, objects } of [...state.plan].reverse()) {
                 for (const { type, name, present } of objects) {
                     if (present) writable.exec(`DROP ${type.toUpperCase()} ${name}`)

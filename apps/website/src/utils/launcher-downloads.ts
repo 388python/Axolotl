@@ -8,6 +8,28 @@ import {
 
 export type DownloadStatus = 'idle' | 'pending' | 'success' | 'error'
 
+/**
+ * The state the landing page's hero call to action is driven by.
+ *
+ * Deliberately narrower than {@link DownloadStatus}: the page collapses the
+ * request's idle and pending states into one "loading" state, and treats a
+ * settled request with no matching package as "ready" so the button stays usable.
+ */
+export type HeroDownloadState = 'loading' | 'ready' | 'error'
+
+/**
+ * Whether the hero call to action should stop waiting and degrade to a usable
+ * control.
+ *
+ * The version service is a third party. A request that never settles used to
+ * leave the button disabled and wordless for as long as it hung, with no way for
+ * the visitor to act. Past the limit the button becomes clickable and explains
+ * itself instead.
+ */
+export function shouldDegradeDownload(state: HeroDownloadState, elapsedMs: number, limitMs = 2500) {
+    return state === 'loading' && elapsedMs >= limitMs
+}
+
 export function hasLauncherDownloads(release: LauncherRelease | null | undefined) {
     return Object.values(resolveLauncherDownloads(release, 'update-server')).some(Boolean)
 }

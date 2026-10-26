@@ -341,7 +341,7 @@ pub(crate) const LIVE_PROGRESS_EMIT_INTERVAL: Duration =
     Duration::from_millis(100);
 pub(crate) const LIVE_PROGRESS_MAX_WAIT: Duration = Duration::from_secs(1);
 pub(crate) const LIVE_PROGRESS_MIN_BYTES: u64 = 64 * 1024;
-pub(crate) const MAX_CONCURRENT_INSTALL_JOBS: usize = 1;
+pub(crate) const MAX_CONCURRENT_INSTALL_JOBS: usize = 2;
 pub(crate) const MAX_PACK_FILE_DOWNLOAD_CONCURRENCY: usize = 4;
 pub(crate) const MODPACK_DATABASE_BATCH_SIZE: usize = 25;
 pub(crate) const MODPACK_DATABASE_FLUSH_INTERVAL: Duration =
